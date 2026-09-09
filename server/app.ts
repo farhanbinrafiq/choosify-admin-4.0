@@ -50,6 +50,9 @@ import { healthRouter } from "./routes/health";
 import { diagnosticsRouter } from "./routes/diagnostics";
 import { dashboardSearchRouter } from "./dashboardSearch/dashboardSearchRouter";
 import { entitlementsRouter } from "./entitlements/entitlementsRouter";
+import { subscriptionsRouter } from "./subscriptions/subscriptionsRouter";
+import { monetizationRouter } from "./monetization/monetizationRouter";
+import { financeRouter } from "./finance/financeRouter";
 import { partnerApplicationRouter } from "./partnerApplications/partnerApplicationRouter";
 import { navAttentionRouter } from "./dashboard/navAttentionRouter";
 import { backfillLegacyPartnerEntitlementsSnapshot } from "./entitlements/entitlementPersistence";
@@ -216,6 +219,9 @@ export function createApp(): Express {
   app.use("/api/v1", partnerApplicationRouter);
   app.use("/api/v1", navAttentionRouter);
   app.use("/api/v1", entitlementsRouter);
+  app.use("/api/v1", subscriptionsRouter);
+  app.use("/api/v1", monetizationRouter);
+  app.use("/api/v1", financeRouter);
   app.use("/api/v1", conversationRouter);
 
   app.get("/api/admin/stats", async (_req, res) => {

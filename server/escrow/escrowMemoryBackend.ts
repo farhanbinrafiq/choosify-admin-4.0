@@ -101,9 +101,20 @@ export const escrowMemoryBackend = {
     ensureEscrowMemoryHydrated();
     return state.escrows.filter((e) => e.sellerId === sellerId);
   },
+  /** Read-only aggregation helper (Sprint 12 Monetization Center) — never a second ledger, just a range scan over the same escrow rows. */
+  listEscrowsInRange(fromIso: string, toIso: string): CommerceEscrow[] {
+    ensureEscrowMemoryHydrated();
+    return state.escrows.filter((e) => e.createdAt >= fromIso && e.createdAt <= toIso);
+  },
   upsertEscrow(row: CommerceEscrow): CommerceEscrow {
     ensureEscrowMemoryHydrated();
     return upsertById(state.escrows, row, (r) => r.escrowId);
+  },
+  /** Test-fixture cleanup only (Sprint 12 Monetization Center probes) — never used by production business logic, which never deletes financial records. */
+  deleteEscrow(escrowId: string): void {
+    ensureEscrowMemoryHydrated();
+    state.escrows = state.escrows.filter((e) => e.escrowId !== escrowId);
+    schedulePersist();
   },
   getSettlement(settlementId: string): CommerceSettlement | null {
     ensureEscrowMemoryHydrated();
@@ -113,9 +124,20 @@ export const escrowMemoryBackend = {
     ensureEscrowMemoryHydrated();
     return state.settlements.find((s) => s.escrowId === escrowId) ?? null;
   },
+  /** Read-only aggregation helper (Sprint 12 Monetization Center) — never a second ledger, just a range scan over the same settlement rows. */
+  listSettlementsInRange(fromIso: string, toIso: string): CommerceSettlement[] {
+    ensureEscrowMemoryHydrated();
+    return state.settlements.filter((s) => s.createdAt >= fromIso && s.createdAt <= toIso);
+  },
   upsertSettlement(row: CommerceSettlement): CommerceSettlement {
     ensureEscrowMemoryHydrated();
     return upsertById(state.settlements, row, (r) => r.settlementId);
+  },
+  /** Test-fixture cleanup only (Sprint 12 Monetization Center probes) — never used by production business logic, which never deletes financial records. */
+  deleteSettlement(settlementId: string): void {
+    ensureEscrowMemoryHydrated();
+    state.settlements = state.settlements.filter((s) => s.settlementId !== settlementId);
+    schedulePersist();
   },
   getBalance(sellerId: string, currency: string): SellerBalanceAccount | null {
     ensureEscrowMemoryHydrated();

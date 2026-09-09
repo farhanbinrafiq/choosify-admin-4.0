@@ -1,7 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '../db/client';
-import { featureEntitlements } from '../db/schema';
-import { planStore } from './planStore';
+import { featureEntitlements, plans, planEntitlements } from '../db/schema';
+import { workspaceService } from '../subscriptions/workspaceService';
 import {
   defaultRoleEntitlements,
   featureByKey,
@@ -77,19 +77,35 @@ export async function resolveFeatureEnabled(params: {
     if (hit) return hit.enabled;
   }
 
-  // Sprint 11: resolve the actor's real assigned plan (account_plans) when the
-  // caller didn't already pass one explicitly. Previously this branch was dead
-  // code — no caller ever populated planId, because no plan-assignment system
-  // existed yet.
-  let planId = params.planId?.trim();
-  if (!planId && uid) {
-    const accountPlan = await planStore.getAccountPlan(uid);
-    planId = accountPlan?.planId;
+  // Sprint 12: plan-tier resolution is now version-aware — reads
+  // plan_entitlements via workspace -> open subscription ->
+  // plan_version_offer -> plan_version, NOT feature_entitlements(scope='plan')
+  // (that bare-planId key can't distinguish two Plan Versions that are
+  // simultaneously valid for different subscribers, which would break
+  // grandfathering). feature_entitlements(scope='plan') rows are no longer
+  // read here at all; 'plan' remains a valid scope value in the enum for any
+  // legacy rows, simply unconsumed by this resolver going forward.
+  let planVersionId: string | null = null;
+  if (params.planId?.trim()) {
+    // Explicit override (no current caller passes this) resolves to that
+    // Plan's CURRENT PUBLISHED version rather than a specific subscriber's
+    // purchased version — used only for "would this Plan grant X" previews.
+    const planRows = await db.select().from(plans).where(eq(plans.id, params.planId.trim())).limit(1);
+    planVersionId = planRows[0]?.currentPublishedVersionId ?? null;
+  } else if (uid) {
+    const workspace = await workspaceService.resolveWorkspaceForUser(uid, params.role);
+    if (workspace) {
+      const resolved = await workspaceService.getResolvedOpenSubscription(workspace.id);
+      planVersionId = resolved?.version.id ?? null;
+    }
   }
-  if (planId) {
-    const rows = await getScopeRows('plan', [planId]);
-    const hit = rows.find((r) => r.featureKey === params.featureKey);
-    if (hit) return hit.enabled;
+  if (planVersionId) {
+    const rows = await db
+      .select()
+      .from(planEntitlements)
+      .where(and(eq(planEntitlements.planVersionId, planVersionId), eq(planEntitlements.featureKey, params.featureKey)))
+      .limit(1);
+    if (rows[0]) return rows[0].enabled;
   }
 
   const roleRows = await getScopeRows('role', [partnerRole]);

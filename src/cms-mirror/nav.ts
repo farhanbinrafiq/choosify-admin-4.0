@@ -71,6 +71,11 @@ export const PAGE_KEY_TO_PATH: Record<string, string> = {
   // through to the new ones.
   platformOrders: '/admin/platform-orders',
   sellerConversations: '/admin/conversations',
+  // Sprint 12, Phase 5 — Seller/Creator self-service Subscription Plan &
+  // Billing page. Deliberately its own key/path (no existing Seller/Creator
+  // nav slot covered this — FINANCE & PAYOUTS is about their own
+  // earnings/payouts FROM Choosify, not what Choosify charges them).
+  planBilling: '/admin/plan-billing',
 };
 
 export const PATH_TO_PAGE_KEY: Record<string, string> = Object.fromEntries(
@@ -135,6 +140,7 @@ export function resolveAdminPageKey(pathname: string): string | null {
   if (pathname.startsWith('/admin/audit-logs')) return 'auditLogs';
   if (pathname.startsWith('/admin/feature-access')) return 'featureAccess';
   if (pathname.startsWith('/dashboard/content-studio')) return 'contentStudio';
+  if (pathname.startsWith('/admin/plan-billing')) return 'planBilling';
   if (pathname.startsWith('/seller')) return 'products';
 
   return null;
@@ -175,6 +181,7 @@ export const ROLE_ALLOWED_PAGE_KEYS: Record<string, string[] | null> = {
     'shipmentOperations',
     'courierAnalytics',
     'myCashbook',
+    'planBilling',
     'settings',
   ],
   creator: [
@@ -192,6 +199,7 @@ export const ROLE_ALLOWED_PAGE_KEYS: Record<string, string[] | null> = {
     'feesAdjustments',
     'payouts',
     'myCashbook',
+    'planBilling',
     'settings',
   ],
   consumer: ['dashboard', 'orders', 'consumerProfile', 'settings'],
@@ -323,6 +331,7 @@ export const PAGE_META: Record<string, [string, string]> = {
   sellerConversations: ['Messages', 'Conversations with your buyers'],
   customers: ['Consumer Management', 'View and manage customer accounts'],
   settings: ['Settings', 'Store configuration'],
+  planBilling: ['Plan & Billing', 'Your subscription plan, billing history, and usage'],
   adminProfile: ['My Profile', 'Account, security, RBAC scope, and preferences'],
   websiteCmsStudio: ['Website Manager', 'Manage homepage banners, pages, and site content'],
   adsDealsStudio: ['Ads & Deals Studio', 'Manage promoted ads, deals, coupons, and paid placements'],
@@ -357,7 +366,7 @@ export const PAGE_META: Record<string, [string, string]> = {
   moderationCenter: ['Moderation Center', 'Flagged content awaiting review'],
   disputes: ['Disputes', 'Buyer/seller disputes requiring resolution'],
   trustCenter: ['Trust & Analytics', 'Platform trust metrics and safety alerts'],
-  finance: ['Finance & Payouts', 'Current eligible earnings, commission, and net withdrawable'],
+  finance: ['Finance', 'Financial transactions, settlements, and billing records'],
   myEarnings: ['My Earnings', 'Earnings overview and payout Payment Info'],
   feesAdjustments: ['Fees & Adjustments', 'Authoritative current deductions and credits'],
   adminManagement: ['Admin Management', 'Manage admin accounts and access'],
@@ -367,7 +376,7 @@ export const PAGE_META: Record<string, [string, string]> = {
   ],
   verificationCenter: ['Verification Center', 'Seller & brand identity verification queue'],
   subscriptionPlans: ['Subscription Plans', 'Seller & brand subscription tiers'],
-  monetizationCenter: ['Monetization Center', 'Ad placements and promoted listings'],
+  monetizationCenter: ['Monetization Center', 'Platform revenue and commerce performance'],
   courierProviders: ['Courier Providers', 'Manage integrated delivery partners'],
   shipmentOperations: ['Shipment Operations', 'Active shipments across all couriers'],
   courierAnalytics: ['Courier Analytics', 'Delivery performance by courier partner'],
@@ -431,7 +440,7 @@ export const SELLER_NAV_GROUPS: CmsNavGroup[] = [
       navItem('payouts', 'Payouts / Withdrawals'),
     ],
   },
-  { title: 'SETTINGS', items: [navItem('settings', 'Settings')] },
+  { title: 'SETTINGS', items: [navItem('planBilling', 'Plan & Billing'), navItem('settings', 'Settings')] },
 ];
 
 /** Creator chrome tree (cms-mirror + AdminWorkspaceLayout). */
@@ -467,7 +476,7 @@ export const CREATOR_NAV_GROUPS: CmsNavGroup[] = [
       navItem('payouts', 'Payouts / Withdrawals'),
     ],
   },
-  { title: 'SETTINGS', items: [navItem('settings', 'Settings')] },
+  { title: 'SETTINGS', items: [navItem('planBilling', 'Plan & Billing'), navItem('settings', 'Settings')] },
 ];
 
 export const CONSUMER_NAV_GROUPS: CmsNavGroup[] = [

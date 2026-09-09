@@ -17,7 +17,9 @@ export type ReferenceEntityType =
   | 'payment'
   | 'escrow'
   | 'conversation'
-  | 'cashbook';
+  | 'cashbook'
+  /** Sprint 12 — Subscription billing documents. Deliberately a SEPARATE series from 'invoice' (commerce sub-order invoices) — different business document, not to be conflated. */
+  | 'subscriptionInvoice';
 
 export const REFERENCE_PREFIX: Record<ReferenceEntityType, string> = {
   user: 'CF',
@@ -34,6 +36,7 @@ export const REFERENCE_PREFIX: Record<ReferenceEntityType, string> = {
   escrow: 'ESC',
   conversation: 'CV',
   cashbook: 'CB',
+  subscriptionInvoice: 'SINV',
 };
 
 export const REFERENCE_FIELD: Record<ReferenceEntityType, string> = {
@@ -51,6 +54,8 @@ export const REFERENCE_FIELD: Record<ReferenceEntityType, string> = {
   escrow: 'escrowReferenceId',
   conversation: 'conversationReferenceId',
   cashbook: 'cashbookReferenceId',
+  /** Field name only for consistency with the map's shape — subscription_billing_documents.reference_id is written directly at creation, never backfilled onto an existing row. */
+  subscriptionInvoice: 'referenceId',
 };
 
 export const REFERENCE_ENTITY_TYPES = Object.keys(REFERENCE_PREFIX) as ReferenceEntityType[];

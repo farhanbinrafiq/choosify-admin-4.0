@@ -77,6 +77,10 @@ const OrderDetailsPage = lazy(() => import('./pages/admin/OrderDetails'));
 const SellerConversations = lazy(() => import('./pages/admin/SellerConversations'));
 const AdsSponsorsPage = lazy(() => import('./pages/admin/AdsSponsors'));
 const SponsoredPromotionsPage = lazy(() => import('./pages/admin/SponsoredPromotions'));
+const SubscriptionPlansPage = lazy(() => import('./pages/admin/SubscriptionPlans'));
+const PlanBillingPage = lazy(() => import('./pages/admin/PlanBilling'));
+const MonetizationPage = lazy(() => import('./pages/admin/Monetization'));
+const FinancePage = lazy(() => import('./pages/admin/Finance'));
 import OrdersOverview from './pages/admin/OrdersOverview';
 const SellerMyCustomers = lazy(() => import('./pages/admin/SellerMyCustomers'));
 const SellerCustomerProfileView = lazy(() => import('./pages/admin/profiles/SellerCustomerProfileView'));
@@ -1594,12 +1598,21 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <RoleGuard>
-                    <AdminWorkspaceLayout>
-                      <AdminFeatureNotAvailable
-                        title="Subscription Plans"
-                        description="Seller/creator subscription plans and billing are not yet built."
-                      />
-                    </AdminWorkspaceLayout>
+                    <Suspense fallback={routeSuspenseFallback}>
+                      <SubscriptionPlansPage />
+                    </Suspense>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/plan-billing"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <Suspense fallback={routeSuspenseFallback}>
+                      <PlanBillingPage />
+                    </Suspense>
                   </RoleGuard>
                 </ProtectedRoute>
               }
@@ -1609,12 +1622,21 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <RoleGuard>
-                    <AdminWorkspaceLayout>
-                      <AdminFeatureNotAvailable
-                        title="Monetization Center"
-                        description="Platform monetization tooling is not yet built."
-                      />
-                    </AdminWorkspaceLayout>
+                    <Suspense fallback={routeSuspenseFallback}>
+                      <MonetizationPage />
+                    </Suspense>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/analytics"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <Suspense fallback={routeSuspenseFallback}>
+                      <FinancePage />
+                    </Suspense>
                   </RoleGuard>
                 </ProtectedRoute>
               }

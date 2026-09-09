@@ -86,8 +86,14 @@ export const escrowStore = {
   async listEscrowsBySeller(sellerId: string): Promise<CommerceEscrow[]> {
     return (await requireMemory()).listEscrowsBySeller(sellerId);
   },
+  async listEscrowsInRange(fromIso: string, toIso: string): Promise<CommerceEscrow[]> {
+    return (await requireMemory()).listEscrowsInRange(fromIso, toIso);
+  },
   async upsertEscrow(row: CommerceEscrow): Promise<CommerceEscrow> {
     return (await requireMemory()).upsertEscrow(row);
+  },
+  async deleteEscrow(escrowId: string): Promise<void> {
+    return (await requireMemory()).deleteEscrow(escrowId);
   },
   async getSettlement(settlementId: string): Promise<CommerceSettlement | null> {
     return (await requireMemory()).getSettlement(settlementId);
@@ -95,8 +101,14 @@ export const escrowStore = {
   async getSettlementByEscrow(escrowId: string): Promise<CommerceSettlement | null> {
     return (await requireMemory()).getSettlementByEscrow(escrowId);
   },
+  async listSettlementsInRange(fromIso: string, toIso: string): Promise<CommerceSettlement[]> {
+    return (await requireMemory()).listSettlementsInRange(fromIso, toIso);
+  },
   async upsertSettlement(row: CommerceSettlement): Promise<CommerceSettlement> {
     return (await requireMemory()).upsertSettlement(row);
+  },
+  async deleteSettlement(settlementId: string): Promise<void> {
+    return (await requireMemory()).deleteSettlement(settlementId);
   },
   async getBalance(sellerId: string, currency: string): Promise<SellerBalanceAccount | null> {
     return (await requireMemory()).getBalance(sellerId, currency);

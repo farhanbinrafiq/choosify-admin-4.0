@@ -6,6 +6,7 @@ import {
   getDocumentById,
   requireAdminFirestore,
   upsertDocumentById,
+  deleteDocument,
 } from '../lib/firestore/queryHelpers';
 import type {
   CommerceEscrow,
@@ -60,9 +61,23 @@ export const escrowFirestoreAdmin = {
     const snap = await db.collection(ESCROWS).where('sellerId', '==', sellerId).get();
     return snap.docs.map((d) => d.data() as CommerceEscrow);
   },
+  /** Read-only aggregation helper (Sprint 12 Monetization Center) — never a second ledger, just a range scan over the same escrow collection. */
+  async listEscrowsInRange(fromIso: string, toIso: string): Promise<CommerceEscrow[]> {
+    const db = await requireAdminFirestore();
+    const snap = await db
+      .collection(ESCROWS)
+      .where('createdAt', '>=', fromIso)
+      .where('createdAt', '<=', toIso)
+      .get();
+    return snap.docs.map((d) => d.data() as CommerceEscrow);
+  },
   async upsertEscrow(row: CommerceEscrow): Promise<CommerceEscrow> {
     await upsertDocumentById(ESCROWS, row.escrowId, row);
     return row;
+  },
+  /** Test-fixture cleanup only (Sprint 12 Monetization Center probes) — never used by production business logic, which never deletes financial records. */
+  async deleteEscrow(escrowId: string): Promise<void> {
+    await deleteDocument(ESCROWS, escrowId);
   },
   async getSettlement(settlementId: string): Promise<CommerceSettlement | null> {
     return getDocumentById<CommerceSettlement>(SETTLEMENTS, settlementId);
@@ -80,6 +95,20 @@ export const escrowFirestoreAdmin = {
   async upsertSettlement(row: CommerceSettlement): Promise<CommerceSettlement> {
     await upsertDocumentById(SETTLEMENTS, row.settlementId, row);
     return row;
+  },
+  /** Test-fixture cleanup only (Sprint 12 Monetization Center probes) — never used by production business logic, which never deletes financial records. */
+  async deleteSettlement(settlementId: string): Promise<void> {
+    await deleteDocument(SETTLEMENTS, settlementId);
+  },
+  /** Read-only aggregation helper (Sprint 12 Monetization Center) — never a second ledger, just a range scan over the same settlement collection. */
+  async listSettlementsInRange(fromIso: string, toIso: string): Promise<CommerceSettlement[]> {
+    const db = await requireAdminFirestore();
+    const snap = await db
+      .collection(SETTLEMENTS)
+      .where('createdAt', '>=', fromIso)
+      .where('createdAt', '<=', toIso)
+      .get();
+    return snap.docs.map((d) => d.data() as CommerceSettlement);
   },
   async getBalance(sellerId: string, currency: string): Promise<SellerBalanceAccount | null> {
     return getDocumentById<SellerBalanceAccount>(BALANCES, balanceDocId(sellerId, currency));

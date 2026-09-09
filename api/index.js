@@ -681,16 +681,34 @@ __export(schema_exports, {
   mediaVisibilityEnum: () => mediaVisibilityEnum,
   notifications: () => notifications,
   partnerApplications: () => partnerApplications,
+  planBillingIntervalEnum: () => planBillingIntervalEnum,
+  planEntitlements: () => planEntitlements,
+  planLifecycleStateEnum: () => planLifecycleStateEnum,
+  planLimits: () => planLimits,
+  planVersionOffers: () => planVersionOffers,
+  planVersions: () => planVersions,
   plans: () => plans,
   refreshTokens: () => refreshTokens,
   roleEnum: () => roleEnum,
   sellerProfiles: () => sellerProfiles,
+  subscriptionBillingDocumentStatusEnum: () => subscriptionBillingDocumentStatusEnum,
+  subscriptionBillingDocuments: () => subscriptionBillingDocuments,
+  subscriptionEventTypeEnum: () => subscriptionEventTypeEnum,
+  subscriptionEvents: () => subscriptionEvents,
+  subscriptionPaymentPurposeEnum: () => subscriptionPaymentPurposeEnum,
+  subscriptionPaymentResultEnum: () => subscriptionPaymentResultEnum,
+  subscriptionPayments: () => subscriptionPayments,
+  subscriptionStatusEnum: () => subscriptionStatusEnum,
+  subscriptions: () => subscriptions,
   userIdentities: () => userIdentities,
-  users: () => users
+  users: () => users,
+  workspaceStatusEnum: () => workspaceStatusEnum,
+  workspaceTypeEnum: () => workspaceTypeEnum,
+  workspaces: () => workspaces
 });
 import { sql } from "drizzle-orm";
 import { pgTable, uuid, varchar, boolean, timestamp, pgEnum, integer, bigint, jsonb, text, index, uniqueIndex } from "drizzle-orm/pg-core";
-var roleEnum, users, choosifyUserIdCounters, choosifyReferenceIdCounters, sellerProfiles, mediaEnum, mediaVisibilityEnum, mediaTypeEnum, media, refreshTokens, authTokenTypeEnum, authTokens, authProviderEnum, userIdentities, localPasswordSetups, partnerApplications, featureEntitlementScopeEnum, featureEntitlements, notifications, plans, accountPlans, featureRequestStatusEnum, featureRequests;
+var roleEnum, users, choosifyUserIdCounters, choosifyReferenceIdCounters, sellerProfiles, mediaEnum, mediaVisibilityEnum, mediaTypeEnum, media, refreshTokens, authTokenTypeEnum, authTokens, authProviderEnum, userIdentities, localPasswordSetups, partnerApplications, featureEntitlementScopeEnum, featureEntitlements, notifications, planLifecycleStateEnum, planBillingIntervalEnum, plans, accountPlans, featureRequestStatusEnum, featureRequests, workspaceTypeEnum, workspaceStatusEnum, workspaces, planVersions, planVersionOffers, planEntitlements, planLimits, subscriptionStatusEnum, subscriptions, subscriptionEventTypeEnum, subscriptionEvents, subscriptionPaymentPurposeEnum, subscriptionPaymentResultEnum, subscriptionPayments, subscriptionBillingDocumentStatusEnum, subscriptionBillingDocuments;
 var init_schema = __esm({
   "server/db/schema.ts"() {
     roleEnum = pgEnum("user_role", [
@@ -909,6 +927,8 @@ var init_schema = __esm({
       userIdIdx: index("notifications_user_id_idx").on(table.userId),
       userReadIdx: index("notifications_user_read_idx").on(table.userId, table.read)
     }));
+    planLifecycleStateEnum = pgEnum("plan_lifecycle_state", ["draft", "published", "archived"]);
+    planBillingIntervalEnum = pgEnum("plan_billing_interval", ["monthly", "annual"]);
     plans = pgTable("plans", {
       id: varchar("id", { length: 64 }).primaryKey(),
       role: varchar("role", { length: 16 }).notNull(),
@@ -916,10 +936,26 @@ var init_schema = __esm({
       priceLabel: varchar("price_label", { length: 64 }),
       active: boolean("active").notNull().default(true),
       sortOrder: integer("sort_order").notNull().default(0),
+      internalCode: varchar("internal_code", { length: 64 }),
+      description: text("description"),
+      badge: varchar("badge", { length: 64 }),
+      lifecycleState: planLifecycleStateEnum("lifecycle_state").notNull().default("draft"),
+      isPublic: boolean("is_public").notNull().default(false),
+      isRecommended: boolean("is_recommended").notNull().default(false),
+      /**
+       * Points at plan_versions.id. The real integrity guarantee — that this can
+       * never point at a version belonging to a DIFFERENT plan — is a composite
+       * FK (id, current_published_version_id) -> plan_versions(plan_id, id)
+       * added directly in the migration SQL (see 0007_subscription_plans.sql);
+       * not expressed as a Drizzle .references() here to avoid a circular
+       * top-level table-callback reference during module evaluation.
+       */
+      currentPublishedVersionId: uuid("current_published_version_id"),
       createdAt: timestamp("created_at").notNull().defaultNow(),
       updatedAt: timestamp("updated_at").notNull().defaultNow()
     }, (table) => ({
-      roleIdx: index("plans_role_idx").on(table.role)
+      roleIdx: index("plans_role_idx").on(table.role),
+      internalCodeUnique: uniqueIndex("plans_internal_code_unique").on(table.internalCode).where(sql`internal_code is not null`)
     }));
     accountPlans = pgTable("account_plans", {
       userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
@@ -946,6 +982,188 @@ var init_schema = __esm({
     }, (table) => ({
       userFeatureActiveUnique: uniqueIndex("feature_requests_user_feature_pending_unique").on(table.userId, table.featureKey).where(sql`status = 'pending'`),
       statusIdx: index("feature_requests_status_idx").on(table.status)
+    }));
+    workspaceTypeEnum = pgEnum("workspace_type", ["seller", "creator"]);
+    workspaceStatusEnum = pgEnum("workspace_status", ["active", "suspended"]);
+    workspaces = pgTable("workspaces", {
+      id: uuid("id").primaryKey().defaultRandom(),
+      type: workspaceTypeEnum("type").notNull(),
+      ownerUserId: uuid("owner_user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+      displayName: varchar("display_name", { length: 160 }).notNull(),
+      status: workspaceStatusEnum("status").notNull().default("active"),
+      createdAt: timestamp("created_at").notNull().defaultNow(),
+      updatedAt: timestamp("updated_at").notNull().defaultNow()
+    }, (table) => ({
+      ownerPersonaUnique: uniqueIndex("workspaces_owner_persona_unique").on(table.ownerUserId, table.type),
+      ownerIdx: index("workspaces_owner_idx").on(table.ownerUserId)
+    }));
+    planVersions = pgTable("plan_versions", {
+      id: uuid("id").primaryKey().defaultRandom(),
+      planId: varchar("plan_id", { length: 64 }).notNull().references(() => plans.id, { onDelete: "restrict" }),
+      version: integer("version").notNull(),
+      nameSnapshot: varchar("name_snapshot", { length: 160 }).notNull(),
+      descriptionSnapshot: text("description_snapshot"),
+      trialDays: integer("trial_days"),
+      /** Supplementary presentation metadata only (e.g. marketing bullets) -- NEVER authoritative for price/features/limits. */
+      snapshot: jsonb("snapshot"),
+      publishedAt: timestamp("published_at"),
+      publishedByUserId: uuid("published_by_user_id").references(() => users.id, { onDelete: "set null" }),
+      createdAt: timestamp("created_at").notNull().defaultNow()
+    }, (table) => ({
+      planVersionUnique: uniqueIndex("plan_versions_unique").on(table.planId, table.version),
+      /** Enables the composite FK from plans.current_published_version_id (added in the migration SQL). */
+      planIdIdUnique: uniqueIndex("plan_versions_plan_id_unique").on(table.planId, table.id),
+      planIdx: index("plan_versions_plan_idx").on(table.planId)
+    }));
+    planVersionOffers = pgTable("plan_version_offers", {
+      id: uuid("id").primaryKey().defaultRandom(),
+      planVersionId: uuid("plan_version_id").notNull().references(() => planVersions.id, { onDelete: "restrict" }),
+      billingInterval: planBillingIntervalEnum("billing_interval").notNull(),
+      price: integer("price").notNull(),
+      currency: varchar("currency", { length: 8 }).notNull().default("BDT")
+    }, (table) => ({
+      offerUnique: uniqueIndex("plan_version_offers_unique").on(table.planVersionId, table.billingInterval),
+      versionIdx: index("plan_version_offers_version_idx").on(table.planVersionId)
+    }));
+    planEntitlements = pgTable("plan_entitlements", {
+      planVersionId: uuid("plan_version_id").notNull().references(() => planVersions.id, { onDelete: "cascade" }),
+      featureKey: varchar("feature_key", { length: 64 }).notNull(),
+      enabled: boolean("enabled").notNull().default(true)
+    }, (table) => ({
+      pk: uniqueIndex("plan_entitlements_pk").on(table.planVersionId, table.featureKey)
+    }));
+    planLimits = pgTable("plan_limits", {
+      planVersionId: uuid("plan_version_id").notNull().references(() => planVersions.id, { onDelete: "cascade" }),
+      limitKey: varchar("limit_key", { length: 64 }).notNull(),
+      limitValue: integer("limit_value")
+    }, (table) => ({
+      pk: uniqueIndex("plan_limits_pk").on(table.planVersionId, table.limitKey)
+    }));
+    subscriptionStatusEnum = pgEnum("subscription_status", [
+      "trial",
+      "active",
+      "past_due",
+      "grace_period",
+      "cancelled",
+      "expired",
+      "suspended"
+    ]);
+    subscriptions = pgTable("subscriptions", {
+      id: uuid("id").primaryKey().defaultRandom(),
+      workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "restrict" }),
+      planVersionOfferId: uuid("plan_version_offer_id").notNull().references(() => planVersionOffers.id, { onDelete: "restrict" }),
+      /**
+       * Sprint 12 (Phase 3C) — the target offer a Seller/Creator has requested
+       * to move to at the end of the CURRENT paid period (a downgrade). NULL =
+       * no pending change. Deliberately a real, queryable column rather than
+       * something derived from subscription_events — the expiry sweep and the
+       * later "pay for the pending target" flow both need to read this directly
+       * and reliably, not re-scan an append-only log for the latest
+       * not-yet-superseded request.
+       */
+      pendingPlanVersionOfferId: uuid("pending_plan_version_offer_id").references(() => planVersionOffers.id, { onDelete: "restrict" }),
+      status: subscriptionStatusEnum("status").notNull().default("trial"),
+      startDate: timestamp("start_date").notNull().defaultNow(),
+      currentPeriodStart: timestamp("current_period_start").notNull(),
+      /** Nullable: an indefinite manual Super Admin grant may have no expiry. */
+      currentPeriodEnd: timestamp("current_period_end"),
+      cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+      cancelledAt: timestamp("cancelled_at"),
+      trialEndsAt: timestamp("trial_ends_at"),
+      /** True = Super Admin manual grant. NEVER counted as paid revenue in Monetization (no subscription_payments row exists for these). */
+      grantedManually: boolean("granted_manually").notNull().default(false),
+      grantedByUserId: uuid("granted_by_user_id").references(() => users.id, { onDelete: "set null" }),
+      grantedReason: text("granted_reason"),
+      createdAt: timestamp("created_at").notNull().defaultNow(),
+      updatedAt: timestamp("updated_at").notNull().defaultNow()
+    }, (table) => ({
+      workspaceIdx: index("subscriptions_workspace_idx").on(table.workspaceId),
+      workspaceOpenUnique: uniqueIndex("subscriptions_workspace_open_unique").on(table.workspaceId).where(sql`status in ('trial','active','past_due','grace_period')`)
+    }));
+    subscriptionEventTypeEnum = pgEnum("subscription_event_type", [
+      "subscribed",
+      "renewed",
+      "upgraded",
+      "downgraded",
+      "cancellation_requested",
+      "cancelled",
+      "expired",
+      "manually_granted",
+      "suspended",
+      "restored",
+      // Sprint 12 (Phase 3C) — 'downgraded' means the transition already took
+      // effect (past tense, matching 'cancelled'); these two represent the
+      // pending request itself, before it's fulfilled or withdrawn.
+      "downgrade_requested",
+      "downgrade_cancelled"
+    ]);
+    subscriptionEvents = pgTable("subscription_events", {
+      id: uuid("id").primaryKey().defaultRandom(),
+      subscriptionId: uuid("subscription_id").notNull().references(() => subscriptions.id, { onDelete: "restrict" }),
+      eventType: subscriptionEventTypeEnum("event_type").notNull(),
+      fromPlanVersionOfferId: uuid("from_plan_version_offer_id").references(() => planVersionOffers.id),
+      toPlanVersionOfferId: uuid("to_plan_version_offer_id").references(() => planVersionOffers.id),
+      /** NULL for system-driven transitions (e.g. an automatic expiry sweep) -- never fabricated to look human-initiated. */
+      actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+      reason: text("reason"),
+      metadata: jsonb("metadata"),
+      createdAt: timestamp("created_at").notNull().defaultNow()
+    }, (table) => ({
+      subscriptionIdx: index("subscription_events_subscription_idx").on(table.subscriptionId)
+    }));
+    subscriptionPaymentPurposeEnum = pgEnum("subscription_payment_purpose", [
+      "initial",
+      "renewal",
+      "upgrade",
+      "downgrade",
+      "manual_adjustment"
+    ]);
+    subscriptionPaymentResultEnum = pgEnum("subscription_payment_result", [
+      "pending",
+      "succeeded",
+      "failed",
+      "cancelled"
+    ]);
+    subscriptionPayments = pgTable("subscription_payments", {
+      id: uuid("id").primaryKey().defaultRandom(),
+      subscriptionId: uuid("subscription_id").references(() => subscriptions.id, { onDelete: "restrict" }),
+      workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "restrict" }),
+      planVersionOfferId: uuid("plan_version_offer_id").notNull().references(() => planVersionOffers.id, { onDelete: "restrict" }),
+      purpose: subscriptionPaymentPurposeEnum("purpose").notNull(),
+      /** Server-resolved from the offer at charge time -- never client-supplied. */
+      amount: integer("amount").notNull(),
+      currency: varchar("currency", { length: 8 }).notNull(),
+      provider: varchar("provider", { length: 32 }).notNull().default("sslcommerz"),
+      providerTranId: varchar("provider_tran_id", { length: 120 }),
+      providerValId: varchar("provider_val_id", { length: 120 }),
+      result: subscriptionPaymentResultEnum("result").notNull().default("pending"),
+      /** Guards duplicate callback/browser-refresh/retry from ever double-activating or double-billing. */
+      idempotencyKey: varchar("idempotency_key", { length: 120 }).notNull(),
+      createdAt: timestamp("created_at").notNull().defaultNow(),
+      updatedAt: timestamp("updated_at").notNull().defaultNow()
+    }, (table) => ({
+      idempotencyUnique: uniqueIndex("subscription_payments_idempotency_unique").on(table.idempotencyKey),
+      tranUnique: uniqueIndex("subscription_payments_tran_unique").on(table.provider, table.providerTranId),
+      subscriptionIdx: index("subscription_payments_subscription_idx").on(table.subscriptionId),
+      workspaceIdx: index("subscription_payments_workspace_idx").on(table.workspaceId)
+    }));
+    subscriptionBillingDocumentStatusEnum = pgEnum("subscription_billing_document_status", ["issued", "void"]);
+    subscriptionBillingDocuments = pgTable("subscription_billing_documents", {
+      id: uuid("id").primaryKey().defaultRandom(),
+      subscriptionPaymentId: uuid("subscription_payment_id").notNull().references(() => subscriptionPayments.id, { onDelete: "restrict" }),
+      workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "restrict" }),
+      /** allocateReferenceId('subscriptionInvoice') -- additive shared/referenceIds/registry.ts entry, no schema change there. */
+      referenceId: varchar("reference_id", { length: 32 }).notNull(),
+      amount: integer("amount").notNull(),
+      currency: varchar("currency", { length: 8 }).notNull(),
+      periodStart: timestamp("period_start").notNull(),
+      periodEnd: timestamp("period_end"),
+      status: subscriptionBillingDocumentStatusEnum("status").notNull().default("issued"),
+      issuedAt: timestamp("issued_at").notNull().defaultNow()
+    }, (table) => ({
+      referenceUnique: uniqueIndex("subscription_billing_documents_reference_unique").on(table.referenceId),
+      paymentUnique: uniqueIndex("subscription_billing_documents_payment_unique").on(table.subscriptionPaymentId),
+      workspaceIdx: index("subscription_billing_documents_workspace_idx").on(table.workspaceId)
     }));
   }
 });
@@ -8541,9 +8759,20 @@ var init_escrowMemoryBackend = __esm({
         ensureEscrowMemoryHydrated();
         return state8.escrows.filter((e) => e.sellerId === sellerId);
       },
+      /** Read-only aggregation helper (Sprint 12 Monetization Center) — never a second ledger, just a range scan over the same escrow rows. */
+      listEscrowsInRange(fromIso, toIso3) {
+        ensureEscrowMemoryHydrated();
+        return state8.escrows.filter((e) => e.createdAt >= fromIso && e.createdAt <= toIso3);
+      },
       upsertEscrow(row) {
         ensureEscrowMemoryHydrated();
         return upsertById2(state8.escrows, row, (r) => r.escrowId);
+      },
+      /** Test-fixture cleanup only (Sprint 12 Monetization Center probes) — never used by production business logic, which never deletes financial records. */
+      deleteEscrow(escrowId) {
+        ensureEscrowMemoryHydrated();
+        state8.escrows = state8.escrows.filter((e) => e.escrowId !== escrowId);
+        schedulePersist6();
       },
       getSettlement(settlementId) {
         ensureEscrowMemoryHydrated();
@@ -8553,9 +8782,20 @@ var init_escrowMemoryBackend = __esm({
         ensureEscrowMemoryHydrated();
         return state8.settlements.find((s) => s.escrowId === escrowId) ?? null;
       },
+      /** Read-only aggregation helper (Sprint 12 Monetization Center) — never a second ledger, just a range scan over the same settlement rows. */
+      listSettlementsInRange(fromIso, toIso3) {
+        ensureEscrowMemoryHydrated();
+        return state8.settlements.filter((s) => s.createdAt >= fromIso && s.createdAt <= toIso3);
+      },
       upsertSettlement(row) {
         ensureEscrowMemoryHydrated();
         return upsertById2(state8.settlements, row, (r) => r.settlementId);
+      },
+      /** Test-fixture cleanup only (Sprint 12 Monetization Center probes) — never used by production business logic, which never deletes financial records. */
+      deleteSettlement(settlementId) {
+        ensureEscrowMemoryHydrated();
+        state8.settlements = state8.settlements.filter((s) => s.settlementId !== settlementId);
+        schedulePersist6();
       },
       getBalance(sellerId, currency) {
         ensureEscrowMemoryHydrated();
@@ -8663,9 +8903,19 @@ var init_escrowFirestoreAdmin = __esm({
         const snap = await db3.collection(ESCROWS).where("sellerId", "==", sellerId).get();
         return snap.docs.map((d) => d.data());
       },
+      /** Read-only aggregation helper (Sprint 12 Monetization Center) — never a second ledger, just a range scan over the same escrow collection. */
+      async listEscrowsInRange(fromIso, toIso3) {
+        const db3 = await requireAdminFirestore();
+        const snap = await db3.collection(ESCROWS).where("createdAt", ">=", fromIso).where("createdAt", "<=", toIso3).get();
+        return snap.docs.map((d) => d.data());
+      },
       async upsertEscrow(row) {
         await upsertDocumentById(ESCROWS, row.escrowId, row);
         return row;
+      },
+      /** Test-fixture cleanup only (Sprint 12 Monetization Center probes) — never used by production business logic, which never deletes financial records. */
+      async deleteEscrow(escrowId) {
+        await deleteDocument(ESCROWS, escrowId);
       },
       async getSettlement(settlementId) {
         return getDocumentById(SETTLEMENTS, settlementId);
@@ -8679,6 +8929,16 @@ var init_escrowFirestoreAdmin = __esm({
       async upsertSettlement(row) {
         await upsertDocumentById(SETTLEMENTS, row.settlementId, row);
         return row;
+      },
+      /** Test-fixture cleanup only (Sprint 12 Monetization Center probes) — never used by production business logic, which never deletes financial records. */
+      async deleteSettlement(settlementId) {
+        await deleteDocument(SETTLEMENTS, settlementId);
+      },
+      /** Read-only aggregation helper (Sprint 12 Monetization Center) — never a second ledger, just a range scan over the same settlement collection. */
+      async listSettlementsInRange(fromIso, toIso3) {
+        const db3 = await requireAdminFirestore();
+        const snap = await db3.collection(SETTLEMENTS).where("createdAt", ">=", fromIso).where("createdAt", "<=", toIso3).get();
+        return snap.docs.map((d) => d.data());
       },
       async getBalance(sellerId, currency) {
         return getDocumentById(BALANCES, balanceDocId(sellerId, currency));
@@ -8795,8 +9055,14 @@ var init_escrowStore = __esm({
       async listEscrowsBySeller(sellerId) {
         return (await requireMemory()).listEscrowsBySeller(sellerId);
       },
+      async listEscrowsInRange(fromIso, toIso3) {
+        return (await requireMemory()).listEscrowsInRange(fromIso, toIso3);
+      },
       async upsertEscrow(row) {
         return (await requireMemory()).upsertEscrow(row);
+      },
+      async deleteEscrow(escrowId) {
+        return (await requireMemory()).deleteEscrow(escrowId);
       },
       async getSettlement(settlementId) {
         return (await requireMemory()).getSettlement(settlementId);
@@ -8804,8 +9070,14 @@ var init_escrowStore = __esm({
       async getSettlementByEscrow(escrowId) {
         return (await requireMemory()).getSettlementByEscrow(escrowId);
       },
+      async listSettlementsInRange(fromIso, toIso3) {
+        return (await requireMemory()).listSettlementsInRange(fromIso, toIso3);
+      },
       async upsertSettlement(row) {
         return (await requireMemory()).upsertSettlement(row);
+      },
+      async deleteSettlement(settlementId) {
+        return (await requireMemory()).deleteSettlement(settlementId);
       },
       async getBalance(sellerId, currency) {
         return (await requireMemory()).getBalance(sellerId, currency);
@@ -9143,7 +9415,8 @@ var init_registry = __esm({
       payment: "PAY",
       escrow: "ESC",
       conversation: "CV",
-      cashbook: "CB"
+      cashbook: "CB",
+      subscriptionInvoice: "SINV"
     };
     REFERENCE_FIELD = {
       user: "choosifyUserId",
@@ -9159,7 +9432,9 @@ var init_registry = __esm({
       payment: "paymentReferenceId",
       escrow: "escrowReferenceId",
       conversation: "conversationReferenceId",
-      cashbook: "cashbookReferenceId"
+      cashbook: "cashbookReferenceId",
+      /** Field name only for consistency with the map's shape — subscription_billing_documents.reference_id is written directly at creation, never backfilled onto an existing row. */
+      subscriptionInvoice: "referenceId"
     };
     REFERENCE_ENTITY_TYPES = Object.keys(REFERENCE_PREFIX);
     MIN_PAD2 = 5;
@@ -10996,7 +11271,7 @@ async function dispatchOrder(input) {
     reused: false
   };
 }
-async function markCommerceOrderDeliveredExternal(orderNumber2, actorId3) {
+async function markCommerceOrderDeliveredExternal(orderNumber2, actorId4) {
   const all = await commerceStore.listOrders();
   const order = all.find((o) => o.orderNumber === orderNumber2) || null;
   if (!order) return { changed: false, status: null };
@@ -11013,11 +11288,11 @@ async function markCommerceOrderDeliveredExternal(orderNumber2, actorId3) {
   } : void 0;
   await commerceStore.commitOrderMutation({ order: next, shipment });
   mirrorOpsStatus(next);
-  emitOrder("ShipmentDelivered", next.id, actorId3, {
+  emitOrder("ShipmentDelivered", next.id, actorId4, {
     orderId: next.id,
     shipmentId: existing?.id
   });
-  emitOrder("OrderDelivered", next.id, actorId3, {
+  emitOrder("OrderDelivered", next.id, actorId4, {
     orderId: next.id,
     from: "shipped",
     to: "delivered",
@@ -11321,7 +11596,7 @@ async function settleOrderItemDelivered(opsOrderId, itemId, source, opts = {}) {
 async function settleOrderDelivered(opsOrderId, source, opts = {}) {
   const order = operationsStore.getOrder(opsOrderId);
   if (!order) return { ok: false, reused: false, allDelivered: false, reason: "no_ops_order" };
-  const actorId3 = opts.actorId || "system";
+  const actorId4 = opts.actorId || "system";
   const commerce = await loadCommerceOrder(opsOrderId);
   const commerceConsumed = Boolean(commerce?.inventoryConsumed);
   const deliveredAt = nowIso15();
@@ -11363,7 +11638,7 @@ async function settleOrderDelivered(opsOrderId, source, opts = {}) {
   if (commerce?.status === "shipped") {
     try {
       const { markCommerceOrderDeliveredExternal: markCommerceOrderDeliveredExternal2 } = await Promise.resolve().then(() => (init_orderService(), orderService_exports));
-      const r = await markCommerceOrderDeliveredExternal2(opsOrderId, actorId3);
+      const r = await markCommerceOrderDeliveredExternal2(opsOrderId, actorId4);
       commerceChanged = r.changed;
     } catch (err) {
       console.warn("[DeliverySettlement] Commerce delivered advance failed (non-fatal):", err);
@@ -12707,8 +12982,8 @@ var init_uploadValidation = __esm({
 });
 
 // server/partnerApplications/partnerApplicationStore.ts
-import { randomUUID as randomUUID8 } from "node:crypto";
-import { and as and4, desc as desc2, eq as eq10, or } from "drizzle-orm";
+import { randomUUID as randomUUID7 } from "node:crypto";
+import { and as and5, desc as desc2, eq as eq10, or as or2 } from "drizzle-orm";
 function rowToApplication(row) {
   return {
     id: row.id,
@@ -12756,7 +13031,7 @@ var init_partnerApplicationStore = __esm({
       },
       findPendingByEmail: async (email) => {
         const normalized = email.trim().toLowerCase();
-        const rows = await db.select().from(partnerApplications).where(and4(eq10(partnerApplications.email, normalized), eq10(partnerApplications.status, "pending"))).limit(1);
+        const rows = await db.select().from(partnerApplications).where(and5(eq10(partnerApplications.email, normalized), eq10(partnerApplications.status, "pending"))).limit(1);
         return rows[0] ? rowToApplication(rows[0]) : null;
       },
       findForActor: async (params) => {
@@ -12766,7 +13041,7 @@ var init_partnerApplicationStore = __esm({
         if (uid) conditions.push(eq10(partnerApplications.provisionedUserId, uid), eq10(partnerApplications.existingUserId, uid));
         if (email) conditions.push(eq10(partnerApplications.email, email));
         if (conditions.length === 0) return null;
-        const rows = await db.select().from(partnerApplications).where(or(...conditions));
+        const rows = await db.select().from(partnerApplications).where(or2(...conditions));
         if (!rows.length) return null;
         const mapped = rows.map(rowToApplication);
         const pending2 = mapped.find((a) => a.status === "pending");
@@ -12774,7 +13049,7 @@ var init_partnerApplicationStore = __esm({
         return [...mapped].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] || null;
       },
       create: async (input) => {
-        const id = `papp_${randomUUID8()}`;
+        const id = `papp_${randomUUID7()}`;
         const rows = await db.insert(partnerApplications).values({
           id,
           applicantType: input.applicantType,
@@ -14380,14 +14655,14 @@ __export(conversationService_exports, {
   toPublicSupportTicket: () => toPublicSupportTicket,
   updateSupportTicketCrm: () => updateSupportTicketCrm
 });
-import { randomUUID as randomUUID11 } from "node:crypto";
+import { randomUUID as randomUUID10 } from "node:crypto";
 async function resolveSupportTargetUser(targetUserId) {
   const id = String(targetUserId || "").trim();
   if (!id) return null;
   try {
     const { db: db3 } = await Promise.resolve().then(() => (init_client(), client_exports));
     const { users: users2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-    const { eq: eq18 } = await import("drizzle-orm");
+    const { eq: eq25 } = await import("drizzle-orm");
     const rows = await db3.select({
       id: users2.id,
       role: users2.role,
@@ -14397,7 +14672,7 @@ async function resolveSupportTargetUser(targetUserId) {
       email: users2.email,
       emailVerified: users2.emailVerified,
       createdAt: users2.createdAt
-    }).from(users2).where(eq18(users2.id, id)).limit(1);
+    }).from(users2).where(eq25(users2.id, id)).limit(1);
     const u = rows[0];
     if (!u) return null;
     const senderRole = resolveSenderRole(u.role);
@@ -14426,7 +14701,7 @@ function nowIso21() {
   return (/* @__PURE__ */ new Date()).toISOString();
 }
 function newId4(prefix) {
-  return `${prefix}_${randomUUID11().replace(/-/g, "").slice(0, 16)}`;
+  return `${prefix}_${randomUUID10().replace(/-/g, "").slice(0, 16)}`;
 }
 function emitMessaging(eventName, aggregateId, actor, payload) {
   publishEvent({
@@ -15470,8 +15745,8 @@ async function resolveStaffRole(userId) {
   try {
     const { db: db3 } = await Promise.resolve().then(() => (init_client(), client_exports));
     const { users: users2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-    const { eq: eq18 } = await import("drizzle-orm");
-    const rows = await db3.select({ role: users2.role }).from(users2).where(eq18(users2.id, userId)).limit(1);
+    const { eq: eq25 } = await import("drizzle-orm");
+    const rows = await db3.select({ role: users2.role }).from(users2).where(eq25(users2.id, userId)).limit(1);
     return rows[0]?.role || null;
   } catch {
     return null;
@@ -15508,8 +15783,8 @@ async function resolveStaffDisplay(userId) {
   try {
     const { db: db3 } = await Promise.resolve().then(() => (init_client(), client_exports));
     const { users: users2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-    const { eq: eq18 } = await import("drizzle-orm");
-    const rows = await db3.select({ displayName: users2.displayName, email: users2.email }).from(users2).where(eq18(users2.id, userId)).limit(1);
+    const { eq: eq25 } = await import("drizzle-orm");
+    const rows = await db3.select({ displayName: users2.displayName, email: users2.email }).from(users2).where(eq25(users2.id, userId)).limit(1);
     return rows[0]?.displayName || rows[0]?.email || "Choosify staff";
   } catch {
     return "Choosify staff";
@@ -16853,8 +17128,8 @@ __export(partnerApplicationService_exports, {
   savePartnerAdminNotes: () => savePartnerAdminNotes,
   submitPartnerApplication: () => submitPartnerApplication
 });
-import { randomUUID as randomUUID20 } from "node:crypto";
-import { eq as eq16 } from "drizzle-orm";
+import { randomUUID as randomUUID22 } from "node:crypto";
+import { eq as eq23 } from "drizzle-orm";
 function appendHistory(app3, entry) {
   return [
     ...app3.reviewHistory || [],
@@ -16862,7 +17137,7 @@ function appendHistory(app3, entry) {
   ];
 }
 async function createSellerIdentityBrand(params) {
-  const id = `brand-${randomUUID20()}`;
+  const id = `brand-${randomUUID22()}`;
   const normalized = normalizeBrandInput({
     id,
     name: params.name,
@@ -16916,7 +17191,7 @@ async function provisionPartnerUser(params) {
   const now = /* @__PURE__ */ new Date();
   let userId = params.existingUserId || "";
   if (params.existingUserId) {
-    const rows = await db.select().from(users).where(eq16(users.id, params.existingUserId)).limit(1);
+    const rows = await db.select().from(users).where(eq23(users.id, params.existingUserId)).limit(1);
     const user = rows[0];
     if (!user) {
       const err = new Error("Linked Consumer account no longer exists");
@@ -16934,7 +17209,7 @@ async function provisionPartnerUser(params) {
         role,
         displayName: params.app.displayName,
         updatedAt: now
-      }).where(eq16(users.id, user.id));
+      }).where(eq23(users.id, user.id));
       if (role === ROLES.SELLER) {
         await tx.insert(sellerProfiles).values({
           userId: user.id,
@@ -16964,7 +17239,7 @@ async function provisionPartnerUser(params) {
       err.status = 409;
       throw err;
     }
-    const uid = randomUUID20();
+    const uid = randomUUID22();
     await db.transaction(async (tx) => {
       const choosifyUserId = await allocateNextChoosifyUserId(tx);
       await tx.insert(users).values({
@@ -17037,7 +17312,7 @@ async function submitPartnerApplication(input) {
       throw err;
     }
     if (role === ROLES.USER) {
-      const rows = await db.select().from(users).where(eq16(users.id, existing.uid)).limit(1);
+      const rows = await db.select().from(users).where(eq23(users.id, existing.uid)).limit(1);
       const userRow = rows[0];
       const ok = userRow?.passwordHash ? await verifyPassword(userRow.passwordHash, input.password) : false;
       if (!ok) {
@@ -21448,94 +21723,168 @@ var EntityVersionBodySchema = z7.object({
 // server/entitlements/entitlementStore.ts
 init_client();
 init_schema();
-import { and as and3, eq as eq9, inArray as inArray3 } from "drizzle-orm";
+import { and as and4, eq as eq9, inArray as inArray4 } from "drizzle-orm";
 
-// server/entitlements/planStore.ts
+// server/subscriptions/workspaceService.ts
 init_client();
 init_schema();
-import { randomUUID as randomUUID7 } from "node:crypto";
-import { eq as eq8 } from "drizzle-orm";
-function toPlan(row) {
+import { and as and3, eq as eq8, ilike, inArray as inArray3, or } from "drizzle-orm";
+
+// server/subscriptions/types.ts
+var OPEN_SUBSCRIPTION_STATUSES = ["trial", "active", "past_due", "grace_period"];
+
+// server/subscriptions/workspaceService.ts
+function toWorkspace(row) {
   return {
     id: row.id,
-    role: row.role,
-    name: row.name,
-    priceLabel: row.priceLabel,
-    active: row.active,
-    sortOrder: row.sortOrder
-  };
-}
-function toAccountPlan(row) {
-  return {
-    userId: row.userId,
-    planId: row.planId,
+    type: row.type,
+    ownerUserId: row.ownerUserId,
+    displayName: row.displayName,
     status: row.status,
-    assignedAt: row.assignedAt.toISOString(),
-    expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString()
   };
 }
-var planStore = {
-  listPlans: async (role) => {
-    const rows = role ? await db.select().from(plans).where(eq8(plans.role, role)) : await db.select().from(plans);
-    return rows.map(toPlan).sort((a, b) => a.sortOrder - b.sortOrder);
+function normalizeWorkspaceType(role) {
+  const r = String(role || "").toLowerCase();
+  if (r === "seller" || r === "verified_seller") return "seller";
+  if (r === "creator") return "creator";
+  return null;
+}
+var workspaceService = {
+  /** Resolve (and lazily create, matching the approved backfill rule) the Workspace for a login + its persona. Returns null for roles with no Workspace concept. */
+  resolveWorkspaceForUser: async (userId, role) => {
+    const type = normalizeWorkspaceType(role);
+    if (!type) return null;
+    const rows = await db.select().from(workspaces).where(and3(eq8(workspaces.ownerUserId, userId), eq8(workspaces.type, type))).limit(1);
+    if (rows[0]) return toWorkspace(rows[0]);
+    return null;
   },
-  getPlan: async (id) => {
-    const rows = await db.select().from(plans).where(eq8(plans.id, id)).limit(1);
-    return rows[0] ? toPlan(rows[0]) : null;
+  /**
+   * Creates the Workspace for a login + persona if one doesn't exist yet —
+   * the same rule the one-time local backfill applied, exposed here so
+   * future onboarding (a user becoming a Seller/Creator after this migration)
+   * gets a Workspace without a second manual backfill run. Never reads the
+   * catalog store; never invoked for Admin/Super Admin/Consumer.
+   */
+  ensureWorkspaceForUser: async (input) => {
+    const type = normalizeWorkspaceType(input.role);
+    if (!type) return null;
+    const existing = await workspaceService.resolveWorkspaceForUser(input.userId, input.role);
+    if (existing) return existing;
+    let displayName = input.displayName;
+    if (!displayName && type === "seller") {
+      const profile = await db.select({ storeName: sellerProfiles.storeName }).from(sellerProfiles).where(eq8(sellerProfiles.userId, input.userId)).limit(1);
+      displayName = profile[0]?.storeName;
+    }
+    displayName = displayName || (type === "seller" ? "Seller Workspace" : "Creator Workspace");
+    const created2 = await db.insert(workspaces).values({ type, ownerUserId: input.userId, displayName }).onConflictDoNothing({ target: [workspaces.ownerUserId, workspaces.type] }).returning();
+    if (created2[0]) return toWorkspace(created2[0]);
+    return workspaceService.resolveWorkspaceForUser(input.userId, input.role);
   },
-  createPlan: async (input) => {
-    const id = `plan_${randomUUID7()}`;
-    await db.insert(plans).values({
-      id,
-      role: input.role,
-      name: input.name,
-      priceLabel: input.priceLabel || null,
-      sortOrder: input.sortOrder ?? 0
-    });
-    return await planStore.getPlan(id);
+  getWorkspace: async (workspaceId) => {
+    const rows = await db.select().from(workspaces).where(eq8(workspaces.id, workspaceId)).limit(1);
+    return rows[0] ? toWorkspace(rows[0]) : null;
   },
-  updatePlan: async (id, patch) => {
-    await db.update(plans).set({ ...patch, updatedAt: /* @__PURE__ */ new Date() }).where(eq8(plans.id, id));
-    return planStore.getPlan(id);
+  /**
+   * Super Admin workspace lookup for manual-grant target selection (Phase 4
+   * UI). The smallest role-protected read this needs — NOT Team & Access,
+   * just "which real Workspace is this." Matches on the Workspace's own
+   * display name or its owner's email/display name; capped at 50 results
+   * since there is no pagination need at this scale yet.
+   */
+  listWorkspaces: async (filter) => {
+    const conditions = [];
+    if (filter?.type) conditions.push(eq8(workspaces.type, filter.type));
+    const search2 = filter?.search?.trim();
+    if (search2) {
+      conditions.push(
+        or(
+          ilike(workspaces.displayName, `%${search2}%`),
+          ilike(users.email, `%${search2}%`),
+          ilike(users.displayName, `%${search2}%`)
+        )
+      );
+    }
+    const rows = await db.select({ workspace: workspaces, ownerEmail: users.email, ownerDisplayName: users.displayName }).from(workspaces).innerJoin(users, eq8(workspaces.ownerUserId, users.id)).where(conditions.length ? and3(...conditions) : void 0).limit(50);
+    return rows.map((r) => ({ ...toWorkspace(r.workspace), ownerEmail: r.ownerEmail, ownerDisplayName: r.ownerDisplayName }));
   },
-  /** The account's currently assigned plan, or null if unassigned/expired. */
-  getAccountPlan: async (userId) => {
-    const rows = await db.select().from(accountPlans).where(eq8(accountPlans.userId, userId)).limit(1);
+  /**
+   * The single canonical lookup: this Workspace's OPEN subscription resolved
+   * all the way through to its Plan Version's own row — the exact chain the
+   * approved architecture requires (workspace -> open subscription ->
+   * plan_version_offer -> plan_version -> plan). Used by BOTH
+   * resolveFeatureEnabled()'s plan tier and resolvePlanLimit() so there is
+   * exactly one place this join lives.
+   */
+  getResolvedOpenSubscription: async (workspaceId) => {
+    const rows = await db.select({
+      subscription: subscriptions,
+      offer: planVersionOffers,
+      version: planVersions,
+      plan: plans
+    }).from(subscriptions).innerJoin(planVersionOffers, eq8(subscriptions.planVersionOfferId, planVersionOffers.id)).innerJoin(planVersions, eq8(planVersionOffers.planVersionId, planVersions.id)).innerJoin(plans, eq8(planVersions.planId, plans.id)).where(and3(eq8(subscriptions.workspaceId, workspaceId), inArray3(subscriptions.status, OPEN_SUBSCRIPTION_STATUSES))).limit(1);
     const row = rows[0];
     if (!row) return null;
-    const ap = toAccountPlan(row);
-    if (ap.status !== "active") return null;
-    if (ap.expiresAt && new Date(ap.expiresAt).getTime() < Date.now()) return null;
-    return ap;
-  },
-  /** Admin-only: assign or change an account's plan. Never self-service. */
-  assignAccountPlan: async (input) => {
-    const plan = await planStore.getPlan(input.planId);
-    if (!plan) throw new Error(`Plan ${input.planId} not found`);
-    await db.insert(accountPlans).values({
-      userId: input.userId,
-      planId: input.planId,
-      status: "active",
-      assignedByUserId: input.assignedByUserId,
-      expiresAt: input.expiresAt ? new Date(input.expiresAt) : null
-    }).onConflictDoUpdate({
-      target: accountPlans.userId,
-      set: {
-        planId: input.planId,
-        status: "active",
-        assignedByUserId: input.assignedByUserId,
-        expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
-        updatedAt: /* @__PURE__ */ new Date()
-      }
-    });
-    return await planStore.getAccountPlan(input.userId);
-  },
-  cancelAccountPlan: async (userId) => {
-    await db.update(accountPlans).set({ status: "cancelled", updatedAt: /* @__PURE__ */ new Date() }).where(eq8(accountPlans.userId, userId));
-  },
-  listAccountPlans: async () => {
-    const rows = await db.select().from(accountPlans);
-    return rows.map(toAccountPlan);
+    const [entitlementRows, limitRows] = await Promise.all([
+      db.select().from(planEntitlements).where(eq8(planEntitlements.planVersionId, row.version.id)),
+      db.select().from(planLimits).where(eq8(planLimits.planVersionId, row.version.id))
+    ]);
+    return {
+      subscription: {
+        id: row.subscription.id,
+        workspaceId: row.subscription.workspaceId,
+        planVersionOfferId: row.subscription.planVersionOfferId,
+        pendingPlanVersionOfferId: row.subscription.pendingPlanVersionOfferId,
+        status: row.subscription.status,
+        startDate: row.subscription.startDate.toISOString(),
+        currentPeriodStart: row.subscription.currentPeriodStart.toISOString(),
+        currentPeriodEnd: row.subscription.currentPeriodEnd ? row.subscription.currentPeriodEnd.toISOString() : null,
+        cancelAtPeriodEnd: row.subscription.cancelAtPeriodEnd,
+        cancelledAt: row.subscription.cancelledAt ? row.subscription.cancelledAt.toISOString() : null,
+        trialEndsAt: row.subscription.trialEndsAt ? row.subscription.trialEndsAt.toISOString() : null,
+        grantedManually: row.subscription.grantedManually,
+        grantedByUserId: row.subscription.grantedByUserId,
+        grantedReason: row.subscription.grantedReason,
+        createdAt: row.subscription.createdAt.toISOString(),
+        updatedAt: row.subscription.updatedAt.toISOString()
+      },
+      offer: {
+        id: row.offer.id,
+        planVersionId: row.offer.planVersionId,
+        billingInterval: row.offer.billingInterval,
+        price: row.offer.price,
+        currency: row.offer.currency
+      },
+      version: {
+        id: row.version.id,
+        planId: row.version.planId,
+        version: row.version.version,
+        nameSnapshot: row.version.nameSnapshot,
+        descriptionSnapshot: row.version.descriptionSnapshot,
+        trialDays: row.version.trialDays,
+        publishedAt: row.version.publishedAt ? row.version.publishedAt.toISOString() : null,
+        publishedByUserId: row.version.publishedByUserId,
+        createdAt: row.version.createdAt.toISOString()
+      },
+      plan: {
+        id: row.plan.id,
+        role: row.plan.role,
+        name: row.plan.name,
+        internalCode: row.plan.internalCode,
+        description: row.plan.description,
+        badge: row.plan.badge,
+        lifecycleState: row.plan.lifecycleState,
+        isPublic: row.plan.isPublic,
+        isRecommended: row.plan.isRecommended,
+        sortOrder: row.plan.sortOrder,
+        currentPublishedVersionId: row.plan.currentPublishedVersionId,
+        createdAt: row.plan.createdAt.toISOString(),
+        updatedAt: row.plan.updatedAt.toISOString()
+      },
+      entitlements: entitlementRows.map((e) => ({ planVersionId: e.planVersionId, featureKey: e.featureKey, enabled: e.enabled })),
+      limits: limitRows.map((l) => ({ planVersionId: l.planVersionId, limitKey: l.limitKey, limitValue: l.limitValue }))
+    };
   }
 };
 
@@ -21636,14 +21985,6 @@ var PARTNER_FEATURES = [
     roles: ["seller"]
   },
   {
-    key: "creatorEconomy",
-    label: "Creator Economy",
-    description: "Creator economy hub",
-    pageKeys: ["creatorEconomy"],
-    apiPrefixes: [],
-    roles: ["creator"]
-  },
-  {
     key: "myEarnings",
     label: "My Earnings",
     description: "Earnings overview and payment info",
@@ -21724,7 +22065,7 @@ function normalizePartnerRole(role) {
 }
 async function getScopeRows(scope, scopeKeys) {
   if (scopeKeys.length === 0) return [];
-  return db.select().from(featureEntitlements).where(and3(eq9(featureEntitlements.scope, scope), inArray3(featureEntitlements.scopeKey, scopeKeys)));
+  return db.select().from(featureEntitlements).where(and4(eq9(featureEntitlements.scope, scope), inArray4(featureEntitlements.scopeKey, scopeKeys)));
 }
 async function ensureRoleDefaultsSeeded(role) {
   const existing = await getScopeRows("role", [role]);
@@ -21746,15 +22087,20 @@ async function resolveFeatureEnabled(params) {
     const hit = rows.find((r) => r.featureKey === params.featureKey);
     if (hit) return hit.enabled;
   }
-  let planId = params.planId?.trim();
-  if (!planId && uid) {
-    const accountPlan = await planStore.getAccountPlan(uid);
-    planId = accountPlan?.planId;
+  let planVersionId = null;
+  if (params.planId?.trim()) {
+    const planRows = await db.select().from(plans).where(eq9(plans.id, params.planId.trim())).limit(1);
+    planVersionId = planRows[0]?.currentPublishedVersionId ?? null;
+  } else if (uid) {
+    const workspace = await workspaceService.resolveWorkspaceForUser(uid, params.role);
+    if (workspace) {
+      const resolved = await workspaceService.getResolvedOpenSubscription(workspace.id);
+      planVersionId = resolved?.version.id ?? null;
+    }
   }
-  if (planId) {
-    const rows = await getScopeRows("plan", [planId]);
-    const hit = rows.find((r) => r.featureKey === params.featureKey);
-    if (hit) return hit.enabled;
+  if (planVersionId) {
+    const rows = await db.select().from(planEntitlements).where(and4(eq9(planEntitlements.planVersionId, planVersionId), eq9(planEntitlements.featureKey, params.featureKey))).limit(1);
+    if (rows[0]) return rows[0].enabled;
   }
   const roleRows = await getScopeRows("role", [partnerRole]);
   const roleHit = roleRows.find((r) => r.featureKey === params.featureKey);
@@ -22211,7 +22557,7 @@ init_roles();
 // lib/vercel-catalog/draftStore.ts
 init_queryHelpers();
 init_firebaseAdmin();
-import { randomUUID as randomUUID9 } from "crypto";
+import { randomUUID as randomUUID8 } from "crypto";
 var DRAFTS_COLLECTION = "catalog_drafts";
 var VERSIONS_COLLECTION = "catalog_versions";
 var DEFAULT_VERSION_LIMIT = 15;
@@ -22261,7 +22607,7 @@ var draftStore = {
   },
   async createVersion(entityType, entityId, label, snapshot, createdBy, createdByName) {
     const version = {
-      id: `ver-${randomUUID9()}`,
+      id: `ver-${randomUUID8()}`,
       entityType,
       entityId,
       label,
@@ -22284,7 +22630,7 @@ init_sellerWorkspace();
 init_brandOwnership();
 
 // server/moderation/moderationStore.ts
-import { randomUUID as randomUUID10 } from "crypto";
+import { randomUUID as randomUUID9 } from "crypto";
 
 // server/moderation/moderationTypes.ts
 var MODERATION_QUEUES = {
@@ -22435,7 +22781,7 @@ var moderationStore = {
   createItem(input) {
     const item = {
       ...input,
-      id: `mod-${randomUUID10()}`,
+      id: `mod-${randomUUID9()}`,
       status: input.status ?? MODERATION_STATUSES.PENDING,
       createdAt: nowIso18(),
       updatedAt: nowIso18()
@@ -22466,7 +22812,7 @@ var moderationStore = {
   createReport(input) {
     const report = {
       ...input,
-      id: `rpt-${randomUUID10()}`,
+      id: `rpt-${randomUUID9()}`,
       status: input.status ?? "open",
       createdAt: nowIso18(),
       updatedAt: nowIso18()
@@ -22491,7 +22837,7 @@ var moderationStore = {
   upsertVerification(sellerId, patch, historyEntry) {
     const existing = state9.verifications.find((v) => v.sellerId === sellerId);
     const entry = {
-      id: `vh-${randomUUID10()}`,
+      id: `vh-${randomUUID9()}`,
       sellerId,
       status: patch.status ?? existing?.status ?? "pending",
       changedBy: historyEntry?.changedBy,
@@ -22513,7 +22859,7 @@ var moderationStore = {
       return existing;
     }
     const created2 = {
-      id: `sv-${randomUUID10()}`,
+      id: `sv-${randomUUID9()}`,
       sellerId,
       sellerName: patch.sellerName,
       status: patch.status ?? "pending",
@@ -22533,7 +22879,7 @@ var moderationStore = {
   addFraudSignal(input) {
     const signal = {
       ...input,
-      id: `frd-${randomUUID10()}`,
+      id: `frd-${randomUUID9()}`,
       detectedAt: nowIso18(),
       reviewed: false
     };
@@ -25708,8 +26054,8 @@ catalogRouter.delete("/catalog/media/:id", ...requireCatalogMedia, async (req, r
       res.status(404).json({ error: "Media not found" });
       return;
     }
-    const actorId3 = req.userId || req.user?.uid;
-    if (!userIsPlatformAdmin(req) && record.uploadedByUserId !== actorId3) {
+    const actorId4 = req.userId || req.user?.uid;
+    if (!userIsPlatformAdmin(req) && record.uploadedByUserId !== actorId4) {
       res.status(403).json({ error: "Not authorized to delete this media" });
       return;
     }
@@ -25731,18 +26077,18 @@ catalogRouter.get("/catalog/media/private/:id", ...requireAuth, async (req, res)
       res.status(404).json({ error: "Document not found" });
       return;
     }
-    const actorId3 = req.userId || req.user?.uid;
-    let authorized = userIsPlatformAdmin(req) || record.uploadedByUserId === actorId3;
-    if (!authorized && record.relatedEntityType === "warranty_claim" && record.relatedEntityId && actorId3) {
+    const actorId4 = req.userId || req.user?.uid;
+    let authorized = userIsPlatformAdmin(req) || record.uploadedByUserId === actorId4;
+    if (!authorized && record.relatedEntityType === "warranty_claim" && record.relatedEntityId && actorId4) {
       const { operationsStore: operationsStore2 } = await Promise.resolve().then(() => (init_operationsStore(), operationsStore_exports));
       const claim = operationsStore2.getWarrantyClaim(record.relatedEntityId);
-      if (claim && claim.sellerId === actorId3) authorized = true;
+      if (claim && claim.sellerId === actorId4) authorized = true;
     }
     if (!authorized) {
       Logger.security("private_media_access_denied", {
         requestId: req.requestId,
         mediaId: record.id,
-        actorId: actorId3
+        actorId: actorId4
       });
       res.status(403).json({ error: "Not authorized to view this document" });
       return;
@@ -25754,8 +26100,8 @@ catalogRouter.get("/catalog/media/private/:id", ...requireAuth, async (req, res)
     Logger.audit("private_media_accessed", {
       requestId: req.requestId,
       mediaId: record.id,
-      actorId: actorId3,
-      isAdminAccess: userIsPlatformAdmin(req) && record.uploadedByUserId !== actorId3
+      actorId: actorId4,
+      isAdminAccess: userIsPlatformAdmin(req) && record.uploadedByUserId !== actorId4
     });
     res.setHeader("Cache-Control", "private, no-store");
     res.sendFile(resolvePrivateFilePath2(record.relativePath), { headers: { "Content-Type": record.mimeType } });
@@ -28102,7 +28448,8 @@ operationsRouter.post("/operations/orders/:id/subs/:sellerId/invoice", ...requir
     role && (hasRole(role, ROLES.SUPER_ADMIN) || hasRole(role, ROLES.ADMIN) || hasRole(role, ROLES.SUPPORT_AGENT) || hasRole(role, ROLES.MODERATOR) || hasRole(role, ROLES.FINANCE_MANAGER))
   );
   const isOwningSeller = Boolean(req.userId && req.userId === targetSellerId);
-  if (!isStaff4 && !isOwningSeller) {
+  const isOwningBuyer = Boolean(req.userId && req.userId === order.buyerId);
+  if (!isStaff4 && !isOwningSeller && !isOwningBuyer) {
     res.status(403).json({ error: "Not authorized to view this invoice" });
     return;
   }
@@ -28801,13 +29148,13 @@ operationsRouter.post("/operations/manual-offers", ...requireAuth2, async (req, 
       res.status(201).json({ success: true, data: toManualOrderOfferCard(offer) });
       return;
     }
-    const webBase4 = (process.env.CHOOSIFY_WEB_URL || process.env.VITE_CHOOSIFY_WEB_URL || "http://localhost:5173").replace(/\/$/, "");
+    const webBase5 = (process.env.CHOOSIFY_WEB_URL || process.env.VITE_CHOOSIFY_WEB_URL || "http://localhost:5173").replace(/\/$/, "");
     res.status(201).json({
       success: true,
       data: toManualOrderOfferCard(offer),
       claim: {
         token: rawClaimToken,
-        url: `${webBase4}/orders/confirm/${encodeURIComponent(rawClaimToken)}`,
+        url: `${webBase5}/orders/confirm/${encodeURIComponent(rawClaimToken)}`,
         expiresAt: claimTokenExpiresAt
       }
     });
@@ -31667,16 +32014,16 @@ bookingRouter.get("/booking/expire", async (req, res) => {
 });
 
 // server/authRouter.ts
-import { randomBytes as randomBytes6, randomUUID as randomUUID13 } from "node:crypto";
+import { randomBytes as randomBytes6, randomUUID as randomUUID12 } from "node:crypto";
 import { Router as Router6 } from "express";
-import { and as and8, eq as eq14, isNull as isNull4 } from "drizzle-orm";
+import { and as and9, eq as eq14, isNull as isNull4 } from "drizzle-orm";
 init_jwtTokens();
 
 // server/auth/authTokens.ts
 init_client();
 init_schema();
 import { createHash as createHash3, randomBytes as randomBytes4 } from "node:crypto";
-import { and as and5, eq as eq11, isNull as isNull2 } from "drizzle-orm";
+import { and as and6, eq as eq11, isNull as isNull2 } from "drizzle-orm";
 var EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1e3;
 var PASSWORD_RESET_TTL_MS = 60 * 60 * 1e3;
 function hashToken(raw) {
@@ -31687,7 +32034,7 @@ function ttlForType(type) {
   return type === "password_reset" ? PASSWORD_RESET_TTL_MS : EMAIL_VERIFICATION_TTL_MS;
 }
 async function issueAuthToken(userId, type) {
-  await db.update(authTokens).set({ consumedAt: /* @__PURE__ */ new Date() }).where(and5(eq11(authTokens.userId, userId), eq11(authTokens.type, type), isNull2(authTokens.consumedAt)));
+  await db.update(authTokens).set({ consumedAt: /* @__PURE__ */ new Date() }).where(and6(eq11(authTokens.userId, userId), eq11(authTokens.type, type), isNull2(authTokens.consumedAt)));
   const rawToken = randomBytes4(32).toString("hex");
   const expiresAt = new Date(Date.now() + ttlForType(type));
   await db.insert(authTokens).values({
@@ -31700,11 +32047,11 @@ async function issueAuthToken(userId, type) {
 }
 async function consumeAuthToken(rawToken, type) {
   const tokenHash = hashToken(rawToken);
-  const rows = await db.select().from(authTokens).where(and5(eq11(authTokens.tokenHash, tokenHash), eq11(authTokens.type, type), isNull2(authTokens.consumedAt))).limit(1);
+  const rows = await db.select().from(authTokens).where(and6(eq11(authTokens.tokenHash, tokenHash), eq11(authTokens.type, type), isNull2(authTokens.consumedAt))).limit(1);
   const row = rows[0];
   if (!row) return null;
   if (row.expiresAt.getTime() < Date.now()) return null;
-  const consumed = await db.update(authTokens).set({ consumedAt: /* @__PURE__ */ new Date() }).where(and5(eq11(authTokens.id, row.id), isNull2(authTokens.consumedAt))).returning();
+  const consumed = await db.update(authTokens).set({ consumedAt: /* @__PURE__ */ new Date() }).where(and6(eq11(authTokens.id, row.id), isNull2(authTokens.consumedAt))).returning();
   if (!consumed.length) return null;
   return row.userId;
 }
@@ -31713,7 +32060,7 @@ async function consumeAuthToken(rawToken, type) {
 init_client();
 init_schema();
 import { createHash as createHash4, randomBytes as randomBytes5, randomInt, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
-import { and as and6, desc as desc3, eq as eq12, isNull as isNull3, sql as sql4 } from "drizzle-orm";
+import { and as and7, desc as desc3, eq as eq12, isNull as isNull3, sql as sql4 } from "drizzle-orm";
 var SET_LOCAL_PASSWORD_PURPOSE = "SET_LOCAL_PASSWORD";
 var CODE_TTL_MS = 10 * 60 * 1e3;
 var GRANT_TTL_MS = 10 * 60 * 1e3;
@@ -31752,7 +32099,7 @@ function maskEmail(email) {
 }
 async function newestOpenRow(userId) {
   const rows = await db.select().from(localPasswordSetups).where(
-    and6(
+    and7(
       eq12(localPasswordSetups.userId, userId),
       eq12(localPasswordSetups.purpose, SET_LOCAL_PASSWORD_PURPOSE),
       isNull3(localPasswordSetups.consumedAt)
@@ -31783,7 +32130,7 @@ async function requestSetupOtp(userId) {
     }
   }
   await db.update(localPasswordSetups).set({ consumedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(
-    and6(
+    and7(
       eq12(localPasswordSetups.userId, userId),
       eq12(localPasswordSetups.purpose, SET_LOCAL_PASSWORD_PURPOSE),
       isNull3(localPasswordSetups.consumedAt)
@@ -31840,7 +32187,7 @@ async function verifySetupOtp(userId, submittedCode) {
     grantExpiresAt,
     updatedAt: /* @__PURE__ */ new Date()
   }).where(
-    and6(
+    and7(
       eq12(localPasswordSetups.id, row.id),
       isNull3(localPasswordSetups.verifiedAt),
       isNull3(localPasswordSetups.consumedAt)
@@ -31856,7 +32203,7 @@ async function consumeSetupGrant(userId, grant) {
   if (!raw) return false;
   const grantHash = hashSecret(userId, raw);
   const rows = await db.select().from(localPasswordSetups).where(
-    and6(
+    and7(
       eq12(localPasswordSetups.userId, userId),
       eq12(localPasswordSetups.purpose, SET_LOCAL_PASSWORD_PURPOSE),
       eq12(localPasswordSetups.grantHash, grantHash),
@@ -31866,7 +32213,7 @@ async function consumeSetupGrant(userId, grant) {
   const row = rows[0];
   if (!row || !row.verifiedAt || !row.grantExpiresAt) return false;
   if (row.grantExpiresAt.getTime() < Date.now()) return false;
-  const consumed = await db.update(localPasswordSetups).set({ consumedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(and6(eq12(localPasswordSetups.id, row.id), isNull3(localPasswordSetups.consumedAt))).returning({ id: localPasswordSetups.id });
+  const consumed = await db.update(localPasswordSetups).set({ consumedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(and7(eq12(localPasswordSetups.id, row.id), isNull3(localPasswordSetups.consumedAt))).returning({ id: localPasswordSetups.id });
   return consumed.length > 0;
 }
 
@@ -32315,8 +32662,8 @@ init_schema();
 init_choosifyUserId();
 init_roles();
 init_logger();
-import { randomUUID as randomUUID12 } from "node:crypto";
-import { and as and7, eq as eq13 } from "drizzle-orm";
+import { randomUUID as randomUUID11 } from "node:crypto";
+import { and as and8, eq as eq13 } from "drizzle-orm";
 import { OAuth2Client } from "google-auth-library";
 var SocialAuthError = class extends Error {
   constructor(message, statusCode, code) {
@@ -32426,7 +32773,7 @@ async function verifyFacebookCredential(accessToken) {
 }
 async function resolveOrCreateUserForSocialIdentity(identity) {
   const existingIdentity = await db.select().from(userIdentities).where(
-    and7(
+    and8(
       eq13(userIdentities.provider, identity.provider),
       eq13(userIdentities.providerSubject, identity.subject)
     )
@@ -32481,7 +32828,7 @@ async function resolveOrCreateUserForSocialIdentity(identity) {
       });
     } catch (error2) {
       const raced = await db.select().from(userIdentities).where(
-        and7(
+        and8(
           eq13(userIdentities.provider, identity.provider),
           eq13(userIdentities.providerSubject, identity.subject)
         )
@@ -32500,7 +32847,7 @@ async function resolveOrCreateUserForSocialIdentity(identity) {
       displayName: existingUser.displayName
     };
   }
-  const uid = randomUUID12();
+  const uid = randomUUID11();
   const now = /* @__PURE__ */ new Date();
   const displayName = (identity.name || "").trim() || identity.email.split("@")[0] || "Choosify member";
   try {
@@ -32758,7 +33105,7 @@ authRouter.post(
         return;
       }
       const passwordHash = await hashPassword(password);
-      const uid = randomUUID13();
+      const uid = randomUUID12();
       const now = /* @__PURE__ */ new Date();
       let choosifyUserId = "";
       await db.transaction(async (tx) => {
@@ -33196,7 +33543,7 @@ authRouter.post("/auth/impersonate/start", ...requireAuth3, async (req, res) => 
   }
   const startedAt3 = (/* @__PURE__ */ new Date()).toISOString();
   const expiresAt = new Date(Date.now() + 1e3 * 60 * 30).toISOString();
-  const impersonationSessionId = `imp_${randomUUID13()}`;
+  const impersonationSessionId = `imp_${randomUUID12()}`;
   let adminChoosifyUserId;
   try {
     adminChoosifyUserId = await ensureUserHasChoosifyUserId(actorUserId);
@@ -33393,9 +33740,9 @@ authRouter.patch("/auth/profile", ...requireAuth3, async (req, res) => {
     });
     return;
   }
-  const actorId3 = req.userId || req.user?.uid || "";
+  const actorId4 = req.userId || req.user?.uid || "";
   const actorRole3 = req.userRole || req.user?.role;
-  const targetUserId = String(req.body?.userId || actorId3).trim() || actorId3;
+  const targetUserId = String(req.body?.userId || actorId4).trim() || actorId4;
   const adminOverride = req.body?.adminOverride === true;
   const hasDisplayName = Object.prototype.hasOwnProperty.call(req.body || {}, "displayName");
   const displayName = hasDisplayName ? String(req.body?.displayName || "").trim() : void 0;
@@ -33450,7 +33797,7 @@ authRouter.patch("/auth/profile", ...requireAuth3, async (req, res) => {
     }
   }
   const isAdmin = hasRole(actorRole3, ROLES.ADMIN);
-  const isSelf = targetUserId === actorId3;
+  const isSelf = targetUserId === actorId4;
   if (!isSelf && !isAdmin) {
     sendAuthError(res, 403, AUTH_ERROR_CODES.FORBIDDEN, "Not authorized to update this profile");
     return;
@@ -33489,14 +33836,14 @@ authRouter.patch("/auth/profile", ...requireAuth3, async (req, res) => {
       });
       if (isAdmin && adminOverride && locked) {
         Logger.audit("auth.profile_name_override", {
-          actorId: actorId3,
+          actorId: actorId4,
           targetUserId,
           previousName: user.displayName,
           newName: displayName
         });
       } else {
         Logger.audit("auth.profile_name_change", {
-          actorId: actorId3,
+          actorId: actorId4,
           targetUserId,
           newName: displayName
         });
@@ -33504,7 +33851,7 @@ authRouter.patch("/auth/profile", ...requireAuth3, async (req, res) => {
     }
     if (avatarUrl !== void 0) {
       await db.update(users).set({ avatarUrl: avatarUrl || null, updatedAt: now }).where(eq14(users.id, targetUserId));
-      Logger.audit("auth.profile_avatar_update", { actorId: actorId3, targetUserId, cleared: !avatarUrl });
+      Logger.audit("auth.profile_avatar_update", { actorId: actorId4, targetUserId, cleared: !avatarUrl });
     }
     if (username !== void 0 || website !== void 0 || bio !== void 0) {
       nextExtras = upsertUserProfileExtras({
@@ -33525,7 +33872,7 @@ authRouter.patch("/auth/profile", ...requireAuth3, async (req, res) => {
         }
       }
       Logger.audit("auth.profile_identity_update", {
-        actorId: actorId3,
+        actorId: actorId4,
         targetUserId,
         fields: {
           username: username !== void 0,
@@ -33546,7 +33893,7 @@ authRouter.patch("/auth/profile", ...requireAuth3, async (req, res) => {
         phone: phone === null ? void 0 : phone
       });
       Logger.audit("auth.profile_phone_update", {
-        actorId: actorId3,
+        actorId: actorId4,
         targetUserId,
         cleared: phone === null,
         admin: isAdmin && !isSelf
@@ -33834,7 +34181,7 @@ authRouter.post("/auth/local-password/set", ...requireAuth3, async (req, res) =>
       return;
     }
     const passwordHash = await hashPassword(newPassword);
-    const updated = await db.update(users).set({ passwordHash, updatedAt: /* @__PURE__ */ new Date() }).where(and8(eq14(users.id, user.id), eq14(users.role, ROLES.USER), isNull4(users.passwordHash))).returning({ id: users.id });
+    const updated = await db.update(users).set({ passwordHash, updatedAt: /* @__PURE__ */ new Date() }).where(and9(eq14(users.id, user.id), eq14(users.role, ROLES.USER), isNull4(users.passwordHash))).returning({ id: users.id });
     if (!updated.length) {
       res.status(409).json({ success: false, error: "This account already has a password.", code: "PASSWORD_ALREADY_SET" });
       return;
@@ -33870,7 +34217,7 @@ authRouter.post("/auth/local-password/set", ...requireAuth3, async (req, res) =>
   }
 });
 authRouter.post("/auth/admin/password-reset-assist", ...requireAdmin3, async (req, res) => {
-  const actorId3 = req.userId || req.user?.uid || "";
+  const actorId4 = req.userId || req.user?.uid || "";
   const userId = String(req.body?.userId || "").trim();
   const mode = String(req.body?.mode || "temp").trim();
   if (!userId) {
@@ -33897,7 +34244,7 @@ authRouter.post("/auth/admin/password-reset-assist", ...requireAdmin3, async (re
         changeNextLogin: true
       });
       Logger.audit("auth.admin_password_reset_assist", {
-        actorId: actorId3,
+        actorId: actorId4,
         targetUserId: userId,
         mode: "link"
       });
@@ -33922,7 +34269,7 @@ authRouter.post("/auth/admin/password-reset-assist", ...requireAdmin3, async (re
       changeNextLogin: true
     });
     Logger.audit("auth.admin_password_reset_assist", {
-      actorId: actorId3,
+      actorId: actorId4,
       targetUserId: userId,
       mode: "temp"
     });
@@ -34467,7 +34814,7 @@ init_orderService();
 init_cartService();
 init_eventBus();
 init_logger();
-import { randomUUID as randomUUID14 } from "node:crypto";
+import { randomUUID as randomUUID13 } from "node:crypto";
 
 // server/payments/paymentLifecycle.ts
 var FORWARD = {
@@ -34884,7 +35231,7 @@ async function initiateCommercePayment(input) {
   }
   const now = nowIso23();
   let payment = {
-    paymentId: `pay_${randomUUID14().replace(/-/g, "").slice(0, 16)}`,
+    paymentId: `pay_${randomUUID13().replace(/-/g, "").slice(0, 16)}`,
     checkoutId: checkout.id,
     orderIds: checkout.orderIds.slice(),
     consumerId: checkout.consumerId,
@@ -34974,7 +35321,7 @@ async function initiateCommercePayment(input) {
     reused: false
   };
 }
-async function applyCodWithoutGatewayCapture(payment, actorId3) {
+async function applyCodWithoutGatewayCapture(payment, actorId4) {
   const now = nowIso23();
   const checkout = await commerceStore.getCheckout(payment.checkoutId);
   let next = {
@@ -34990,7 +35337,7 @@ async function applyCodWithoutGatewayCapture(payment, actorId3) {
   };
   await commercePaymentStore.upsertPayment(next);
   await patchOrdersPaymentKnowledge(next);
-  emitPayment("PaymentAuthorized", next, actorId3, { cod: true, noGatewayCapture: true });
+  emitPayment("PaymentAuthorized", next, actorId4, { cod: true, noGatewayCapture: true });
   return next;
 }
 async function applyValidatedCommerceCapture(params) {
@@ -36227,7 +36574,7 @@ function assertRoleCanUsePlacement(placementId, role) {
 init_catalogStore();
 init_eventBus();
 init_logger();
-import { randomUUID as randomUUID15 } from "node:crypto";
+import { randomUUID as randomUUID14 } from "node:crypto";
 
 // shared/ads/heroMedia.ts
 function inferHeroMediaType(url, explicit) {
@@ -36394,7 +36741,7 @@ function nowIso24() {
   return (/* @__PURE__ */ new Date()).toISOString();
 }
 function newId5(prefix) {
-  return `${prefix}_${randomUUID15().replace(/-/g, "").slice(0, 16)}`;
+  return `${prefix}_${randomUUID14().replace(/-/g, "").slice(0, 16)}`;
 }
 function isPlatformAdmin(role) {
   const r = (role || "").toLowerCase();
@@ -37301,7 +37648,7 @@ init_referenceIdService();
 // server/cashbook/cashbookStore.ts
 import { existsSync as existsSync16, mkdirSync as mkdirSync16, readFileSync as readFileSync16, writeFileSync as writeFileSync16 } from "node:fs";
 import { dirname as dirname16, join as join17 } from "node:path";
-import { randomUUID as randomUUID16 } from "node:crypto";
+import { randomUUID as randomUUID15 } from "node:crypto";
 var DEFAULT_PATH9 = join17(process.cwd(), ".data", "cashbook-memory-snapshot.json");
 function snapshotPath2() {
   return process.env.CASHBOOK_MEMORY_SNAPSHOT_PATH?.trim() || DEFAULT_PATH9;
@@ -37367,7 +37714,7 @@ function createCashbook(input) {
   const name = input.name.trim();
   if (!name) throw new Error("Book Name is required");
   const book = {
-    id: `cb_${randomUUID16().replace(/-/g, "").slice(0, 16)}`,
+    id: `cb_${randomUUID15().replace(/-/g, "").slice(0, 16)}`,
     ownerUserId: input.ownerUserId,
     name,
     icon: (input.icon || "\u{1F4D2}").trim() || "\u{1F4D2}",
@@ -37452,7 +37799,7 @@ function addManualEntry(input) {
     throw new Error("Enter a non-zero amount");
   }
   const entry = {
-    entryId: `cbe_${randomUUID16().replace(/-/g, "").slice(0, 16)}`,
+    entryId: `cbe_${randomUUID15().replace(/-/g, "").slice(0, 16)}`,
     bookId: input.bookId,
     ownerUserId: input.ownerUserId,
     source: "manual",
@@ -37562,7 +37909,7 @@ function importResolvedLines(bookId, ownerUserId, lines) {
       continue;
     }
     const entry = {
-      entryId: `cbe_${randomUUID16().replace(/-/g, "").slice(0, 16)}`,
+      entryId: `cbe_${randomUUID15().replace(/-/g, "").slice(0, 16)}`,
       bookId,
       ownerUserId,
       source: "order_import",
@@ -37869,8 +38216,8 @@ async function listCashbookOversight(actor, sellerId) {
     try {
       const { db: db3 } = await Promise.resolve().then(() => (init_client(), client_exports));
       const { users: users2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-      const { eq: eq18 } = await import("drizzle-orm");
-      const [u] = await db3.select({ displayName: users2.displayName, email: users2.email }).from(users2).where(eq18(users2.id, owner));
+      const { eq: eq25 } = await import("drizzle-orm");
+      const [u] = await db3.select({ displayName: users2.displayName, email: users2.email }).from(users2).where(eq25(users2.id, owner));
       accountName = u?.displayName || u?.email || `Account ${owner.slice(0, 8)}\u2026`;
     } catch {
     }
@@ -37888,7 +38235,7 @@ async function listCashbookOversight(actor, sellerId) {
   try {
     const { db: db3 } = await Promise.resolve().then(() => (init_client(), client_exports));
     const { users: users2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-    const { inArray: inArray5 } = await import("drizzle-orm");
+    const { inArray: inArray9 } = await import("drizzle-orm");
     if (ownerIds.length) {
       const rows = await db3.select({
         id: users2.id,
@@ -37896,7 +38243,7 @@ async function listCashbookOversight(actor, sellerId) {
         email: users2.email,
         choosifyUserId: users2.choosifyUserId,
         role: users2.role
-      }).from(users2).where(inArray5(users2.id, ownerIds));
+      }).from(users2).where(inArray9(users2.id, ownerIds));
       profiles = Object.fromEntries(
         rows.map((r) => [
           r.id,
@@ -40661,11 +41008,11 @@ function createHelmetMiddleware() {
 }
 
 // server/middleware/requestId.ts
-import { randomUUID as randomUUID17 } from "crypto";
+import { randomUUID as randomUUID16 } from "crypto";
 var REQUEST_ID_HEADER = "x-request-id";
 function requestIdMiddleware(req, res, next) {
   const incoming = req.header(REQUEST_ID_HEADER);
-  const requestId = incoming && incoming.trim().length > 0 ? incoming.trim() : randomUUID17();
+  const requestId = incoming && incoming.trim().length > 0 ? incoming.trim() : randomUUID16();
   req.requestId = requestId;
   res.locals.requestId = requestId;
   res.setHeader("X-Request-ID", requestId);
@@ -41806,12 +42153,12 @@ init_eventHooks();
 init_communicationTypes();
 init_client();
 init_schema();
-import { inArray as inArray4 } from "drizzle-orm";
+import { inArray as inArray5 } from "drizzle-orm";
 var VALID_ROLES = new Set(roleEnum.enumValues);
 async function resolveRoleRecipients(targetRoles) {
   const roles = (targetRoles || []).filter((r) => VALID_ROLES.has(r));
   if (roles.length === 0) return [];
-  const rows = await db.select({ id: users.id }).from(users).where(inArray4(users.role, roles));
+  const rows = await db.select({ id: users.id }).from(users).where(inArray5(users.role, roles));
   return rows.map((r) => r.id);
 }
 function listBroadcasts() {
@@ -42222,7 +42569,7 @@ ${await buildSearchContext(input.query, input.ids)}`);
 }
 
 // server/ai/conversation/conversationManager.ts
-import { randomUUID as randomUUID18 } from "crypto";
+import { randomUUID as randomUUID17 } from "crypto";
 var sessions = /* @__PURE__ */ new Map();
 var MAX_MESSAGES_PER_SESSION = 40;
 var MAX_SESSIONS = 500;
@@ -42239,7 +42586,7 @@ function trimSessions() {
 }
 function createConversation(input) {
   const session = {
-    id: `conv-${randomUUID18()}`,
+    id: `conv-${randomUUID17()}`,
     userId: input.userId,
     skillId: input.skillId,
     messages: [],
@@ -43297,7 +43644,7 @@ init_registry();
 init_referenceIdService();
 init_choosifyUserId();
 init_catalogStore();
-import { ilike, or as or2 } from "drizzle-orm";
+import { ilike as ilike2, or as or3 } from "drizzle-orm";
 init_operationsStore();
 init_commerceStore();
 init_conversationService();
@@ -43312,7 +43659,6 @@ var PAGE_KEY_TO_PATH = {
   creators: "/admin/creator-studio",
   creatorProfile: "/admin/creator-profile",
   consumerProfile: "/admin/consumer-profile",
-  creatorEconomy: "/admin/creator-hub",
   brands: "/admin/brand-studio",
   brandProfile: "/admin/brand-profile",
   products: "/admin/products",
@@ -43358,7 +43704,12 @@ var PAGE_KEY_TO_PATH = {
   // "Messages" links straight back to those legacy pages instead of
   // through to the new ones.
   platformOrders: "/admin/platform-orders",
-  sellerConversations: "/admin/conversations"
+  sellerConversations: "/admin/conversations",
+  // Sprint 12, Phase 5 — Seller/Creator self-service Subscription Plan &
+  // Billing page. Deliberately its own key/path (no existing Seller/Creator
+  // nav slot covered this — FINANCE & PAYOUTS is about their own
+  // earnings/payouts FROM Choosify, not what Choosify charges them).
+  planBilling: "/admin/plan-billing"
 };
 var PATH_TO_PAGE_KEY = Object.fromEntries(
   Object.entries(PAGE_KEY_TO_PATH).map(([k, v]) => [v, k])
@@ -43389,6 +43740,7 @@ var ROLE_ALLOWED_PAGE_KEYS = {
     "shipmentOperations",
     "courierAnalytics",
     "myCashbook",
+    "planBilling",
     "settings"
   ],
   creator: [
@@ -43399,7 +43751,6 @@ var ROLE_ALLOWED_PAGE_KEYS = {
     // Creator Profile (account / verification / listings)
     "contentStudio",
     "adsDealsStudio",
-    "creatorEconomy",
     "sellerCustomers",
     "partnerSupport",
     "notifications",
@@ -43409,6 +43760,7 @@ var ROLE_ALLOWED_PAGE_KEYS = {
     "feesAdjustments",
     "payouts",
     "myCashbook",
+    "planBilling",
     "settings"
   ],
   consumer: ["dashboard", "orders", "consumerProfile", "settings"],
@@ -43432,8 +43784,15 @@ var NAV_DEFS = [
       { key: "brands", label: "Seller Management Studio", path: PAGE_KEY_TO_PATH.brands },
       { key: "creators", label: "Creators Management", path: PAGE_KEY_TO_PATH.creators },
       { key: "customers", label: "Consumer Management", path: PAGE_KEY_TO_PATH.customers },
-      { key: "creatorEconomy", label: "Creator Economy", path: PAGE_KEY_TO_PATH.creatorEconomy },
-      { key: "consumerProfile", label: "My Profile", path: PAGE_KEY_TO_PATH.consumerProfile }
+      // The ONE canonical self-profile entry for Admin/Super Admin -- routes
+      // to /admin/profile (native MyProfilePage, inside AdminWorkspaceLayout).
+      // Previously this group also carried a 'consumerProfile'/"My Profile"
+      // entry meant for the Consumer role; Consumer now gets its own
+      // dedicated CONSUMER_NAV_GROUPS (below) instead of reading NAV_DEFS at
+      // all, so that entry was leaking into Admin/Super Admin's unfiltered
+      // nav as a second, incorrect "My Profile" pointing at a different page
+      // -- removed rather than filtered, since nothing reads it from here anymore.
+      { key: "adminProfile", label: "My Profile", path: PAGE_KEY_TO_PATH.adminProfile }
     ]
   },
   {
@@ -43512,10 +43871,7 @@ var NAV_DEFS = [
   },
   {
     title: "SETTINGS",
-    items: [
-      { key: "adminProfile", label: "Admin Profile", path: PAGE_KEY_TO_PATH.adminProfile },
-      { key: "settings", label: "Settings", path: PAGE_KEY_TO_PATH.settings }
-    ]
+    items: [{ key: "settings", label: "Settings", path: PAGE_KEY_TO_PATH.settings }]
   }
 ];
 var PAGE_META = {
@@ -43533,7 +43889,8 @@ var PAGE_META = {
   sellerConversations: ["Messages", "Conversations with your buyers"],
   customers: ["Consumer Management", "View and manage customer accounts"],
   settings: ["Settings", "Store configuration"],
-  adminProfile: ["Admin Profile", "Account, security, RBAC scope, and preferences"],
+  planBilling: ["Plan & Billing", "Your subscription plan, billing history, and usage"],
+  adminProfile: ["My Profile", "Account, security, RBAC scope, and preferences"],
   websiteCmsStudio: ["Website Manager", "Manage homepage banners, pages, and site content"],
   adsDealsStudio: ["Ads & Deals Studio", "Manage promoted ads, deals, coupons, and paid placements"],
   contentStudio: ["Guide Management", "Manage videos, reels, blogs, and live sessions"],
@@ -43560,10 +43917,6 @@ var PAGE_META = {
     "Apply service charges, platform fees, tax, and delivery charges platform-wide, by brand, category, or product"
   ],
   notifications: ["Notifications", "Blast announcements, alerts, and promos to platform users"],
-  creatorEconomy: [
-    "Creator Economy & Recommendation Analytics",
-    "Affiliate commission attribution, campaign, and partnership management"
-  ],
   sellerCustomers: [
     "My Customers",
     "Customers who have purchased from your business"
@@ -43571,7 +43924,7 @@ var PAGE_META = {
   moderationCenter: ["Moderation Center", "Flagged content awaiting review"],
   disputes: ["Disputes", "Buyer/seller disputes requiring resolution"],
   trustCenter: ["Trust & Analytics", "Platform trust metrics and safety alerts"],
-  finance: ["Finance & Payouts", "Current eligible earnings, commission, and net withdrawable"],
+  finance: ["Finance", "Financial transactions, settlements, and billing records"],
   myEarnings: ["My Earnings", "Earnings overview and payout Payment Info"],
   feesAdjustments: ["Fees & Adjustments", "Authoritative current deductions and credits"],
   adminManagement: ["Admin Management", "Manage admin accounts and access"],
@@ -43581,7 +43934,7 @@ var PAGE_META = {
   ],
   verificationCenter: ["Verification Center", "Seller & brand identity verification queue"],
   subscriptionPlans: ["Subscription Plans", "Seller & brand subscription tiers"],
-  monetizationCenter: ["Monetization Center", "Ad placements and promoted listings"],
+  monetizationCenter: ["Monetization Center", "Platform revenue and commerce performance"],
   courierProviders: ["Courier Providers", "Manage integrated delivery partners"],
   shipmentOperations: ["Shipment Operations", "Active shipments across all couriers"],
   courierAnalytics: ["Courier Analytics", "Delivery performance by courier partner"],
@@ -43639,7 +43992,7 @@ var SELLER_NAV_GROUPS = [
       navItem("payouts", "Payouts / Withdrawals")
     ]
   },
-  { title: "SETTINGS", items: [navItem("settings", "Settings")] }
+  { title: "SETTINGS", items: [navItem("planBilling", "Plan & Billing"), navItem("settings", "Settings")] }
 ];
 var CREATOR_NAV_GROUPS = [
   { title: "OVERVIEW", items: [navItem("dashboard", "Dashboard")] },
@@ -43647,8 +44000,7 @@ var CREATOR_NAV_GROUPS = [
     title: "PEOPLE",
     items: [
       navItem("creators", "Creator Studio"),
-      navItem("creatorProfile", "Creator Profile"),
-      navItem("creatorEconomy", "Creator Economy")
+      navItem("creatorProfile", "Creator Profile")
     ]
   },
   { title: "COMMERCE", items: [navItem("sellerCustomers", "My Customers")] },
@@ -43674,7 +44026,7 @@ var CREATOR_NAV_GROUPS = [
       navItem("payouts", "Payouts / Withdrawals")
     ]
   },
-  { title: "SETTINGS", items: [navItem("settings", "Settings")] }
+  { title: "SETTINGS", items: [navItem("planBilling", "Plan & Billing"), navItem("settings", "Settings")] }
 ];
 var CONSUMER_NAV_GROUPS = [
   { title: "OVERVIEW", items: [navItem("dashboard", "Dashboard")] },
@@ -43718,10 +44070,10 @@ function formatUserRoleLabel(role) {
 async function searchUsersForStaff(needle, limit) {
   const pattern = `%${needle}%`;
   const rows = await db.select().from(users).where(
-    or2(
-      ilike(users.displayName, pattern),
-      ilike(users.email, pattern),
-      ilike(users.choosifyUserId, pattern)
+    or3(
+      ilike2(users.displayName, pattern),
+      ilike2(users.email, pattern),
+      ilike2(users.choosifyUserId, pattern)
     )
   ).limit(limit);
   return rows.map((user) => ({
@@ -44295,11 +44647,100 @@ dashboardSearchRouter.get("/search/suggestions", authenticateRequest, async (req
 import { Router as Router24 } from "express";
 init_roles();
 
+// server/entitlements/planStore.ts
+init_client();
+init_schema();
+import { randomUUID as randomUUID18 } from "node:crypto";
+import { eq as eq15 } from "drizzle-orm";
+function toPlan(row) {
+  return {
+    id: row.id,
+    role: row.role,
+    name: row.name,
+    priceLabel: row.priceLabel,
+    active: row.active,
+    sortOrder: row.sortOrder
+  };
+}
+function toAccountPlan(row) {
+  return {
+    userId: row.userId,
+    planId: row.planId,
+    status: row.status,
+    assignedAt: row.assignedAt.toISOString(),
+    expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null
+  };
+}
+var planStore = {
+  listPlans: async (role) => {
+    const rows = role ? await db.select().from(plans).where(eq15(plans.role, role)) : await db.select().from(plans);
+    return rows.map(toPlan).sort((a, b) => a.sortOrder - b.sortOrder);
+  },
+  getPlan: async (id) => {
+    const rows = await db.select().from(plans).where(eq15(plans.id, id)).limit(1);
+    return rows[0] ? toPlan(rows[0]) : null;
+  },
+  createPlan: async (input) => {
+    const id = `plan_${randomUUID18()}`;
+    await db.insert(plans).values({
+      id,
+      role: input.role,
+      name: input.name,
+      priceLabel: input.priceLabel || null,
+      sortOrder: input.sortOrder ?? 0
+    });
+    return await planStore.getPlan(id);
+  },
+  updatePlan: async (id, patch) => {
+    await db.update(plans).set({ ...patch, updatedAt: /* @__PURE__ */ new Date() }).where(eq15(plans.id, id));
+    return planStore.getPlan(id);
+  },
+  /** The account's currently assigned plan, or null if unassigned/expired. */
+  getAccountPlan: async (userId) => {
+    const rows = await db.select().from(accountPlans).where(eq15(accountPlans.userId, userId)).limit(1);
+    const row = rows[0];
+    if (!row) return null;
+    const ap = toAccountPlan(row);
+    if (ap.status !== "active") return null;
+    if (ap.expiresAt && new Date(ap.expiresAt).getTime() < Date.now()) return null;
+    return ap;
+  },
+  /** Admin-only: assign or change an account's plan. Never self-service. */
+  assignAccountPlan: async (input) => {
+    const plan = await planStore.getPlan(input.planId);
+    if (!plan) throw new Error(`Plan ${input.planId} not found`);
+    await db.insert(accountPlans).values({
+      userId: input.userId,
+      planId: input.planId,
+      status: "active",
+      assignedByUserId: input.assignedByUserId,
+      expiresAt: input.expiresAt ? new Date(input.expiresAt) : null
+    }).onConflictDoUpdate({
+      target: accountPlans.userId,
+      set: {
+        planId: input.planId,
+        status: "active",
+        assignedByUserId: input.assignedByUserId,
+        expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+        updatedAt: /* @__PURE__ */ new Date()
+      }
+    });
+    return await planStore.getAccountPlan(input.userId);
+  },
+  cancelAccountPlan: async (userId) => {
+    await db.update(accountPlans).set({ status: "cancelled", updatedAt: /* @__PURE__ */ new Date() }).where(eq15(accountPlans.userId, userId));
+  },
+  listAccountPlans: async () => {
+    const rows = await db.select().from(accountPlans);
+    return rows.map(toAccountPlan);
+  }
+};
+
 // server/entitlements/featureRequestStore.ts
 init_client();
 init_schema();
 import { randomUUID as randomUUID19 } from "node:crypto";
-import { and as and9, desc as desc4, eq as eq15 } from "drizzle-orm";
+import { and as and10, desc as desc4, eq as eq16 } from "drizzle-orm";
 function toFeatureRequest(row) {
   return {
     id: row.id,
@@ -44319,10 +44760,10 @@ var featureRequestStore = {
   /** Throws if the user already has a pending request for this feature (DB unique index also enforces this). */
   create: async (input) => {
     const existing = await db.select().from(featureRequests).where(
-      and9(
-        eq15(featureRequests.userId, input.userId),
-        eq15(featureRequests.featureKey, input.featureKey),
-        eq15(featureRequests.status, "pending")
+      and10(
+        eq16(featureRequests.userId, input.userId),
+        eq16(featureRequests.featureKey, input.featureKey),
+        eq16(featureRequests.status, "pending")
       )
     ).limit(1);
     if (existing[0]) return toFeatureRequest(existing[0]);
@@ -44334,18 +44775,18 @@ var featureRequestStore = {
       featureKey: input.featureKey,
       message: input.message || null
     });
-    const [row] = await db.select().from(featureRequests).where(eq15(featureRequests.id, id)).limit(1);
+    const [row] = await db.select().from(featureRequests).where(eq16(featureRequests.id, id)).limit(1);
     return toFeatureRequest(row);
   },
   list: async (filter) => {
     const conditions = [];
-    if (filter?.status) conditions.push(eq15(featureRequests.status, filter.status));
-    if (filter?.userId) conditions.push(eq15(featureRequests.userId, filter.userId));
-    const rows = conditions.length ? await db.select().from(featureRequests).where(and9(...conditions)).orderBy(desc4(featureRequests.createdAt)) : await db.select().from(featureRequests).orderBy(desc4(featureRequests.createdAt));
+    if (filter?.status) conditions.push(eq16(featureRequests.status, filter.status));
+    if (filter?.userId) conditions.push(eq16(featureRequests.userId, filter.userId));
+    const rows = conditions.length ? await db.select().from(featureRequests).where(and10(...conditions)).orderBy(desc4(featureRequests.createdAt)) : await db.select().from(featureRequests).orderBy(desc4(featureRequests.createdAt));
     return rows.map(toFeatureRequest);
   },
   get: async (id) => {
-    const rows = await db.select().from(featureRequests).where(eq15(featureRequests.id, id)).limit(1);
+    const rows = await db.select().from(featureRequests).where(eq16(featureRequests.id, id)).limit(1);
     return rows[0] ? toFeatureRequest(rows[0]) : null;
   },
   /** Admin-only: record a decision. Does NOT grant the feature — that's a separate explicit entitlement/plan action. */
@@ -44356,7 +44797,7 @@ var featureRequestStore = {
       reviewedByUserId: input.reviewedByUserId,
       reviewNote: input.reviewNote || null,
       updatedAt: /* @__PURE__ */ new Date()
-    }).where(eq15(featureRequests.id, id));
+    }).where(eq16(featureRequests.id, id));
     return featureRequestStore.get(id);
   }
 };
@@ -44603,14 +45044,2220 @@ entitlementsRouter.patch("/entitlements/admin/feature-requests/:id", ...requireA
   });
 });
 
-// server/partnerApplications/partnerApplicationRouter.ts
+// server/subscriptions/subscriptionsRouter.ts
 import { Router as Router25 } from "express";
+init_roles();
+init_client();
+init_schema();
+import { and as and14, desc as desc6, eq as eq20 } from "drizzle-orm";
+
+// server/subscriptions/planService.ts
+init_client();
+init_schema();
+import { randomUUID as randomUUID20 } from "node:crypto";
+import { and as and11, eq as eq17, desc as desc5 } from "drizzle-orm";
+init_auditLogger();
+var PlanServiceError = class extends Error {
+  constructor(message, status = 400) {
+    super(message);
+    this.status = status;
+  }
+};
+function toPlan2(row) {
+  return {
+    id: row.id,
+    role: row.role,
+    name: row.name,
+    internalCode: row.internalCode,
+    description: row.description,
+    badge: row.badge,
+    lifecycleState: row.lifecycleState,
+    isPublic: row.isPublic,
+    isRecommended: row.isRecommended,
+    sortOrder: row.sortOrder,
+    currentPublishedVersionId: row.currentPublishedVersionId,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString()
+  };
+}
+function toVersion(row) {
+  return {
+    id: row.id,
+    planId: row.planId,
+    version: row.version,
+    nameSnapshot: row.nameSnapshot,
+    descriptionSnapshot: row.descriptionSnapshot,
+    trialDays: row.trialDays,
+    publishedAt: row.publishedAt ? row.publishedAt.toISOString() : null,
+    publishedByUserId: row.publishedByUserId,
+    createdAt: row.createdAt.toISOString()
+  };
+}
+function toOffer(row) {
+  return {
+    id: row.id,
+    planVersionId: row.planVersionId,
+    billingInterval: row.billingInterval,
+    price: row.price,
+    currency: row.currency
+  };
+}
+function toEntitlement(row) {
+  return { planVersionId: row.planVersionId, featureKey: row.featureKey, enabled: row.enabled };
+}
+function toLimit(row) {
+  return { planVersionId: row.planVersionId, limitKey: row.limitKey, limitValue: row.limitValue };
+}
+async function requirePlan(planId) {
+  const rows = await db.select().from(plans).where(eq17(plans.id, planId)).limit(1);
+  if (!rows[0]) throw new PlanServiceError("Plan not found", 404);
+  return rows[0];
+}
+async function requireDraftVersion(planId, versionId) {
+  const rows = await db.select().from(planVersions).where(eq17(planVersions.id, versionId)).limit(1);
+  const row = rows[0];
+  if (!row || row.planId !== planId) throw new PlanServiceError("Plan version not found", 404);
+  if (row.publishedAt) {
+    throw new PlanServiceError("This Plan Version is already published and is immutable \u2014 create a new draft version instead.", 409);
+  }
+  return row;
+}
+var planService = {
+  /**
+   * Phase 5 additive read: resolves a bare Plan Version Offer id to its
+   * Plan/Version/Offer details — used to faithfully display a WORKSPACE'S
+   * OWN pending-downgrade target (which may not be the plan's current
+   * published version, or may even belong to a different Plan than the
+   * subscriber's current one) without inventing a second resolver. No
+   * schema change; pure read, reuses the same tables getPlanDetail already
+   * reads. Not workspace-scoped — Plan/Offer catalog data isn't
+   * subscriber-identifying, so any authenticated partner may resolve any
+   * real offer id (mirrors what listPublishedPlansForPersona already
+   * exposes for published plans).
+   */
+  getOfferDetail: async (offerId) => {
+    const rows = await db.select({ offer: planVersionOffers, version: planVersions, plan: plans }).from(planVersionOffers).innerJoin(planVersions, eq17(planVersionOffers.planVersionId, planVersions.id)).innerJoin(plans, eq17(planVersions.planId, plans.id)).where(eq17(planVersionOffers.id, offerId)).limit(1);
+    const row = rows[0];
+    if (!row) return null;
+    return { plan: toPlan2(row.plan), version: toVersion(row.version), offer: toOffer(row.offer) };
+  },
+  listPlans: async (filter) => {
+    const rows = filter?.role ? await db.select().from(plans).where(eq17(plans.role, filter.role)) : await db.select().from(plans);
+    return rows.map(toPlan2).sort((a, b) => a.sortOrder - b.sortOrder);
+  },
+  /**
+   * Phase 4 UI list view — same plans as listPlans, enriched with the
+   * current published version's real offers and a real subscriber count (no
+   * invented numbers: a Plan with no published version simply has none).
+   */
+  listPlansWithSummary: async (filter) => {
+    const list = await planService.listPlans(filter);
+    const out = [];
+    for (const p of list) {
+      let currentVersion = null;
+      let subscriberCount = 0;
+      if (p.currentPublishedVersionId) {
+        const versionRows = await db.select().from(planVersions).where(eq17(planVersions.id, p.currentPublishedVersionId)).limit(1);
+        if (versionRows[0]) {
+          const offerRows = await db.select().from(planVersionOffers).where(eq17(planVersionOffers.planVersionId, versionRows[0].id));
+          currentVersion = { ...toVersion(versionRows[0]), offers: offerRows.map(toOffer) };
+        }
+      }
+      const subscribers = await planService.getSubscribersForPlan(p.id);
+      subscriberCount = subscribers.length;
+      out.push({ ...p, currentVersion, subscriberCount });
+    }
+    return out;
+  },
+  getPlanDetail: async (planId) => {
+    const plan = await requirePlan(planId);
+    const versionRows = await db.select().from(planVersions).where(eq17(planVersions.planId, planId)).orderBy(desc5(planVersions.version));
+    const versions = [];
+    for (const v of versionRows) {
+      const [offerRows, entitlementRows, limitRows] = await Promise.all([
+        db.select().from(planVersionOffers).where(eq17(planVersionOffers.planVersionId, v.id)),
+        db.select().from(planEntitlements).where(eq17(planEntitlements.planVersionId, v.id)),
+        db.select().from(planLimits).where(eq17(planLimits.planVersionId, v.id))
+      ]);
+      versions.push({
+        ...toVersion(v),
+        offers: offerRows.map(toOffer),
+        entitlements: entitlementRows.map(toEntitlement),
+        limits: limitRows.map(toLimit)
+      });
+    }
+    return { plan: toPlan2(plan), versions };
+  },
+  createPlan: async (input) => {
+    const name = input.name.trim();
+    if (!name) throw new PlanServiceError("Plan name is required");
+    const id = `plan_${randomUUID20()}`;
+    await db.insert(plans).values({
+      id,
+      role: input.role,
+      name,
+      internalCode: input.internalCode?.trim() || null,
+      description: input.description?.trim() || null,
+      badge: input.badge?.trim() || null,
+      sortOrder: input.sortOrder ?? 0,
+      lifecycleState: "draft"
+    });
+    auditLog({
+      category: AUDIT_CATEGORIES.ADMIN_ACTION,
+      action: "subscription_plan.create",
+      resource: "plan",
+      resourceId: id,
+      result: "success",
+      userId: input.actorUserId,
+      metadata: { role: input.role, name }
+    });
+    const created2 = await requirePlan(id);
+    return toPlan2(created2);
+  },
+  /** Catalog-identity-only edit — never touches price/features/limits (those don't live here). */
+  updatePlanMetadata: async (planId, patch, actorUserId) => {
+    await requirePlan(planId);
+    await db.update(plans).set({ ...patch, updatedAt: /* @__PURE__ */ new Date() }).where(eq17(plans.id, planId));
+    auditLog({
+      category: AUDIT_CATEGORIES.ADMIN_ACTION,
+      action: "subscription_plan.update_metadata",
+      resource: "plan",
+      resourceId: planId,
+      result: "success",
+      userId: actorUserId,
+      metadata: patch
+    });
+    const updated = await requirePlan(planId);
+    return toPlan2(updated);
+  },
+  archivePlan: async (planId, actorUserId) => {
+    await requirePlan(planId);
+    await db.update(plans).set({ lifecycleState: "archived", isPublic: false, updatedAt: /* @__PURE__ */ new Date() }).where(eq17(plans.id, planId));
+    auditLog({
+      category: AUDIT_CATEGORIES.ADMIN_ACTION,
+      action: "subscription_plan.archive",
+      resource: "plan",
+      resourceId: planId,
+      result: "success",
+      userId: actorUserId
+    });
+    const updated = await requirePlan(planId);
+    return toPlan2(updated);
+  },
+  createDraftVersion: async (planId, input, actorUserId) => {
+    const plan = await requirePlan(planId);
+    const existingVersions = await db.select().from(planVersions).where(eq17(planVersions.planId, planId));
+    const nextVersion = existingVersions.reduce((max, v) => Math.max(max, v.version), 0) + 1;
+    const nameSnapshot = input.nameSnapshot.trim() || plan.name;
+    const [created2] = await db.insert(planVersions).values({
+      planId,
+      version: nextVersion,
+      nameSnapshot,
+      descriptionSnapshot: input.descriptionSnapshot?.trim() || null,
+      trialDays: input.trialDays ?? null
+    }).returning();
+    auditLog({
+      category: AUDIT_CATEGORIES.ADMIN_ACTION,
+      action: "subscription_plan.create_draft_version",
+      resource: "plan_version",
+      resourceId: created2.id,
+      result: "success",
+      userId: actorUserId,
+      metadata: { planId, version: nextVersion }
+    });
+    return toVersion(created2);
+  },
+  updateDraftVersion: async (planId, versionId, patch) => {
+    await requireDraftVersion(planId, versionId);
+    await db.update(planVersions).set(patch).where(eq17(planVersions.id, versionId));
+    const rows = await db.select().from(planVersions).where(eq17(planVersions.id, versionId)).limit(1);
+    return toVersion(rows[0]);
+  },
+  /** Replaces the draft version's offers wholesale (only valid pre-publish). No price is invented — caller supplies every value. */
+  setDraftOffers: async (planId, versionId, offers) => {
+    await requireDraftVersion(planId, versionId);
+    for (const o of offers) {
+      if (!Number.isFinite(o.price) || o.price < 0) {
+        throw new PlanServiceError(`Invalid price for ${o.billingInterval} offer`);
+      }
+    }
+    await db.delete(planVersionOffers).where(eq17(planVersionOffers.planVersionId, versionId));
+    if (offers.length === 0) return [];
+    const inserted = await db.insert(planVersionOffers).values(offers.map((o) => ({ planVersionId: versionId, billingInterval: o.billingInterval, price: o.price, currency: o.currency || "BDT" }))).returning();
+    return inserted.map(toOffer);
+  },
+  /** Replaces the draft version's boolean features wholesale. Validates every key against the canonical registry for the Plan's persona — no arbitrary feature-key strings. */
+  setDraftEntitlements: async (planId, versionId, entitlements) => {
+    const plan = await requirePlan(planId);
+    await requireDraftVersion(planId, versionId);
+    const allowed = new Set(featureKeysForRole(plan.role));
+    for (const e of entitlements) {
+      if (!allowed.has(e.featureKey)) {
+        throw new PlanServiceError(`"${e.featureKey}" is not a valid feature for the ${plan.role} persona`);
+      }
+    }
+    await db.delete(planEntitlements).where(eq17(planEntitlements.planVersionId, versionId));
+    if (entitlements.length === 0) return [];
+    const inserted = await db.insert(planEntitlements).values(entitlements.map((e) => ({ planVersionId: versionId, featureKey: e.featureKey, enabled: e.enabled }))).returning();
+    return inserted.map(toEntitlement);
+  },
+  /** Replaces the draft version's quantitative limits wholesale. No commercial values are invented — caller supplies every limitKey/limitValue explicitly. */
+  setDraftLimits: async (planId, versionId, limits) => {
+    await requireDraftVersion(planId, versionId);
+    await db.delete(planLimits).where(eq17(planLimits.planVersionId, versionId));
+    if (limits.length === 0) return [];
+    const inserted = await db.insert(planLimits).values(limits.map((l) => ({ planVersionId: versionId, limitKey: l.limitKey, limitValue: l.limitValue }))).returning();
+    return inserted.map(toLimit);
+  },
+  /**
+   * Transactional publish: verifies the version is still a draft, requires
+   * at least one real offer (never publishes an unpriced version), freezes
+   * it (publishedAt/publishedByUserId), and repoints
+   * plans.current_published_version_id — all in one transaction so a crash
+   * mid-publish can never leave the Plan pointing at a half-written version.
+   * Existing subscribers on an OLDER version are entirely unaffected — this
+   * only changes what NEW subscribers see.
+   */
+  publishVersion: async (planId, versionId, actorUserId) => {
+    const version = await requireDraftVersion(planId, versionId);
+    const offers = await db.select().from(planVersionOffers).where(eq17(planVersionOffers.planVersionId, versionId));
+    if (offers.length === 0) {
+      throw new PlanServiceError("Cannot publish a Plan Version with no billing offer configured \u2014 add at least one monthly or annual price first.");
+    }
+    await db.transaction(async (tx) => {
+      await tx.update(planVersions).set({ publishedAt: /* @__PURE__ */ new Date(), publishedByUserId: actorUserId }).where(eq17(planVersions.id, versionId));
+      await tx.update(plans).set({ currentPublishedVersionId: versionId, lifecycleState: "published", updatedAt: /* @__PURE__ */ new Date() }).where(eq17(plans.id, planId));
+    });
+    auditLog({
+      category: AUDIT_CATEGORIES.ADMIN_ACTION,
+      action: "subscription_plan.publish_version",
+      resource: "plan_version",
+      resourceId: versionId,
+      result: "success",
+      userId: actorUserId,
+      metadata: { planId, version: version.version }
+    });
+    const updated = await requirePlan(planId);
+    return toPlan2(updated);
+  },
+  /** Published plans a given persona may subscribe to — used by the Seller/Creator "available plans" surface. Never invents data: an empty catalog returns an empty array. */
+  listPublishedPlansForPersona: async (persona) => {
+    const rows = await db.select().from(plans).where(and11(eq17(plans.role, persona), eq17(plans.lifecycleState, "published"), eq17(plans.isPublic, true)));
+    const out = [];
+    for (const p of rows) {
+      if (!p.currentPublishedVersionId) continue;
+      const versionRows = await db.select().from(planVersions).where(eq17(planVersions.id, p.currentPublishedVersionId)).limit(1);
+      const version = versionRows[0];
+      if (!version) continue;
+      const [offerRows, entitlementRows, limitRows] = await Promise.all([
+        db.select().from(planVersionOffers).where(eq17(planVersionOffers.planVersionId, version.id)),
+        db.select().from(planEntitlements).where(eq17(planEntitlements.planVersionId, version.id)),
+        db.select().from(planLimits).where(eq17(planLimits.planVersionId, version.id))
+      ]);
+      out.push({
+        plan: toPlan2(p),
+        version: toVersion(version),
+        offers: offerRows.map(toOffer),
+        entitlements: entitlementRows.map(toEntitlement),
+        limits: limitRows.map(toLimit)
+      });
+    }
+    return out.sort((a, b) => a.plan.sortOrder - b.plan.sortOrder);
+  },
+  /** Super Admin subscriber inspection — every Workspace currently (or historically) on any Version of this Plan. */
+  getSubscribersForPlan: async (planId) => {
+    const versionRows = await db.select({ id: planVersions.id }).from(planVersions).where(eq17(planVersions.planId, planId));
+    const versionIds = new Set(versionRows.map((v) => v.id));
+    if (versionIds.size === 0) return [];
+    const offerRows = await db.select().from(planVersionOffers);
+    const offerIdsForPlan = offerRows.filter((o) => versionIds.has(o.planVersionId)).map((o) => o.id);
+    if (offerIdsForPlan.length === 0) return [];
+    const subs = await db.select().from(subscriptions);
+    const relevant = subs.filter((s) => offerIdsForPlan.includes(s.planVersionOfferId));
+    const workspaceIds = [...new Set(relevant.map((s) => s.workspaceId))];
+    const workspaceRows = workspaceIds.length ? await db.select().from(workspaces) : [];
+    const workspaceById = new Map(workspaceRows.map((w) => [w.id, w]));
+    return relevant.map((s) => ({
+      subscriptionId: s.id,
+      workspaceId: s.workspaceId,
+      workspaceDisplayName: workspaceById.get(s.workspaceId)?.displayName ?? null,
+      status: s.status,
+      currentPeriodStart: s.currentPeriodStart.toISOString(),
+      currentPeriodEnd: s.currentPeriodEnd ? s.currentPeriodEnd.toISOString() : null,
+      grantedManually: s.grantedManually
+    }));
+  }
+};
+
+// server/subscriptions/subscriptionService.ts
+init_client();
+init_schema();
+init_auditLogger();
+init_referenceIdService();
+import { and as and12, eq as eq18, inArray as inArray6, lt, isNotNull } from "drizzle-orm";
+var SubscriptionServiceError = class extends Error {
+  constructor(message, status = 400) {
+    super(message);
+    this.status = status;
+  }
+};
+function toSubscription(row) {
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    planVersionOfferId: row.planVersionOfferId,
+    pendingPlanVersionOfferId: row.pendingPlanVersionOfferId,
+    status: row.status,
+    startDate: row.startDate.toISOString(),
+    currentPeriodStart: row.currentPeriodStart.toISOString(),
+    currentPeriodEnd: row.currentPeriodEnd ? row.currentPeriodEnd.toISOString() : null,
+    cancelAtPeriodEnd: row.cancelAtPeriodEnd,
+    cancelledAt: row.cancelledAt ? row.cancelledAt.toISOString() : null,
+    trialEndsAt: row.trialEndsAt ? row.trialEndsAt.toISOString() : null,
+    grantedManually: row.grantedManually,
+    grantedByUserId: row.grantedByUserId,
+    grantedReason: row.grantedReason,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString()
+  };
+}
+function toEvent(row) {
+  return {
+    id: row.id,
+    subscriptionId: row.subscriptionId,
+    eventType: row.eventType,
+    fromPlanVersionOfferId: row.fromPlanVersionOfferId,
+    toPlanVersionOfferId: row.toPlanVersionOfferId,
+    actorUserId: row.actorUserId,
+    reason: row.reason,
+    metadata: row.metadata,
+    createdAt: row.createdAt.toISOString()
+  };
+}
+function addInterval(date, interval) {
+  const d = new Date(date);
+  if (interval === "monthly") d.setMonth(d.getMonth() + 1);
+  else d.setFullYear(d.getFullYear() + 1);
+  return d;
+}
+async function getOfferWithPlan(offerId) {
+  const rows = await db.select({ offer: planVersionOffers, version: planVersions, plan: plans }).from(planVersionOffers).innerJoin(planVersions, eq18(planVersionOffers.planVersionId, planVersions.id)).innerJoin(plans, eq18(planVersions.planId, plans.id)).where(eq18(planVersionOffers.id, offerId)).limit(1);
+  return rows[0] ?? null;
+}
+async function assertPersonaMatch(workspaceType, offerId) {
+  const found = await getOfferWithPlan(offerId);
+  if (!found) throw new SubscriptionServiceError("Plan version offer not found", 404);
+  if (found.plan.role !== workspaceType) {
+    throw new SubscriptionServiceError(
+      `Persona mismatch: this offer belongs to a ${found.plan.role} plan, but the workspace is ${workspaceType}.`,
+      403
+    );
+  }
+}
+async function assertTargetOfferValid(currentOfferId, targetOfferId) {
+  const target = await getOfferWithPlan(targetOfferId);
+  if (!target) throw new SubscriptionServiceError("Target plan version offer not found", 404);
+  if (target.plan.lifecycleState !== "published") {
+    throw new SubscriptionServiceError("Target Plan is not currently published.", 400);
+  }
+  if (targetOfferId === currentOfferId) {
+    throw new SubscriptionServiceError("Target offer is the same as the current offer \u2014 not a Plan change.", 400);
+  }
+  return target;
+}
+var subscriptionService = {
+  /** null = no open subscription (never fabricated as "active on a default plan"). */
+  getCurrentSubscription: async (workspaceId) => {
+    return workspaceService.getResolvedOpenSubscription(workspaceId);
+  },
+  getSubscriptionHistory: async (workspaceId) => {
+    const subRows = await db.select().from(subscriptions).where(eq18(subscriptions.workspaceId, workspaceId));
+    const subIds = subRows.map((s) => s.id);
+    const eventRows = subIds.length ? await db.select().from(subscriptionEvents).where(inArray6(subscriptionEvents.subscriptionId, subIds)) : [];
+    return {
+      subscriptions: subRows.map(toSubscription).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      events: eventRows.map(toEvent).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    };
+  },
+  /**
+   * Super Admin manual grant. Creates a subscription + lifecycle event and
+   * NOTHING ELSE — no subscription_payments row, no billing document, so
+   * Monetization Center's revenue derivation naturally counts this as ৳0
+   * (it only sums succeeded payments) without any special-case filter.
+   */
+  manualGrant: async (input) => {
+    if (!input.reason?.trim()) throw new SubscriptionServiceError("A reason is required for a manual grant.");
+    const workspace = await workspaceService.getWorkspace(input.workspaceId);
+    if (!workspace) throw new SubscriptionServiceError("Workspace not found", 404);
+    await assertPersonaMatch(workspace.type, input.planVersionOfferId);
+    const existing = await workspaceService.getResolvedOpenSubscription(input.workspaceId);
+    if (existing) {
+      throw new SubscriptionServiceError(
+        "This Workspace already has an open subscription. Cancel or let it expire before granting a new one.",
+        409
+      );
+    }
+    const startDate = input.startDate ?? /* @__PURE__ */ new Date();
+    const [created2] = await db.insert(subscriptions).values({
+      workspaceId: input.workspaceId,
+      planVersionOfferId: input.planVersionOfferId,
+      status: "active",
+      startDate,
+      currentPeriodStart: startDate,
+      currentPeriodEnd: input.endDate ?? null,
+      grantedManually: true,
+      grantedByUserId: input.actorUserId,
+      grantedReason: input.reason.trim()
+    }).returning();
+    await db.insert(subscriptionEvents).values({
+      subscriptionId: created2.id,
+      eventType: "manually_granted",
+      toPlanVersionOfferId: input.planVersionOfferId,
+      actorUserId: input.actorUserId,
+      reason: input.reason.trim()
+    });
+    auditLog({
+      category: AUDIT_CATEGORIES.ADMIN_ACTION,
+      action: "subscription.manual_grant",
+      resource: "subscription",
+      resourceId: created2.id,
+      result: "success",
+      userId: input.actorUserId,
+      metadata: { workspaceId: input.workspaceId, planVersionOfferId: input.planVersionOfferId, reason: input.reason, endDate: input.endDate ?? null }
+    });
+    return toSubscription(created2);
+  },
+  /**
+   * Locked policy: cancellation is always cancel-at-period-end. Entitlement
+   * is not revoked immediately. CANCELLATION + PENDING DOWNGRADE
+   * interaction (locked): cancellation wins — a pending downgrade is
+   * cleared in the same update, since we should not retain a future
+   * Plan-change intention after the user has explicitly chosen to end the
+   * subscription.
+   */
+  requestCancellation: async (workspaceId, actorUserId) => {
+    const resolved = await workspaceService.getResolvedOpenSubscription(workspaceId);
+    if (!resolved) throw new SubscriptionServiceError("No open subscription for this Workspace", 404);
+    if (resolved.subscription.cancelAtPeriodEnd && !resolved.subscription.pendingPlanVersionOfferId) return resolved.subscription;
+    const hadPendingDowngrade = resolved.subscription.pendingPlanVersionOfferId;
+    await db.update(subscriptions).set({ cancelAtPeriodEnd: true, pendingPlanVersionOfferId: null, updatedAt: /* @__PURE__ */ new Date() }).where(eq18(subscriptions.id, resolved.subscription.id));
+    await db.insert(subscriptionEvents).values({
+      subscriptionId: resolved.subscription.id,
+      eventType: "cancellation_requested",
+      actorUserId,
+      metadata: hadPendingDowngrade ? { clearedPendingDowngrade: hadPendingDowngrade } : void 0
+    });
+    if (hadPendingDowngrade) {
+      await db.insert(subscriptionEvents).values({
+        subscriptionId: resolved.subscription.id,
+        eventType: "downgrade_cancelled",
+        toPlanVersionOfferId: hadPendingDowngrade,
+        actorUserId,
+        reason: "Superseded by full subscription cancellation"
+      });
+    }
+    auditLog({
+      category: AUDIT_CATEGORIES.ADMIN_ACTION,
+      action: "subscription.cancellation_requested",
+      resource: "subscription",
+      resourceId: resolved.subscription.id,
+      result: "success",
+      userId: actorUserId,
+      metadata: { workspaceId, clearedPendingDowngrade: hadPendingDowngrade ?? null }
+    });
+    const rows = await db.select().from(subscriptions).where(eq18(subscriptions.id, resolved.subscription.id)).limit(1);
+    return toSubscription(rows[0]);
+  },
+  /**
+   * Expiry sweep — idempotent (only selects subscriptions still in an OPEN
+   * status with a passed current_period_end; once transitioned, a rerun
+   * won't reselect the same row). Never deletes any business data —
+   * downstream product/order/team data is untouched; only this Workspace's
+   * effective plan access stops (resolveFeatureEnabled/resolvePlanLimit will
+   * simply find no open subscription afterward). Local/test invocation only
+   * — no cron is wired in this phase.
+   */
+  processExpirations: async (now = /* @__PURE__ */ new Date()) => {
+    const candidates = await db.select().from(subscriptions).where(and12(inArray6(subscriptions.status, OPEN_SUBSCRIPTION_STATUSES), isNotNull(subscriptions.currentPeriodEnd), lt(subscriptions.currentPeriodEnd, now)));
+    let expiredCount = 0;
+    let cancelledCount = 0;
+    const ids = [];
+    for (const row of candidates) {
+      const nextStatus = row.cancelAtPeriodEnd ? "cancelled" : "expired";
+      await db.update(subscriptions).set({ status: nextStatus, cancelledAt: nextStatus === "cancelled" ? now : row.cancelledAt, updatedAt: now }).where(eq18(subscriptions.id, row.id));
+      await db.insert(subscriptionEvents).values({
+        subscriptionId: row.id,
+        eventType: nextStatus === "cancelled" ? "cancelled" : "expired",
+        actorUserId: null,
+        // system-driven — never fabricated as a human action
+        reason: nextStatus === "cancelled" ? "cancel_at_period_end reached at expiry sweep" : "current_period_end passed with no renewal",
+        // pending_plan_version_offer_id is deliberately NOT cleared here — a pending downgrade
+        // is never auto-activated (no automatic charge exists), but the intent must survive
+        // this closure so the later "pay for the pending target" flow knows what was requested.
+        metadata: row.pendingPlanVersionOfferId ? { pendingPlanVersionOfferId: row.pendingPlanVersionOfferId } : void 0
+      });
+      auditLog({
+        category: AUDIT_CATEGORIES.SYSTEM_EVENT,
+        action: nextStatus === "cancelled" ? "subscription.cancelled" : "subscription.expired",
+        resource: "subscription",
+        resourceId: row.id,
+        result: "success",
+        metadata: { workspaceId: row.workspaceId }
+      });
+      ids.push(row.id);
+      if (nextStatus === "cancelled") cancelledCount++;
+      else expiredCount++;
+    }
+    return { expiredCount, cancelledCount, ids };
+  },
+  /**
+   * Phase 6 payment integration point: called ONLY after SSLCommerz
+   * validateTransaction() has confirmed success. Never mutates
+   * subscription tables from payment code directly.
+   */
+  activateInitialSubscription: async (input) => {
+    const workspace = await workspaceService.getWorkspace(input.workspaceId);
+    if (!workspace) throw new SubscriptionServiceError("Workspace not found", 404);
+    await assertPersonaMatch(workspace.type, input.planVersionOfferId);
+    const existing = await workspaceService.getResolvedOpenSubscription(input.workspaceId);
+    if (existing) {
+      throw new SubscriptionServiceError("This Workspace already has an open subscription.", 409);
+    }
+    const offerRow = await getOfferWithPlan(input.planVersionOfferId);
+    if (!offerRow) throw new SubscriptionServiceError("Plan version offer not found", 404);
+    const now = /* @__PURE__ */ new Date();
+    const periodEnd = addInterval(now, offerRow.offer.billingInterval);
+    const [created2] = await db.insert(subscriptions).values({
+      workspaceId: input.workspaceId,
+      planVersionOfferId: input.planVersionOfferId,
+      status: "active",
+      startDate: now,
+      currentPeriodStart: now,
+      currentPeriodEnd: periodEnd
+    }).returning();
+    await db.insert(subscriptionEvents).values({
+      subscriptionId: created2.id,
+      eventType: "subscribed",
+      toPlanVersionOfferId: input.planVersionOfferId,
+      metadata: input.subscriptionPaymentId ? { subscriptionPaymentId: input.subscriptionPaymentId } : void 0
+    });
+    auditLog({
+      category: AUDIT_CATEGORIES.SYSTEM_EVENT,
+      action: "subscription.subscribed",
+      resource: "subscription",
+      resourceId: created2.id,
+      result: "success",
+      metadata: { workspaceId: input.workspaceId, planVersionOfferId: input.planVersionOfferId }
+    });
+    return toSubscription(created2);
+  },
+  /**
+   * Phase 6 payment integration point for a manual renewal payment. Same
+   * offer, next period. Interpretation choice (reporting per the ask):
+   * renewing on the CURRENT offer as-is is an affirmative "keep this plan"
+   * action, so any stale pending downgrade is cleared here too — same
+   * rationale as upgrade/cancellation superseding it. If the workspace
+   * actually wants to move to the pending target, that happens through
+   * activatePendingDowngrade, not this function.
+   */
+  renewSubscription: async (input) => {
+    const rows = await db.select().from(subscriptions).where(eq18(subscriptions.id, input.subscriptionId)).limit(1);
+    const sub = rows[0];
+    if (!sub) throw new SubscriptionServiceError("Subscription not found", 404);
+    const offerRow = await getOfferWithPlan(sub.planVersionOfferId);
+    if (!offerRow) throw new SubscriptionServiceError("Plan version offer not found", 404);
+    const now = /* @__PURE__ */ new Date();
+    const periodStart = sub.currentPeriodEnd && sub.currentPeriodEnd > now ? sub.currentPeriodEnd : now;
+    const periodEnd = addInterval(periodStart, offerRow.offer.billingInterval);
+    await db.update(subscriptions).set({ status: "active", currentPeriodStart: periodStart, currentPeriodEnd: periodEnd, cancelAtPeriodEnd: false, pendingPlanVersionOfferId: null, updatedAt: now }).where(eq18(subscriptions.id, sub.id));
+    if (sub.pendingPlanVersionOfferId) {
+      await db.insert(subscriptionEvents).values({
+        subscriptionId: sub.id,
+        eventType: "downgrade_cancelled",
+        toPlanVersionOfferId: sub.pendingPlanVersionOfferId,
+        reason: "Superseded by renewing on the current Plan"
+      });
+    }
+    await db.insert(subscriptionEvents).values({
+      subscriptionId: sub.id,
+      eventType: "renewed",
+      fromPlanVersionOfferId: sub.planVersionOfferId,
+      toPlanVersionOfferId: sub.planVersionOfferId,
+      metadata: input.subscriptionPaymentId ? { subscriptionPaymentId: input.subscriptionPaymentId } : void 0
+    });
+    auditLog({
+      category: AUDIT_CATEGORIES.SYSTEM_EVENT,
+      action: "subscription.renewed",
+      resource: "subscription",
+      resourceId: sub.id,
+      result: "success"
+    });
+    const updated = await db.select().from(subscriptions).where(eq18(subscriptions.id, sub.id)).limit(1);
+    return toSubscription(updated[0]);
+  },
+  /**
+   * Upgrade REQUEST — validates only, never mutates. The client states the
+   * intent (this is explicitly an upgrade); the server validates the target
+   * is real, published, correctly-personaed, and different from the
+   * current offer — it does NOT infer direction from price. Returns the
+   * canonical amount Phase 6 must charge in full (no proration/credit).
+   * Activation only ever happens via activateUpgrade() after a validated
+   * successful payment.
+   */
+  requestUpgrade: async (input) => {
+    const rows = await db.select().from(subscriptions).where(eq18(subscriptions.id, input.subscriptionId)).limit(1);
+    const sub = rows[0];
+    if (!sub) throw new SubscriptionServiceError("Subscription not found", 404);
+    if (!OPEN_SUBSCRIPTION_STATUSES.includes(sub.status)) {
+      throw new SubscriptionServiceError("Subscription is not open \u2014 cannot change plan.", 409);
+    }
+    const workspace = await workspaceService.getWorkspace(sub.workspaceId);
+    if (!workspace) throw new SubscriptionServiceError("Workspace not found", 404);
+    await assertPersonaMatch(workspace.type, input.toPlanVersionOfferId);
+    const target = await assertTargetOfferValid(sub.planVersionOfferId, input.toPlanVersionOfferId);
+    auditLog({
+      category: AUDIT_CATEGORIES.ADMIN_ACTION,
+      action: "subscription.upgrade_requested",
+      resource: "subscription",
+      resourceId: sub.id,
+      result: "success",
+      userId: input.actorUserId,
+      metadata: { toPlanVersionOfferId: input.toPlanVersionOfferId }
+    });
+    return {
+      applied: false,
+      status: "upgrade_quote",
+      targetOfferId: input.toPlanVersionOfferId,
+      amountDue: target.offer.price,
+      currency: target.offer.currency,
+      note: "Full price is charged immediately upon successful payment. No proration, credit, or refund for unused time on the current Plan."
+    };
+  },
+  /**
+   * Downgrade REQUEST — locked V1 policy. Never touches the current offer,
+   * entitlements, or limits; only records the pending target for activation
+   * at period end (and only once actually paid for — see
+   * activatePendingDowngrade below). If a pending downgrade already exists,
+   * this safely REPLACES it with the newly requested target — still one
+   * canonical pending pointer, full auditability via a fresh
+   * downgrade_requested event either way.
+   */
+  requestDowngrade: async (input) => {
+    const rows = await db.select().from(subscriptions).where(eq18(subscriptions.id, input.subscriptionId)).limit(1);
+    const sub = rows[0];
+    if (!sub) throw new SubscriptionServiceError("Subscription not found", 404);
+    if (!OPEN_SUBSCRIPTION_STATUSES.includes(sub.status)) {
+      throw new SubscriptionServiceError("Subscription is not open \u2014 cannot change plan.", 409);
+    }
+    const workspace = await workspaceService.getWorkspace(sub.workspaceId);
+    if (!workspace) throw new SubscriptionServiceError("Workspace not found", 404);
+    await assertPersonaMatch(workspace.type, input.toPlanVersionOfferId);
+    await assertTargetOfferValid(sub.planVersionOfferId, input.toPlanVersionOfferId);
+    await db.update(subscriptions).set({ pendingPlanVersionOfferId: input.toPlanVersionOfferId, updatedAt: /* @__PURE__ */ new Date() }).where(eq18(subscriptions.id, sub.id));
+    await db.insert(subscriptionEvents).values({
+      subscriptionId: sub.id,
+      eventType: "downgrade_requested",
+      fromPlanVersionOfferId: sub.planVersionOfferId,
+      toPlanVersionOfferId: input.toPlanVersionOfferId,
+      actorUserId: input.actorUserId
+    });
+    auditLog({
+      category: AUDIT_CATEGORIES.ADMIN_ACTION,
+      action: "subscription.downgrade_requested",
+      resource: "subscription",
+      resourceId: sub.id,
+      result: "success",
+      userId: input.actorUserId,
+      metadata: {
+        fromPlanVersionOfferId: sub.planVersionOfferId,
+        toPlanVersionOfferId: input.toPlanVersionOfferId,
+        replacedPending: sub.pendingPlanVersionOfferId ?? null
+      }
+    });
+    const updated = await db.select().from(subscriptions).where(eq18(subscriptions.id, sub.id)).limit(1);
+    return toSubscription(updated[0]);
+  },
+  /** Cancels a pending downgrade only — the current active Plan/entitlements/limits are entirely untouched (nothing about them ever changed in the first place). No payment/revenue effects. */
+  cancelPendingDowngrade: async (subscriptionId, actorUserId) => {
+    const rows = await db.select().from(subscriptions).where(eq18(subscriptions.id, subscriptionId)).limit(1);
+    const sub = rows[0];
+    if (!sub) throw new SubscriptionServiceError("Subscription not found", 404);
+    if (!sub.pendingPlanVersionOfferId) {
+      throw new SubscriptionServiceError("No pending downgrade to cancel.", 404);
+    }
+    const clearedTarget = sub.pendingPlanVersionOfferId;
+    await db.update(subscriptions).set({ pendingPlanVersionOfferId: null, updatedAt: /* @__PURE__ */ new Date() }).where(eq18(subscriptions.id, sub.id));
+    await db.insert(subscriptionEvents).values({
+      subscriptionId: sub.id,
+      eventType: "downgrade_cancelled",
+      toPlanVersionOfferId: clearedTarget,
+      actorUserId
+    });
+    auditLog({
+      category: AUDIT_CATEGORIES.ADMIN_ACTION,
+      action: "subscription.downgrade_cancelled",
+      resource: "subscription",
+      resourceId: sub.id,
+      result: "success",
+      userId: actorUserId,
+      metadata: { clearedPendingPlanVersionOfferId: clearedTarget }
+    });
+    const updated = await db.select().from(subscriptions).where(eq18(subscriptions.id, sub.id)).limit(1);
+    return toSubscription(updated[0]);
+  },
+  /**
+   * LATER DOWNGRADE PAYMENT — called once Phase 6 receives a validated
+   * successful payment for a workspace's pending target. Requires the
+   * subscription to already be CLOSED (expired/cancelled) — paying for a
+   * pending downgrade EARLY, while the current period is still open, is not
+   * a supported V1 flow (that would raise an unresolved
+   * forfeit-remaining-time question this project has explicitly deferred).
+   * Reuses the SAME canonical subscription row (reactivates it in place —
+   * the same pattern renewSubscription already relies on for a closed
+   * same-offer renewal) rather than creating a second row, so history
+   * never fragments across two subscription ids for one continuous
+   * commercial relationship.
+   */
+  activatePendingDowngrade: async (input) => {
+    const closedWithPending = await db.select().from(subscriptions).where(eq18(subscriptions.workspaceId, input.workspaceId));
+    const candidate = closedWithPending.filter((s) => !OPEN_SUBSCRIPTION_STATUSES.includes(s.status) && s.pendingPlanVersionOfferId).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
+    if (!candidate) {
+      throw new SubscriptionServiceError("No closed subscription with a pending downgrade target found for this Workspace.", 404);
+    }
+    const pendingOfferId = candidate.pendingPlanVersionOfferId;
+    const offerRow = await getOfferWithPlan(pendingOfferId);
+    if (!offerRow) throw new SubscriptionServiceError("Pending target plan version offer not found", 404);
+    if (offerRow.plan.lifecycleState !== "published") {
+      throw new SubscriptionServiceError("The pending target Plan is no longer published \u2014 it cannot be activated as-is.", 409);
+    }
+    const now = /* @__PURE__ */ new Date();
+    const periodEnd = addInterval(now, offerRow.offer.billingInterval);
+    const fromOfferId = candidate.planVersionOfferId;
+    await db.update(subscriptions).set({
+      planVersionOfferId: pendingOfferId,
+      pendingPlanVersionOfferId: null,
+      status: "active",
+      currentPeriodStart: now,
+      currentPeriodEnd: periodEnd,
+      cancelAtPeriodEnd: false,
+      cancelledAt: null,
+      updatedAt: now
+    }).where(eq18(subscriptions.id, candidate.id));
+    await db.insert(subscriptionEvents).values({
+      subscriptionId: candidate.id,
+      eventType: "downgraded",
+      fromPlanVersionOfferId: fromOfferId,
+      toPlanVersionOfferId: pendingOfferId,
+      metadata: { subscriptionPaymentId: input.subscriptionPaymentId }
+    });
+    await subscriptionService.issueBillingDocumentForPayment({
+      subscriptionPaymentId: input.subscriptionPaymentId,
+      workspaceId: input.workspaceId,
+      periodStart: now,
+      periodEnd
+    });
+    auditLog({
+      category: AUDIT_CATEGORIES.SYSTEM_EVENT,
+      action: "subscription.downgraded",
+      resource: "subscription",
+      resourceId: candidate.id,
+      result: "success",
+      metadata: { fromPlanVersionOfferId: fromOfferId, toPlanVersionOfferId: pendingOfferId }
+    });
+    const updated = await db.select().from(subscriptions).where(eq18(subscriptions.id, candidate.id)).limit(1);
+    return toSubscription(updated[0]);
+  },
+  /**
+   * Records a successful payment (Phase 6's job to call this once
+   * SSLCommerz validateTransaction() confirms success) and issues the
+   * matching billing document. Never called from anywhere but the
+   * activation functions below and future Phase 6 payment code — payment
+   * code must never mutate `subscriptions` directly.
+   */
+  recordSuccessfulPayment: async (input) => {
+    const [created2] = await db.insert(subscriptionPayments).values({
+      workspaceId: input.workspaceId,
+      subscriptionId: input.subscriptionId,
+      planVersionOfferId: input.planVersionOfferId,
+      purpose: input.purpose,
+      amount: input.amount,
+      currency: input.currency,
+      provider: input.provider || "sslcommerz",
+      providerTranId: input.providerTranId,
+      providerValId: input.providerValId,
+      result: "succeeded",
+      idempotencyKey: input.idempotencyKey
+    }).returning();
+    return { id: created2.id };
+  },
+  /** Issues a billing document for an already-succeeded payment, using the subscription's CURRENT period (call AFTER the state mutation, not before). */
+  issueBillingDocumentForPayment: async (input) => {
+    const paymentRows = await db.select().from(subscriptionPayments).where(eq18(subscriptionPayments.id, input.subscriptionPaymentId)).limit(1);
+    const payment = paymentRows[0];
+    if (!payment) throw new SubscriptionServiceError("Subscription payment not found", 404);
+    const referenceId = await allocateReferenceId("subscriptionInvoice");
+    const [created2] = await db.insert(subscriptionBillingDocuments).values({
+      subscriptionPaymentId: input.subscriptionPaymentId,
+      workspaceId: input.workspaceId,
+      referenceId,
+      amount: payment.amount,
+      currency: payment.currency,
+      periodStart: input.periodStart,
+      periodEnd: input.periodEnd
+    }).returning();
+    return { id: created2.id, referenceId: created2.referenceId };
+  },
+  /**
+   * Upgrade ACTIVATION — called only after a validated successful payment
+   * (recordSuccessfulPayment above). Never reachable from a bare client
+   * request. Per the locked V1 policy: new billing period starts NOW (full
+   * price, no proration); cancel_at_period_end resets to false (an upgrade
+   * is an affirmative "keep going, on a bigger plan" action — see report for
+   * rationale); any previously-pending downgrade is cleared (superseded —
+   * it was scheduled against a period that no longer exists once upgraded).
+   */
+  activateUpgrade: async (input) => {
+    const rows = await db.select().from(subscriptions).where(eq18(subscriptions.id, input.subscriptionId)).limit(1);
+    const sub = rows[0];
+    if (!sub) throw new SubscriptionServiceError("Subscription not found", 404);
+    if (!OPEN_SUBSCRIPTION_STATUSES.includes(sub.status)) {
+      throw new SubscriptionServiceError("Subscription is not open \u2014 cannot activate an upgrade.", 409);
+    }
+    const workspace = await workspaceService.getWorkspace(sub.workspaceId);
+    if (!workspace) throw new SubscriptionServiceError("Workspace not found", 404);
+    await assertPersonaMatch(workspace.type, input.toPlanVersionOfferId);
+    const toOfferRow = await assertTargetOfferValid(sub.planVersionOfferId, input.toPlanVersionOfferId);
+    const now = /* @__PURE__ */ new Date();
+    const periodEnd = addInterval(now, toOfferRow.offer.billingInterval);
+    const fromOfferId = sub.planVersionOfferId;
+    await db.update(subscriptions).set({
+      planVersionOfferId: input.toPlanVersionOfferId,
+      pendingPlanVersionOfferId: null,
+      status: "active",
+      currentPeriodStart: now,
+      currentPeriodEnd: periodEnd,
+      cancelAtPeriodEnd: false,
+      updatedAt: now
+    }).where(eq18(subscriptions.id, sub.id));
+    if (sub.pendingPlanVersionOfferId) {
+      await db.insert(subscriptionEvents).values({
+        subscriptionId: sub.id,
+        eventType: "downgrade_cancelled",
+        toPlanVersionOfferId: sub.pendingPlanVersionOfferId,
+        actorUserId: input.actorUserId,
+        reason: "Superseded by a completed upgrade"
+      });
+    }
+    await db.insert(subscriptionEvents).values({
+      subscriptionId: sub.id,
+      eventType: "upgraded",
+      fromPlanVersionOfferId: fromOfferId,
+      toPlanVersionOfferId: input.toPlanVersionOfferId,
+      actorUserId: input.actorUserId,
+      metadata: { subscriptionPaymentId: input.subscriptionPaymentId }
+    });
+    await subscriptionService.issueBillingDocumentForPayment({
+      subscriptionPaymentId: input.subscriptionPaymentId,
+      workspaceId: sub.workspaceId,
+      periodStart: now,
+      periodEnd
+    });
+    auditLog({
+      category: AUDIT_CATEGORIES.SYSTEM_EVENT,
+      action: "subscription.upgraded",
+      resource: "subscription",
+      resourceId: sub.id,
+      result: "success",
+      userId: input.actorUserId,
+      metadata: { fromPlanVersionOfferId: fromOfferId, toPlanVersionOfferId: input.toPlanVersionOfferId }
+    });
+    const updated = await db.select().from(subscriptions).where(eq18(subscriptions.id, sub.id)).limit(1);
+    return toSubscription(updated[0]);
+  },
+  /**
+   * Super Admin replaces/changes an existing MANUAL grant (item "MANUAL
+   * GRANTS" in the Phase 3C spec). Deliberately separate from customer
+   * upgrade/downgrade: no payment, no billing document, no revenue —
+   * exactly a second explicit authorized Admin action with its own
+   * reason/actor/event, same as the original grant.
+   */
+  replaceManualGrant: async (input) => {
+    if (!input.reason?.trim()) throw new SubscriptionServiceError("A reason is required to change a manual grant.");
+    const rows = await db.select().from(subscriptions).where(eq18(subscriptions.id, input.subscriptionId)).limit(1);
+    const sub = rows[0];
+    if (!sub) throw new SubscriptionServiceError("Subscription not found", 404);
+    if (!sub.grantedManually) throw new SubscriptionServiceError("This subscription was not a manual grant \u2014 use the customer upgrade/downgrade path instead.", 400);
+    if (!OPEN_SUBSCRIPTION_STATUSES.includes(sub.status)) {
+      throw new SubscriptionServiceError("Subscription is not open.", 409);
+    }
+    const workspace = await workspaceService.getWorkspace(sub.workspaceId);
+    if (!workspace) throw new SubscriptionServiceError("Workspace not found", 404);
+    await assertPersonaMatch(workspace.type, input.toPlanVersionOfferId);
+    const fromOfferId = sub.planVersionOfferId;
+    await db.update(subscriptions).set({
+      planVersionOfferId: input.toPlanVersionOfferId,
+      pendingPlanVersionOfferId: null,
+      // an explicit Admin re-grant supersedes any stale customer-requested pending downgrade
+      grantedReason: input.reason.trim(),
+      grantedByUserId: input.actorUserId,
+      updatedAt: /* @__PURE__ */ new Date()
+    }).where(eq18(subscriptions.id, sub.id));
+    await db.insert(subscriptionEvents).values({
+      subscriptionId: sub.id,
+      eventType: "manually_granted",
+      fromPlanVersionOfferId: fromOfferId,
+      toPlanVersionOfferId: input.toPlanVersionOfferId,
+      actorUserId: input.actorUserId,
+      reason: input.reason.trim()
+    });
+    auditLog({
+      category: AUDIT_CATEGORIES.ADMIN_ACTION,
+      action: "subscription.manual_grant_replaced",
+      resource: "subscription",
+      resourceId: sub.id,
+      result: "success",
+      userId: input.actorUserId,
+      metadata: { fromPlanVersionOfferId: fromOfferId, toPlanVersionOfferId: input.toPlanVersionOfferId, reason: input.reason }
+    });
+    const updated = await db.select().from(subscriptions).where(eq18(subscriptions.id, sub.id)).limit(1);
+    return toSubscription(updated[0]);
+  }
+};
+
+// server/subscriptions/subscriptionPaymentService.ts
+init_client();
+init_schema();
+init_logger();
+init_auditLogger();
+init_sslcommerzProvider();
+init_mockProvider();
+import { randomUUID as randomUUID21 } from "node:crypto";
+import { and as and13, eq as eq19, gte, lte } from "drizzle-orm";
+var SubscriptionPaymentError = class extends Error {
+  constructor(message, status = 400) {
+    super(message);
+    this.status = status;
+  }
+};
+function isProductionRuntime2() {
+  return process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production" || process.env.CHOOSIFY_ENV === "production";
+}
+function resolveSubscriptionPaymentProvider() {
+  const mockOn = (process.env.PAYMENT_GATEWAY_MOCK || "").trim().toLowerCase() === "true";
+  const sslOn = sslcommerzProvider.isConfigured();
+  if (isProductionRuntime2()) {
+    if (mockOn && !sslOn) {
+      throw new SubscriptionPaymentError("Mock payment provider cannot run in production", 503);
+    }
+    if (!sslOn) {
+      throw new SubscriptionPaymentError("Payment gateway not available. Set SSLCOMMERZ_STORE_ID and SSLCOMMERZ_STORE_PASSWORD.", 503);
+    }
+    return sslcommerzProvider;
+  }
+  if (mockOn && mockPaymentProvider.isConfigured()) return mockPaymentProvider;
+  if (sslOn) return sslcommerzProvider;
+  if (mockOn) return mockPaymentProvider;
+  throw new SubscriptionPaymentError("Payment gateway not available. Set SSLCOMMERZ credentials or PAYMENT_GATEWAY_MOCK=true for the local harness.", 503);
+}
+function amountsMatch2(expectedMinorUnits, actualMajorUnits, toleranceMajor = 0.01) {
+  const expectedMajor = expectedMinorUnits / 100;
+  return Math.abs(expectedMajor - actualMajorUnits) <= toleranceMajor;
+}
+async function getPaymentRow(id) {
+  const rows = await db.select().from(subscriptionPayments).where(eq19(subscriptionPayments.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+async function getPaymentByTranId(tranId) {
+  const rows = await db.select().from(subscriptionPayments).where(eq19(subscriptionPayments.providerTranId, tranId)).limit(1);
+  return rows[0] ?? null;
+}
+async function initiateSubscriptionCheckout(input) {
+  const workspace = await workspaceService.resolveWorkspaceForUser(input.actorUserId, input.actorRole);
+  if (!workspace) {
+    throw new SubscriptionPaymentError("Only an authenticated Seller or Creator Workspace may purchase a subscription.", 403);
+  }
+  const offerDetail = await planService.getOfferDetail(input.offerId);
+  if (!offerDetail) throw new SubscriptionPaymentError("Plan version offer not found", 404);
+  if (offerDetail.plan.lifecycleState !== "published") {
+    throw new SubscriptionPaymentError("This Plan is not currently published.", 400);
+  }
+  if (offerDetail.plan.role !== workspace.type) {
+    throw new SubscriptionPaymentError(`Persona mismatch: this offer belongs to a ${offerDetail.plan.role} plan, but the workspace is ${workspace.type}.`, 403);
+  }
+  const openSub = await workspaceService.getResolvedOpenSubscription(workspace.id);
+  let subscriptionId = null;
+  if (input.purpose === "initial") {
+    if (openSub) throw new SubscriptionPaymentError("This Workspace already has an open subscription.", 409);
+  } else if (input.purpose === "renewal") {
+    if (!openSub) throw new SubscriptionPaymentError("No open subscription to renew.", 404);
+    if (openSub.offer.id !== input.offerId) {
+      throw new SubscriptionPaymentError("Renewal must target the subscription's current offer \u2014 use upgrade/downgrade to change Plans.", 400);
+    }
+    subscriptionId = openSub.subscription.id;
+  } else if (input.purpose === "upgrade") {
+    if (!openSub) throw new SubscriptionPaymentError("No open subscription to upgrade.", 404);
+    await subscriptionService.requestUpgrade({ subscriptionId: openSub.subscription.id, toPlanVersionOfferId: input.offerId, actorUserId: input.actorUserId });
+    subscriptionId = openSub.subscription.id;
+  } else if (input.purpose === "downgrade") {
+    const closedWithPending = await db.select().from(subscriptions).where(eq19(subscriptions.workspaceId, workspace.id));
+    const candidate = closedWithPending.filter((s) => !OPEN_SUBSCRIPTION_STATUSES.includes(s.status) && s.pendingPlanVersionOfferId === input.offerId).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
+    if (!candidate) {
+      throw new SubscriptionPaymentError("No pending downgrade to this offer was found for this Workspace.", 404);
+    }
+    subscriptionId = candidate.id;
+  } else {
+    throw new SubscriptionPaymentError("Unsupported payment purpose", 400);
+  }
+  const provider = resolveSubscriptionPaymentProvider();
+  const tranId = `SUBTXN-${offerDetail.plan.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 12)}-${randomUUID21()}`;
+  const idempotencyKey = `subpay-${workspace.id}-${input.purpose}-${randomUUID21()}`;
+  const [paymentRow] = await db.insert(subscriptionPayments).values({
+    subscriptionId,
+    workspaceId: workspace.id,
+    planVersionOfferId: input.offerId,
+    purpose: input.purpose,
+    amount: offerDetail.offer.price,
+    // minor units, server-resolved — never client-supplied
+    currency: offerDetail.offer.currency,
+    provider: provider.id,
+    result: "pending",
+    idempotencyKey
+  }).returning();
+  const actorUserRows = await db.select({ email: users.email, displayName: users.displayName }).from(users).where(eq19(users.id, input.actorUserId)).limit(1);
+  const actorUser = actorUserRows[0];
+  let session;
+  try {
+    session = await provider.initiateSession({
+      order: { orderId: paymentRow.id },
+      amount: offerDetail.offer.price / 100,
+      // gateway expects major units (e.g. 500.00)
+      currency: offerDetail.offer.currency,
+      tranId,
+      successUrl: `${input.publicApiBase}/subscriptions/payments/sslcommerz/success`,
+      failUrl: `${input.publicApiBase}/subscriptions/payments/sslcommerz/fail`,
+      cancelUrl: `${input.publicApiBase}/subscriptions/payments/sslcommerz/cancel`,
+      ipnUrl: `${input.publicApiBase}/subscriptions/payments/sslcommerz/ipn`,
+      customer: {
+        name: actorUser?.displayName || workspace.displayName || "Customer",
+        email: actorUser?.email,
+        city: "Dhaka"
+      }
+    });
+  } catch (error2) {
+    await db.update(subscriptionPayments).set({ result: "failed", updatedAt: /* @__PURE__ */ new Date() }).where(eq19(subscriptionPayments.id, paymentRow.id));
+    throw error2;
+  }
+  await db.update(subscriptionPayments).set({ providerTranId: session.tranId, updatedAt: /* @__PURE__ */ new Date() }).where(eq19(subscriptionPayments.id, paymentRow.id));
+  auditLog({
+    category: AUDIT_CATEGORIES.SYSTEM_EVENT,
+    action: "subscription_payment.initiated",
+    resource: "subscription_payment",
+    resourceId: paymentRow.id,
+    result: "success",
+    userId: input.actorUserId,
+    metadata: { workspaceId: workspace.id, offerId: input.offerId, purpose: input.purpose, amount: offerDetail.offer.price, currency: offerDetail.offer.currency }
+  });
+  return { redirectUrl: session.redirectUrl, tranId: session.tranId, paymentId: paymentRow.id, amount: offerDetail.offer.price, currency: offerDetail.offer.currency };
+}
+async function resolveSubscriptionPaymentIdForReturn(params) {
+  const payment = (params.tranId ? await getPaymentByTranId(params.tranId) : null) || (params.paymentId ? await getPaymentRow(params.paymentId) : null);
+  return payment?.id ?? null;
+}
+async function applyUntrustedSubscriptionPaymentOutcome(params) {
+  const payment = (params.tranId ? await getPaymentByTranId(params.tranId) : null) || (params.paymentId ? await getPaymentRow(params.paymentId) : null);
+  if (!payment) return null;
+  if (payment.result === "succeeded") return payment.id;
+  await db.update(subscriptionPayments).set({ result: params.status, updatedAt: /* @__PURE__ */ new Date() }).where(eq19(subscriptionPayments.id, payment.id));
+  return payment.id;
+}
+async function processSubscriptionIpn(body) {
+  const provider = resolveSubscriptionPaymentProvider();
+  const valId = String(body.val_id || "").trim();
+  const tranId = String(body.tran_id || "").trim();
+  const paymentIdHint = String(body.value_a || body.paymentId || "").trim();
+  const ipnStatus = String(body.status || "").toUpperCase();
+  const payment = (tranId ? await getPaymentByTranId(tranId) : null) || (paymentIdHint ? await getPaymentRow(paymentIdHint) : null);
+  if (!payment) return { received: true, credited: false, reason: "payment_not_found" };
+  if (!valId) {
+    if (ipnStatus === "FAILED" || ipnStatus === "CANCELLED" || ipnStatus === "UNATTEMPTED") {
+      await applyUntrustedSubscriptionPaymentOutcome({ paymentId: payment.id, status: ipnStatus === "CANCELLED" ? "cancelled" : "failed" });
+    }
+    return { received: true, credited: false, paymentId: payment.id, reason: "no_val_id" };
+  }
+  if (payment.result === "succeeded") {
+    return { received: true, credited: true, paymentId: payment.id, reason: "already_processed" };
+  }
+  const validation = await provider.validateTransaction(valId);
+  if (!validation.valid) {
+    await db.update(subscriptionPayments).set({ result: "failed", updatedAt: /* @__PURE__ */ new Date() }).where(eq19(subscriptionPayments.id, payment.id));
+    return { received: true, credited: false, paymentId: payment.id, reason: "validation_not_valid" };
+  }
+  if (!amountsMatch2(payment.amount, validation.amount)) {
+    Logger.error("Subscription payment amount mismatch \u2014 not crediting", { paymentId: payment.id, expectedMinor: payment.amount, actualMajor: validation.amount });
+    return { received: true, credited: false, paymentId: payment.id, reason: "amount_mismatch" };
+  }
+  if (validation.tranId && payment.providerTranId && validation.tranId !== payment.providerTranId) {
+    Logger.error("Subscription payment tran_id mismatch \u2014 not crediting", { paymentId: payment.id, expected: payment.providerTranId, actual: validation.tranId });
+    return { received: true, credited: false, paymentId: payment.id, reason: "tran_id_mismatch" };
+  }
+  const result = await finalizeSubscriptionPayment(payment.id, validation);
+  return { received: true, credited: true, paymentId: payment.id, reason: result.reused ? "already_processed" : "credited" };
+}
+async function finalizeSubscriptionPayment(paymentId, validation) {
+  const fresh = await getPaymentRow(paymentId);
+  if (!fresh) throw new SubscriptionPaymentError("Subscription payment not found", 404);
+  if (fresh.result === "succeeded") {
+    return { reused: true };
+  }
+  const marked = await db.update(subscriptionPayments).set({ result: "succeeded", providerValId: validation.valId, updatedAt: /* @__PURE__ */ new Date() }).where(eq19(subscriptionPayments.id, paymentId)).returning();
+  if (!marked[0]) return { reused: true };
+  const workspace = await workspaceService.getWorkspace(fresh.workspaceId);
+  let subscription;
+  try {
+    if (fresh.purpose === "initial") {
+      subscription = await subscriptionService.activateInitialSubscription({ workspaceId: fresh.workspaceId, planVersionOfferId: fresh.planVersionOfferId, subscriptionPaymentId: paymentId });
+      await db.update(subscriptionPayments).set({ subscriptionId: subscription.id, updatedAt: /* @__PURE__ */ new Date() }).where(eq19(subscriptionPayments.id, paymentId));
+      await ensureBillingDocument(paymentId, fresh.workspaceId, subscription);
+    } else if (fresh.purpose === "renewal") {
+      subscription = await subscriptionService.renewSubscription({ subscriptionId: fresh.subscriptionId, subscriptionPaymentId: paymentId });
+      await ensureBillingDocument(paymentId, fresh.workspaceId, subscription);
+    } else if (fresh.purpose === "upgrade") {
+      subscription = await subscriptionService.activateUpgrade({ subscriptionId: fresh.subscriptionId, toPlanVersionOfferId: fresh.planVersionOfferId, subscriptionPaymentId: paymentId, actorUserId: workspace?.ownerUserId });
+    } else if (fresh.purpose === "downgrade") {
+      subscription = await subscriptionService.activatePendingDowngrade({ workspaceId: fresh.workspaceId, subscriptionPaymentId: paymentId });
+    } else {
+      throw new SubscriptionPaymentError(`Unsupported payment purpose: ${fresh.purpose}`, 400);
+    }
+  } catch (error2) {
+    Logger.error("Subscription payment marked succeeded but activation failed \u2014 payment remains succeeded for safe retry/reconciliation", {
+      paymentId,
+      purpose: fresh.purpose,
+      error: error2 instanceof Error ? error2.message : String(error2)
+    });
+    throw error2;
+  }
+  auditLog({
+    category: AUDIT_CATEGORIES.SYSTEM_EVENT,
+    action: "subscription_payment.succeeded",
+    resource: "subscription_payment",
+    resourceId: paymentId,
+    result: "success",
+    metadata: { workspaceId: fresh.workspaceId, purpose: fresh.purpose, amount: fresh.amount, currency: fresh.currency, subscriptionId: subscription.id }
+  });
+  return { reused: false, subscription };
+}
+async function ensureBillingDocument(paymentId, workspaceId, subscription) {
+  const existing = await db.select().from(subscriptionBillingDocuments).where(eq19(subscriptionBillingDocuments.subscriptionPaymentId, paymentId)).limit(1);
+  if (existing[0]) return;
+  await subscriptionService.issueBillingDocumentForPayment({
+    subscriptionPaymentId: paymentId,
+    workspaceId,
+    periodStart: new Date(subscription.currentPeriodStart),
+    periodEnd: subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd) : null
+  });
+}
+
+// server/subscriptions/subscriptionsRouter.ts
+init_logger();
+var subscriptionsRouter = Router25();
+var requireAuth15 = [authenticateRequest];
+var requireAdmin7 = [authenticateRequest, requireRole(ROLES.ADMIN)];
+function actorId3(req) {
+  return req.userId || req.user?.uid || "unknown";
+}
+function publicApiBase3(req) {
+  const envBase = (process.env.PUBLIC_API_BASE_URL || process.env.API_PUBLIC_URL || "").replace(/\/$/, "");
+  if (envBase) return envBase;
+  const host = req.get("host") || "localhost:3001";
+  return `${req.protocol}://${host}/api/v1`;
+}
+function webBase4() {
+  return (process.env.CHOOSIFY_WEB_URL || "http://localhost:5173").replace(/\/$/, "");
+}
+function redirectToWeb3(res, path, query2) {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(query2)) if (v) qs.set(k, v);
+  const suffix = qs.toString() ? `?${qs}` : "";
+  res.redirect(302, `${webBase4()}${path}${suffix}`);
+}
+function handleServiceError(res, error2) {
+  if (error2 instanceof PlanServiceError || error2 instanceof SubscriptionServiceError || error2 instanceof SubscriptionPaymentError) {
+    res.status(error2.status).json({ success: false, error: error2.message });
+    return;
+  }
+  console.error("[Subscriptions] Unexpected error:", error2);
+  res.status(500).json({ success: false, error: "Internal error" });
+}
+subscriptionsRouter.get("/admin/subscription-plans", ...requireAdmin7, async (req, res) => {
+  const role = typeof req.query.role === "string" ? req.query.role : void 0;
+  const list = await planService.listPlansWithSummary(role ? { role } : void 0);
+  res.json({ success: true, plans: list });
+});
+subscriptionsRouter.post("/admin/subscription-plans", ...requireAdmin7, async (req, res) => {
+  const body = req.body;
+  const role = normalizeWorkspaceType(body.role);
+  if (!role) {
+    res.status(400).json({ success: false, error: "role must be seller or creator" });
+    return;
+  }
+  try {
+    const created2 = await planService.createPlan({
+      role,
+      name: String(body.name || ""),
+      internalCode: body.internalCode,
+      description: body.description,
+      badge: body.badge,
+      sortOrder: body.sortOrder,
+      actorUserId: actorId3(req)
+    });
+    res.status(201).json({ success: true, plan: created2 });
+  } catch (error2) {
+    handleServiceError(res, error2);
+  }
+});
+subscriptionsRouter.get("/admin/subscription-plans/:planId", ...requireAdmin7, async (req, res) => {
+  try {
+    const detail = await planService.getPlanDetail(req.params.planId);
+    res.json({ success: true, ...detail });
+  } catch (error2) {
+    handleServiceError(res, error2);
+  }
+});
+subscriptionsRouter.patch("/admin/subscription-plans/:planId", ...requireAdmin7, async (req, res) => {
+  try {
+    const updated = await planService.updatePlanMetadata(req.params.planId, req.body || {}, actorId3(req));
+    res.json({ success: true, plan: updated });
+  } catch (error2) {
+    handleServiceError(res, error2);
+  }
+});
+subscriptionsRouter.post("/admin/subscription-plans/:planId/archive", ...requireAdmin7, async (req, res) => {
+  try {
+    const updated = await planService.archivePlan(req.params.planId, actorId3(req));
+    res.json({ success: true, plan: updated });
+  } catch (error2) {
+    handleServiceError(res, error2);
+  }
+});
+subscriptionsRouter.post("/admin/subscription-plans/:planId/versions", ...requireAdmin7, async (req, res) => {
+  const body = req.body;
+  try {
+    const created2 = await planService.createDraftVersion(
+      req.params.planId,
+      { nameSnapshot: String(body.nameSnapshot || ""), descriptionSnapshot: body.descriptionSnapshot, trialDays: body.trialDays },
+      actorId3(req)
+    );
+    res.status(201).json({ success: true, version: created2 });
+  } catch (error2) {
+    handleServiceError(res, error2);
+  }
+});
+subscriptionsRouter.patch("/admin/subscription-plans/:planId/versions/:versionId", ...requireAdmin7, async (req, res) => {
+  try {
+    const updated = await planService.updateDraftVersion(req.params.planId, req.params.versionId, req.body || {});
+    res.json({ success: true, version: updated });
+  } catch (error2) {
+    handleServiceError(res, error2);
+  }
+});
+subscriptionsRouter.put("/admin/subscription-plans/:planId/versions/:versionId/offers", ...requireAdmin7, async (req, res) => {
+  const offers = req.body?.offers;
+  if (!Array.isArray(offers)) {
+    res.status(400).json({ success: false, error: "offers array is required" });
+    return;
+  }
+  try {
+    const saved = await planService.setDraftOffers(req.params.planId, req.params.versionId, offers);
+    res.json({ success: true, offers: saved });
+  } catch (error2) {
+    handleServiceError(res, error2);
+  }
+});
+subscriptionsRouter.put("/admin/subscription-plans/:planId/versions/:versionId/entitlements", ...requireAdmin7, async (req, res) => {
+  const entitlements = req.body?.entitlements;
+  if (!Array.isArray(entitlements)) {
+    res.status(400).json({ success: false, error: "entitlements array is required" });
+    return;
+  }
+  try {
+    const saved = await planService.setDraftEntitlements(req.params.planId, req.params.versionId, entitlements);
+    res.json({ success: true, entitlements: saved });
+  } catch (error2) {
+    handleServiceError(res, error2);
+  }
+});
+subscriptionsRouter.put("/admin/subscription-plans/:planId/versions/:versionId/limits", ...requireAdmin7, async (req, res) => {
+  const limits = req.body?.limits;
+  if (!Array.isArray(limits)) {
+    res.status(400).json({ success: false, error: "limits array is required" });
+    return;
+  }
+  try {
+    const saved = await planService.setDraftLimits(req.params.planId, req.params.versionId, limits);
+    res.json({ success: true, limits: saved });
+  } catch (error2) {
+    handleServiceError(res, error2);
+  }
+});
+subscriptionsRouter.post("/admin/subscription-plans/:planId/versions/:versionId/publish", ...requireAdmin7, async (req, res) => {
+  try {
+    const plan = await planService.publishVersion(req.params.planId, req.params.versionId, actorId3(req));
+    res.json({ success: true, plan });
+  } catch (error2) {
+    handleServiceError(res, error2);
+  }
+});
+subscriptionsRouter.get("/admin/subscription-plans/:planId/subscribers", ...requireAdmin7, async (req, res) => {
+  const subscribers = await planService.getSubscribersForPlan(req.params.planId);
+  res.json({ success: true, subscribers });
+});
+subscriptionsRouter.get("/admin/workspaces", ...requireAdmin7, async (req, res) => {
+  const type = req.query.type === "seller" || req.query.type === "creator" ? req.query.type : void 0;
+  const search2 = typeof req.query.q === "string" ? req.query.q : void 0;
+  const list = await workspaceService.listWorkspaces({ type, search: search2 });
+  res.json({ success: true, workspaces: list });
+});
+subscriptionsRouter.post("/admin/subscriptions/manual-grant", ...requireAdmin7, async (req, res) => {
+  const body = req.body;
+  if (!body.workspaceId || !body.planVersionOfferId) {
+    res.status(400).json({ success: false, error: "workspaceId and planVersionOfferId are required" });
+    return;
+  }
+  try {
+    const created2 = await subscriptionService.manualGrant({
+      workspaceId: body.workspaceId,
+      planVersionOfferId: body.planVersionOfferId,
+      actorUserId: actorId3(req),
+      reason: String(body.reason || ""),
+      startDate: body.startDate ? new Date(body.startDate) : void 0,
+      endDate: body.endDate ? new Date(body.endDate) : null
+    });
+    res.status(201).json({ success: true, subscription: created2 });
+  } catch (error2) {
+    handleServiceError(res, error2);
+  }
+});
+subscriptionsRouter.get("/admin/workspaces/:workspaceId/subscription", ...requireAdmin7, async (req, res) => {
+  const resolved = await subscriptionService.getCurrentSubscription(req.params.workspaceId);
+  res.json({ success: true, current: resolved });
+});
+subscriptionsRouter.get("/admin/workspaces/:workspaceId/subscription-history", ...requireAdmin7, async (req, res) => {
+  const history = await subscriptionService.getSubscriptionHistory(req.params.workspaceId);
+  res.json({ success: true, ...history });
+});
+subscriptionsRouter.post("/admin/subscriptions/process-expirations", ...requireAdmin7, async (_req, res) => {
+  const result = await subscriptionService.processExpirations();
+  res.json({ success: true, ...result });
+});
+subscriptionsRouter.post("/admin/subscriptions/:subscriptionId/replace-manual-grant", ...requireAdmin7, async (req, res) => {
+  const body = req.body;
+  if (!body.toPlanVersionOfferId) {
+    res.status(400).json({ success: false, error: "toPlanVersionOfferId is required" });
+    return;
+  }
+  try {
+    const updated = await subscriptionService.replaceManualGrant({
+      subscriptionId: req.params.subscriptionId,
+      toPlanVersionOfferId: body.toPlanVersionOfferId,
+      actorUserId: actorId3(req),
+      reason: String(body.reason || "")
+    });
+    res.json({ success: true, subscription: updated });
+  } catch (error2) {
+    handleServiceError(res, error2);
+  }
+});
+async function requireOwnWorkspace(req, res) {
+  const userId = req.userId || req.user?.uid;
+  const role = req.userRole || req.user?.role;
+  if (!userId) {
+    res.status(401).json({ success: false, error: "Authentication required" });
+    return null;
+  }
+  const workspace = await workspaceService.resolveWorkspaceForUser(userId, role);
+  if (!workspace) {
+    res.status(403).json({ success: false, error: "No Seller/Creator Workspace for this account" });
+    return null;
+  }
+  return workspace;
+}
+subscriptionsRouter.get("/subscriptions/offers/:offerId", ...requireAuth15, async (req, res) => {
+  const detail = await planService.getOfferDetail(req.params.offerId);
+  if (!detail) {
+    res.status(404).json({ success: false, error: "Offer not found" });
+    return;
+  }
+  res.json({ success: true, ...detail });
+});
+subscriptionsRouter.get("/subscriptions/available-plans", ...requireAuth15, async (req, res) => {
+  const workspace = await requireOwnWorkspace(req, res);
+  if (!workspace) return;
+  const plansForPersona = await planService.listPublishedPlansForPersona(workspace.type);
+  res.json({ success: true, plans: plansForPersona });
+});
+subscriptionsRouter.get("/subscriptions/current", ...requireAuth15, async (req, res) => {
+  const workspace = await requireOwnWorkspace(req, res);
+  if (!workspace) return;
+  const current = await subscriptionService.getCurrentSubscription(workspace.id);
+  res.json({ success: true, workspace, current });
+});
+subscriptionsRouter.get("/subscriptions/history", ...requireAuth15, async (req, res) => {
+  const workspace = await requireOwnWorkspace(req, res);
+  if (!workspace) return;
+  const history = await subscriptionService.getSubscriptionHistory(workspace.id);
+  res.json({ success: true, ...history });
+});
+subscriptionsRouter.post("/subscriptions/cancel", ...requireAuth15, async (req, res) => {
+  const workspace = await requireOwnWorkspace(req, res);
+  if (!workspace) return;
+  try {
+    const updated = await subscriptionService.requestCancellation(workspace.id, actorId3(req));
+    res.json({ success: true, subscription: updated });
+  } catch (error2) {
+    handleServiceError(res, error2);
+  }
+});
+async function resolveOwnCurrentSubscription(req, res) {
+  const workspace = await requireOwnWorkspace(req, res);
+  if (!workspace) return null;
+  const current = await subscriptionService.getCurrentSubscription(workspace.id);
+  if (!current) {
+    res.status(404).json({ success: false, error: "No open subscription for this Workspace" });
+    return null;
+  }
+  return current;
+}
+subscriptionsRouter.post("/subscriptions/request-upgrade", ...requireAuth15, async (req, res) => {
+  const body = req.body;
+  if (!body.toPlanVersionOfferId) {
+    res.status(400).json({ success: false, error: "toPlanVersionOfferId is required" });
+    return;
+  }
+  const current = await resolveOwnCurrentSubscription(req, res);
+  if (!current) return;
+  try {
+    const result = await subscriptionService.requestUpgrade({
+      subscriptionId: current.subscription.id,
+      toPlanVersionOfferId: body.toPlanVersionOfferId,
+      actorUserId: actorId3(req)
+    });
+    res.json({ success: true, ...result });
+  } catch (error2) {
+    handleServiceError(res, error2);
+  }
+});
+subscriptionsRouter.post("/subscriptions/request-downgrade", ...requireAuth15, async (req, res) => {
+  const body = req.body;
+  if (!body.toPlanVersionOfferId) {
+    res.status(400).json({ success: false, error: "toPlanVersionOfferId is required" });
+    return;
+  }
+  const current = await resolveOwnCurrentSubscription(req, res);
+  if (!current) return;
+  try {
+    const updated = await subscriptionService.requestDowngrade({
+      subscriptionId: current.subscription.id,
+      toPlanVersionOfferId: body.toPlanVersionOfferId,
+      actorUserId: actorId3(req)
+    });
+    res.json({ success: true, subscription: updated });
+  } catch (error2) {
+    handleServiceError(res, error2);
+  }
+});
+subscriptionsRouter.post("/subscriptions/cancel-pending-downgrade", ...requireAuth15, async (req, res) => {
+  const current = await resolveOwnCurrentSubscription(req, res);
+  if (!current) return;
+  try {
+    const updated = await subscriptionService.cancelPendingDowngrade(current.subscription.id, actorId3(req));
+    res.json({ success: true, subscription: updated });
+  } catch (error2) {
+    handleServiceError(res, error2);
+  }
+});
+subscriptionsRouter.post("/subscriptions/checkout/initiate", ...requireAuth15, async (req, res) => {
+  const body = req.body;
+  const purpose = body.purpose;
+  if (!body.offerId || !purpose || !["initial", "renewal", "upgrade", "downgrade"].includes(purpose)) {
+    res.status(400).json({ success: false, error: "offerId and a valid purpose (initial|renewal|upgrade|downgrade) are required" });
+    return;
+  }
+  try {
+    const result = await initiateSubscriptionCheckout({
+      actorUserId: req.userId || req.user?.uid || "",
+      actorRole: req.userRole || req.user?.role,
+      offerId: body.offerId,
+      purpose,
+      publicApiBase: publicApiBase3(req),
+      webBase: webBase4()
+    });
+    res.json({ success: true, ...result });
+  } catch (error2) {
+    handleServiceError(res, error2);
+  }
+});
+subscriptionsRouter.post("/subscriptions/payments/sslcommerz/ipn", async (req, res) => {
+  const body = req.body || {};
+  Logger.info("Subscription SSLCommerz IPN received", { tran_id: body.tran_id, val_id: body.val_id, status: body.status });
+  try {
+    const result = await processSubscriptionIpn(body);
+    res.status(200).json(result);
+  } catch (error2) {
+    Logger.error("Subscription SSLCommerz IPN handler error", { error: error2 instanceof Error ? error2.message : String(error2) });
+    res.status(200).json({ received: true, credited: false, error: error2 instanceof Error ? error2.message : "ipn_error" });
+  }
+});
+subscriptionsRouter.get("/subscriptions/payments/sslcommerz/success", async (req, res) => {
+  const tranId = typeof req.query.tran_id === "string" ? req.query.tran_id : void 0;
+  const hint = typeof req.query.value_a === "string" ? req.query.value_a : typeof req.query.orderId === "string" ? req.query.orderId : void 0;
+  const paymentId = await resolveSubscriptionPaymentIdForReturn({ tranId, paymentId: hint }) ?? void 0;
+  Logger.info("Subscription SSLCommerz browser success redirect (untrusted)", { tranId, paymentId });
+  redirectToWeb3(res, "/admin/plan-billing", { paymentOutcome: "success", paymentId, tran_id: tranId });
+});
+subscriptionsRouter.get("/subscriptions/payments/sslcommerz/fail", async (req, res) => {
+  const tranId = typeof req.query.tran_id === "string" ? req.query.tran_id : void 0;
+  const hint = typeof req.query.value_a === "string" ? req.query.value_a : typeof req.query.orderId === "string" ? req.query.orderId : void 0;
+  const paymentId = await applyUntrustedSubscriptionPaymentOutcome({ tranId, paymentId: hint, status: "failed" }) ?? void 0;
+  Logger.info("Subscription SSLCommerz browser fail redirect", { tranId, paymentId });
+  redirectToWeb3(res, "/admin/plan-billing", { paymentOutcome: "failed", paymentId, tran_id: tranId });
+});
+subscriptionsRouter.get("/subscriptions/payments/sslcommerz/cancel", async (req, res) => {
+  const tranId = typeof req.query.tran_id === "string" ? req.query.tran_id : void 0;
+  const hint = typeof req.query.value_a === "string" ? req.query.value_a : typeof req.query.orderId === "string" ? req.query.orderId : void 0;
+  const paymentId = await applyUntrustedSubscriptionPaymentOutcome({ tranId, paymentId: hint, status: "cancelled" }) ?? void 0;
+  Logger.info("Subscription SSLCommerz browser cancel redirect", { tranId, paymentId });
+  redirectToWeb3(res, "/admin/plan-billing", { paymentOutcome: "cancelled", paymentId, tran_id: tranId });
+});
+subscriptionsRouter.get("/subscriptions/payments/:paymentId/status", ...requireAuth15, async (req, res) => {
+  const workspace = await requireOwnWorkspace(req, res);
+  if (!workspace) return;
+  const rows = await db.select().from(subscriptionPayments).where(eq20(subscriptionPayments.id, req.params.paymentId)).limit(1);
+  const payment = rows[0];
+  if (!payment || payment.workspaceId !== workspace.id) {
+    res.status(404).json({ success: false, error: "Payment not found" });
+    return;
+  }
+  res.json({
+    success: true,
+    payment: {
+      id: payment.id,
+      planVersionOfferId: payment.planVersionOfferId,
+      purpose: payment.purpose,
+      amount: payment.amount,
+      currency: payment.currency,
+      result: payment.result,
+      createdAt: payment.createdAt.toISOString()
+    }
+  });
+});
+subscriptionsRouter.get("/subscriptions/payments/history", ...requireAuth15, async (req, res) => {
+  const workspace = await requireOwnWorkspace(req, res);
+  if (!workspace) return;
+  const rows = await db.select().from(subscriptionPayments).where(and14(eq20(subscriptionPayments.workspaceId, workspace.id))).orderBy(desc6(subscriptionPayments.createdAt));
+  res.json({
+    success: true,
+    payments: rows.map((p) => ({
+      id: p.id,
+      planVersionOfferId: p.planVersionOfferId,
+      purpose: p.purpose,
+      amount: p.amount,
+      currency: p.currency,
+      result: p.result,
+      createdAt: p.createdAt.toISOString()
+    }))
+  });
+});
+
+// server/monetization/monetizationRouter.ts
+import { Router as Router26 } from "express";
+init_roles();
+
+// server/monetization/monetizationService.ts
+init_client();
+import { and as and15, eq as eq21, gte as gte2, lte as lte2, inArray as inArray7 } from "drizzle-orm";
+
+// server/lib/dbTimestampDrift.ts
+init_client();
+import { sql as sql5 } from "drizzle-orm";
+var cachedDriftMs = null;
+async function getDbTimestampDriftMs() {
+  if (cachedDriftMs !== null) return cachedDriftMs;
+  const result = await db.execute(sql5`select extract(epoch from now()) as true_epoch, now()::timestamp as naive_now`);
+  const row = result.rows?.[0];
+  if (!row) {
+    cachedDriftMs = 0;
+    return 0;
+  }
+  const trueEpochMs = Number(row.true_epoch) * 1e3;
+  const asDrizzleWouldReadIt = (/* @__PURE__ */ new Date(String(row.naive_now).replace(" ", "T") + "Z")).getTime();
+  cachedDriftMs = asDrizzleWouldReadIt - trueEpochMs;
+  return cachedDriftMs;
+}
+async function toDbComparableRange(from, to) {
+  const drift = await getDbTimestampDriftMs();
+  if (drift === 0) return { from, to };
+  return { from: new Date(from.getTime() + drift), to: new Date(to.getTime() + drift) };
+}
+
+// server/monetization/monetizationService.ts
+init_schema();
+init_escrowStore();
+init_money();
+function normalizeFilters(f) {
+  return {
+    from: f.from,
+    to: f.to,
+    source: f.source ?? "all",
+    persona: f.persona ?? "all",
+    paymentStatus: f.paymentStatus ?? "all",
+    planId: f.planId,
+    planVersionId: f.planVersionId,
+    billingInterval: f.billingInterval
+  };
+}
+async function selectSubscriptionPaymentRows(f) {
+  const { from: dbFrom, to: dbTo } = await toDbComparableRange(f.from, f.to);
+  const conditions = [gte2(subscriptionPayments.createdAt, dbFrom), lte2(subscriptionPayments.createdAt, dbTo)];
+  if (f.persona !== "all") conditions.push(eq21(workspaces.type, f.persona));
+  if (f.planId) conditions.push(eq21(plans.id, f.planId));
+  if (f.planVersionId) conditions.push(eq21(planVersions.id, f.planVersionId));
+  if (f.billingInterval) conditions.push(eq21(planVersionOffers.billingInterval, f.billingInterval));
+  return db.select({
+    payment: subscriptionPayments,
+    workspaceType: workspaces.type,
+    planId: plans.id,
+    planName: plans.name,
+    planVersionId: planVersions.id,
+    planVersion: planVersions.version,
+    billingInterval: planVersionOffers.billingInterval
+  }).from(subscriptionPayments).innerJoin(workspaces, eq21(subscriptionPayments.workspaceId, workspaces.id)).innerJoin(planVersionOffers, eq21(subscriptionPayments.planVersionOfferId, planVersionOffers.id)).innerJoin(planVersions, eq21(planVersionOffers.planVersionId, planVersions.id)).innerJoin(plans, eq21(planVersions.planId, plans.id)).where(and15(...conditions));
+}
+async function computeSubscriptionRevenue(f) {
+  const rows = await selectSubscriptionPaymentRows(f);
+  const succeeded = rows.filter((r) => r.payment.result === "succeeded");
+  const totalMinorUnits = succeeded.reduce((sum, r) => sum + r.payment.amount, 0);
+  return { totalMinorUnits, currency: succeeded[0]?.payment.currency || "BDT", paymentCount: succeeded.length };
+}
+function toIso(d) {
+  return d.toISOString();
+}
+async function computeCommerceMetrics(f) {
+  const [settlements, escrows] = await Promise.all([
+    escrowStore.listSettlementsInRange(toIso(f.from), toIso(f.to)),
+    escrowStore.listEscrowsInRange(toIso(f.from), toIso(f.to))
+  ]);
+  const gmvMinorUnits = escrows.reduce((sum, e) => sum + toMinor(e.capturedAmount), 0);
+  const commissionMinorUnits = settlements.reduce((sum, s) => sum + toMinor(s.commissionAmount), 0);
+  const sellerNetMinorUnits = settlements.reduce((sum, s) => sum + toMinor(s.sellerNetAmount), 0);
+  const currency = settlements[0]?.currency || escrows[0]?.currency || "BDT";
+  return { gmvMinorUnits, commissionMinorUnits, sellerNetMinorUnits, currency, settlementCount: settlements.length, escrowCount: escrows.length };
+}
+var monetizationService = {
+  /** Documents the derivation of every field for future audits (Part 24). Not a UI response shape — a developer/ops reference. */
+  metricDictionary: {
+    subscriptionRevenue: { table: "subscription_payments", field: "amount", filter: "result = 'succeeded'", formula: "SUM(amount)" },
+    commissionRevenue: { table: "commerce_settlements (escrow module)", field: "commissionAmount", filter: "createdAt in range", formula: "SUM(commissionAmount)" },
+    gmv: { table: "commerce_escrows (escrow module)", field: "capturedAmount", filter: "createdAt in range", formula: "SUM(capturedAmount)" },
+    sellerNet: { table: "commerce_settlements (escrow module)", field: "sellerNetAmount", filter: "createdAt in range", formula: "SUM(sellerNetAmount)" },
+    platformRevenue: { table: "(derived)", field: "n/a", filter: "n/a", formula: "commissionRevenue + subscriptionRevenue" }
+  },
+  async getSummary(input) {
+    const f = normalizeFilters(input);
+    const includeSubscriptions = f.source !== "commerce";
+    const includeCommerce = f.source !== "subscriptions";
+    const [subRevenue, commerce] = await Promise.all([
+      includeSubscriptions ? computeSubscriptionRevenue(f) : null,
+      includeCommerce ? computeCommerceMetrics(f) : null
+    ]);
+    const subscriptionRevenue = subRevenue ? subRevenue.totalMinorUnits : null;
+    const commissionRevenue = commerce ? commerce.commissionMinorUnits : null;
+    const gmv = commerce ? commerce.gmvMinorUnits : null;
+    const sellerNet = commerce ? commerce.sellerNetMinorUnits : null;
+    const platformRevenue = subscriptionRevenue === null && commissionRevenue === null ? null : (subscriptionRevenue ?? 0) + (commissionRevenue ?? 0);
+    const currency = subRevenue?.currency || commerce?.currency || "BDT";
+    return { from: toIso(f.from), to: toIso(f.to), currency, platformRevenue, gmv, commissionRevenue, subscriptionRevenue, sellerNet };
+  },
+  async getRevenueBreakdown(input) {
+    const summary = await this.getSummary(input);
+    return { currency: summary.currency, commerceCommission: summary.commissionRevenue, subscriptionRevenue: summary.subscriptionRevenue, platformRevenue: summary.platformRevenue };
+  },
+  async getSubscriptionMetrics(input) {
+    const f = normalizeFilters(input);
+    const rows = await selectSubscriptionPaymentRows(f);
+    const succeeded = rows.filter((r) => r.payment.result === "succeeded");
+    const sellerRevenue = succeeded.filter((r) => r.workspaceType === "seller").reduce((s, r) => s + r.payment.amount, 0);
+    const creatorRevenue = succeeded.filter((r) => r.workspaceType === "creator").reduce((s, r) => s + r.payment.amount, 0);
+    const byPlanMap = /* @__PURE__ */ new Map();
+    for (const r of succeeded) {
+      const key = `${r.planVersionId}:${r.billingInterval}`;
+      const existing = byPlanMap.get(key);
+      if (existing) {
+        existing.revenue += r.payment.amount;
+        existing.count += 1;
+      } else {
+        byPlanMap.set(key, { planId: r.planId, planName: r.planName, planVersionId: r.planVersionId, planVersion: r.planVersion, billingInterval: r.billingInterval, revenue: r.payment.amount, count: 1 });
+      }
+    }
+    const byInterval = {
+      monthly: succeeded.filter((r) => r.billingInterval === "monthly").reduce((s, r) => s + r.payment.amount, 0),
+      annual: succeeded.filter((r) => r.billingInterval === "annual").reduce((s, r) => s + r.payment.amount, 0)
+    };
+    const statusRows = f.paymentStatus === "all" ? rows : rows.filter((r) => r.payment.result === f.paymentStatus);
+    const paymentCounts = {
+      succeeded: statusRows.filter((r) => r.payment.result === "succeeded").length,
+      pending: statusRows.filter((r) => r.payment.result === "pending").length,
+      failed: statusRows.filter((r) => r.payment.result === "failed").length,
+      cancelled: statusRows.filter((r) => r.payment.result === "cancelled").length
+    };
+    const openStatuses = ["trial", "active", "past_due", "grace_period"];
+    const wsConditions = f.persona !== "all" ? [eq21(workspaces.type, f.persona)] : [];
+    const openSubRows = await db.select({ subscriptionId: subscriptions.id }).from(subscriptions).innerJoin(workspaces, eq21(subscriptions.workspaceId, workspaces.id)).where(and15(inArray7(subscriptions.status, [...openStatuses]), eq21(subscriptions.grantedManually, false), ...wsConditions));
+    const openIds = new Set(openSubRows.map((r) => r.subscriptionId));
+    const paidSubIdsWithPayment = new Set(
+      (await db.select({ subscriptionId: subscriptionPayments.subscriptionId }).from(subscriptionPayments).where(eq21(subscriptionPayments.result, "succeeded"))).map((r) => r.subscriptionId).filter((id) => !!id)
+    );
+    const activePaidSubscriptions = [...openIds].filter((id) => paidSubIdsWithPayment.has(id)).length;
+    const { from: dbEventFrom, to: dbEventTo } = await toDbComparableRange(f.from, f.to);
+    const eventConditions = [gte2(subscriptionEvents.createdAt, dbEventFrom), lte2(subscriptionEvents.createdAt, dbEventTo)];
+    const eventRows = await db.select({ eventType: subscriptionEvents.eventType, workspaceType: workspaces.type }).from(subscriptionEvents).innerJoin(subscriptions, eq21(subscriptionEvents.subscriptionId, subscriptions.id)).innerJoin(workspaces, eq21(subscriptions.workspaceId, workspaces.id)).where(and15(...eventConditions, ...f.persona !== "all" ? [eq21(workspaces.type, f.persona)] : []));
+    const renewals = eventRows.filter((r) => r.eventType === "renewed").length;
+    const expirations = eventRows.filter((r) => r.eventType === "expired").length;
+    const cancellations = eventRows.filter((r) => r.eventType === "cancelled").length;
+    return {
+      currency: succeeded[0]?.payment.currency || "BDT",
+      activePaidSubscriptions,
+      sellerRevenue,
+      creatorRevenue,
+      byPlan: [...byPlanMap.values()].sort((a, b) => b.revenue - a.revenue),
+      byInterval,
+      paymentCounts,
+      renewals,
+      expirations,
+      cancellations
+    };
+  },
+  async getCommissionMetrics(input) {
+    const f = normalizeFilters(input);
+    const commerce = await computeCommerceMetrics(f);
+    return { currency: commerce.currency, totalCommission: commerce.commissionMinorUnits, settlementCount: commerce.settlementCount };
+  },
+  async getGmvMetrics(input) {
+    const f = normalizeFilters(input);
+    const commerce = await computeCommerceMetrics(f);
+    return { currency: commerce.currency, totalGmv: commerce.gmvMinorUnits, escrowCount: commerce.escrowCount };
+  },
+  /**
+   * Real time-series aggregation over actual transaction dates — never
+   * placeholder points or a generated growth curve. Bucketed daily when the
+   * range is <= 92 days, monthly otherwise, so a "This year" query returns a
+   * readable number of points instead of 365 near-empty days.
+   */
+  async getRevenueTrend(input) {
+    const f = normalizeFilters(input);
+    const spanDays = (f.to.getTime() - f.from.getTime()) / 864e5;
+    const granularity = spanDays <= 92 ? "day" : "month";
+    const bucketKey = (d) => granularity === "day" ? d.toISOString().slice(0, 10) : d.toISOString().slice(0, 7);
+    const includeSubscriptions = f.source !== "commerce";
+    const includeCommerce = f.source !== "subscriptions";
+    const buckets = /* @__PURE__ */ new Map();
+    const touch2 = (key) => {
+      if (!buckets.has(key)) buckets.set(key, { subscriptionRevenue: 0, commissionRevenue: 0, gmv: 0 });
+      return buckets.get(key);
+    };
+    if (includeSubscriptions) {
+      const rows = await selectSubscriptionPaymentRows(f);
+      const driftMs = await getDbTimestampDriftMs();
+      for (const r of rows) {
+        if (r.payment.result !== "succeeded") continue;
+        const key = bucketKey(new Date(r.payment.createdAt.getTime() - driftMs));
+        touch2(key).subscriptionRevenue += r.payment.amount;
+      }
+    }
+    let currency = "BDT";
+    if (includeCommerce) {
+      const [settlements, escrows] = await Promise.all([
+        escrowStore.listSettlementsInRange(toIso(f.from), toIso(f.to)),
+        escrowStore.listEscrowsInRange(toIso(f.from), toIso(f.to))
+      ]);
+      currency = settlements[0]?.currency || escrows[0]?.currency || currency;
+      for (const s of settlements) {
+        const key = bucketKey(new Date(s.createdAt));
+        touch2(key).commissionRevenue += toMinor(s.commissionAmount);
+      }
+      for (const e of escrows) {
+        const key = bucketKey(new Date(e.createdAt));
+        touch2(key).gmv += toMinor(e.capturedAmount);
+      }
+    }
+    const points = [...buckets.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, v]) => ({
+      date,
+      subscriptionRevenue: includeSubscriptions ? v.subscriptionRevenue : 0,
+      commissionRevenue: includeCommerce ? v.commissionRevenue : 0,
+      gmv: includeCommerce ? v.gmv : 0,
+      platformRevenue: (includeSubscriptions ? v.subscriptionRevenue : 0) + (includeCommerce ? v.commissionRevenue : 0)
+    }));
+    return { currency, granularity, points };
+  },
+  /** Real filter dimensions for the UI dropdowns — never hardcoded plan names/intervals. */
+  async getFilterOptions() {
+    const planRows = await db.select({ id: plans.id, name: plans.name, role: plans.role }).from(plans);
+    const versionRows = await db.select({ id: planVersions.id, planId: planVersions.planId, version: planVersions.version }).from(planVersions);
+    return { plans: planRows, planVersions: versionRows, billingIntervals: ["monthly", "annual"] };
+  }
+};
+
+// server/monetization/monetizationRouter.ts
+var monetizationRouter = Router26();
+var requireAdmin8 = [authenticateRequest, requireRole(ROLES.ADMIN)];
+var SOURCES = ["all", "commerce", "subscriptions"];
+var PERSONAS = ["all", "seller", "creator"];
+var PAYMENT_STATUSES = ["all", "succeeded", "pending", "failed", "cancelled"];
+var MonetizationRequestError = class extends Error {
+  constructor() {
+    super(...arguments);
+    this.status = 400;
+  }
+};
+function parseFilters(query2) {
+  const toStr = (v) => typeof v === "string" && v.trim() ? v.trim() : void 0;
+  const fromRaw = toStr(query2.from);
+  const toRaw = toStr(query2.to);
+  if (!fromRaw || !toRaw) throw new MonetizationRequestError("from and to (ISO dates) are required");
+  const from = new Date(fromRaw);
+  const to = new Date(toRaw);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) throw new MonetizationRequestError("from/to must be valid dates");
+  if (from.getTime() > to.getTime()) throw new MonetizationRequestError("from must not be after to");
+  const source = toStr(query2.source);
+  if (source && !SOURCES.includes(source)) throw new MonetizationRequestError(`source must be one of ${SOURCES.join(", ")}`);
+  const persona = toStr(query2.persona);
+  if (persona && !PERSONAS.includes(persona)) throw new MonetizationRequestError(`persona must be one of ${PERSONAS.join(", ")}`);
+  const paymentStatus = toStr(query2.paymentStatus);
+  if (paymentStatus && !PAYMENT_STATUSES.includes(paymentStatus)) throw new MonetizationRequestError(`paymentStatus must be one of ${PAYMENT_STATUSES.join(", ")}`);
+  const billingInterval = toStr(query2.billingInterval);
+  if (billingInterval && billingInterval !== "monthly" && billingInterval !== "annual") {
+    throw new MonetizationRequestError("billingInterval must be 'monthly' or 'annual'");
+  }
+  return {
+    from,
+    to,
+    source,
+    persona,
+    paymentStatus,
+    planId: toStr(query2.planId),
+    planVersionId: toStr(query2.planVersionId),
+    billingInterval
+  };
+}
+function handleError6(res, error2) {
+  if (error2 instanceof MonetizationRequestError) {
+    res.status(error2.status).json({ success: false, error: error2.message });
+    return;
+  }
+  console.error("[Monetization] Unexpected error:", error2);
+  res.status(500).json({ success: false, error: "Internal error" });
+}
+monetizationRouter.get("/admin/monetization/summary", ...requireAdmin8, async (req, res) => {
+  try {
+    const filters = parseFilters(req.query);
+    const summary = await monetizationService.getSummary(filters);
+    res.json({ success: true, summary });
+  } catch (error2) {
+    handleError6(res, error2);
+  }
+});
+monetizationRouter.get("/admin/monetization/revenue-breakdown", ...requireAdmin8, async (req, res) => {
+  try {
+    const filters = parseFilters(req.query);
+    const breakdown = await monetizationService.getRevenueBreakdown(filters);
+    res.json({ success: true, breakdown });
+  } catch (error2) {
+    handleError6(res, error2);
+  }
+});
+monetizationRouter.get("/admin/monetization/subscription-metrics", ...requireAdmin8, async (req, res) => {
+  try {
+    const filters = parseFilters(req.query);
+    const metrics = await monetizationService.getSubscriptionMetrics(filters);
+    res.json({ success: true, metrics });
+  } catch (error2) {
+    handleError6(res, error2);
+  }
+});
+monetizationRouter.get("/admin/monetization/commission-metrics", ...requireAdmin8, async (req, res) => {
+  try {
+    const filters = parseFilters(req.query);
+    const metrics = await monetizationService.getCommissionMetrics(filters);
+    res.json({ success: true, metrics });
+  } catch (error2) {
+    handleError6(res, error2);
+  }
+});
+monetizationRouter.get("/admin/monetization/gmv-metrics", ...requireAdmin8, async (req, res) => {
+  try {
+    const filters = parseFilters(req.query);
+    const metrics = await monetizationService.getGmvMetrics(filters);
+    res.json({ success: true, metrics });
+  } catch (error2) {
+    handleError6(res, error2);
+  }
+});
+monetizationRouter.get("/admin/monetization/revenue-trend", ...requireAdmin8, async (req, res) => {
+  try {
+    const filters = parseFilters(req.query);
+    const trend = await monetizationService.getRevenueTrend(filters);
+    res.json({ success: true, trend });
+  } catch (error2) {
+    handleError6(res, error2);
+  }
+});
+monetizationRouter.get("/admin/monetization/filters", ...requireAdmin8, async (_req, res) => {
+  try {
+    const options = await monetizationService.getFilterOptions();
+    res.json({ success: true, options });
+  } catch (error2) {
+    handleError6(res, error2);
+  }
+});
+
+// server/finance/financeRouter.ts
+import { Router as Router27 } from "express";
+init_roles();
+
+// server/finance/financeService.ts
+init_client();
+init_schema();
+init_escrowStore();
+init_money();
+import { and as and16, eq as eq22, gte as gte3, lte as lte3, inArray as inArray8 } from "drizzle-orm";
+function normalizeFilters2(f) {
+  return { from: f.from, to: f.to, paymentStatus: f.paymentStatus ?? "all", persona: f.persona ?? "all" };
+}
+function normalizePagination(p) {
+  const pageSize = Math.min(Math.max(p?.pageSize ?? 25, 1), 100);
+  const page = Math.max(p?.page ?? 1, 1);
+  return { page, pageSize };
+}
+function toIso2(d) {
+  return d.toISOString();
+}
+async function getFinanceOverview(input) {
+  const f = normalizeFilters2(input);
+  const { from: dbFrom, to: dbTo } = await toDbComparableRange(f.from, f.to);
+  const paymentRows = await db.select({ amount: subscriptionPayments.amount, result: subscriptionPayments.result, currency: subscriptionPayments.currency }).from(subscriptionPayments).where(and16(gte3(subscriptionPayments.createdAt, dbFrom), lte3(subscriptionPayments.createdAt, dbTo)));
+  const succeeded = paymentRows.filter((r) => r.result === "succeeded");
+  const totalSuccessfulSubscriptionPaymentValue = succeeded.reduce((s, r) => s + r.amount, 0);
+  const [settlements, billingDocRows] = await Promise.all([
+    escrowStore.listSettlementsInRange(toIso2(f.from), toIso2(f.to)),
+    db.select({ id: subscriptionBillingDocuments.id }).from(subscriptionBillingDocuments).where(and16(gte3(subscriptionBillingDocuments.issuedAt, dbFrom), lte3(subscriptionBillingDocuments.issuedAt, dbTo)))
+  ]);
+  const totalCommissionRecorded = settlements.reduce((s, r) => s + toMinor(r.commissionAmount), 0);
+  const totalSellerNetRecorded = settlements.reduce((s, r) => s + toMinor(r.sellerNetAmount), 0);
+  return {
+    currency: succeeded[0]?.currency || settlements[0]?.currency || "BDT",
+    totalSuccessfulSubscriptionPaymentValue,
+    successfulSubscriptionPaymentCount: succeeded.length,
+    pendingSubscriptionPaymentCount: paymentRows.filter((r) => r.result === "pending").length,
+    failedSubscriptionPaymentCount: paymentRows.filter((r) => r.result === "failed").length,
+    cancelledSubscriptionPaymentCount: paymentRows.filter((r) => r.result === "cancelled").length,
+    commerceSettlementCount: settlements.length,
+    totalCommissionRecorded,
+    totalSellerNetRecorded,
+    billingDocumentCount: billingDocRows.length
+  };
+}
+async function listFinanceTransactions(input, pagination) {
+  const f = normalizeFilters2(input);
+  const p = normalizePagination(pagination);
+  const { from: dbFrom, to: dbTo } = await toDbComparableRange(f.from, f.to);
+  const conditions = [gte3(subscriptionPayments.createdAt, dbFrom), lte3(subscriptionPayments.createdAt, dbTo)];
+  if (f.paymentStatus !== "all") conditions.push(eq22(subscriptionPayments.result, f.paymentStatus));
+  if (f.persona !== "all") conditions.push(eq22(workspaces.type, f.persona));
+  const base = db.select({
+    id: subscriptionPayments.id,
+    createdAt: subscriptionPayments.createdAt,
+    purpose: subscriptionPayments.purpose,
+    amount: subscriptionPayments.amount,
+    currency: subscriptionPayments.currency,
+    result: subscriptionPayments.result,
+    planName: plans.name,
+    planVersion: planVersions.version,
+    billingInterval: planVersionOffers.billingInterval,
+    workspaceType: workspaces.type
+  }).from(subscriptionPayments).innerJoin(workspaces, eq22(subscriptionPayments.workspaceId, workspaces.id)).innerJoin(planVersionOffers, eq22(subscriptionPayments.planVersionOfferId, planVersionOffers.id)).innerJoin(planVersions, eq22(planVersionOffers.planVersionId, planVersions.id)).innerJoin(plans, eq22(planVersions.planId, plans.id)).where(and16(...conditions));
+  const allRows = await base;
+  const total = allRows.length;
+  const sorted = allRows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  const pageRows = sorted.slice((p.page - 1) * p.pageSize, p.page * p.pageSize);
+  return {
+    rows: pageRows.map((r) => ({
+      id: r.id,
+      createdAt: r.createdAt.toISOString(),
+      purpose: r.purpose,
+      amount: r.amount,
+      currency: r.currency,
+      result: r.result,
+      planName: r.planName,
+      planVersion: r.planVersion,
+      billingInterval: r.billingInterval,
+      workspaceType: r.workspaceType
+    })),
+    total,
+    page: p.page,
+    pageSize: p.pageSize
+  };
+}
+async function listFinanceSettlements(input, pagination) {
+  const f = normalizeFilters2(input);
+  const p = normalizePagination(pagination);
+  const all = await escrowStore.listSettlementsInRange(toIso2(f.from), toIso2(f.to));
+  const total = all.length;
+  const sorted = [...all].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const pageRows = sorted.slice((p.page - 1) * p.pageSize, p.page * p.pageSize);
+  const sellerIds = [...new Set(pageRows.map((r) => r.sellerId))];
+  const nameMap = /* @__PURE__ */ new Map();
+  if (sellerIds.length) {
+    try {
+      const matches = await db.select({ id: users.id, displayName: users.displayName }).from(users).where(inArray8(users.id, sellerIds));
+      for (const m of matches) nameMap.set(m.id, m.displayName);
+    } catch {
+    }
+  }
+  return {
+    rows: pageRows.map((r) => ({
+      settlementId: r.settlementId,
+      createdAt: r.createdAt,
+      sellerId: r.sellerId,
+      sellerName: nameMap.get(r.sellerId) ?? null,
+      grossAmount: toMinor(r.grossAmount),
+      commissionAmount: toMinor(r.commissionAmount),
+      sellerNetAmount: toMinor(r.sellerNetAmount),
+      currency: r.currency,
+      orderId: r.orderId
+    })),
+    total,
+    page: p.page,
+    pageSize: p.pageSize
+  };
+}
+async function listFinanceBillingDocuments(input, pagination) {
+  const f = normalizeFilters2(input);
+  const p = normalizePagination(pagination);
+  const { from: dbFrom, to: dbTo } = await toDbComparableRange(f.from, f.to);
+  const conditions = [gte3(subscriptionBillingDocuments.issuedAt, dbFrom), lte3(subscriptionBillingDocuments.issuedAt, dbTo)];
+  if (f.persona !== "all") conditions.push(eq22(workspaces.type, f.persona));
+  const allRows = await db.select({
+    referenceId: subscriptionBillingDocuments.referenceId,
+    issuedAt: subscriptionBillingDocuments.issuedAt,
+    amount: subscriptionBillingDocuments.amount,
+    currency: subscriptionBillingDocuments.currency,
+    periodStart: subscriptionBillingDocuments.periodStart,
+    periodEnd: subscriptionBillingDocuments.periodEnd,
+    status: subscriptionBillingDocuments.status,
+    workspaceType: workspaces.type
+  }).from(subscriptionBillingDocuments).innerJoin(workspaces, eq22(subscriptionBillingDocuments.workspaceId, workspaces.id)).where(and16(...conditions));
+  const total = allRows.length;
+  const sorted = allRows.sort((a, b) => b.issuedAt.getTime() - a.issuedAt.getTime());
+  const pageRows = sorted.slice((p.page - 1) * p.pageSize, p.page * p.pageSize);
+  return {
+    rows: pageRows.map((r) => ({
+      referenceId: r.referenceId,
+      issuedAt: r.issuedAt.toISOString(),
+      amount: r.amount,
+      currency: r.currency,
+      periodStart: r.periodStart.toISOString(),
+      periodEnd: r.periodEnd ? r.periodEnd.toISOString() : null,
+      status: r.status,
+      workspaceType: r.workspaceType
+    })),
+    total,
+    page: p.page,
+    pageSize: p.pageSize
+  };
+}
+
+// server/finance/financeRouter.ts
+var financeRouter = Router27();
+var requireAdmin9 = [authenticateRequest, requireRole(ROLES.ADMIN)];
+var FinanceRequestError = class extends Error {
+  constructor() {
+    super(...arguments);
+    this.status = 400;
+  }
+};
+var PAYMENT_STATUSES2 = ["all", "succeeded", "pending", "failed", "cancelled"];
+var PERSONAS2 = ["all", "seller", "creator"];
+function parseFilters2(query2) {
+  const toStr = (v) => typeof v === "string" && v.trim() ? v.trim() : void 0;
+  const fromRaw = toStr(query2.from);
+  const toRaw = toStr(query2.to);
+  if (!fromRaw || !toRaw) throw new FinanceRequestError("from and to (ISO dates) are required");
+  const from = new Date(fromRaw);
+  const to = new Date(toRaw);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) throw new FinanceRequestError("from/to must be valid dates");
+  if (from.getTime() > to.getTime()) throw new FinanceRequestError("from must not be after to");
+  const paymentStatus = toStr(query2.paymentStatus);
+  if (paymentStatus && !PAYMENT_STATUSES2.includes(paymentStatus)) throw new FinanceRequestError(`paymentStatus must be one of ${PAYMENT_STATUSES2.join(", ")}`);
+  const persona = toStr(query2.persona);
+  if (persona && !PERSONAS2.includes(persona)) throw new FinanceRequestError(`persona must be one of ${PERSONAS2.join(", ")}`);
+  return { from, to, paymentStatus, persona };
+}
+function parsePagination(query2) {
+  const page = Number(query2.page);
+  const pageSize = Number(query2.pageSize);
+  return {
+    page: Number.isFinite(page) && page > 0 ? Math.floor(page) : void 0,
+    pageSize: Number.isFinite(pageSize) && pageSize > 0 ? Math.floor(pageSize) : void 0
+  };
+}
+function handleError7(res, error2) {
+  if (error2 instanceof FinanceRequestError) {
+    res.status(error2.status).json({ success: false, error: error2.message });
+    return;
+  }
+  console.error("[Finance] Unexpected error:", error2);
+  res.status(500).json({ success: false, error: "Internal error" });
+}
+financeRouter.get("/admin/finance/overview", ...requireAdmin9, async (req, res) => {
+  try {
+    const overview = await getFinanceOverview(parseFilters2(req.query));
+    res.json({ success: true, overview });
+  } catch (error2) {
+    handleError7(res, error2);
+  }
+});
+financeRouter.get("/admin/finance/transactions", ...requireAdmin9, async (req, res) => {
+  try {
+    const result = await listFinanceTransactions(parseFilters2(req.query), parsePagination(req.query));
+    res.json({ success: true, ...result });
+  } catch (error2) {
+    handleError7(res, error2);
+  }
+});
+financeRouter.get("/admin/finance/settlements", ...requireAdmin9, async (req, res) => {
+  try {
+    const result = await listFinanceSettlements(parseFilters2(req.query), parsePagination(req.query));
+    res.json({ success: true, ...result });
+  } catch (error2) {
+    handleError7(res, error2);
+  }
+});
+financeRouter.get("/admin/finance/billing-documents", ...requireAdmin9, async (req, res) => {
+  try {
+    const result = await listFinanceBillingDocuments(parseFilters2(req.query), parsePagination(req.query));
+    res.json({ success: true, ...result });
+  } catch (error2) {
+    handleError7(res, error2);
+  }
+});
+
+// server/partnerApplications/partnerApplicationRouter.ts
+import { Router as Router28 } from "express";
 init_roles();
 init_partnerApplicationStore();
 init_partnerApplicationService();
 init_logger();
-var partnerApplicationRouter = Router25();
-var requireAdmin7 = [authenticateRequest, requireRole(ROLES.ADMIN)];
+var partnerApplicationRouter = Router28();
+var requireAdmin10 = [authenticateRequest, requireRole(ROLES.ADMIN)];
 var REJECTED_APPLY_FIELDS = [
   "role",
   "roles",
@@ -44723,7 +47370,7 @@ partnerApplicationRouter.post(
     }
   }
 );
-partnerApplicationRouter.get("/operations/partner-applications", ...requireAdmin7, async (req, res) => {
+partnerApplicationRouter.get("/operations/partner-applications", ...requireAdmin10, async (req, res) => {
   const status = typeof req.query.status === "string" ? req.query.status : void 0;
   const rows = await partnerApplicationStore.list(
     status === "pending" || status === "approved" || status === "rejected" ? status : void 0
@@ -44735,7 +47382,7 @@ partnerApplicationRouter.get("/operations/partner-applications", ...requireAdmin
 });
 partnerApplicationRouter.post(
   "/operations/partner-applications/:id/approve",
-  ...requireAdmin7,
+  ...requireAdmin10,
   async (req, res) => {
     try {
       const updated = await approvePartnerApplication({
@@ -44755,7 +47402,7 @@ partnerApplicationRouter.post(
 );
 partnerApplicationRouter.post(
   "/operations/partner-applications/:id/reject",
-  ...requireAdmin7,
+  ...requireAdmin10,
   async (req, res) => {
     try {
       const updated = await rejectPartnerApplication({
@@ -44775,7 +47422,7 @@ partnerApplicationRouter.post(
 );
 partnerApplicationRouter.post(
   "/operations/partner-applications/:id/resubmit",
-  ...requireAdmin7,
+  ...requireAdmin10,
   async (req, res) => {
     try {
       const updated = await requestPartnerResubmission({
@@ -44795,7 +47442,7 @@ partnerApplicationRouter.post(
 );
 partnerApplicationRouter.patch(
   "/operations/partner-applications/:id/notes",
-  ...requireAdmin7,
+  ...requireAdmin10,
   async (req, res) => {
     try {
       const updated = await savePartnerAdminNotes({
@@ -44815,7 +47462,7 @@ partnerApplicationRouter.patch(
 );
 
 // server/dashboard/navAttentionRouter.ts
-import { Router as Router26 } from "express";
+import { Router as Router29 } from "express";
 
 // server/dashboard/navAttentionService.ts
 init_catalogStore();
@@ -45101,7 +47748,7 @@ async function buildNavAttention(actor) {
 }
 
 // server/dashboard/navAttentionRouter.ts
-var navAttentionRouter = Router26();
+var navAttentionRouter = Router29();
 navAttentionRouter.get("/dashboard/nav-attention", authenticateRequest, async (req, res) => {
   const userId = req.userId || req.user?.uid || "";
   if (!userId) {
@@ -45127,7 +47774,7 @@ init_client();
 init_schema();
 import { existsSync as existsSync18, readFileSync as readFileSync18 } from "node:fs";
 import { join as join19 } from "node:path";
-import { eq as eq17 } from "drizzle-orm";
+import { eq as eq24 } from "drizzle-orm";
 var DEFAULT_PATH10 = join19(process.cwd(), ".data", "partner-entitlements-snapshot.json");
 function snapshotPath3() {
   return process.env.PARTNER_ENTITLEMENTS_SNAPSHOT_PATH?.trim() || DEFAULT_PATH10;
@@ -45135,7 +47782,7 @@ function snapshotPath3() {
 async function backfillPartnerApplications(rows) {
   let imported = 0;
   for (const app3 of rows) {
-    const existing = await db.select({ id: partnerApplications.id }).from(partnerApplications).where(eq17(partnerApplications.id, app3.id)).limit(1);
+    const existing = await db.select({ id: partnerApplications.id }).from(partnerApplications).where(eq24(partnerApplications.id, app3.id)).limit(1);
     if (existing.length > 0) continue;
     await db.insert(partnerApplications).values({
       id: app3.id,
@@ -45189,7 +47836,7 @@ async function backfillEntitlements(state14) {
     }
   }
   for (const row of rowsToUpsert) {
-    const existing = await db.select({ id: featureEntitlements.id }).from(featureEntitlements).where(eq17(featureEntitlements.scopeKey, row.scopeKey)).limit(1);
+    const existing = await db.select({ id: featureEntitlements.id }).from(featureEntitlements).where(eq24(featureEntitlements.scopeKey, row.scopeKey)).limit(1);
     await db.insert(featureEntitlements).values(row).onConflictDoNothing();
     if (existing.length === 0) imported += 1;
   }
@@ -45317,6 +47964,9 @@ function createApp() {
   app3.use("/api/v1", partnerApplicationRouter);
   app3.use("/api/v1", navAttentionRouter);
   app3.use("/api/v1", entitlementsRouter);
+  app3.use("/api/v1", subscriptionsRouter);
+  app3.use("/api/v1", monetizationRouter);
+  app3.use("/api/v1", financeRouter);
   app3.use("/api/v1", conversationRouter);
   app3.get("/api/admin/stats", async (_req, res) => {
     const summary = getAnalyticsSummary("30d");
