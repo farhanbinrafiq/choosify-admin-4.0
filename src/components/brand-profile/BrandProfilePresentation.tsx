@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { ChevronDown, ExternalLink, MapPin, Star } from 'lucide-react';
 import type { BrandCMSModel } from '../../pages/admin/brandSeeds';
 import { resolveStoryMedia, type BrandEditSection } from '../../pages/admin/brandEditorModel';
+import { resolveCreatorThumbnail } from '../../lib/productVideo';
 
 /** CSS aspect-ratio for a resolved story-media aspect (inline style — purge-proof). */
 const STORY_ASPECT_RATIO: Record<'landscape' | 'portrait' | 'square', string> = {
@@ -672,7 +673,13 @@ export function BrandProfilePresentation({
               return {
                 key: b.id,
                 title: (b.heading || '').trim() || resolved?.title || 'View',
-                image: b.kind === 'link' ? b.thumbnail : resolved?.image,
+                // Thumbnail fallback: custom upload → source-derived (YouTube)
+                // → none (caller renders a neutral placeholder, never a blank
+                // rectangle).
+                image:
+                  b.kind === 'link'
+                    ? resolveCreatorThumbnail(b.url, b.thumbnail) || undefined
+                    : resolved?.image,
                 kindLabel: b.kind === 'link' ? 'Link' : resolved?.kind || 'Content',
                 caption: b.kind === 'link' ? b.body : '',
                 href: b.kind === 'link' ? b.url : resolved?.href,
@@ -759,7 +766,7 @@ export function BrandProfilePresentation({
                         className="block bg-white border border-[#E8EDF2] rounded-[10px] overflow-hidden"
                       >
                         <div
-                          className="bg-[#F4F7F9] w-full"
+                          className="bg-[#F4F7F9] w-full overflow-hidden"
                           style={{
                             aspectRatio: c.ratio,
                             ...(c.ratio === '9 / 16'
@@ -769,7 +776,15 @@ export function BrandProfilePresentation({
                         >
                           {c.image ? (
                             <img src={c.image} alt="" className="w-full h-full object-cover" />
-                          ) : null}
+                          ) : (
+                            /* Neutral Choosify placeholder — never a blank grey block */
+                            <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-gradient-to-br from-[#1A1D4E] to-[#2A2E6B] text-white">
+                              <span className="text-[9px] font-black uppercase tracking-[0.16em] opacity-90">
+                                {c.kindLabel}
+                              </span>
+                              <span className="text-[8px] font-semibold opacity-60">Open to view</span>
+                            </div>
+                          )}
                         </div>
                         <div className="p-3 text-left">
                           <div className="text-[9px] font-extrabold text-[#8A00C4] uppercase tracking-wider">

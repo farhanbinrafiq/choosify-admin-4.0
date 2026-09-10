@@ -92,7 +92,11 @@ export default function MyProfilePage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-5 items-start">
         <div className="bg-app-card border border-app-border rounded-xl overflow-hidden">
-          <div className="h-14" style={{ background: 'linear-gradient(90deg, #18154C, #EF3C23)' }} />
+          <div className="profile-identity-banner h-14 flex items-center justify-center px-4">
+            <span className="text-sm font-extrabold tracking-[0.15em] text-white uppercase select-none text-center">
+              {roleLabel.toUpperCase()}
+            </span>
+          </div>
           <div className="p-4 -mt-9">
             <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-white shadow bg-[#EFF6FF] flex items-center justify-center text-[#2563EB] font-extrabold text-[15px]">
               {hasRealPhoto ? (
