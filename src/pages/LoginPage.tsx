@@ -223,7 +223,9 @@ export default function LoginPage() {
             </p>
           </div>
           <div className="mt-10 text-[10.5px] font-semibold text-white/30 md:mt-0">
-            © 2026 CHOOSIFY BANGLADESH LTD.
+            <span className="text-[#FF5B00]">©</span> {new Date().getFullYear()}{' '}
+            <span className="font-bold text-[#FF5B00]">Choosify Technologies Ltd</span>
+            . All rights reserved.
           </div>
         </div>
 
