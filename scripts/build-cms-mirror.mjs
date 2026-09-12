@@ -2,8 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
 
-const root = 'C:/Users/User/Projects/choosify-admin-4.0';
-const srcHtml = 'c:/Users/User/Downloads/Choosify Admin CMS (standalone).html';
+const root = process.cwd();
+const srcHtml = path.join(root, 'design-reference/Choosify Admin CMS (standalone).html');
 const ref = path.join(root, 'src/cms-mirror/_reference');
 const pub = path.join(root, 'public/cms-mirror');
 
