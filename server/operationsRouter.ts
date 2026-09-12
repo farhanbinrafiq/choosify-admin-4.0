@@ -48,6 +48,7 @@ import { resolveActiveGuideOffer, guideOfferWasPresent } from './catalog/guideOf
 import { normalizeBrandInput } from './catalogContract';
 import { normalizeCreatorInput } from '../lib/vercel-catalog/catalogEditorialContract';
 import { recordSuspiciousRequest, recordClaimConfirmAttempt } from './lib/abuseProtection';
+import { normalizePrimaryPhone } from './lib/phone';
 import {
   normalizeEmail,
   normalizeBdPhone,
@@ -938,6 +939,25 @@ operationsRouter.post('/operations/orders', ...requireAuth, async (req, res) => 
     if (!body.orderId) {
       res.status(400).json({ error: 'orderId is required' });
       return;
+    }
+
+    // Data-integrity guard: `shipping.phone` and `shipping.address` must stay
+    // semantically independent fields. Only a presence check existed here
+    // before, so nothing rejected a caller (a buggy/legacy client, a stray
+    // copy-paste) submitting the delivery address text (or any other
+    // non-phone string) as the phone -- it was persisted verbatim and later
+    // rendered as-is on the invoice. Only validated when a phone is actually
+    // provided; shipping itself is not required by this endpoint (manual
+    // orders may have none yet).
+    const bodyShippingPhone = (body.shipping as { phone?: unknown } | undefined)?.phone;
+    if (typeof bodyShippingPhone === 'string' && bodyShippingPhone.trim()) {
+      if (!normalizePrimaryPhone(bodyShippingPhone).ok) {
+        res.status(400).json({
+          error: 'Shipping phone must be a valid phone number.',
+          code: 'INVALID_SHIPPING_PHONE',
+        });
+        return;
+      }
     }
 
     const wantsManual = Boolean(body.isManual);

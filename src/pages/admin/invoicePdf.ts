@@ -221,17 +221,27 @@ export function buildInvoicePdf({ vm, order, invoiceDate, logoDataUrl, satoshiFo
   doc.text('BILLED TO', MARGIN, y);
   doc.setFontSize(11);
   doc.setTextColor(...BRAND.navy);
-  doc.text(order.shipping?.fullName || 'Buyer', MARGIN, y + 6);
+  // Wrapped the same as address/phone below -- an unbounded customer name was
+  // otherwise free to run into the metadata column on the right.
+  const billedToColWidth = 95;
+  const nameLines = doc.splitTextToSize(order.shipping?.fullName || 'Buyer', billedToColWidth) as string[];
+  const nameLineH = 11 * 0.42;
+  nameLines.forEach((line, i) => doc.text(line, MARGIN, y + 6 + i * nameLineH));
+  const addrStartY = y + 6 + (nameLines.length - 1) * nameLineH + 6; // matches the original fixed "y + 12" when the name is a single line
   doc.setFont(FONT, 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(60, 60, 70);
   const addrLine = `${order.shipping?.address || '—'}${order.shipping?.region ? `, ${order.shipping.region}` : ''}`;
-  const billedToColWidth = 95;
   const addrLines = doc.splitTextToSize(addrLine, billedToColWidth) as string[];
   const addrLineH = 8.5 * 0.42; // matches the metadata renderer's line-height convention
-  addrLines.forEach((line, i) => doc.text(line, MARGIN, y + 12 + i * addrLineH));
-  const phoneY = y + 12 + addrLines.length * addrLineH + 2.5; // moves down for a wrapped address
-  doc.text(`Phone: ${order.shipping?.phone || '—'}`, MARGIN, phoneY);
+  addrLines.forEach((line, i) => doc.text(line, MARGIN, addrStartY + i * addrLineH));
+  const phoneY = addrStartY + addrLines.length * addrLineH + 2.5; // moves down for a wrapped address
+  // Same wrapping treatment as the address above -- an unbounded phone line
+  // was the one remaining spot in this block that could run past the "Billed
+  // To" column into the metadata column on the right (e.g. when a long value
+  // ends up here instead of a short number).
+  const phoneLines = doc.splitTextToSize(`Phone: ${order.shipping?.phone || '—'}`, billedToColWidth) as string[];
+  phoneLines.forEach((line, i) => doc.text(line, MARGIN, phoneY + i * addrLineH));
 
   // Right-hand metadata column — one renderer, four rows, dynamic height.
   const metaX = PAGE_W - MARGIN; // right edge every metadata value aligns to
@@ -245,7 +255,7 @@ export function buildInvoicePdf({ vm, order, invoiceDate, logoDataUrl, satoshiFo
   // Both columns may have grown to different heights (a long "Billed To"
   // address vs. a long Order Reference) — the divider goes below whichever is
   // taller so nothing from either column is cut off.
-  const billedToBottom = phoneY + 3;
+  const billedToBottom = phoneY + (phoneLines.length - 1) * addrLineH + 3;
   y = Math.max(billedToBottom, my) + 4;
   doc.setDrawColor(...BRAND.hairline);
   doc.line(MARGIN, y, PAGE_W - MARGIN, y);
