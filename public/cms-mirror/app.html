@@ -1399,16 +1399,14 @@ window.addEventListener('message', function(ev) {
         <sc-if value="{{ showBrandAdminChrome }}" hint-placeholder-val="{{ true }}">
         <div style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;overflow-x:auto">
           <sc-raw-table style="width:100%;min-width:900px;border-collapse:collapse">
-            <sc-raw-thead><sc-raw-tr style="background:#F9FAFB"><sc-raw-th style="{{ thStyle }};width:36px;text-align:center"><input type="checkbox" checked="{{ brandAllSelected }}" sc-camel-on-change="{{ toggleBrandSelectAllHandler }}"></sc-raw-th><sc-raw-th style="{{ thStyle }};width:40px">Sl.</sc-raw-th><sc-raw-th style="{{ thStyle }}">Brand / Business Name</sc-raw-th><sc-raw-th style="{{ thStyle }}">Representative Seller</sc-raw-th><sc-raw-th style="{{ thStyle }};white-space:nowrap">Seller CF ID</sc-raw-th><sc-raw-th style="{{ thStyle }};white-space:nowrap">BR ID</sc-raw-th><sc-raw-th style="{{ thStyle }}">Ownership Status</sc-raw-th><sc-raw-th style="{{ thStyle }}">Brand Summary</sc-raw-th><sc-raw-th style="{{ thStyle }}">Trust Score</sc-raw-th><sc-raw-th style="{{ thStyle }}">Fulfillment</sc-raw-th><sc-raw-th style="{{ thStyle }}">Revenue</sc-raw-th><sc-raw-th style="{{ thStyle }}">Last Active</sc-raw-th><sc-raw-th style="{{ thStyle }}">Marketplace Access</sc-raw-th></sc-raw-tr></sc-raw-thead>
+            <sc-raw-thead><sc-raw-tr style="background:#F9FAFB"><sc-raw-th style="{{ thStyle }};width:36px;text-align:center"><input type="checkbox" checked="{{ brandAllSelected }}" sc-camel-on-change="{{ toggleBrandSelectAllHandler }}"></sc-raw-th><sc-raw-th style="{{ thStyle }};width:40px">Sl.</sc-raw-th><sc-raw-th style="{{ thStyle }}">Seller / Brand Profile</sc-raw-th><sc-raw-th style="{{ thStyle }};white-space:nowrap">Seller CF ID</sc-raw-th><sc-raw-th style="{{ thStyle }}">Ownership Status</sc-raw-th><sc-raw-th style="{{ thStyle }}">Brand Summary</sc-raw-th><sc-raw-th style="{{ thStyle }}">Trust Score</sc-raw-th><sc-raw-th style="{{ thStyle }}">Fulfillment</sc-raw-th><sc-raw-th style="{{ thStyle }}">Revenue</sc-raw-th><sc-raw-th style="{{ thStyle }}">Last Active</sc-raw-th><sc-raw-th style="{{ thStyle }}">Marketplace Access</sc-raw-th></sc-raw-tr></sc-raw-thead>
             <sc-raw-tbody>
               <sc-for list="{{ brandsSorted }}" as="b" hint-placeholder-count="10">
                 <sc-raw-tr style="border-top:1px solid #F1F3F5;cursor:pointer" sc-camel-on-click="{{ b.onClick }}">
                   <sc-raw-td style="{{ tdStyle }};text-align:center" sc-camel-on-click="{{ stopClick }}"><input type="checkbox" checked="{{ b.checked }}" sc-camel-on-change="{{ b.onCheck }}"></sc-raw-td>
                   <sc-raw-td style="{{ tdStyleMuted }}">{{ b.slNo }}</sc-raw-td>
                   <sc-raw-td style="{{ tdStyle }}"><div style="display:flex;align-items:center;gap:10px"><div style="{{ b.thumbStyle }}">{{ b.initial }}</div><div><div style="font-weight:700;color:#EF3C23">{{ b.name }}</div><div style="font-size:10px;color:#9CA3AF;font-weight:700">{{ b.category }}</div></div></div></sc-raw-td>
-                  <sc-raw-td style="{{ tdStyleMuted }}">{{ b.representativeSeller }}</sc-raw-td>
                   <sc-raw-td style="{{ tdStyle }}"><span style="font-size:11px;font-weight:700;font-family:ui-monospace,monospace;color:#374151">{{ b.ownerCfIdLabel }}</span></sc-raw-td>
-                  <sc-raw-td style="{{ tdStyle }}"><span style="font-size:11px;font-weight:700;font-family:ui-monospace,monospace;color:#374151">{{ b.brandReferenceIdLabel }}</span></sc-raw-td>
                   <sc-raw-td style="{{ tdStyle }}"><span style="{{ b.ownershipStyle }}">{{ b.ownership }}</span></sc-raw-td>
                   <sc-raw-td style="{{ tdStyleMuted }}">{{ b.summary }}</sc-raw-td>
                   <sc-raw-td style="{{ tdStyle }}">{{ b.trustScoreLabel }}</sc-raw-td>
@@ -1822,6 +1820,9 @@ window.addEventListener('message', function(ev) {
           <div>
             <div style="font-size:15px;font-weight:800">{{ selectedBrand.profileHeaderTitle }}</div>
             <div style="font-size:11.5px;color:#9CA3AF;font-weight:600;margin-top:2px">{{ selectedBrand.profileHeaderSub }}</div>
+            <sc-if value="{{ selectedBrand.showIdentityPair }}" hint-placeholder-val="{{ false }}">
+              <div style="font-size:10.5px;color:#6B7280;font-weight:700;margin-top:6px;font-family:ui-monospace,monospace">Brand Profile ID: {{ selectedBrand.brandReferenceIdLabel }} &nbsp;·&nbsp; Seller CF ID: {{ selectedBrand.choosifyUserId }}</div>
+            </sc-if>
           </div>
           <sc-if value="{{ !selectedBrand.hideAllBrandsBack }}" hint-placeholder-val="{{ true }}">
             <button sc-camel-on-click="{{ selectedBrand.onBack }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:9px 14px;font-size:11.5px;font-weight:800;color:#374151;cursor:pointer">{{ selectedBrand.backLabel }}</button>
@@ -16083,7 +16084,6 @@ class Component extends DCLogic {
           this.selectBrand(b.name);
         },
         onOpenStudio: () => this.openSellerBrandStudio(b.catalogId, b.name),
-        representativeSeller: b.verified ? `${b.name} Rep · 01${(700000000+i*137931).toString().slice(0,9)}` : 'Unclaimed Pre-Merchant',
         ownership,
         ownershipStyle: ownership==='VERIFIED OWNER' ? 'background:#F0FDF4;color:#15803D;font-size:9.5px;font-weight:800;padding:4px 9px;border-radius:6px'
           : ownership==='OWNERSHIP PENDING' ? 'background:#FFFBEB;color:#B45309;font-size:9.5px;font-weight:800;padding:4px 9px;border-radius:6px'
@@ -16122,7 +16122,7 @@ class Component extends DCLogic {
         ? window.cfIdLabelForUid(b.sellerId, b.choosifyUserId)
         : '') || '—';
       // Unclaimed / no seller account → never invent a CF ID
-      if (!b.sellerId && (!b.verified || String(record2.representativeSeller || '').toLowerCase().indexOf('unclaimed') !== -1)) {
+      if (!b.sellerId && !b.verified) {
         record2.ownerCfIdLabel = '—';
       }
       record2.brandReferenceIdLabel = b.brandReferenceId || '—';
@@ -16134,8 +16134,8 @@ class Component extends DCLogic {
     const pendingBrandClaimRows = this.pendingOwnershipClaims('brand');
     const pendingCreatorClaimRows = this.pendingOwnershipClaims('creator');
     const brandTabDefsAdmin = [
-      {key:'all', icon:'👥', label:'All Brands', count: brands.length},
-      {key:'verified', icon:'✔️', label:'Verified Brands', count: brands.filter(b=>b.ownership==='VERIFIED OWNER').length},
+      {key:'all', icon:'👥', label:'All Seller Profiles', count: brands.length},
+      {key:'verified', icon:'✔️', label:'Verified Sellers', count: brands.filter(b=>b.ownership==='VERIFIED OWNER').length},
       {key:'requests', icon:'🆕', label:'Requests', count: (window.__CMS_MIRROR_PARTNER_APPS__ || []).filter(function(a){ return window.sellerAppNeedsAdminAttention && window.sellerAppNeedsAdminAttention(a, Component.BRANDS); }).length},
       {key:'activeSellers', icon:'🏪', label:'Active Sellers', count: brands.filter(b=>b.isActiveSeller).length},
       {key:'claims', icon:'📋', label:'Ownership Claims', count: pendingBrandClaimRows.length},
@@ -16165,7 +16165,7 @@ class Component extends DCLogic {
     const brandListBadge = isSellerBrandList ? 'OWNED BRANDS' : 'WORKSPACE CONSOLIDATION';
     const brandListSubtitle = isSellerBrandList
       ? 'Your owned brands — open Brand Studio to edit and publish your public Brand Page.'
-      : 'Unified brand monitoring directory, pre-merchant SEO profiles builder, claimable funnels, and corporate verification checks.';
+      : 'Unified seller & brand monitoring directory, pre-merchant SEO profiles builder, claimable funnels, and corporate verification checks.';
     const createBrandButtonLabel = isSellerBrandList ? '+ Create Brand' : '+ Create Brand Profile';
     const brandSearchPlaceholder = isSellerBrandList
       ? 'Search your brands by name, category, or BR ID...'
@@ -16182,7 +16182,6 @@ class Component extends DCLogic {
       const hay = [
         b.name,
         b.category,
-        b.representativeSeller,
         b.summary,
         b.ownership,
         b.ownerCfIdLabel,
@@ -16459,8 +16458,27 @@ class Component extends DCLogic {
       selectedBrand.showAdminEditEnter = (['admin','super_admin','moderator'].indexOf(window.__CMS_MIRROR_ROLE__||'') >= 0) && !this.state.adminEditMode;
 
       selectedBrand.choosifyUserId = (typeof window.resolveProfileChoosifyUserId === 'function'
-        ? window.resolveProfileChoosifyUserId(b.sellerId || window.__CMS_MIRROR_USER_ID__, b.choosifyUserId, window.__CMS_MIRROR_EMAIL__)
+        ? window.resolveProfileChoosifyUserId(b.sellerId, b.choosifyUserId, window.__CMS_MIRROR_EMAIL__)
         : (window.__CMS_MIRROR_CHOOSIFY_USER_ID__ || '—')) || '—';
+      // Unclaimed brand (no b.sellerId, not verified) must never show a CF ID.
+      // resolveProfileChoosifyUserId() falls back to the CURRENT VIEWER's own
+      // CF ID whenever accountUserId is falsy (that's correct for a true
+      // self-view, e.g. a seller on their own Portfolio/Profile tab, but wrong
+      // here whenever the viewer isn't the brand's owner -- e.g. an Admin
+      // opening an unclaimed brand would otherwise see their OWN CF ID
+      // displayed as if it were the seller's). Same explicit override already
+      // used for the list row's ownerCfIdLabel above.
+      if (!b.sellerId && !b.verified) {
+        selectedBrand.choosifyUserId = '—';
+      }
+      // Brand Profile ID (BR-xxxxx) is a separate reference-ID series from the
+      // Seller Account's CF ID (see shared/referenceIds/registry.ts) -- shown
+      // together here so Super Admin sees them as two related-but-distinct
+      // identifiers (Seller Account owns/claims a Brand Profile) rather than
+      // duplicate IDs for one object. Not shown in the seller's own self-view
+      // (redundant -- they already know which brand they're editing).
+      selectedBrand.brandReferenceIdLabel = b.brandReferenceId || '—';
+      selectedBrand.showIdentityPair = window.__CMS_MIRROR_ROLE__ !== 'seller';
       {
         const apps = Array.isArray(window.__CMS_MIRROR_PARTNER_APPS__) ? window.__CMS_MIRROR_PARTNER_APPS__ : [];
         const app = apps.find((row) =>
