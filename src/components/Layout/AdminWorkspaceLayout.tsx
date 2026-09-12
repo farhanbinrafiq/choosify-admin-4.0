@@ -1,4 +1,4 @@
-import React, { Suspense, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useImpersonation } from '../../contexts/ImpersonationContext';
@@ -88,6 +88,17 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
     return activePageKey === key;
   };
 
+  // The sidebar nav is its own independently-scrollable container, so the
+  // active item can end up scrolled out of view (e.g. deep-linking directly
+  // to /admin/analytics while the nav happens to be scrolled elsewhere).
+  // Reveal it on every route change/mount without re-centering or touching
+  // any other scroll container — `block: 'nearest'` is a no-op if the item
+  // is already visible, and otherwise scrolls only the minimum needed.
+  const activeNavItemRef = useRef<HTMLAnchorElement | null>(null);
+  useEffect(() => {
+    activeNavItemRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [location.pathname]);
+
   return (
     <div className="admin-workspace">
       <aside className="admin-workspace__sidebar" aria-label="Admin navigation">
@@ -133,6 +144,7 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
                   <Link
                     key={item.key}
                     to={item.path}
+                    ref={active ? activeNavItemRef : undefined}
                     className={`admin-workspace__nav-item${active ? ' admin-workspace__nav-item--active' : ''}${locked ? ' admin-workspace__nav-item--locked' : ''}`}
                     aria-current={active ? 'page' : undefined}
                     aria-disabled={locked || undefined}
