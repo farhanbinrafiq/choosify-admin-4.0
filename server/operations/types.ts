@@ -342,7 +342,8 @@ export type OpsWarrantyClaimStatus =
   | 'rejected'
   | 'service_in_progress'
   | 'resolved'
-  | 'cancelled';
+  | 'cancelled'
+  | 'disputed';
 
 export const OPEN_WARRANTY_CLAIM_STATUSES = new Set<OpsWarrantyClaimStatus>([
   'submitted',
@@ -392,6 +393,107 @@ export interface OpsWarrantyClaim {
   cancelledAt?: string;
   createdAt: string;
   updatedAt: string;
+  /** Set when linked via dispute escalation */
+  disputeId?: string;
+}
+
+/**
+ * Disputes — the escalation/adjudication layer, NOT a duplicate of Returns,
+ * Warranty Claims, or Orders. A dispute always references its source case by
+ * id (never copies the source's data) and exists only when a normal
+ * resolution is being challenged/escalated. Any refund a decision implies
+ * must still go through the canonical Returns & Refunds finance engine
+ * (`PATCH /operations/returns/:id/refund`) — a dispute decision here never
+ * moves money on its own.
+ */
+export type OpsDisputeSourceType = 'return' | 'warranty_claim' | 'order';
+
+export type OpsDisputeStatus =
+  | 'raised'
+  | 'evidence_collection'
+  | 'under_review'
+  | 'awaiting_buyer'
+  | 'awaiting_seller'
+  | 'decision_pending'
+  | 'resolved'
+  | 'closed';
+
+/** Valid forward transitions — enforced server-side, never trust the client. */
+export const OPS_DISPUTE_TRANSITIONS: Record<OpsDisputeStatus, OpsDisputeStatus[]> = {
+  raised: ['evidence_collection', 'under_review', 'closed'],
+  evidence_collection: ['under_review', 'awaiting_buyer', 'awaiting_seller', 'closed'],
+  under_review: ['awaiting_buyer', 'awaiting_seller', 'decision_pending', 'closed'],
+  awaiting_buyer: ['under_review', 'decision_pending', 'closed'],
+  awaiting_seller: ['under_review', 'decision_pending', 'closed'],
+  decision_pending: ['resolved', 'closed'],
+  resolved: ['closed'],
+  closed: [],
+};
+
+export const OPEN_DISPUTE_STATUSES = new Set<OpsDisputeStatus>([
+  'raised',
+  'evidence_collection',
+  'under_review',
+  'awaiting_buyer',
+  'awaiting_seller',
+  'decision_pending',
+]);
+
+export type OpsDisputeDecision =
+  | 'uphold_seller'
+  | 'uphold_buyer'
+  | 'partial'
+  | 'refund_approved'
+  | 'replacement'
+  | 'dismissed';
+
+export interface OpsDisputeEvidenceItem {
+  id: string;
+  submittedBy: 'buyer' | 'seller' | 'admin';
+  submittedByUserId?: string;
+  description: string;
+  mediaUrl?: string;
+  createdAt: string;
+}
+
+export interface OpsDisputeTimelineEntry {
+  id: string;
+  type: 'status_change' | 'note' | 'evidence' | 'decision' | 'raised';
+  fromStatus?: OpsDisputeStatus;
+  toStatus?: OpsDisputeStatus;
+  actorId?: string;
+  actorRole?: string;
+  text?: string;
+  createdAt: string;
+}
+
+export interface OpsDispute {
+  /** DSP-<timestamp> */
+  id: string;
+  sourceType: OpsDisputeSourceType;
+  /** The source Return (RET-...), Warranty Claim (WC-...), or Order (ORD-...) id — canonical record lives there, never duplicated here. */
+  sourceId: string;
+  orderId: string;
+  buyerId: string;
+  sellerId: string;
+  reason: string;
+  /** Disputed amount/value, if applicable (e.g. refund amount in question). */
+  amount?: number;
+  buyerStatement?: string;
+  sellerStatement?: string;
+  status: OpsDisputeStatus;
+  evidence: OpsDisputeEvidenceItem[];
+  timeline: OpsDisputeTimelineEntry[];
+  /** Staff-only internal notes — never shown to buyer/seller. */
+  adminNotes: string[];
+  decision?: OpsDisputeDecision;
+  decisionNotes?: string;
+  decidedBy?: string;
+  decidedAt?: string;
+  assignedAdminId?: string;
+  createdAt: string;
+  updatedAt: string;
+  closedAt?: string;
 }
 
 /** Mirrors admin TrustContext VerificationRequest (+ entityType for brand|creator). */

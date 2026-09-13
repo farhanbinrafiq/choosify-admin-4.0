@@ -44,7 +44,7 @@ interface ReturnsContextType {
   addReturnNote: (id: string, note: string) => Promise<ReturnRequest>;
   updateReturnStatus: (id: string, newStatus: ReturnRequest['status']) => Promise<ReturnRequest>;
   generateReturnLabel: (id: string) => Promise<{ labelUrl: string; trackingId: string; courier: string }>;
-  linkReturnToDispute: (returnId: string, disputeId: string) => Promise<ReturnRequest>;
+  linkReturnToDispute: (returnId: string, reason?: string) => Promise<ReturnRequest>;
 }
 
 const ReturnsContext = createContext<ReturnsContextType | undefined>(undefined);
@@ -173,8 +173,8 @@ export const ReturnsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return { labelUrl: result.labelUrl, trackingId: result.trackingId, courier: result.courier };
   };
 
-  const linkReturnToDispute = async (returnId: string, disputeId: string): Promise<ReturnRequest> => {
-    const saved = await operationsApi.linkReturnToDispute(returnId, disputeId);
+  const linkReturnToDispute = async (returnId: string, reason?: string): Promise<ReturnRequest> => {
+    const saved = await operationsApi.linkReturnToDispute(returnId, reason);
     setReturnRequests((prev) => upsertLocal(prev, saved));
     return saved;
   };

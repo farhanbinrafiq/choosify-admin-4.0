@@ -14,6 +14,10 @@ import { scheduleOperationsPersist } from './operations/operationsPersistence';
 import { ensureSubOrderInvoiceNumber } from './operations/invoiceAssignment';
 import type {
   OpsCoupon,
+  OpsDispute,
+  OpsDisputeDecision,
+  OpsDisputeSourceType,
+  OpsDisputeStatus,
   OpsFeeCharge,
   OpsReturnRequest,
   OpsReturnStatus,
@@ -25,6 +29,7 @@ import type {
   OpsWarrantyClaim,
   PermissionKey,
 } from './operations/types';
+import { OPEN_DISPUTE_STATUSES } from './operations/types';
 import { validate } from './middleware/validate';
 import { authenticateRequest } from './middleware/auth';
 import { requireRole } from './middleware/authorization';
@@ -2717,22 +2722,34 @@ operationsRouter.patch('/operations/returns/:id/dispute', ...requireAuth, (req, 
     res.status(403).json({ error: 'Not authorized to escalate this return' });
     return;
   }
-  const disputeId = String(req.body?.disputeId || '').trim();
-  if (!disputeId) {
-    res.status(400).json({ error: 'disputeId is required' });
-    return;
+
+  // Creates a real Dispute case (server/operations disputes) rather than
+  // just stamping a client-fabricated string -- the Disputes module is now
+  // the actual escalation/adjudication layer, not an inert label.
+  let dispute = operationsStore.getActiveDisputeForSource('return', existing.id);
+  if (!dispute) {
+    const reason = typeof req.body?.reason === 'string' && req.body.reason.trim() ? req.body.reason.trim() : `Return ${existing.id} escalated to dispute`;
+    dispute = operationsStore.createDispute({
+      sourceType: 'return',
+      sourceId: existing.id,
+      orderId: existing.orderId,
+      buyerId: existing.buyerId,
+      sellerId: existing.sellerId,
+      reason,
+      amount: existing.refundAmount,
+    });
   }
 
   const saved = operationsStore.updateReturn(req.params.id, {
     status: 'dispute',
-    disputeId,
+    disputeId: dispute.id,
     notes: [
       ...existing.notes,
-      `Escalated to Dispute resolution system. Dispute ID: ${disputeId}`,
+      `Escalated to Dispute resolution system. Dispute ID: ${dispute.id}`,
     ],
   });
   scheduleOperationsPersist();
-  res.json({ success: true, data: saved });
+  res.json({ success: true, data: saved, dispute });
 });
 
 // ─── Warranty Claims ───────────────────────────────────────────────────────
@@ -3196,6 +3213,283 @@ operationsRouter.patch('/operations/warranty-claims/:id/cancel', ...requireAuth,
   });
   scheduleOperationsPersist();
   res.json({ success: true, data: saved });
+});
+
+operationsRouter.patch('/operations/warranty-claims/:id/dispute', ...requireAuth, (req, res) => {
+  const existing = operationsStore.getWarrantyClaim(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Warranty claim not found' });
+    return;
+  }
+  if (!userCanManageWarrantyClaim(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to escalate this warranty claim' });
+    return;
+  }
+
+  let dispute = operationsStore.getActiveDisputeForSource('warranty_claim', existing.id);
+  if (!dispute) {
+    const reason = typeof req.body?.reason === 'string' && req.body.reason.trim() ? req.body.reason.trim() : `Warranty claim ${existing.id} escalated to dispute`;
+    dispute = operationsStore.createDispute({
+      sourceType: 'warranty_claim',
+      sourceId: existing.id,
+      orderId: existing.orderId,
+      buyerId: existing.consumerId,
+      sellerId: existing.sellerId,
+      reason,
+    });
+  }
+
+  const saved = operationsStore.updateWarrantyClaim(req.params.id, {
+    status: 'disputed',
+    disputeId: dispute.id,
+  });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved, dispute });
+});
+
+// ─── Disputes ────────────────────────────────────────────────────────────────
+// The escalation/adjudication layer -- NOT a duplicate of Returns, Warranty
+// Claims, or Orders Hub. A dispute always references its source case by id
+// (sourceType + sourceId); the source's own canonical record remains the
+// source of truth for order/return/warranty data. Any refund a decision
+// implies must still go through the canonical Returns & Refunds finance
+// engine (PATCH /operations/returns/:id/refund) -- deciding a dispute here
+// never moves money on its own.
+
+function userIsDisputeParty(
+  req: { userId?: string },
+  row: OpsDispute,
+): boolean {
+  return Boolean(req.userId && (row.buyerId === req.userId || row.sellerId === req.userId));
+}
+
+function userCanViewDispute(
+  req: { userId?: string; userRole?: (typeof ROLES)[keyof typeof ROLES] },
+  row: OpsDispute,
+): boolean {
+  return userIsStaff(req) || userIsDisputeParty(req, row);
+}
+
+async function resolveDisputeSource(
+  sourceType: OpsDisputeSourceType,
+  sourceId: string,
+  /** Required only for sourceType "order" -- a single order can span multiple sellers' sub-orders, so the caller must say which one this dispute concerns. */
+  explicitSellerId?: string,
+): Promise<{ orderId: string; buyerId: string; sellerId: string } | null> {
+  if (sourceType === 'return') {
+    const ret = operationsStore.getReturn(sourceId);
+    if (!ret) return null;
+    return { orderId: ret.orderId, buyerId: ret.buyerId, sellerId: ret.sellerId };
+  }
+  if (sourceType === 'warranty_claim') {
+    const claim = operationsStore.getWarrantyClaim(sourceId);
+    if (!claim) return null;
+    return { orderId: claim.orderId, buyerId: claim.consumerId, sellerId: claim.sellerId };
+  }
+  // sourceType === 'order' -- orders don't carry a single top-level sellerId (see subOrders), so it must be supplied explicitly.
+  const order = operationsStore.getOrder(sourceId);
+  if (!order || !explicitSellerId) return null;
+  return { orderId: order.orderId, buyerId: order.buyerId, sellerId: explicitSellerId };
+}
+
+operationsRouter.get('/operations/disputes', ...requireAuth, (req, res) => {
+  const filter: { buyerId?: string; sellerId?: string; orderId?: string; status?: OpsDisputeStatus; sourceType?: OpsDisputeSourceType } = {};
+
+  if (!userIsStaff(req)) {
+    // Sellers/buyers only ever see their own disputes -- never the platform-wide queue.
+    if (!req.userId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    filter.sellerId = req.userId;
+  } else {
+    if (typeof req.query.sellerId === 'string') filter.sellerId = req.query.sellerId;
+    if (typeof req.query.buyerId === 'string') filter.buyerId = req.query.buyerId;
+  }
+  if (typeof req.query.orderId === 'string') filter.orderId = req.query.orderId;
+  if (typeof req.query.status === 'string') filter.status = req.query.status as OpsDisputeStatus;
+  if (typeof req.query.sourceType === 'string') filter.sourceType = req.query.sourceType as OpsDisputeSourceType;
+
+  res.json({ data: operationsStore.listDisputes(filter) });
+});
+
+operationsRouter.get('/operations/disputes/:id', ...requireAuth, (req, res) => {
+  const existing = operationsStore.getDispute(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Dispute not found' });
+    return;
+  }
+  if (!userCanViewDispute(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to view this dispute' });
+    return;
+  }
+  res.json({ data: existing });
+});
+
+operationsRouter.post('/operations/disputes', ...requireAuth, async (req, res) => {
+  const body = req.body ?? {};
+  const sourceType = body.sourceType as OpsDisputeSourceType;
+  const sourceId = String(body.sourceId || '').trim();
+  const reason = String(body.reason || '').trim();
+
+  if (!['return', 'warranty_claim', 'order'].includes(sourceType)) {
+    res.status(400).json({ error: 'A valid sourceType (return | warranty_claim | order) is required' });
+    return;
+  }
+  if (!sourceId) {
+    res.status(400).json({ error: 'sourceId is required' });
+    return;
+  }
+  if (!reason) {
+    res.status(400).json({ error: 'reason is required' });
+    return;
+  }
+
+  const explicitSellerId = typeof body.sellerId === 'string' ? body.sellerId.trim() : undefined;
+  const source = await resolveDisputeSource(sourceType, sourceId, explicitSellerId);
+  if (!source) {
+    res.status(404).json({
+      error:
+        sourceType === 'order' && !explicitSellerId
+          ? 'sellerId is required when raising a dispute against an order (a single order can span multiple sellers)'
+          : `${sourceType} "${sourceId}" was not found -- disputes must reference a real case`,
+    });
+    return;
+  }
+
+  if (!userIsStaff(req) && req.userId !== source.buyerId && req.userId !== source.sellerId) {
+    res.status(403).json({ error: 'Only the buyer, seller, or staff may raise a dispute on this case' });
+    return;
+  }
+
+  const alreadyOpen = operationsStore.getActiveDisputeForSource(sourceType, sourceId);
+  if (alreadyOpen) {
+    res.json({ success: true, data: alreadyOpen, alreadyExisted: true });
+    return;
+  }
+
+  const amount = typeof body.amount === 'number' && Number.isFinite(body.amount) ? body.amount : undefined;
+  const buyerStatement = req.userId === source.buyerId ? String(body.statement || '').trim() || undefined : undefined;
+  const sellerStatement = req.userId === source.sellerId ? String(body.statement || '').trim() || undefined : undefined;
+
+  const created = operationsStore.createDispute({
+    sourceType,
+    sourceId,
+    orderId: source.orderId,
+    buyerId: source.buyerId,
+    sellerId: source.sellerId,
+    reason,
+    amount,
+    buyerStatement,
+    sellerStatement,
+  });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: created });
+});
+
+operationsRouter.patch('/operations/disputes/:id/status', ...requireAuth, (req, res) => {
+  const existing = operationsStore.getDispute(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Dispute not found' });
+    return;
+  }
+  if (!userIsStaff(req)) {
+    res.status(403).json({ error: 'Only staff may change a dispute\'s workflow status' });
+    return;
+  }
+  const toStatus = req.body?.status as OpsDisputeStatus;
+  const updated = operationsStore.transitionDispute(req.params.id, toStatus, {
+    actorId: req.userId,
+    actorRole: req.userRole,
+    text: typeof req.body?.note === 'string' ? req.body.note : undefined,
+  });
+  if (!updated) {
+    res.status(400).json({ error: `Cannot move a dispute from "${existing.status}" to "${toStatus}"` });
+    return;
+  }
+  scheduleOperationsPersist();
+  res.json({ success: true, data: updated });
+});
+
+operationsRouter.post('/operations/disputes/:id/evidence', ...requireAuth, (req, res) => {
+  const existing = operationsStore.getDispute(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Dispute not found' });
+    return;
+  }
+  if (!userCanViewDispute(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to add evidence to this dispute' });
+    return;
+  }
+  const description = String(req.body?.description || '').trim();
+  if (!description) {
+    res.status(400).json({ error: 'description is required' });
+    return;
+  }
+  const submittedBy: 'buyer' | 'seller' | 'admin' = userIsStaff(req)
+    ? 'admin'
+    : req.userId === existing.buyerId
+      ? 'buyer'
+      : 'seller';
+  const updated = operationsStore.addDisputeEvidence(req.params.id, {
+    submittedBy,
+    submittedByUserId: req.userId,
+    description,
+    mediaUrl: typeof req.body?.mediaUrl === 'string' ? req.body.mediaUrl : undefined,
+  });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: updated });
+});
+
+operationsRouter.post('/operations/disputes/:id/notes', ...requireAuth, (req, res) => {
+  const existing = operationsStore.getDispute(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Dispute not found' });
+    return;
+  }
+  if (!userIsStaff(req)) {
+    res.status(403).json({ error: 'Only staff may add internal notes' });
+    return;
+  }
+  const note = String(req.body?.note || '').trim();
+  if (!note) {
+    res.status(400).json({ error: 'note is required' });
+    return;
+  }
+  const updated = operationsStore.addDisputeAdminNote(req.params.id, note, req.userId);
+  scheduleOperationsPersist();
+  res.json({ success: true, data: updated });
+});
+
+const DISPUTE_DECISIONS = new Set(['uphold_seller', 'uphold_buyer', 'partial', 'refund_approved', 'replacement', 'dismissed']);
+
+operationsRouter.post('/operations/disputes/:id/decision', ...requireAdmin, (req, res) => {
+  const existing = operationsStore.getDispute(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Dispute not found' });
+    return;
+  }
+  if (!OPEN_DISPUTE_STATUSES.has(existing.status)) {
+    res.status(409).json({ error: `Dispute is already "${existing.status}"; it cannot be decided again.` });
+    return;
+  }
+  const decision = req.body?.decision as OpsDisputeDecision;
+  if (!DISPUTE_DECISIONS.has(decision)) {
+    res.status(400).json({ error: 'A valid decision is required' });
+    return;
+  }
+  const decisionNotes = typeof req.body?.decisionNotes === 'string' ? req.body.decisionNotes : undefined;
+  const updated = operationsStore.decideDispute(req.params.id, decision, decisionNotes, req.userId);
+  scheduleOperationsPersist();
+  res.json({
+    success: true,
+    data: updated,
+    // Deliberately no automatic financial side effect -- see module comment.
+    note:
+      decision === 'refund_approved'
+        ? 'This records the adjudication decision only. Process the actual refund via Returns & Refunds using the canonical refund flow.'
+        : undefined,
+  });
 });
 
 operationsRouter.get('/operations/coupons', (_req, res) => {

@@ -1083,11 +1083,12 @@ export const operationsApi = {
     }>(`/operations/returns/${encodeURIComponent(id)}/label`, 'POST', {});
     return result;
   },
-  linkReturnToDispute: async (id: string, disputeId: string) => {
+  /** Creates a real Dispute case server-side (server/operations disputes) and links this return to it -- no client-fabricated id. */
+  linkReturnToDispute: async (id: string, reason?: string) => {
     const result = await request<{ data: import('../contexts/ReturnsContext').ReturnRequest }>(
       `/operations/returns/${encodeURIComponent(id)}/dispute`,
       'PATCH',
-      { disputeId },
+      { reason },
     );
     return result.data;
   },

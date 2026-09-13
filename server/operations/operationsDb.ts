@@ -44,6 +44,7 @@ export interface OperationsSnapshot {
   returns?: OpsReturnRequest[];
   verifications?: OpsVerificationRequest[];
   warrantyClaims?: import('./types').OpsWarrantyClaim[];
+  disputes?: import('./types').OpsDispute[];
 }
 
 export interface OpsSellerOfferRow {

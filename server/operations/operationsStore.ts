@@ -1,6 +1,12 @@
 import type {
   OpsCoupon,
   OpsCouponUsage,
+  OpsDispute,
+  OpsDisputeDecision,
+  OpsDisputeEvidenceItem,
+  OpsDisputeSourceType,
+  OpsDisputeStatus,
+  OpsDisputeTimelineEntry,
   OpsFeeCharge,
   OpsJobApplication,
   OpsJobPosting,
@@ -16,7 +22,7 @@ import type {
   OpsVerificationReview,
   RolePermissionsMap,
 } from './types';
-import { OPEN_WARRANTY_CLAIM_STATUSES } from './types';
+import { OPEN_WARRANTY_CLAIM_STATUSES, OPS_DISPUTE_TRANSITIONS } from './types';
 
 const nowIso = () => new Date().toISOString();
 
@@ -362,6 +368,7 @@ const state: {
   returns: OpsReturnRequest[];
   verifications: OpsVerificationRequest[];
   warrantyClaims: OpsWarrantyClaim[];
+  disputes: OpsDispute[];
 } = {
   orders: [],
   coupons: defaultCoupons(),
@@ -377,6 +384,7 @@ const state: {
   returns: [],
   verifications: [],
   warrantyClaims: [],
+  disputes: [],
   featureFlags: {
     creator_hub: true,
     compare_tool: true,
@@ -434,6 +442,7 @@ export const operationsStore = {
     if (snapshot.returns) state.returns = snapshot.returns;
     if (snapshot.verifications) state.verifications = snapshot.verifications as OpsVerificationRequest[];
     if (snapshot.warrantyClaims) state.warrantyClaims = snapshot.warrantyClaims;
+    if (snapshot.disputes) state.disputes = snapshot.disputes;
   },
 
   listCouponUsage: () => [...state.couponUsage],
@@ -960,6 +969,157 @@ export const operationsStore = {
     state.warrantyClaims[idx] = { ...state.warrantyClaims[idx], ...patch, updatedAt: nowIso() };
     touch();
     return state.warrantyClaims[idx];
+  },
+
+  listDisputes: (filter?: {
+    buyerId?: string;
+    sellerId?: string;
+    orderId?: string;
+    status?: OpsDisputeStatus;
+    sourceType?: OpsDisputeSourceType;
+  }) => {
+    let rows = [...state.disputes].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    if (filter?.buyerId) rows = rows.filter((row) => row.buyerId === filter.buyerId);
+    if (filter?.sellerId) rows = rows.filter((row) => row.sellerId === filter.sellerId);
+    if (filter?.orderId) rows = rows.filter((row) => row.orderId === filter.orderId);
+    if (filter?.status) rows = rows.filter((row) => row.status === filter.status);
+    if (filter?.sourceType) rows = rows.filter((row) => row.sourceType === filter.sourceType);
+    return rows;
+  },
+  getDispute: (id: string) => state.disputes.find((row) => row.id === id) ?? null,
+  /** Only one open dispute may exist per source case at a time. */
+  getActiveDisputeForSource: (sourceType: OpsDisputeSourceType, sourceId: string) =>
+    state.disputes.find(
+      (row) => row.sourceType === sourceType && row.sourceId === sourceId && row.status !== 'resolved' && row.status !== 'closed',
+    ) ?? null,
+  createDispute: (
+    payload: Omit<OpsDispute, 'id' | 'createdAt' | 'updatedAt' | 'evidence' | 'timeline' | 'adminNotes' | 'status'> & {
+      id?: string;
+    },
+  ) => {
+    const ts = nowIso();
+    const row: OpsDispute = {
+      ...payload,
+      id: payload.id || `DSP-${Date.now()}`,
+      status: 'raised',
+      evidence: [],
+      adminNotes: [],
+      timeline: [
+        {
+          id: `dtl-${Date.now()}`,
+          type: 'raised',
+          toStatus: 'raised',
+          actorId: payload.buyerId,
+          text: payload.reason,
+          createdAt: ts,
+        },
+      ],
+      createdAt: ts,
+      updatedAt: ts,
+    };
+    state.disputes.unshift(row);
+    touch();
+    return row;
+  },
+  /** Server-validated transition -- returns null if the transition isn't allowed from the dispute's current status. */
+  transitionDispute: (
+    id: string,
+    toStatus: OpsDisputeStatus,
+    actor: { actorId?: string; actorRole?: string; text?: string },
+  ): OpsDispute | null => {
+    const idx = state.disputes.findIndex((row) => row.id === id);
+    if (idx < 0) return null;
+    const current = state.disputes[idx];
+    const allowed = OPS_DISPUTE_TRANSITIONS[current.status] ?? [];
+    if (!allowed.includes(toStatus)) return null;
+    const ts = nowIso();
+    const entry: OpsDisputeTimelineEntry = {
+      id: `dtl-${Date.now()}`,
+      type: 'status_change',
+      fromStatus: current.status,
+      toStatus,
+      actorId: actor.actorId,
+      actorRole: actor.actorRole,
+      text: actor.text,
+      createdAt: ts,
+    };
+    state.disputes[idx] = {
+      ...current,
+      status: toStatus,
+      timeline: [...current.timeline, entry],
+      updatedAt: ts,
+      closedAt: toStatus === 'closed' ? ts : current.closedAt,
+    };
+    touch();
+    return state.disputes[idx];
+  },
+  addDisputeEvidence: (id: string, evidence: Omit<OpsDisputeEvidenceItem, 'id' | 'createdAt'>): OpsDispute | null => {
+    const idx = state.disputes.findIndex((row) => row.id === id);
+    if (idx < 0) return null;
+    const ts = nowIso();
+    const item: OpsDisputeEvidenceItem = { ...evidence, id: `dev-${Date.now()}`, createdAt: ts };
+    const entry: OpsDisputeTimelineEntry = {
+      id: `dtl-${Date.now()}`,
+      type: 'evidence',
+      actorId: evidence.submittedByUserId,
+      actorRole: evidence.submittedBy,
+      text: evidence.description,
+      createdAt: ts,
+    };
+    state.disputes[idx] = {
+      ...state.disputes[idx],
+      evidence: [...state.disputes[idx].evidence, item],
+      timeline: [...state.disputes[idx].timeline, entry],
+      updatedAt: ts,
+    };
+    touch();
+    return state.disputes[idx];
+  },
+  addDisputeAdminNote: (id: string, note: string, actorId?: string): OpsDispute | null => {
+    const idx = state.disputes.findIndex((row) => row.id === id);
+    if (idx < 0) return null;
+    const ts = nowIso();
+    const entry: OpsDisputeTimelineEntry = { id: `dtl-${Date.now()}`, type: 'note', actorId, actorRole: 'admin', text: note, createdAt: ts };
+    state.disputes[idx] = {
+      ...state.disputes[idx],
+      adminNotes: [...state.disputes[idx].adminNotes, note],
+      timeline: [...state.disputes[idx].timeline, entry],
+      updatedAt: ts,
+    };
+    touch();
+    return state.disputes[idx];
+  },
+  decideDispute: (
+    id: string,
+    decision: OpsDisputeDecision,
+    decisionNotes: string | undefined,
+    decidedBy: string | undefined,
+  ): OpsDispute | null => {
+    const idx = state.disputes.findIndex((row) => row.id === id);
+    if (idx < 0) return null;
+    const ts = nowIso();
+    const entry: OpsDisputeTimelineEntry = {
+      id: `dtl-${Date.now()}`,
+      type: 'decision',
+      fromStatus: state.disputes[idx].status,
+      toStatus: 'resolved',
+      actorId: decidedBy,
+      actorRole: 'admin',
+      text: decisionNotes,
+      createdAt: ts,
+    };
+    state.disputes[idx] = {
+      ...state.disputes[idx],
+      status: 'resolved',
+      decision,
+      decisionNotes,
+      decidedBy,
+      decidedAt: ts,
+      timeline: [...state.disputes[idx].timeline, entry],
+      updatedAt: ts,
+    };
+    touch();
+    return state.disputes[idx];
   },
 
   listVerifications: (filter?: {

@@ -38,7 +38,7 @@ function ensureModerationHydrated(): void {
   hydrated = true;
   const snapshot = loadModerationMemorySnapshot();
   if (!snapshot) return;
-  state.items = snapshot.items || [];
+  state.items = (snapshot.items || []).map((item) => ({ ...item, history: item.history || [] }));
   state.reports = snapshot.reports || [];
   state.verifications = snapshot.verifications || [];
   state.fraudSignals = snapshot.fraudSignals || [];
@@ -105,13 +105,15 @@ export const moderationStore = {
     );
   },
 
-  createItem(input: Omit<ModerationItem, 'id' | 'createdAt' | 'updatedAt' | 'status'> & {
+  createItem(input: Omit<ModerationItem, 'id' | 'createdAt' | 'updatedAt' | 'status' | 'history'> & {
     status?: ModerationStatus;
+    history?: ModerationItem['history'];
   }): ModerationItem {
     const item: ModerationItem = {
       ...input,
       id: `mod-${randomUUID()}`,
       status: input.status ?? MODERATION_STATUSES.PENDING,
+      history: input.history ?? [],
       createdAt: nowIso(),
       updatedAt: nowIso(),
     };
@@ -132,6 +134,7 @@ export const moderationStore = {
     status?: ReportItem['status'];
     category?: ReportItem['category'];
     resourceId?: string;
+    resourceType?: string;
     limit?: number;
     offset?: number;
   }): ReportItem[] {
@@ -139,6 +142,7 @@ export const moderationStore = {
     if (filter?.status) rows = rows.filter((r) => r.status === filter.status);
     if (filter?.category) rows = rows.filter((r) => r.category === filter.category);
     if (filter?.resourceId) rows = rows.filter((r) => r.resourceId === filter.resourceId);
+    if (filter?.resourceType) rows = rows.filter((r) => r.resourceType === filter.resourceType);
     const offset = filter?.offset ?? 0;
     const limit = filter?.limit ?? rows.length;
     return rows.slice(offset, offset + limit);

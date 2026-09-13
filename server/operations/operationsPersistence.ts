@@ -29,6 +29,7 @@ export function buildOperationsSnapshot(): OperationsSnapshot {
     returns: operationsStore.listReturns(),
     verifications: operationsStore.listVerifications(),
     warrantyClaims: operationsStore.listWarrantyClaims(),
+    disputes: operationsStore.listDisputes(),
   };
 }
 

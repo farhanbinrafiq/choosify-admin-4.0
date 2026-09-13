@@ -1223,7 +1223,7 @@ export default function ReturnsPage() {
                           onClick={async () => {
                             setActionBusy('dispute');
                             try {
-                              await linkReturnToDispute(selectedReturn.id, `DISP-${Math.floor(1000 + Math.random() * 9000)}`);
+                              await linkReturnToDispute(selectedReturn.id, `Return ${selectedReturn.id} escalated to dispute from Returns & Refunds`);
                               showToast('Return escalated to Dispute channels', 'info');
                             } catch (err) {
                               showToast(err instanceof Error ? err.message : 'Failed to escalate return', 'error');

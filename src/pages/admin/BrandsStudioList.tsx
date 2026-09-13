@@ -73,7 +73,7 @@ function mapCatalogBrandToItem(b: ApiCatalogBrand): BrandStudioItem {
 
 export default function BrandsStudioList() {
   const { profile, activeBrandId, setActiveBrandId, allBrands, sellerBrands, requestNewBrand, brandsLoading } = useAuth();
-  const { verificationRequests, trustScores, trustAlerts, submitVerificationRequest } = useTrust();
+  const { verificationRequests, submitVerificationRequest } = useTrust();
 
   // Sub-tab selection state for Seller Dashboard context
   const [activeSubTab, setActiveSubTab] = useState<"storefronts" | "operational" | "verification">("storefronts");

@@ -43,6 +43,31 @@ function sellerModerationItems(sellerId: string) {
   );
 }
 
+/**
+ * Real, working verification status for a seller. moderationStore's own
+ * SellerVerification records (`getVerification`) are never populated in
+ * practice -- the only writer is moderationService.approve/reject on the
+ * "sellers" queue, which nothing in this codebase ever pushes items into.
+ * The actual, live verification workflow is the brand/creator verification
+ * system (server/operations/types.ts OpsVerificationRequest, exposed at
+ * /operations/verifications*, consumed by BrandVerification.tsx /
+ * BrandsStudioList.tsx) -- a seller's own verification request there
+ * (submitted_by === sellerId) is the real signal.
+ */
+function sellerVerificationStatus(sellerId: string): { status: VerificationStatus; createdAt?: string } {
+  const requests = operationsStore.listVerifications({ submittedBy: sellerId });
+  if (requests.length === 0) return { status: VERIFICATION_STATUSES.PENDING };
+  // Most recent request wins (listVerifications already sorts newest-first).
+  const latest = requests[0];
+  const mapped: VerificationStatus =
+    latest.status === 'Approved'
+      ? VERIFICATION_STATUSES.VERIFIED
+      : latest.status === 'Rejected'
+        ? VERIFICATION_STATUSES.REJECTED
+        : VERIFICATION_STATUSES.PENDING;
+  return { status: mapped, createdAt: latest.created_at };
+}
+
 function averageReviewRating(reviews: ReturnType<typeof operationsStore.listReviews>): number | null {
   if (reviews.length === 0) return null;
   const total = reviews.reduce((sum, review) => sum + review.rating, 0);
@@ -76,13 +101,12 @@ export function calculateSellerReputation(
   const reviews = sellerReviews(sellerId, sellerName);
   const reports = sellerReports(sellerId);
   const moderationItems = sellerModerationItems(sellerId);
-  const verification = moderationStore.getVerification(sellerId);
+  const verification = sellerVerificationStatus(sellerId);
 
   const reviewRating = averageReviewRating(reviews);
   const complaintCount = reports.filter((r) => r.status !== 'dismissed').length;
   const approvalRateValue = approvalRate(moderationItems);
-  const verificationStatus: VerificationStatus =
-    verification?.status ?? VERIFICATION_STATUSES.PENDING;
+  const verificationStatus: VerificationStatus = verification.status;
 
   // TODO: Wire seller response-time telemetry when messaging SLA metrics are available.
   const responseTimeHours: number | null = null;

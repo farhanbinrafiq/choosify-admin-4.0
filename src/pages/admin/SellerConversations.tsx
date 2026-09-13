@@ -10,7 +10,9 @@ import {
   Send,
   AlertCircle,
   ExternalLink,
+  Flag,
 } from 'lucide-react';
+import { ReportEntityModal } from '../../components/shared/ReportEntityModal';
 import {
   operationsApi,
   type OpsPlatformMessage,
@@ -97,6 +99,7 @@ export default function SellerConversations() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [reportTarget, setReportTarget] = useState<{ id: string; name: string } | null>(null);
 
   const [selectedBuyerId, setSelectedBuyerId] = useState<string | null>(null);
   const [messages, setMessages] = useState<OpsPlatformMessage[]>([]);
@@ -926,13 +929,25 @@ export default function SellerConversations() {
                 </div>
               ) : (
                 <>
-                  <div className="p-3 border-b border-app-border">
-                    <p className="font-bold text-sm text-app-text-primary">
-                      {selectedConversation?.buyerName}
-                    </p>
-                    <p className="text-[10px] text-slate-400">
-                      Order {selectedConversation?.lastOrderId}
-                    </p>
+                  <div className="p-3 border-b border-app-border flex items-center justify-between gap-2">
+                    <div>
+                      <p className="font-bold text-sm text-app-text-primary">
+                        {selectedConversation?.buyerName}
+                      </p>
+                      <p className="text-[10px] text-slate-400">
+                        Order {selectedConversation?.lastOrderId}
+                      </p>
+                    </div>
+                    {selectedBuyerId && (
+                      <button
+                        type="button"
+                        onClick={() => setReportTarget({ id: selectedBuyerId, name: selectedConversation?.buyerName || 'this customer' })}
+                        title="Report this customer"
+                        className="rounded-lg border border-app-border p-2 text-slate-400 hover:border-red-200 hover:text-red-500 shrink-0"
+                      >
+                        <Flag className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
                   <div className="flex-1 overflow-y-auto p-4 space-y-3">
                     {messagesLoading ? (
@@ -1170,6 +1185,17 @@ export default function SellerConversations() {
           void loadMessages(selectedConversation?.buyerId || '');
         }}
       />
+
+      {reportTarget && (
+        <ReportEntityModal
+          isOpen={Boolean(reportTarget)}
+          onClose={() => setReportTarget(null)}
+          targetType="consumer"
+          targetId={reportTarget.id}
+          targetName={reportTarget.name}
+          source={profile?.role === 'creator' ? 'creator_dashboard' : 'seller_dashboard'}
+        />
+      )}
     </div>
   );
 }

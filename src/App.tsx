@@ -10,7 +10,6 @@ import { CmsMirrorHost } from './cms-mirror/CmsMirrorHost';
 import { OrdersProvider } from './contexts/OrdersContext';
 import { ReturnsProvider } from './contexts/ReturnsContext';
 import { TrustProvider } from './contexts/TrustContext';
-import { DisputeProvider } from './contexts/DisputeContext';
 import { CouponsProvider } from './contexts/CouponsContext';
 import { ReviewModerationProvider } from './contexts/ReviewModeration';
 import { CashBookProvider } from './contexts/CashBookContext';
@@ -60,7 +59,7 @@ const Reviews = lazy(() => import('./pages/admin/Reviews'));
 const CommunitySubmissions = lazy(() => import('./pages/admin/CommunitySubmissions'));
 const Payouts = lazy(() => import('./pages/admin/Payouts'));
 const Analytics = lazy(() => import('./pages/admin/Analytics'));
-const Moderation = lazy(() => import('./pages/admin/Moderation'));
+const ModerationCenter = lazy(() => import('./pages/admin/ModerationCenter'));
 const MessagesInbox = lazy(() => import('./pages/admin/MessagesInbox'));
 const PartnerSupportInbox = lazy(() =>
   import('./components/messaging/PartnerSupportInbox').then((m) => ({ default: m.PartnerSupportInbox })),
@@ -97,10 +96,10 @@ const CourierAnalytics = lazy(() => import('./pages/admin/Logistics/CourierAnaly
 // Trust & Safety Core Modules
 const TrustCenter = lazy(() => import('./pages/admin/TrustCenter'));
 const DisputeCenter = lazy(() => import('./pages/admin/DisputeCenter'));
+const DisputeDetail = lazy(() => import('./pages/admin/DisputeDetail'));
 const Coupons = lazy(() => import('./pages/admin/Coupons'));
 const BrandVerification = lazy(() => import('./pages/admin/BrandVerification'));
 const CreatorEarnings = lazy(() => import('./pages/admin/CreatorEarnings'));
-const ModerationV2 = lazy(() => import('./pages/admin/ModerationV2'));
 
 const BrandEditStudio = lazy(() => import('./pages/admin/BrandEditStudio'));
 const ProductEditStudio = lazy(() => import('./pages/admin/ProductEditStudio'));
@@ -610,7 +609,6 @@ export default function App() {
               <TrustProvider>
               <CreatorProvider>
               <ReviewModerationProvider>
-              <DisputeProvider>
               <ErrorBoundary>
               <Routes>
             <Route path="/login" element={<LoginRoute />} />
@@ -1529,15 +1527,12 @@ export default function App() {
             />
 
             {/*
-              Sprint 11 remediation, tier 3: these screens have no real backend
-              behind their core actions at all (confirmed by direct investigation,
-              not assumed) -- building one would be new feature work, out of this
-              sprint's scope. Rather than leave them silently rendering the
-              CmsMirrorHost mock (seeded data, buttons with no effect), each is
-              routed to an explicit "not yet available" state, with a pointer to
-              the real screen that covers the closest real capability where one
-              exists. Rollback: remove these nine routes; each path falls back
-              to CmsMirrorHost.
+              Trust & Safety module cleanup: Moderation Center now wired to
+              the real server/moderation/* backend (queue + reports +
+              actions) that was previously built and mounted but never
+              called by any frontend. Reviews stay in the dedicated Review
+              Console -- a flagged review here deep-links there rather than
+              duplicating its moderation actions.
             */}
             <Route
               path="/admin/moderation"
@@ -1545,30 +1540,49 @@ export default function App() {
                 <ProtectedRoute>
                   <RoleGuard>
                     <AdminWorkspaceLayout>
-                      <AdminFeatureNotAvailable
-                        title="Moderation Center"
-                        description="General content-flagging and moderation-queue tooling is not yet built. Partner application review and review moderation are both real and live today."
-                        alternatives={[
-                          { label: 'Review Partner Applications', to: '/admin/feature-access' },
-                          { label: 'Moderate Reviews', to: '/admin/reviews' },
-                        ]}
-                      />
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <ModerationCenter />
+                      </Suspense>
                     </AdminWorkspaceLayout>
                   </RoleGuard>
                 </ProtectedRoute>
               }
             />
+
+            {/*
+              Sprint 11 remediation, tier 3: these screens have no real backend
+              behind their core actions at all (confirmed by direct investigation,
+              not assumed) -- building one would be new feature work, out of this
+              sprint's scope. Rather than leave them silently rendering the
+              CmsMirrorHost mock (seeded data, buttons with no effect), each is
+              routed to an explicit "not yet available" state, with a pointer to
+              the real screen that covers the closest real capability where one
+              exists. Rollback: remove these routes; each path falls back
+              to CmsMirrorHost.
+            */}
             <Route
               path="/admin/disputes"
               element={
                 <ProtectedRoute>
                   <RoleGuard>
                     <AdminWorkspaceLayout>
-                      <AdminFeatureNotAvailable
-                        title="Disputes"
-                        description="A dedicated dispute case-management system (evidence, resolution workflow) is not yet built. Returns can be flagged as disputed today from the Returns & Refunds screen."
-                        alternatives={[{ label: 'Go to Returns & Refunds', to: '/admin/returns' }]}
-                      />
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <DisputeCenter />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/disputes/:id"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <DisputeDetail />
+                      </Suspense>
                     </AdminWorkspaceLayout>
                   </RoleGuard>
                 </ProtectedRoute>
@@ -1580,14 +1594,9 @@ export default function App() {
                 <ProtectedRoute>
                   <RoleGuard>
                     <AdminWorkspaceLayout>
-                      <AdminFeatureNotAvailable
-                        title="Trust & Analytics"
-                        description="Automated fraud detection and trust scoring are not yet live. Brand/Creator verification review and review moderation are both real, currently-enforced actions."
-                        alternatives={[
-                          { label: 'Go to Verification Center', to: '/admin/brand-verification' },
-                          { label: 'Moderate Reviews', to: '/admin/reviews' },
-                        ]}
-                      />
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <TrustCenter />
+                      </Suspense>
                     </AdminWorkspaceLayout>
                   </RoleGuard>
                 </ProtectedRoute>
@@ -1826,7 +1835,6 @@ export default function App() {
             />
           </Routes>
               </ErrorBoundary>
-          </DisputeProvider>
               </ReviewModerationProvider>
               </CreatorProvider>
               </TrustProvider>

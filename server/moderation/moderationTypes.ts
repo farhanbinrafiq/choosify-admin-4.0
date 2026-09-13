@@ -2,6 +2,9 @@ export const MODERATION_QUEUES = {
   PRODUCTS: 'products',
   BRANDS: 'brands',
   SELLERS: 'sellers',
+  CREATORS: 'creators',
+  GUIDES: 'guides',
+  CAMPAIGNS: 'campaigns',
   REVIEWS: 'reviews',
   REPORTS: 'reports',
   MEDIA: 'media',
@@ -26,6 +29,7 @@ export const MODERATION_DECISIONS = {
   REQUEST_CHANGES: 'request_changes',
   ESCALATE: 'escalate',
   DISMISS: 'dismiss',
+  REVOKE: 'revoke',
 } as const;
 
 export type ModerationDecision = (typeof MODERATION_DECISIONS)[keyof typeof MODERATION_DECISIONS];
@@ -88,6 +92,28 @@ export const FRAUD_SIGNAL_TYPES = {
 
 export type FraudSignalType = (typeof FRAUD_SIGNAL_TYPES)[keyof typeof FRAUD_SIGNAL_TYPES];
 
+/**
+ * One immutable entry in a ModerationItem's decision history. Actions are
+ * appended, never edited or removed -- this is the auditable trail behind
+ * "revoke" (which reverses a decision without erasing that it happened).
+ */
+export type ModerationHistoryEntry = {
+  id: string;
+  action: 'approve' | 'reject' | 'request_changes' | 'revoke' | 'assign';
+  actorId?: string;
+  actorName?: string;
+  previousStatus: ModerationStatus;
+  newStatus: ModerationStatus;
+  reason?: ModerationReason;
+  notes?: string;
+  /** For an 'assign' entry: who it was assigned to (may differ from actor). */
+  assignedToId?: string;
+  assignedToName?: string;
+  /** For a 'revoke' entry: which prior history entry it reverses. */
+  revokesEntryId?: string;
+  timestamp: string;
+};
+
 export type ModerationItem = {
   id: string;
   queue: ModerationQueueType;
@@ -100,12 +126,23 @@ export type ModerationItem = {
   assignedModeratorName?: string;
   reason?: ModerationReason;
   notes?: string;
+  history: ModerationHistoryEntry[];
   metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
   decidedAt?: string;
   decidedBy?: string;
 };
+
+export const REPORT_SOURCES = {
+  STOREFRONT: 'storefront',
+  SELLER_DASHBOARD: 'seller_dashboard',
+  CREATOR_DASHBOARD: 'creator_dashboard',
+  CONSUMER_ACCOUNT: 'consumer_account',
+  ADMIN: 'admin',
+} as const;
+
+export type ReportSource = (typeof REPORT_SOURCES)[keyof typeof REPORT_SOURCES];
 
 export type ReportItem = {
   id: string;
@@ -114,12 +151,29 @@ export type ReportItem = {
   resourceType: string;
   resourceId: string;
   resourceLabel?: string;
+  /** The seller/creator/account that owns the reported entity, when known --
+   *  distinct from resourceId itself (e.g. reporting a product records both
+   *  the product id AND the seller who owns it). Never fabricated: left
+   *  undefined when ownership can't be resolved server-side. */
+  resourceOwnerId?: string;
   reporterId?: string;
   reporterRole?: string;
+  /** Where the report was filed from -- storefront, a seller/creator's own
+   *  dashboard, a consumer's account, or created directly by an admin. */
+  source?: ReportSource;
   description?: string;
   assignedModeratorId?: string;
+  assignedModeratorName?: string;
+  /** Staff-only investigation note -- never shown to the reporter or the
+   *  reported party. Distinct from `description` (reporter's own words) and
+   *  `resolutionNote` (explanation of how it was closed out). */
+  internalNotes?: string;
+  /** If this report led to (or already concerns) a real moderation queue
+   *  item, link to it instead of duplicating moderation state here. */
+  linkedModerationItemId?: string;
   resolution?: ModerationDecision;
   resolutionReason?: ModerationReason;
+  resolutionNote?: string;
   metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
