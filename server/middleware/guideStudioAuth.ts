@@ -7,12 +7,12 @@ import { ROLES } from '../permissions/roles';
 import { sellerOwnsBrand } from '../catalog/brandOwnership';
 import type { CatalogGuide } from '../../lib/vercel-catalog/catalogEditorialTypes';
 
-function isCreatorRole(role: string | undefined): boolean {
+export function isCreatorRole(role: string | undefined): boolean {
   if (!role) return false;
   return hasRole(role as (typeof ROLES)[keyof typeof ROLES], ROLES.CREATOR);
 }
 
-function isSellerRole(role: string | undefined): boolean {
+export function isSellerRole(role: string | undefined): boolean {
   if (!role) return false;
   const r = role as (typeof ROLES)[keyof typeof ROLES];
   return hasRole(r, ROLES.SELLER) || hasRole(r, ROLES.VERIFIED_SELLER);

@@ -45,6 +45,17 @@ import {
 
 const refKey = (r?: GuideEntityRef): string => (r ? `${r.entityType}:${r.entityId}` : '');
 
+/**
+ * Publisher UI is display-only role gating -- mirrors (but never replaces)
+ * the server-authoritative check in `persistGuideStudioWrite` /
+ * `isSellerRole` (server/middleware/guideStudioAuth.ts). A seller/creator
+ * seeing the wrong branch here is a display bug; the server independently
+ * re-derives and enforces the real publisher identity on every save.
+ */
+const isSellerRoleClient = (role: string | undefined): boolean =>
+  role === 'seller' || role === 'verified_seller';
+const isCreatorRoleClient = (role: string | undefined): boolean => role === 'creator';
+
 const label = 'block text-[10px] font-extrabold uppercase tracking-wider text-[#6B7280] mb-1';
 const input =
   'w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12.5px] text-[#1A1A2E] outline-none focus:border-[#EF3C23]';
@@ -1257,9 +1268,12 @@ export default function GuideEditStudio() {
 
       if (isNew) {
         setModel(createBlankGuideStudioModel());
-        // Publisher options for the create flow.
-        if (profile?.role === 'seller') {
-          const mine = brs.filter((b) => (b as { sellerId?: string }).sellerId === profile.id);
+        // Publisher options for the create flow -- a seller only ever sees
+        // (read-only) their own brand(s); the server independently forces
+        // this same scoping on save, so this is display-only, never trusted
+        // as the authorization boundary (see persistGuideStudioWrite).
+        if (isSellerRoleClient(profile?.role)) {
+          const mine = brs.filter((b) => (b as { sellerId?: string }).sellerId === profile?.id);
           setOwnedBrands(mine);
         }
         setLoading(false);
@@ -2113,11 +2127,38 @@ export default function GuideEditStudio() {
         <div className="max-w-[1180px] mx-auto px-5 sm:px-8 pt-4">
           <div className="rounded-xl border border-[#E8EDF2] bg-white p-4">
             <div className={label}>Publisher</div>
-            {profile?.role === 'creator' ? (
-              <p className="text-[12px] text-[#4B5563] m-0">
-                Publishing as <b>you</b> — this guide is authored by your Creator profile.
-              </p>
-            ) : ownedBrands.length ? (
+            {isCreatorRoleClient(profile?.role) ? (
+              // Creator: no selector -- automatically their own creator identity.
+              // The server independently stamps creatorId from the session;
+              // this text can never be used to change that.
+              <div className="rounded-lg bg-[#F8FAFC] border border-[#E8EDF2] px-3 py-2.5">
+                <p className="text-[13px] font-bold text-[#1A1A2E] m-0">
+                  {profile?.displayName || 'Your creator profile'}
+                </p>
+                <p className="text-[11px] text-[#6B7280] mt-1 mb-0">
+                  Your guides are published under your creator profile.
+                </p>
+              </div>
+            ) : isSellerRoleClient(profile?.role) ? (
+              // Seller: no selector -- automatically their own owned brand.
+              // The server independently forces publisherType=brand +
+              // an owned publisherBrandId on save (persistGuideStudioWrite);
+              // this display can never widen what a seller is allowed to send.
+              ownedBrands.length ? (
+                <div className="rounded-lg bg-[#F8FAFC] border border-[#E8EDF2] px-3 py-2.5">
+                  <p className="text-[13px] font-bold text-[#1A1A2E] m-0">{ownedBrands[0].name}</p>
+                  <p className="text-[11px] text-[#6B7280] mt-1 mb-0">
+                    Your guides are published under your seller brand.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-[12px] text-[#DC2626] font-semibold m-0">
+                  No brand workspace is linked to your seller account yet — contact support before creating a guide.
+                </p>
+              )
+            ) : (
+              // Staff (moderator / admin / super_admin / marketing_manager) --
+              // the only role allowed to explicitly choose the publisher.
               <>
                 <select
                   className={input}
@@ -2125,20 +2166,17 @@ export default function GuideEditStudio() {
                   onChange={(e) => setNewPublisherBrandId(e.target.value)}
                 >
                   <option value="">Choosify Editorial (creator / staff)</option>
-                  {ownedBrands.map((b) => (
+                  {brands.map((b) => (
                     <option key={b.id} value={b.id}>
                       Brand: {b.name}
                     </option>
                   ))}
                 </select>
                 <div className={hint}>
-                  A brand publisher shows "About the Brand" and no author card. Only brands you own are listed.
+                  A brand publisher shows "About the Brand" and no author card. Super Admin / staff may publish as
+                  any brand.
                 </div>
               </>
-            ) : (
-              <p className="text-[12px] text-[#4B5563] m-0">
-                Publishing as <b>Choosify Editorial</b>. Author identity is resolved from your account.
-              </p>
             )}
             <p className="text-[11px] text-[#9AA0AC] mt-2 mb-0">
               Fill in the Identity section below and Save to create the draft.

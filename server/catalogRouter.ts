@@ -42,6 +42,8 @@ import {
   primaryCreatorIdForUser,
   userOwnsGuide,
   userOwnsGuidePublisherBrand,
+  isSellerRole,
+  isCreatorRole,
 } from './middleware/guideStudioAuth';
 import { hasPermission, hasRole } from './permissions/authorization';
 import { PERMISSIONS } from './permissions/permissions';
@@ -59,7 +61,7 @@ import {
   listMyCustomersForOwner,
   listOwnedProducts,
 } from './catalog/sellerWorkspace';
-import { sellerOwnsBrand } from './catalog/brandOwnership';
+import { sellerOwnsBrand, listSellerOwnedBrandIds } from './catalog/brandOwnership';
 import { createReport } from './moderation/moderationService';
 import { REPORT_CATEGORIES } from './moderation/moderationTypes';
 import {
@@ -2556,18 +2558,42 @@ async function persistGuideStudioWrite(
   if (idParam) body.id = idParam;
 
   const isStaff = userIsGuideStaff(req);
+  // Only Super Admin / CMS staff may ever choose the publisher explicitly.
+  // A seller (even one who also somehow reaches this handler with a crafted
+  // publisherType=creator/staff body) is ALWAYS forced onto their own owned
+  // brand -- never the client's word for it. Same canonical ownership source
+  // as Brand Studio (`sellerOwnsBrand` / `listSellerOwnedBrandIds`), no
+  // second ownership mechanism.
+  const sellerWriter = !isStaff && isSellerRole(req.userRole);
 
   // ── Publisher identity (server-authoritative) ─────────────────────────────
   // Intended publisher: explicit body value, else the existing record's.
   const bodyPublisherType = typeof body.publisherType === 'string' ? body.publisherType : '';
   const bodyPublisherBrandId =
     typeof body.publisherBrandId === 'string' ? body.publisherBrandId.trim() : '';
-  const intendedPublisherType: 'creator' | 'brand' =
-    bodyPublisherType === 'brand' || bodyPublisherType === 'creator'
-      ? bodyPublisherType
-      : existing?.publisherType ?? 'creator';
-  const intendedPublisherBrandId =
-    bodyPublisherBrandId || existing?.publisherBrandId || '';
+
+  let intendedPublisherType: 'creator' | 'brand';
+  let intendedPublisherBrandId: string;
+
+  if (sellerWriter) {
+    // A seller can never end up "creator/staff"-published, no matter what
+    // the request body claims -- their guide is always attributed to a
+    // brand they actually own.
+    intendedPublisherType = 'brand';
+    const ownedBrandIds = await listSellerOwnedBrandIds(req.userId as string);
+    if (!ownedBrandIds.length) {
+      res.status(403).json({ error: 'No owned brand workspace for this account' });
+      return;
+    }
+    const requested = bodyPublisherBrandId || existing?.publisherBrandId || '';
+    intendedPublisherBrandId = ownedBrandIds.includes(requested) ? requested : ownedBrandIds[0];
+  } else {
+    intendedPublisherType =
+      bodyPublisherType === 'brand' || bodyPublisherType === 'creator'
+        ? bodyPublisherType
+        : existing?.publisherType ?? 'creator';
+    intendedPublisherBrandId = bodyPublisherBrandId || existing?.publisherBrandId || '';
+  }
 
   if (intendedPublisherType === 'brand') {
     if (!intendedPublisherBrandId) {
@@ -2580,6 +2606,8 @@ async function persistGuideStudioWrite(
       return;
     }
     // A non-staff writer must own/administer that brand. Never trust the client.
+    // (Redundant with the seller branch above, kept as defense-in-depth for
+    // any other non-staff path that reaches here with publisherType=brand.)
     if (!isStaff && !(await sellerOwnsBrand(req.userId as string, intendedPublisherBrandId))) {
       res.status(403).json({ error: 'Not authorized to publish as this brand' });
       return;

@@ -32,6 +32,29 @@ export async function sellerOwnsBrand(
   return approvedClaims.length > 0;
 }
 
+/**
+ * All brand ids this seller owns -- the same two canonical sources
+ * `sellerOwnsBrand` checks (direct `CatalogBrand.sellerId` assignment, or an
+ * approved brand-verification claim), just returning every match instead of
+ * checking one specific id. Used wherever a seller must be scoped to "any
+ * brand I own" (e.g. Guide Studio publisher resolution) without duplicating
+ * the ownership rule.
+ */
+export async function listSellerOwnedBrandIds(sellerUserId: string): Promise<string[]> {
+  if (!sellerUserId) return [];
+  const brands = await catalogStore.listBrands();
+  const directIds = brands
+    .filter((b) => b.sellerId === sellerUserId)
+    .map((b) => b.id);
+  const approvedClaims = operationsStore.listVerifications({
+    submittedBy: sellerUserId,
+    entityType: 'brand',
+    status: 'approved',
+  });
+  const claimedIds = approvedClaims.map((c) => c.entityId).filter((id): id is string => !!id);
+  return Array.from(new Set([...directIds, ...claimedIds]));
+}
+
 /** Stamp seller ownership on a brand (e.g. after verification approve). */
 export async function linkBrandSellerOwnership(
   brand: CatalogBrand,
