@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useState, CSSProperties } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { resolveCreatorThumbnail } from '../../lib/productVideo';
+import { CreatorReviewThumbnailPreview } from '../../components/admin/product-studio/CreatorReviewThumbnailPreview';
 import { uploadCreatorImage, uploadProductImages } from '../../services/mediaUpload';
 import {
   checkCategorySchemaCompatibility,
@@ -2083,11 +2084,7 @@ function CreatorThumbField({
             justifyContent: 'center',
           }}
         >
-          {resolved ? (
-            <img src={resolved} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} referrerPolicy="no-referrer" />
-          ) : (
-            <span style={{ fontSize: 9.5, color: '#9CA3AF', textAlign: 'center', padding: 4 }}>No thumbnail</span>
-          )}
+          <CreatorReviewThumbnailPreview videoUrl={video.videoUrl} thumbnail={explicit} />
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, flex: 1 }}>
           <input
@@ -2118,7 +2115,8 @@ function CreatorThumbField({
           ) : null}
           {!resolved ? (
             <div style={{ ...x.note, fontSize: 10 }}>
-              No image, and this platform has no automatic thumbnail — the storefront card shows a play icon.
+              No image yet — a provider thumbnail is used automatically where one is available (YouTube, TikTok),
+              otherwise the storefront shows a clearly labeled placeholder, never a fabricated photo.
             </div>
           ) : null}
           {err ? <div style={{ fontSize: 10, color: '#DC2626', fontWeight: 700 }}>{err}</div> : null}
