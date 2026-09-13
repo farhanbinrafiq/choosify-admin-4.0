@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
@@ -235,7 +235,13 @@ export default function SellerConversations() {
     void refreshBookingRequests();
   }, [refreshBookingRequests]);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Each thread scrolls its own viewport directly (no sentinel "end" div) so
+  // positioning can be read/set synchronously without relying on
+  // scrollIntoView's animated, interruptible behavior.
+  const buyerThreadRef = useRef<HTMLDivElement>(null);
+  const buyerNearBottomRef = useRef(true);
+  const supportThreadRef = useRef<HTMLDivElement>(null);
+  const supportNearBottomRef = useRef(true);
 
   const loadConversations = useCallback(async () => {
     setLoading(true);
@@ -328,17 +334,27 @@ export default function SellerConversations() {
     void loadConversations();
   }, [loadConversations]);
 
-  const loadMessages = useCallback(async (buyerId: string) => {
-    setMessagesLoading(true);
-    setSendError(null);
+  // `silent` distinguishes a genuine cold open (show the spinner) from a
+  // background realtime/poll refresh (must never blank the thread the user
+  // is currently reading — that collapse-then-rebuild cycle, repeating every
+  // few seconds, was the actual cause of the visible scroll loop).
+  const loadMessages = useCallback(async (buyerId: string, opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true;
+    if (!silent) {
+      setMessagesLoading(true);
+      setSendError(null);
+    }
     try {
       const { data } = await operationsApi.listPlatformMessages(buyerId);
       setMessages(data);
     } catch (err) {
-      setMessages([]);
-      setSendError(err instanceof Error ? err.message : 'Failed to load messages');
+      if (!silent) {
+        setMessages([]);
+        setSendError(err instanceof Error ? err.message : 'Failed to load messages');
+      }
+      // Silent background refreshes keep whatever is already on screen.
     } finally {
-      setMessagesLoading(false);
+      if (!silent) setMessagesLoading(false);
     }
   }, []);
 
@@ -352,7 +368,7 @@ export default function SellerConversations() {
     const q = query(collection(db, 'omni_messages'), where('conversationId', '==', conversationId));
     const unsub = onSnapshot(
       q,
-      () => void loadMessages(selectedBuyerId),
+      () => void loadMessages(selectedBuyerId, { silent: true }),
       (err) => {
         console.warn('[SellerConversations] Live buyer-message listener failed; staying on manual refresh.', err);
       },
@@ -365,7 +381,7 @@ export default function SellerConversations() {
   // mirror isn't genuinely live.
   useMessagingPoll(
     selectedBuyerId,
-    () => selectedBuyerId && void loadMessages(selectedBuyerId),
+    () => selectedBuyerId && void loadMessages(selectedBuyerId, { silent: true }),
     4000,
   );
   useMessagingPoll('seller-conversations-list', () => void loadConversations(), 20000);
@@ -386,9 +402,61 @@ export default function SellerConversations() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deepLinkBuyerId]);
 
+  // Buyer thread scroll lifecycle: (1) jump to the bottom once, synchronously,
+  // whenever a different buyer is opened; (2) track how close to the bottom
+  // the user currently is; (3) on any later message-array update (a reply
+  // sent, a realtime/poll refresh landing), only follow to the bottom if the
+  // user was already there — never yank someone reading history back down.
+  useLayoutEffect(() => {
+    const el = buyerThreadRef.current;
+    if (!el || !selectedBuyerId) return;
+    el.scrollTop = el.scrollHeight;
+    buyerNearBottomRef.current = true;
+  }, [selectedBuyerId]);
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = buyerThreadRef.current;
+    if (!el) return;
+    const NEAR_BOTTOM_PX = 120;
+    const handleScroll = () => {
+      buyerNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR_BOTTOM_PX;
+    };
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, [selectedBuyerId]);
+
+  useEffect(() => {
+    const el = buyerThreadRef.current;
+    if (!el || !buyerNearBottomRef.current) return;
+    el.scrollTop = el.scrollHeight;
   }, [messages]);
+
+  // Same lifecycle for the Choosify Support thread, keyed on which
+  // conversation is actually open (a buyer thread and Support are mutually
+  // exclusive panels, but each keeps its own independent scroll state).
+  useLayoutEffect(() => {
+    const el = supportThreadRef.current;
+    if (!el || !supportSelected) return;
+    el.scrollTop = el.scrollHeight;
+    supportNearBottomRef.current = true;
+  }, [supportSelected, supportConv?.id]);
+
+  useEffect(() => {
+    const el = supportThreadRef.current;
+    if (!el) return;
+    const NEAR_BOTTOM_PX = 120;
+    const handleScroll = () => {
+      supportNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR_BOTTOM_PX;
+    };
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, [supportSelected, supportConv?.id]);
+
+  useEffect(() => {
+    const el = supportThreadRef.current;
+    if (!el || !supportNearBottomRef.current) return;
+    el.scrollTop = el.scrollHeight;
+  }, [supportMessages]);
 
   const selectedConversation = useMemo(
     () => conversations.find((c) => c.buyerId === selectedBuyerId) || null,
@@ -572,6 +640,20 @@ export default function SellerConversations() {
     const mine = m.direction === 'outbound';
     const when = formatElapsed(m.timestamp);
 
+    // Platform-generated events (e.g. "Order ORD-13659 placed") are written
+    // with senderId:'system' (see server/operations/platformMessagingBridge.ts)
+    // — neither the buyer nor the seller said this, so it must never inherit
+    // the mine/not-mine buyer-vs-seller bubble treatment based on `direction`.
+    if (m.senderId === 'system') {
+      return (
+        <div key={m.id} className="flex justify-center my-1">
+          <span className="text-[10.5px] font-semibold text-slate-500 bg-slate-100 border border-app-border rounded-full px-3 py-1 text-center">
+            {displayBody(m.content?.body || '')}
+          </span>
+        </div>
+      );
+    }
+
     if (m.bookingOffer && (m.bookingOffer.requestId || m.bookingOffer.listingTitle)) {
       const snap = m.bookingOffer;
       const live = snap.requestId ? bookingByRequestId[snap.requestId] : undefined;
@@ -668,14 +750,14 @@ export default function SellerConversations() {
     return (
       <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
         <div
-          className={`max-w-[75%] rounded-2xl px-3.5 py-2 text-xs leading-relaxed ${
+          className={`w-fit max-w-[75%] rounded-2xl px-3.5 py-2 text-xs font-bold leading-relaxed ${
             mine
-              ? 'bg-app-accent text-white rounded-br-sm'
-              : 'bg-app-card border border-app-border text-app-text-primary rounded-bl-sm'
+              ? 'bg-orange-600 bg-gradient-to-br from-[#EF3C23] to-[#FF5B00] text-white rounded-br-sm'
+              : 'bg-navy bg-gradient-to-br from-[#18154C] to-[#3D1D6B] text-white rounded-bl-sm'
           }`}
         >
-          <p className="whitespace-pre-wrap break-words">{displayBody(m.content?.body || '')}</p>
-          <p className={`text-[9px] mt-1 ${mine ? 'text-white/70' : 'text-slate-400'}`}>{when}</p>
+          <p className="whitespace-pre-wrap break-words !text-[#FFFFFF]">{displayBody(m.content?.body || '')}</p>
+          <p className="text-[9px] mt-1 text-white/70">{when}</p>
         </div>
       </div>
     );
@@ -853,7 +935,7 @@ export default function SellerConversations() {
                       <span className="text-[10px] text-slate-400">· {supportConv.status}</span>
                     ) : null}
                   </div>
-                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  <div ref={supportThreadRef} className="flex-1 overflow-y-auto p-4 space-y-3">
                     {!supportConv ? (
                       <p className="text-xs text-slate-400 text-center py-10">
                         {supportBusy ? 'Opening…' : 'Start a conversation with the Choosify team.'}
@@ -864,31 +946,38 @@ export default function SellerConversations() {
                       </p>
                     ) : (
                       supportMessages.map((m) => (
-                        <div
-                          key={m.id}
-                          className={`flex ${m.senderId === profile?.id ? 'justify-end' : 'justify-start'}`}
-                        >
-                          <div
-                            className={`max-w-[75%] rounded-2xl px-3.5 py-2 text-xs leading-relaxed ${
-                              m.senderId === profile?.id
-                                ? 'bg-app-accent text-white rounded-br-sm'
-                                : 'bg-app-card border border-app-border text-app-text-primary rounded-bl-sm'
-                            }`}
-                          >
-                            {m.senderRole === 'admin' ? (
-                              <p className="text-[9px] font-bold uppercase tracking-wide opacity-70 m-0 mb-0.5">
-                                Choosify Support
-                              </p>
-                            ) : null}
-                            <p className="whitespace-pre-wrap break-words m-0">{m.body}</p>
-                            <p className={`text-[9px] mt-1 ${m.senderId === profile?.id ? 'text-white/70' : 'text-slate-400'}`}>
-                              {formatElapsed(m.createdAt)}
-                            </p>
+                        m.senderRole === 'system' || m.messageType === 'system' ? (
+                          <div key={m.id} className="flex justify-center my-1">
+                            <span className="text-[10.5px] font-semibold text-slate-500 bg-slate-100 border border-app-border rounded-full px-3 py-1 text-center">
+                              {m.body}
+                            </span>
                           </div>
-                        </div>
+                        ) : (
+                          <div
+                            key={m.id}
+                            className={`flex ${m.senderId === profile?.id ? 'justify-end' : 'justify-start'}`}
+                          >
+                            <div
+                              className={`w-fit max-w-[75%] rounded-2xl px-3.5 py-2 text-xs font-bold leading-relaxed ${
+                                m.senderId === profile?.id
+                                  ? 'bg-orange-600 bg-gradient-to-br from-[#EF3C23] to-[#FF5B00] text-white rounded-br-sm'
+                                  : 'bg-navy bg-gradient-to-br from-[#18154C] to-[#3D1D6B] text-white rounded-bl-sm'
+                              }`}
+                            >
+                              {m.senderRole === 'admin' ? (
+                                <p className="text-[9px] font-bold uppercase tracking-wide text-white/70 m-0 mb-0.5">
+                                  Choosify Support
+                                </p>
+                              ) : null}
+                              <p className="whitespace-pre-wrap break-words m-0 !text-[#FFFFFF]">{m.body}</p>
+                              <p className="text-[9px] mt-1 text-white/70">
+                                {formatElapsed(m.createdAt)}
+                              </p>
+                            </div>
+                          </div>
+                        )
                       ))
                     )}
-                    <div ref={messagesEndRef} />
                   </div>
                   {sendError && (
                     <div className="px-4 pb-1 text-[11px] font-semibold text-red-500">{sendError}</div>
@@ -949,7 +1038,7 @@ export default function SellerConversations() {
                       </button>
                     )}
                   </div>
-                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  <div ref={buyerThreadRef} className="flex-1 overflow-y-auto p-4 space-y-3">
                     {messagesLoading ? (
                       <div className="flex items-center justify-center py-10 text-slate-400">
                         <Loader2 className="w-5 h-5 animate-spin" />
@@ -961,7 +1050,6 @@ export default function SellerConversations() {
                     ) : (
                       messages.map((m) => renderMessage(m))
                     )}
-                    <div ref={messagesEndRef} />
                   </div>
                   {sendError && (
                     <div className="px-4 pb-1 text-[11px] font-semibold text-red-500">{sendError}</div>

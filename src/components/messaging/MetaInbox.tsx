@@ -329,7 +329,7 @@ export function MetaInbox({ currentUserId }: { currentUserId?: string }) {
       {threadLoading ? (
         <CenterState loading />
       ) : (
-        <MessageScroller>
+        <MessageScroller resetKey={selectedId}>
           {messages.map((m) => (
             <MessageBubble
               key={m.id}

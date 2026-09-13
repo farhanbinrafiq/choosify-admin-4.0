@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Loader2, Send, Paperclip, MessageCircleMore, Search, X } from 'lucide-react';
 
 /**
@@ -580,14 +580,14 @@ export function MessageBubble({
           </div>
         ) : (
           <div
-            className={`rounded-2xl px-3.5 py-2 text-[12px] leading-relaxed whitespace-pre-wrap break-words ${
+            className={`w-fit max-w-full rounded-2xl px-3.5 py-2 text-[12px] font-bold leading-relaxed whitespace-pre-wrap break-words ${
               mine
-                ? 'bg-app-accent text-white rounded-br-sm'
-                : 'bg-app-bg border border-app-border text-app-text-primary rounded-bl-sm'
+                ? 'bg-orange-600 bg-gradient-to-br from-[#EF3C23] to-[#FF5B00] text-white rounded-br-sm'
+                : 'bg-navy bg-gradient-to-br from-[#18154C] to-[#3D1D6B] text-white rounded-bl-sm'
             }`}
           >
             {body}
-            <div className={`text-[9px] mt-1 ${mine ? 'text-white/70' : 'text-app-text-secondary'}`}>
+            <div className="text-[9px] mt-1 text-white/70">
               {when}
             </div>
           </div>
@@ -597,15 +597,56 @@ export function MessageBubble({
   );
 }
 
-export function MessageScroller({ children }: { children: React.ReactNode }) {
-  const endRef = useRef<HTMLDivElement>(null);
+export function MessageScroller({
+  children,
+  resetKey,
+}: {
+  children: React.ReactNode;
+  /** Identity of the open thread/conversation (e.g. its id). Changing it
+   * jumps the viewport to the bottom immediately, before paint — the correct
+   * "just opened this conversation" position. Omit it if the scroller never
+   * switches between distinct threads. */
+  resetKey?: string | number | null;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isNearBottomRef = useRef(true);
+
+  // Thread switched (or first opened): position at its bottom synchronously,
+  // before the browser paints, so there's no visible jump.
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    isNearBottomRef.current = true;
+  }, [resetKey]);
+
+  // Track how close to the bottom the user currently is, so later updates
+  // know whether to follow or leave them alone.
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = containerRef.current;
+    if (!el) return;
+    const NEAR_BOTTOM_PX = 120;
+    const handleScroll = () => {
+      isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR_BOTTOM_PX;
+    };
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, [resetKey]);
+
+  // Runs after every render intentionally: it's a plain, non-animated
+  // scrollTop assignment, so it is a no-op once already at the bottom and
+  // never fights the user — it only ever moves the viewport when new content
+  // actually grew scrollHeight while the user was already reading the latest
+  // messages. A user who has scrolled up is left completely alone.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !isNearBottomRef.current) return;
+    el.scrollTop = el.scrollHeight;
   });
+
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-2.5 min-h-0">
+    <div ref={containerRef} className="flex-1 overflow-y-auto p-4 space-y-2.5 min-h-0">
       {children}
-      <div ref={endRef} />
     </div>
   );
 }

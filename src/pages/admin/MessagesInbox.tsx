@@ -469,7 +469,7 @@ export default function MessagesInbox() {
           )}
         </button>
       </div>
-      <MessageScroller>
+      <MessageScroller resetKey={selected.conversation.id}>
         {msgLoading ? (
           <CenterState loading />
         ) : messages.length === 0 ? (

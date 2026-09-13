@@ -182,7 +182,7 @@ export function PartnerSupportInbox({
           <span className="text-[10px] text-app-text-secondary">· {conversation.status}</span>
         ) : null}
       </div>
-      <MessageScroller>
+      <MessageScroller resetKey={conversation.id}>
         {messages.length === 0 ? (
           <p className="text-[12px] text-app-text-secondary text-center py-8 m-0">
             No messages yet. Say hello — the Choosify team will reply here.
