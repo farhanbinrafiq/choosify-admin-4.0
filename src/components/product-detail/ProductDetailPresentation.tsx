@@ -251,7 +251,7 @@ export function ProductDetailPresentation({
     `${extra} ${previewOnly ? 'opacity-60 cursor-default' : ''}`;
 
   return (
-    <div className="bg-[#F0F8FF] text-[#1A1A2E] overflow-hidden">
+    <div className="bg-[#F0F8FF] text-[#1A1A2E]">
       {/* -- Gallery hero (media carousel) -- */}
       <div className="w-full choosify-dark-surface">
         <div className="max-w-[1280px] mx-auto px-5 sm:px-8 lg:px-10 py-6">
@@ -433,7 +433,7 @@ export function ProductDetailPresentation({
         </div>
 
         {/* -- Underline section nav (parity) -- */}
-        <div className="sticky top-[64px] z-[15] mb-6 bg-[#F0F8FF]">
+        <div className="sticky top-[var(--cms-topbar-height,64px)] z-[8] mb-6 bg-[#F0F8FF]">
           <div className="w-full flex border border-[#E8EDF2] rounded-none bg-white overflow-x-auto">
             {SECTION_NAV.map((item) => (
               <button key={item.id} type="button" onClick={() => scrollTo(item.id)}

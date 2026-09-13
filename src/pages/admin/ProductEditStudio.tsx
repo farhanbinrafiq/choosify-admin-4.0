@@ -1179,7 +1179,7 @@ export default function ProductEditStudio() {
           engagement metrics, Creator/Public Reviews, Brand card and the trust
           panel are preview-only. Buyer actions (Add to Cart / Wishlist / Compare
           / Message / qty) render for parity but are disabled. -- */}
-      <div style={{ border: '1px solid #E8EDF2', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+      <div style={{ border: '1px solid #E8EDF2', borderRadius: 10, background: '#fff' }}>
         <ProductDetailPresentation model={model} mode="studio" studio={studio} />
       </div>
 
