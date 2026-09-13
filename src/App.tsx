@@ -110,6 +110,8 @@ const CreatorEditStudio = lazy(() => import('./pages/admin/CreatorEditStudio'));
 const GuideManagementList = lazy(() => import('./pages/admin/GuideManagementList'));
 const GuideEditStudio = lazy(() => import('./pages/admin/GuideEditStudio'));
 
+const StorefrontCtaBanners = lazy(() => import('./pages/admin/StorefrontCtaBanners'));
+
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { profile, loading, mustChangePassword } = useAuth();
   if (loading) return <div className="min-h-screen bg-app-bg flex items-center justify-center text-app-accent font-mono text-[10px] uppercase tracking-[4px] animate-pulse">Authenticating Choosify Session...</div>;
@@ -958,6 +960,26 @@ export default function App() {
                       </Suspense>
                     </AdminWorkspaceLayout>
                   </GuideVisualBuilderRoleGate>
+                </ProtectedRoute>
+              }
+            />
+
+            {/*
+              Storefront Curation -> CTA & Banners — editorial CTA/banner
+              placement management. Fills in the previously-unrouted
+              "Website Manager" nav entry (WEBSITE group) with its first real
+              feature. Rollback: remove this route; the nav item goes back to
+              pointing at nothing (its prior state).
+            */}
+            <Route
+              path="/admin/website-cms"
+              element={
+                <ProtectedRoute>
+                  <AdminWorkspaceLayout>
+                    <Suspense fallback={routeSuspenseFallback}>
+                      <StorefrontCtaBanners />
+                    </Suspense>
+                  </AdminWorkspaceLayout>
                 </ProtectedRoute>
               }
             />

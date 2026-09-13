@@ -305,9 +305,9 @@ export const NAV_DEFS: CmsNavGroup[] = [
     ],
   },
   {
-    title: 'WEBSITE',
+    title: 'STOREFRONT CURATION',
     items: [
-      { key: 'websiteCmsStudio', label: 'Website Manager', tag: 'NEW', path: PAGE_KEY_TO_PATH.websiteCmsStudio },
+      { key: 'websiteCmsStudio', label: 'CTA & Banners', tag: 'NEW', path: PAGE_KEY_TO_PATH.websiteCmsStudio },
     ],
   },
   {
@@ -333,7 +333,7 @@ export const PAGE_META: Record<string, [string, string]> = {
   settings: ['Settings', 'Store configuration'],
   planBilling: ['Plan & Billing', 'Your subscription plan, billing history, and usage'],
   adminProfile: ['My Profile', 'Account, security, RBAC scope, and preferences'],
-  websiteCmsStudio: ['Website Manager', 'Manage homepage banners, pages, and site content'],
+  websiteCmsStudio: ['CTA & Banners', 'Manage editorial CTA/banner strips shown across the storefront'],
   adsDealsStudio: ['Ads & Deals Studio', 'Manage promoted ads, deals, coupons, and paid placements'],
   contentStudio: ['Guide Management', 'Manage videos, reels, blogs, and live sessions'],
   messages: ['Choosify Support', 'Support conversations from Consumers, Sellers and Creators'],

@@ -5,6 +5,10 @@ import type {
   CatalogDeal,
   CatalogDealsBanner,
   CatalogProduct,
+  CtaAudienceRule,
+  CtaBannerItem,
+  CtaDestinationType,
+  CtaPageKey,
   HomepageConfig,
   HomepageHeroBanner,
   HomepageSectionConfig,
@@ -636,6 +640,271 @@ const normalizeWebsiteAssets = (
   defaultProductImage: toString(raw?.defaultProductImage, existing?.defaultProductImage ?? ''),
 });
 
+/**
+ * Editorial CTA/banner placements (Storefront Curation -> CTA & Banners).
+ * Seed defaults mirror the real hardcoded storefront copy at the time this
+ * model was introduced -- a placement id missing from the saved config still
+ * renders (falls back to this default) so content never disappears just
+ * because Admin hasn't saved a config yet.
+ */
+const defaultCtaBanners = (): CtaBannerItem[] => [
+  {
+    id: 'creators.join_cta',
+    page: 'creators',
+    section: 'creators-grid',
+    position: 'after',
+    title: 'Are you a creator?',
+    subtitle: 'Join Choosify and grow your audience by sharing honest reviews.',
+    buttonLabel: 'JOIN AS CREATOR',
+    destinationType: 'creator_signup',
+    destinationValue: '',
+    openInNewTab: true,
+    enabled: true,
+    order: 0,
+    style: 'navy',
+    audienceRule: 'hide_if_has_creator_account',
+  },
+  {
+    id: 'deals.subscribe_cta',
+    page: 'deals',
+    section: 'deals-subscribe-banner',
+    position: 'after',
+    title: '\u{1F381} NEVER MISS A DEAL!',
+    subtitle: 'Subscribe and get top deals straight to your inbox.',
+    buttonLabel: 'SUBSCRIBE',
+    destinationType: 'none',
+    destinationValue: '',
+    openInNewTab: false,
+    enabled: true,
+    order: 0,
+    style: 'navy',
+    audienceRule: 'none',
+  },
+];
+
+/**
+ * The shared placement registry (mirrors src/lib/ctaPlacementRegistry.ts on
+ * both the storefront and admin frontends -- this is the third, server-side
+ * copy, used only for validation so a saved CTA can never reference a
+ * (page, section, position) combination that has no matching <CtaBannerSlot/>
+ * anywhere on the real storefront). Every section here corresponds to a real,
+ * hand-wired anchor in a real storefront page component.
+ */
+const CTA_PLACEMENT_REGISTRY: Record<string, Record<string, Array<'before' | 'after'>>> = {
+  home: {
+    'home-deals': ['before', 'after'],
+    'home-featured-brands': ['before', 'after'],
+    'home-end': ['after'],
+  },
+  brands: {
+    'brands-grid': ['before', 'after'],
+    'brands-follow-cta-strip': ['before', 'after'],
+  },
+  deals: {
+    'deals-flash-dotd': ['before', 'after'],
+    'deals-subscribe-banner': ['before', 'after'],
+  },
+  categories: {
+    'categories-feed-header': ['before', 'after'],
+    'categories-browse-body': ['after'],
+  },
+  products: {
+    'products-grid': ['before', 'after'],
+    'products-end': ['after'],
+  },
+  search: {
+    'search-pill-tabs': ['before', 'after'],
+    'search-end': ['after'],
+  },
+  creators: {
+    'creators-feed-header': ['before', 'after'],
+    'creators-grid': ['before', 'after'],
+  },
+};
+
+function defaultPlacementFor(page: string): { section: string; position: 'before' | 'after' } {
+  const sections = CTA_PLACEMENT_REGISTRY[page] ?? CTA_PLACEMENT_REGISTRY.home;
+  const [section, positions] = Object.entries(sections)[0];
+  return { section, position: positions[0] };
+}
+
+/**
+ * Internal routes recognized as valid destinations -- mirrors the
+ * storefront's own real, live route list (PRIMARY_NAV_ITEMS in
+ * src/lib/navigation.ts) plus the other known-real static pages already
+ * referenced elsewhere in SiteConfig (footer links, Website Manager pages),
+ * so this dropdown/validator can never point a CTA at a dead route.
+ */
+const CTA_ALLOWED_INTERNAL_ROUTES = new Set([
+  '/',
+  '/categories',
+  '/products',
+  '/brands',
+  '/spotlight',
+  '/deals',
+  '/creators',
+  '/compare',
+  '/search',
+  '/suggest-brand',
+  '/advertise',
+  '/partnership',
+  '/post-offer',
+  '/login',
+  '/contact',
+  '/about',
+  '/terms',
+  '/privacy',
+  '/guides',
+]);
+const CTA_PAGE_KEYS = new Set(Object.keys(CTA_PLACEMENT_REGISTRY));
+const CTA_DESTINATION_TYPES = new Set<CtaDestinationType>(['internal', 'creator_signup', 'seller_signup', 'external', 'none']);
+const CTA_STYLES = new Set(['navy', 'purple', 'orange', 'light']);
+const CTA_AUDIENCE_RULES = new Set<CtaAudienceRule>([
+  'none',
+  'guests_only',
+  'logged_in_only',
+  'hide_if_has_creator_account',
+  'hide_if_has_seller_account',
+]);
+
+/**
+ * Migrates the pre-placement-registry shape (destinationType: "external"
+ * with destinationValue "creator_signup"/"seller_signup" as a magic
+ * sentinel, and no section/position/openInNewTab fields at all) to the
+ * current schema -- without this, old persisted records would silently
+ * resolve to a dead destination the first time they're saved through the
+ * new normalizer.
+ */
+const migrateLegacyCtaRow = (row: Record<string, unknown>): Record<string, unknown> => {
+  if (row.destinationType === 'external' && (row.destinationValue === 'creator_signup' || row.destinationValue === 'seller_signup')) {
+    return { ...row, destinationType: row.destinationValue, destinationValue: '' };
+  }
+  return row;
+};
+
+/**
+ * Rejects anything javascript:/data:/file:/etc. by construction -- only
+ * https:// (external) or a same-origin "/..." path (internal) ever survive.
+ */
+const normalizeCtaDestination = (
+  destinationType: CtaDestinationType,
+  destinationValue: string,
+): { destinationType: CtaDestinationType; destinationValue: string } => {
+  if (destinationType === 'none' || destinationType === 'creator_signup' || destinationType === 'seller_signup') {
+    return { destinationType, destinationValue: '' };
+  }
+  if (destinationType === 'internal') {
+    // Falls back to "no action" rather than accepting an arbitrary/unknown
+    // path -- keeps an Admin from silently pointing a CTA at a dead route.
+    if (CTA_ALLOWED_INTERNAL_ROUTES.has(destinationValue) || /^\/[a-z0-9/_-]*$/i.test(destinationValue)) {
+      return { destinationType, destinationValue };
+    }
+    return { destinationType: 'none', destinationValue: '' };
+  }
+  // external -- https:// only; javascript:/data:/file:/etc. never match and fall through to "none"
+  if (/^https:\/\/[^\s<>"']+$/i.test(destinationValue)) {
+    return { destinationType, destinationValue };
+  }
+  return { destinationType: 'none', destinationValue: '' };
+};
+
+/** Resolves page/section/position, falling back to that page's registry default if the combination isn't real (stale data, or a section since removed from the registry). Never lets a CTA silently render nowhere. */
+const normalizeCtaPlacement = (
+  rawPage: unknown,
+  rawSection: unknown,
+  rawPosition: unknown,
+  fallback: { page: CtaPageKey; section: string; position: 'before' | 'after' },
+): { page: CtaPageKey; section: string; position: 'before' | 'after' } => {
+  const page = CTA_PAGE_KEYS.has(rawPage as string) ? (rawPage as CtaPageKey) : fallback.page;
+  const section = toString(rawSection, fallback.section);
+  const position: 'before' | 'after' = rawPosition === 'before' || rawPosition === 'after' ? rawPosition : fallback.position;
+  const allowedPositions = CTA_PLACEMENT_REGISTRY[page]?.[section];
+  if (allowedPositions && allowedPositions.includes(position)) return { page, section, position };
+  return { page, ...defaultPlacementFor(page) };
+};
+
+const normalizeCtaBannerItem = (raw: Record<string, unknown>, fallback: CtaBannerItem, idx: number): CtaBannerItem => {
+  const requestedType = CTA_DESTINATION_TYPES.has(raw.destinationType as CtaDestinationType)
+    ? (raw.destinationType as CtaDestinationType)
+    : fallback.destinationType;
+  const requestedValue = toString(raw.destinationValue, fallback.destinationValue);
+  const destination = normalizeCtaDestination(requestedType, requestedValue);
+  const placement = normalizeCtaPlacement(raw.page, raw.section, raw.position, fallback);
+  return {
+    id: fallback.id,
+    ...placement,
+    title: toString(raw.title, fallback.title),
+    subtitle: toString(raw.subtitle, fallback.subtitle),
+    buttonLabel: toString(raw.buttonLabel, fallback.buttonLabel),
+    destinationType: destination.destinationType,
+    destinationValue: destination.destinationValue,
+    openInNewTab: destination.destinationType === 'none' ? false : toBoolean(raw.openInNewTab, fallback.openInNewTab),
+    enabled: toBoolean(raw.enabled, fallback.enabled),
+    order: Math.floor(toNumber(raw.order, fallback.order ?? idx)),
+    style: CTA_STYLES.has(raw.style as string) ? (raw.style as CtaBannerItem['style']) : fallback.style,
+    icon: toString(raw.icon, fallback.icon ?? '') || undefined,
+    startDate: typeof raw.startDate === 'string' ? raw.startDate : fallback.startDate,
+    endDate: typeof raw.endDate === 'string' ? raw.endDate : fallback.endDate,
+    audienceRule: CTA_AUDIENCE_RULES.has(raw.audienceRule as CtaAudienceRule)
+      ? (raw.audienceRule as CtaAudienceRule)
+      : fallback.audienceRule ?? 'none',
+  };
+};
+
+export const normalizeCtaBanners = (payload: unknown, existing?: CtaBannerItem[] | null): CtaBannerItem[] => {
+  const defaults = defaultCtaBanners();
+  const raw = Array.isArray(payload) ? payload : existing ?? [];
+
+  // Reject outright rather than silently deduping -- an Admin who submits two
+  // rows with the same internal name/id should see an error, not have one
+  // vanish without explanation.
+  const seenIds = new Set<string>();
+  for (const item of raw) {
+    const id = (item as Record<string, unknown> | null)?.id;
+    if (typeof id === 'string' && id) {
+      if (seenIds.has(id)) throw new Error(`Duplicate CTA internal name: "${id}"`);
+      seenIds.add(id);
+    }
+  }
+
+  const byId = new Map<string, Record<string, unknown>>();
+  raw.forEach((item) => {
+    const row = migrateLegacyCtaRow((item ?? {}) as Record<string, unknown>);
+    if (typeof row.id === 'string' && row.id) byId.set(row.id, row);
+  });
+
+  const merged = defaults.map((fb, idx) => {
+    const row = byId.get(fb.id);
+    byId.delete(fb.id);
+    return row ? normalizeCtaBannerItem(row, fb, idx) : fb;
+  });
+
+  const extras = Array.from(byId.entries()).map(([id, row], idx) => {
+    const page = CTA_PAGE_KEYS.has(row.page as string) ? (row.page as CtaPageKey) : 'home';
+    return normalizeCtaBannerItem(
+      row,
+      {
+        id,
+        page,
+        ...defaultPlacementFor(page),
+        title: '',
+        subtitle: '',
+        buttonLabel: '',
+        destinationType: 'none',
+        destinationValue: '',
+        openInNewTab: true,
+        enabled: true,
+        order: defaults.length + idx,
+        style: 'navy',
+        audienceRule: 'none',
+      },
+      defaults.length + idx,
+    );
+  });
+
+  return [...merged, ...extras];
+};
+
 export const normalizeSiteInput = (payload: unknown, existing?: SiteConfig): SiteConfig => {
   const raw = (payload ?? {}) as Record<string, unknown>;
   const footerRaw = (raw.footer ?? existing?.footer ?? {}) as Record<string, unknown>;
@@ -669,6 +938,7 @@ export const normalizeSiteInput = (payload: unknown, existing?: SiteConfig): Sit
     websiteName: toString(raw.websiteName, existing?.websiteName ?? ''),
     supportEmail: toString(raw.supportEmail, existing?.supportEmail ?? ''),
     supportPhone: toString(raw.supportPhone, existing?.supportPhone ?? ''),
+    ctaBanners: normalizeCtaBanners(raw.ctaBanners, existing?.ctaBanners ?? null),
     updatedAt: nowIso(),
   };
 };
