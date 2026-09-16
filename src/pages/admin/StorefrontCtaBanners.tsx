@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { catalogApi } from '../../services/catalogApi';
 import { useAuth } from '../../contexts/AuthContext';
+import { uploadSiteAssetImage } from '../../services/mediaUpload';
+import { BrandImageUploadField } from './BrandImageUploadField';
 import type { CtaAudienceRule, CtaBannerItem, CtaDestinationType, CtaPageKey, CtaPosition, SiteConfig } from '../../types/catalog';
 import {
   CTA_AUDIENCE_RULE_OPTIONS,
@@ -105,12 +107,22 @@ export default function StorefrontCtaBanners() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
+  // Auth Page Visual — the storefront login/signup/forgot/reset left-column
+  // image (StorefrontAuthShell). Own local draft + save, independent of the
+  // CTA list above, but persisted through the exact same SiteConfig record.
+  const [authImage, setAuthImage] = useState('');
+  const [authImageAlt, setAuthImageAlt] = useState('');
+  const [authVisualSaving, setAuthVisualSaving] = useState(false);
+  const [authVisualSavedFlash, setAuthVisualSavedFlash] = useState(false);
+
   const load = async () => {
     setLoading(true);
     setError(null);
     try {
       const config = await catalogApi.getSiteConfig();
       setSite(config);
+      setAuthImage(config.authVisual?.storefrontImage ?? '');
+      setAuthImageAlt(config.authVisual?.storefrontImageAlt ?? '');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load site config');
     } finally {
@@ -121,6 +133,31 @@ export default function StorefrontCtaBanners() {
   useEffect(() => {
     void load();
   }, []);
+
+  const authVisualDirty =
+    site != null &&
+    (authImage !== (site.authVisual?.storefrontImage ?? '') || authImageAlt !== (site.authVisual?.storefrontImageAlt ?? ''));
+
+  const saveAuthVisual = async () => {
+    if (!site) return;
+    setAuthVisualSaving(true);
+    setError(null);
+    try {
+      const saved = await catalogApi.updateSiteConfig({
+        ...site,
+        authVisual: { storefrontImage: authImage.trim(), storefrontImageAlt: authImageAlt.trim() },
+      });
+      setSite(saved);
+      setAuthImage(saved.authVisual?.storefrontImage ?? '');
+      setAuthImageAlt(saved.authVisual?.storefrontImageAlt ?? '');
+      setAuthVisualSavedFlash(true);
+      window.setTimeout(() => setAuthVisualSavedFlash(false), 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
+      setAuthVisualSaving(false);
+    }
+  };
 
   const banners = useMemo(() => resolveCtaBanners(site?.ctaBanners), [site]);
 
@@ -308,6 +345,42 @@ export default function StorefrontCtaBanners() {
           >
             <Plus className="h-3.5 w-3.5" /> Create CTA / Banner
           </button>
+        </div>
+      </div>
+
+      <div className="mb-4 rounded-xl border border-[#E8EDF2] bg-white p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-[13px] font-bold text-[#1A1A2E]">Auth Page Visual</div>
+            <div className="text-[11px] text-[#9AA0AC]">
+              Optional image shown in the left column of the storefront Login/Signup/Forgot/Reset pages. Leave empty to use the approved no-image layout.
+            </div>
+          </div>
+          {authVisualSavedFlash && (
+            <div className="flex items-center gap-1.5 text-[12px] font-bold text-emerald-600">
+              <CheckCircle2 className="h-4 w-4" /> Saved
+            </div>
+          )}
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[220px_1fr]">
+          <BrandImageUploadField value={authImage} onChange={setAuthImage} label="Image" variant="banner" uploadFn={uploadSiteAssetImage} />
+          <div>
+            <label className="mb-1 block text-[10px] font-bold uppercase text-[#9AA0AC]">Alt text</label>
+            <input
+              className="w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12.5px]"
+              value={authImageAlt}
+              onChange={(e) => setAuthImageAlt(e.target.value)}
+              placeholder="Describe the image for screen readers"
+            />
+            <button
+              type="button"
+              onClick={saveAuthVisual}
+              disabled={authVisualSaving || !authVisualDirty}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-[#FF5B00] px-4 py-2 text-[12px] font-bold text-white disabled:opacity-50"
+            >
+              {authVisualSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} Save Auth Visual
+            </button>
+          </div>
         </div>
       </div>
 

@@ -420,6 +420,11 @@ export type SiteConfig = {
   supportPhone?: string;
   /** Editorial CTA/banner strips -- Website Manager -> CTA & Banners. Not paid/sponsored placements (see CatalogPlacement). */
   ctaBanners?: CtaBannerItem[];
+  /** Optional storefront auth-page (Login/Signup/Forgot/Reset/Seller-Signup) left-column visual -- Website Manager -> CTA & Banners -> Auth Page Visual. Unset renders the approved no-image fallback. */
+  authVisual?: {
+    storefrontImage?: string;
+    storefrontImageAlt?: string;
+  };
   updatedAt: string;
 };
 

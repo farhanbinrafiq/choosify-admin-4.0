@@ -640,6 +640,15 @@ const normalizeWebsiteAssets = (
   defaultProductImage: toString(raw?.defaultProductImage, existing?.defaultProductImage ?? ''),
 });
 
+/** Optional storefront/admin auth-page left-column visual (Login/Signup/Forgot/Reset/Seller-Signup). Empty string = unset -> shells render the approved no-image fallback. */
+const normalizeAuthVisual = (
+  raw: Record<string, unknown> | undefined,
+  existing?: SiteConfig['authVisual'],
+): NonNullable<SiteConfig['authVisual']> => ({
+  storefrontImage: toString(raw?.storefrontImage, existing?.storefrontImage ?? ''),
+  storefrontImageAlt: toString(raw?.storefrontImageAlt, existing?.storefrontImageAlt ?? ''),
+});
+
 /**
  * Editorial CTA/banner placements (Storefront Curation -> CTA & Banners).
  * Seed defaults mirror the real hardcoded storefront copy at the time this
@@ -934,6 +943,10 @@ export const normalizeSiteInput = (payload: unknown, existing?: SiteConfig): Sit
     websiteAssets: normalizeWebsiteAssets(
       (raw.websiteAssets ?? existing?.websiteAssets) as Record<string, unknown> | undefined,
       existing?.websiteAssets,
+    ),
+    authVisual: normalizeAuthVisual(
+      (raw.authVisual ?? existing?.authVisual) as Record<string, unknown> | undefined,
+      existing?.authVisual,
     ),
     websiteName: toString(raw.websiteName, existing?.websiteName ?? ''),
     supportEmail: toString(raw.supportEmail, existing?.supportEmail ?? ''),

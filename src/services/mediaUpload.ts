@@ -138,6 +138,11 @@ export async function uploadCreatorImage(file: File): Promise<string> {
   return uploadImage(file, 'choosify/creators');
 }
 
+/** Site-wide CMS visuals (e.g. the optional auth-page left-column image) — same upload chokepoint, own Cloudinary/media folder. */
+export async function uploadSiteAssetImage(file: File): Promise<string> {
+  return uploadImage(file, 'choosify/site-assets');
+}
+
 /**
  * Any authenticated user's own profile photo — Consumer, Seller, Creator,
  * Admin, Super Admin alike. Routes through the same `/catalog/media/upload`
