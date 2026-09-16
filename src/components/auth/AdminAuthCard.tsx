@@ -1,12 +1,14 @@
 import React from 'react';
-import { ChoosifyLogo } from '../common/ChoosifyLogo';
+import { AdminAuthShell } from './AdminAuthShell';
 
 /**
  * Lighter-weight member of the approved Admin/Partner auth design family
- * (see LoginPage.tsx): the same navy `choosify-dark-surface` ground with soft
- * ambient lighting, the Choosify wordmark, one white card, and the
- * `btn-brand-gradient` primary CTA. Used by the dashboard Forgot Password and
- * Reset Password screens so they don't fall back to a generic form.
+ * (see LoginPage.tsx): the same clean white `AdminAuthShell` two-column
+ * page (brand/marketing left, sharp auth card right). Used by the
+ * dashboard Forgot Password and Reset Password screens so they don't fall
+ * back to a generic form. Reusing `AdminAuthShell` here (rather than each
+ * page owning its own copy) is what makes every page built on
+ * `AdminAuthCard` share the same background/layout automatically.
  */
 export function AdminAuthCard({
   kicker = 'Admin Console',
@@ -22,38 +24,21 @@ export function AdminAuthCard({
   footer?: React.ReactNode;
 }) {
   return (
-    <div
-      className="choosify-dark-surface relative flex min-h-screen items-center justify-center overflow-hidden p-6"
-      style={{ fontFamily: 'var(--font-sans)' }}
-    >
-      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-        <div className="absolute -left-[12%] -top-[10%] h-[560px] w-[560px] rounded-full bg-[#5A1230]/25 blur-[170px]" />
-        <div className="absolute left-1/2 top-1/2 h-[520px] w-[760px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#7A3CFF]/10 blur-[180px]" />
-        <div className="absolute -right-[10%] -bottom-[8%] h-[540px] w-[540px] rounded-full bg-[#FF5B00]/10 blur-[170px]" />
-        <div className="auth-admin-grid absolute inset-0 hidden opacity-60 xl:block" />
-        <div className="auth-admin-vignette absolute inset-0" />
-      </div>
-
-      <div
-        className="relative w-full max-w-[420px] overflow-hidden rounded-[16px] border border-white/12 bg-white"
-        style={{ boxShadow: '0 30px 80px rgba(0,0,0,0.45)' }}
-      >
-        <div className="border-b border-[#EEF0F4] px-9 pt-9 pb-6">
-          <ChoosifyLogo variant="full" theme="light" className="mb-5 h-8 w-auto max-w-[170px] select-none" />
-          <span className="mb-3 inline-block rounded-full bg-[rgba(255,90,44,0.12)] px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#FF5B00]">
-            {kicker}
-          </span>
-          <h1 className="text-[20px] font-extrabold leading-tight text-[#111827]">{title}</h1>
-          {intro ? <p className="mt-1.5 text-[12.5px] font-semibold leading-relaxed text-[#6B7280]">{intro}</p> : null}
-        </div>
-        <div className="px-9 py-7">{children}</div>
+    <AdminAuthShell>
+      <>
+        <span className="mb-3 inline-block rounded-full bg-[rgba(255,90,44,0.12)] px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#FF5B00]">
+          {kicker}
+        </span>
+        <h1 className="text-[20px] font-extrabold leading-tight text-[#111827]">{title}</h1>
+        {intro ? <p className="mb-5 mt-1.5 text-[12.5px] font-semibold leading-relaxed text-[#6B7280]">{intro}</p> : <div className="mb-5" />}
+        {children}
         {footer ? (
-          <div className="border-t border-[#EEF0F4] px-9 py-4 text-center text-[11px] font-semibold text-[#6B7280]">
+          <div className="mt-5 border-t border-[#EEF0F4] pt-4 text-center text-[11px] font-semibold text-[#6B7280]">
             {footer}
           </div>
         ) : null}
-      </div>
-    </div>
+      </>
+    </AdminAuthShell>
   );
 }
 

@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Lock, Mail, Sparkles, Store } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { ChoosifyLogo } from '../components/common/ChoosifyLogo';
+import { AdminAuthShell, AdminAuthTrustRow } from '../components/auth/AdminAuthShell';
 import { getCanonicalAdminCategories } from '../lib/storefrontCategories';
 
 const STOREFRONT_TERMS_URL = 'https://choosify.bd/terms';
@@ -14,16 +15,6 @@ const PROCESS_STEPS = [
   { n: '01', title: 'Apply', body: 'Submit your information' },
   { n: '02', title: 'Review', body: 'Choosify reviews your application' },
   { n: '03', title: 'Access', body: 'Approved partners receive access' },
-];
-
-/** Faint atmospheric points — large desktop only, static, decorative. */
-const PARTNER_NODES: { style: React.CSSProperties; cls: string }[] = [
-  { style: { left: '11%', top: '16%' }, cls: 'h-1 w-1 bg-white/20' },
-  { style: { left: '18%', top: '62%' }, cls: 'h-1.5 w-1.5 bg-[#7A3CFF]/45 shadow-[0_0_10px_2px_rgba(122,60,255,0.2)]' },
-  { style: { left: '84%', top: '24%' }, cls: 'h-1 w-1 bg-[#7A3CFF]/40' },
-  { style: { left: '90%', top: '58%' }, cls: 'h-1.5 w-1.5 bg-[#FF5B00]/35 shadow-[0_0_10px_2px_rgba(255,91,0,0.18)]' },
-  { style: { left: '74%', top: '80%' }, cls: 'h-1 w-1 bg-[#EF3C23]/35' },
-  { style: { left: '46%', top: '10%' }, cls: 'h-1 w-1 bg-white/[0.14]' },
 ];
 
 /** Visual grouping only — no field, name, handler or payload change. */
@@ -59,13 +50,13 @@ function ContextRow({
   icon: React.ComponentType<{ className?: string }>;
 }) {
   return (
-    <div className={`flex gap-3 border-l-2 pl-3.5 ${active ? 'border-[#FF5B00]' : 'border-white/10'}`}>
-      <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${active ? 'text-[#FF5B00]' : 'text-white/30'}`} />
+    <div className={`flex gap-3 border-l-2 pl-3.5 ${active ? 'border-[#FF5B00]' : 'border-[#E8EDF2]'}`}>
+      <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${active ? 'text-[#FF5B00]' : 'text-[#C4CAD3]'}`} />
       <div>
-        <div className={`text-[11.5px] font-bold ${active ? 'text-white/85' : 'text-white/40'}`}>
+        <div className={`text-[11.5px] font-bold ${active ? 'text-[#111827]' : 'text-[#9CA3AF]'}`}>
           {label}
         </div>
-        <div className={`text-[10.5px] leading-relaxed ${active ? 'text-white/55' : 'text-white/30'}`}>
+        <div className={`text-[10.5px] leading-relaxed ${active ? 'text-[#6B7280]' : 'text-[#B8BEC7]'}`}>
           {body}
         </div>
       </div>
@@ -222,124 +213,66 @@ export default function SellerSignupPage() {
   const isCreator = applicantType === 'creator';
   const accentLine = isCreator ? 'Create, guide and inspire.' : 'Grow your brand on Choosify.';
 
-  return (
-    <div
-      className="choosify-dark-surface relative min-h-screen w-full"
-      style={{ fontFamily: 'var(--font-sans)' }}
-    >
-      {/* ── Partnership / growth atmosphere (decorative, viewport-anchored) ── */}
-      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden="true">
-        {/* Ambient blooms — purple depth + warm growth glow. Navy stays dominant. */}
-        <div className="absolute -left-[10%] -top-[12%] h-[600px] w-[600px] rounded-full bg-[#7A3CFF]/12 blur-[170px]" />
-        <div className="absolute -right-[8%] -bottom-[10%] h-[620px] w-[620px] rounded-full bg-[#FF5B00]/10 blur-[160px]" />
-        <div className="absolute left-1/2 top-1/3 hidden h-[520px] w-[780px] -translate-x-1/2 rounded-full bg-[#7A3CFF]/[0.08] blur-[180px] sm:block" />
-        <div className="absolute right-[12%] top-[68%] hidden h-[300px] w-[300px] rounded-full bg-[#EF3C23]/[0.07] blur-[130px] sm:block" />
+  const leftContent = (
+    <>
+      <div className="mb-8">
+        <ChoosifyLogo variant="full" theme="light" className="h-9 w-auto max-w-[190px] select-none" />
+      </div>
+      <span className="mb-4 inline-block w-max rounded-full bg-[rgba(255,90,44,0.1)] px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#FF5B00]">
+        Partner Program
+      </span>
+      <h1
+        className="mb-3 text-[27px] font-extrabold leading-tight text-[#111827] sm:text-[29px]"
+        style={{ fontFamily: 'var(--font-heading)' }}
+      >
+        Partner with
+        <br />
+        Choosify Bangladesh.
+      </h1>
+      <p className="mb-2 text-[12.5px] font-bold leading-relaxed text-[#FF5B00]">{accentLine}</p>
+      <p className="mb-7 max-w-[380px] text-[13px] font-semibold leading-relaxed text-[#6B7280]">
+        Apply as a Seller/Brand or Creator. Access is granted only after Admin review — submitting
+        this form does not activate partner tools.
+      </p>
 
-        {/* Peripheral grid — felt, not read (large desktop only) */}
-        <div className="auth-partner-grid absolute inset-0 hidden opacity-70 xl:block" />
-
-        {/* Faint ecosystem / connection geometry — full composition only */}
-        <svg
-          className="absolute inset-0 hidden h-full w-full min-[1600px]:block"
-          viewBox="0 0 1920 1080"
-          fill="none"
-          preserveAspectRatio="xMidYMid slice"
-        >
-          <circle cx="1620" cy="470" r="120" stroke="rgba(255,255,255,0.05)" />
-          <circle cx="1620" cy="470" r="210" stroke="rgba(255,255,255,0.04)" strokeDasharray="2 8" />
-          <path d="M1500 210 C1640 300 1700 380 1620 470" stroke="rgba(255,255,255,0.05)" strokeWidth="1" strokeDasharray="2 7" />
-          <path d="M1620 470 C1560 640 1640 800 1500 900" stroke="rgba(255,255,255,0.045)" strokeWidth="1" strokeDasharray="2 7" />
-          <path d="M150 300 C320 260 380 420 300 520" stroke="rgba(255,255,255,0.04)" strokeWidth="1" strokeDasharray="2 7" />
-          <g fill="rgba(255,255,255,0.13)">
-            <circle cx="1500" cy="210" r="2.5" />
-            <circle cx="1620" cy="470" r="2.5" />
-            <circle cx="1500" cy="900" r="2.5" />
-            <circle cx="150" cy="300" r="2" />
-            <circle cx="300" cy="520" r="2" />
-          </g>
-        </svg>
-
-        {/* Tiny connection nodes */}
-        {PARTNER_NODES.map((n, i) => (
-          <span key={i} className={`absolute hidden rounded-full xl:block ${n.cls}`} style={n.style} />
-        ))}
-
-        {/* Soft vignette — pulls the eye inward */}
-        <div className="auth-partner-vignette absolute inset-0" />
+      {/* Partner context — mirrors the selected application type */}
+      <div className="mb-7 space-y-3.5">
+        <ContextRow
+          active={!isCreator}
+          icon={Store}
+          label="Seller / Brand"
+          body="Sell and manage your products through the Choosify ecosystem."
+        />
+        <ContextRow
+          active={isCreator}
+          icon={Sparkles}
+          label="Creator"
+          body="Build your creator profile and publish product discovery content."
+        />
       </div>
 
-      <div className="relative z-10 flex min-h-screen w-full justify-center px-5 py-10 sm:px-6 lg:py-16">
-        <div
-          className="my-auto grid w-full max-w-[1180px] rounded-[16px] border border-white/12 lg:grid-cols-[38fr_62fr]"
-          style={{ boxShadow: '0 30px 80px rgba(0,0,0,0.45)' }}
-        >
-          {/* ── Left contextual panel (sticky on large desktop) ── */}
-          <div className="choosify-dark-surface rounded-t-[16px] lg:rounded-t-none lg:rounded-l-[16px] lg:border-r lg:border-white/10">
-            <div className="flex flex-col p-9 sm:p-10 md:p-12 lg:sticky lg:top-16">
-              <ChoosifyLogo
-                variant="full"
-                theme="dark"
-                className="mb-10 h-10 w-auto max-w-[200px] select-none"
-              />
-              <span className="mb-4 inline-block w-max rounded-full bg-[rgba(255,90,44,0.14)] px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#FF5B00]">
-                Partner Program
-              </span>
-              <h1
-                className="mb-3 text-[27px] font-extrabold leading-tight text-white sm:text-[29px]"
-                style={{ fontFamily: 'var(--font-heading)' }}
-              >
-                Partner with
-                <br />
-                Choosify Bangladesh.
-              </h1>
-              <p className="mb-4 text-[12.5px] font-bold leading-relaxed text-[#FF5B00]/90">
-                {accentLine}
-              </p>
-              <p className="max-w-[340px] text-[13px] font-semibold leading-relaxed text-white/55">
-                Apply as a Seller/Brand or Creator. Access is granted only after Admin review —
-                submitting this form does not activate partner tools.
-              </p>
-
-              {/* Partner context + process — full on large desktop, simplified below */}
-              <div className="hidden lg:block">
-                {/* Partner context — mirrors the selected application type */}
-                <div className="mt-8 space-y-3.5">
-                  <ContextRow
-                    active={!isCreator}
-                    icon={Store}
-                    label="Seller / Brand"
-                    body="Sell and manage your products through the Choosify ecosystem."
-                  />
-                  <ContextRow
-                    active={isCreator}
-                    icon={Sparkles}
-                    label="Creator"
-                    body="Build your creator profile and publish product discovery content."
-                  />
-                </div>
-
-                {/* Application process — explanatory, non-interactive */}
-                <ol className="mt-9 space-y-4">
-                  {PROCESS_STEPS.map((s) => (
-                    <li key={s.n} className="flex gap-3.5">
-                      <span className="mt-px font-mono text-[11px] font-bold text-[#FF5B00]">{s.n}</span>
-                      <div>
-                        <div className="text-[12px] font-bold text-white/80">{s.title}</div>
-                        <div className="text-[11px] text-white/45">{s.body}</div>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-
-              <div className="mt-8 text-[10.5px] font-semibold text-white/30 lg:mt-10">
-                © 2026 CHOOSIFY BANGLADESH LTD.
-              </div>
+      {/* Application process — explanatory, non-interactive */}
+      <ol className="mb-2 space-y-4">
+        {PROCESS_STEPS.map((s) => (
+          <li key={s.n} className="flex gap-3.5">
+            <span className="mt-px font-mono text-[11px] font-bold text-[#FF5B00]">{s.n}</span>
+            <div>
+              <div className="text-[12px] font-bold text-[#111827]">{s.title}</div>
+              <div className="text-[11px] text-[#9CA3AF]">{s.body}</div>
             </div>
-          </div>
+          </li>
+        ))}
+      </ol>
 
-          {/* ── Right application panel — page scrolls naturally, no nested scrollbar ── */}
-          <div className="rounded-b-[16px] bg-white p-7 sm:p-8 md:p-10 lg:rounded-b-none lg:rounded-r-[16px] lg:p-12">
+      <AdminAuthTrustRow />
+
+      <div className="mt-8 text-[10.5px] font-semibold text-[#9CA3AF]">© 2026 CHOOSIFY BANGLADESH LTD.</div>
+    </>
+  );
+
+  return (
+    <AdminAuthShell left={leftContent} cardMaxWidthClass="max-w-[720px]">
+      <>
             <div className="mb-6 flex items-center justify-between gap-3">
               <Link
                 to={loginHref}
@@ -616,9 +549,7 @@ export default function SellerSignupPage() {
                 Sign in
               </Link>
             </p>
-          </div>
-        </div>
-      </div>
-    </div>
+      </>
+    </AdminAuthShell>
   );
 }
