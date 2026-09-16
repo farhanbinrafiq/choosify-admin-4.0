@@ -2,8 +2,9 @@ import React, { useMemo, useRef, useState, CSSProperties } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { resolveCreatorThumbnail } from '../../lib/productVideo';
 import { CreatorReviewThumbnailPreview } from '../../components/admin/product-studio/CreatorReviewThumbnailPreview';
-import { detectBrandablePlatform } from '../../lib/creatorReviewPlatform';
+import { isUnsupportedFacebookShareUrl, detectBrandablePlatform } from '../../lib/creatorReviewPlatform';
 import { uploadCreatorImage, uploadProductImages } from '../../services/mediaUpload';
+import { catalogApi } from '../../services/catalogApi';
 import {
   checkCategorySchemaCompatibility,
   generateCombinations,
@@ -2157,6 +2158,26 @@ export function CreatorReviewsEditor({
       { id: `cr-${Date.now()}`, title: '', platform: 'YouTube', thumbnail: '', videoUrl: '', creatorHandle: '' },
     ]);
 
+  // Per-row Facebook share-link resolution state -- a row is never blocked
+  // by another row's in-flight resolve/error. Cleared automatically on
+  // successful resolve (patch() below sets a fresh videoUrl, which drops
+  // shareLinkWarning for that row) or the next edit to that field.
+  const [resolveState, setResolveState] = useState<Record<string, { loading: boolean; error: string | null }>>({});
+
+  const resolveShareLink = async (id: string, url: string) => {
+    setResolveState((prev) => ({ ...prev, [id]: { loading: true, error: null } }));
+    try {
+      const canonicalUrl = await catalogApi.resolveFacebookShareUrl(url);
+      patch(id, { videoUrl: canonicalUrl });
+      setResolveState((prev) => ({ ...prev, [id]: { loading: false, error: null } }));
+    } catch (err) {
+      setResolveState((prev) => ({
+        ...prev,
+        [id]: { loading: false, error: err instanceof Error ? err.message : 'Could not resolve this Facebook link.' },
+      }));
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={x.note}>
@@ -2166,7 +2187,10 @@ export function CreatorReviewsEditor({
       </div>
       {videos.length === 0 ? <p style={{ ...x.note, fontStyle: 'italic' }}>No creator reviews yet.</p> : null}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 10, alignItems: 'start' }}>
-      {videos.map((v) => (
+      {videos.map((v) => {
+        const shareLinkWarning = isUnsupportedFacebookShareUrl(v.videoUrl);
+        const rowResolveState = resolveState[v.id];
+        return (
         <div key={v.id} style={{ border: '1px solid #E8EDF2', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 8 }}>
             <div>
@@ -2182,7 +2206,44 @@ export function CreatorReviewsEditor({
           </div>
           <div>
             <div style={x.label}>Shareable / embed video link (https)</div>
-            <input value={v.videoUrl} onChange={(e) => patch(v.id, { videoUrl: e.target.value })} placeholder="https://youtube.com/watch?v=… / https://instagram.com/reel/…" style={x.input} />
+            <input
+              value={v.videoUrl}
+              onChange={(e) => patch(v.id, { videoUrl: e.target.value })}
+              placeholder="https://youtube.com/watch?v=… / https://instagram.com/reel/…"
+              style={shareLinkWarning ? { ...x.input, border: '1px solid #DC2626' } : x.input}
+              aria-invalid={shareLinkWarning}
+            />
+            {shareLinkWarning ? (
+              <div style={{ marginTop: 4, fontSize: 10, color: '#DC2626', fontWeight: 700 }}>
+                Facebook share links can’t be embedded directly.
+                <button
+                  type="button"
+                  onClick={() => resolveShareLink(v.id, v.videoUrl)}
+                  disabled={rowResolveState?.loading}
+                  style={{
+                    marginLeft: 6,
+                    fontSize: 10,
+                    fontWeight: 800,
+                    color: '#FF5B00',
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    cursor: rowResolveState?.loading ? 'default' : 'pointer',
+                    textDecoration: 'underline',
+                  }}
+                >
+                  {rowResolveState?.loading ? 'Resolving…' : 'Resolve to canonical URL'}
+                </button>
+                <div style={{ marginTop: 2, fontWeight: 500, color: '#7A1F1F' }}>
+                  Or paste the video’s canonical Facebook Reel URL directly, e.g. https://www.facebook.com/reel/123456789/
+                </div>
+              </div>
+            ) : null}
+            {rowResolveState?.error ? (
+              <div style={{ marginTop: 4, fontSize: 10, color: '#DC2626', fontWeight: 700 }}>
+                Choosify couldn’t resolve this Facebook link: {rowResolveState.error}
+              </div>
+            ) : null}
           </div>
           <CreatorThumbField video={v} onPatch={(p) => patch(v.id, p)} />
           <div>
@@ -2191,7 +2252,8 @@ export function CreatorReviewsEditor({
           </div>
           <button type="button" onClick={() => remove(v.id)} style={{ ...x.ghostBtn, color: '#DC2626', alignSelf: 'flex-start' }}>Remove review</button>
         </div>
-      ))}
+        );
+      })}
       </div>
       <div>
         <button type="button" onClick={add} style={x.accentBtn}>+ Add creator review</button>

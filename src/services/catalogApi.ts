@@ -419,6 +419,20 @@ export const catalogApi = {
     return result.homepage;
   },
 
+  /** Resolves a Facebook share link (/share/v/<token>/, /share/r/<token>/) to
+   *  its canonical Reel/video URL via the server-side resolver -- see
+   *  server/lib/facebookShareResolver.ts. Throws (with a human-readable
+   *  message) when the link can't be resolved; never silently transforms
+   *  the URL and never returns anything other than the canonical URL string. */
+  resolveFacebookShareUrl: async (url: string): Promise<string> => {
+    const result = await request<{ canonicalUrl: string }>(
+      '/catalog/creator-reviews/resolve-facebook-share-url',
+      'POST',
+      { url },
+    );
+    return result.canonicalUrl;
+  },
+
   getSiteConfig: async (): Promise<SiteConfig> => {
     const result = await request<{ site: SiteConfig }>('/catalog/site');
     return result.site;

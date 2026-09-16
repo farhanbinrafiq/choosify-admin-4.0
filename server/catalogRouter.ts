@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { Logger } from './lib/logger';
 import { detectBrandablePlatform } from '../src/lib/creatorReviewPlatform';
+import { resolveFacebookShareUrl } from './lib/facebookShareResolver';
+import { recordFacebookShareResolveAttempt } from './lib/abuseProtection';
 import { catalogStore, defaultHomepage } from '../lib/vercel-catalog/catalogStore';
 import {
   normalizeBrandInput,
@@ -3306,6 +3308,37 @@ function findCreatorContentMissingRequiredThumbnail(
   }
   return null;
 }
+
+/**
+ * Resolves a Facebook share link (`/share/v/<token>/`, `/share/r/<token>/`)
+ * to its canonical Reel/video URL via a server-side, header-only redirect
+ * follow -- see `server/lib/facebookShareResolver.ts` for the full security
+ * model (host allowlist, redirect validation, no body reads, no scraping).
+ * Any authenticated partner can call this (sellers/creators fill this field
+ * in their own Product Studio, not only CMS staff) -- gated by `requireAuth`
+ * the same as the other `/catalog/workspace/*` self-service endpoints, not
+ * `requireCmsWrite`. Read-only with respect to Choosify's own data: this
+ * never writes anything, the resolved URL is only ever used by the caller to
+ * populate the existing `videoUrl` field through the normal save path.
+ */
+catalogRouter.post('/catalog/creator-reviews/resolve-facebook-share-url', ...requireAuth, async (req, res) => {
+  const throttle = recordFacebookShareResolveAttempt(req.ip);
+  if (throttle.thresholdExceeded) {
+    res.status(429).json({ error: 'Too many Facebook link resolution attempts. Try again shortly.', code: 'RATE_LIMITED' });
+    return;
+  }
+  const url = typeof req.body?.url === 'string' ? req.body.url : '';
+  if (!url.trim()) {
+    res.status(400).json({ error: 'A Facebook share URL is required.', code: 'VALIDATION_ERROR' });
+    return;
+  }
+  const result = await resolveFacebookShareUrl(url);
+  if (result.ok === true) {
+    res.json({ canonicalUrl: result.canonicalUrl });
+    return;
+  }
+  res.status(422).json({ error: result.message, code: result.code });
+});
 
 catalogRouter.put('/catalog/product-details/:productId', ...requireProductEdit, async (req, res) => {
   try {

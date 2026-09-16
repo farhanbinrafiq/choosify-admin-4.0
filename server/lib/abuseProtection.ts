@@ -89,6 +89,25 @@ export function recordClaimConfirmAttempt(ip: string | undefined, token: string)
   };
 }
 
+const DEFAULT_FB_SHARE_RESOLVE_THRESHOLD = 30;
+
+/** Per-IP throttle for the Facebook share-link resolver (server-side outbound
+ *  fetch to facebook.com) -- keeps a bug or abusive caller from turning the
+ *  resolver into a high-volume request generator against Facebook. */
+export function recordFacebookShareResolveAttempt(ip: string | undefined): {
+  count: number;
+  thresholdExceeded: boolean;
+} {
+  const windowMs = Number(process.env.ABUSE_FB_SHARE_RESOLVE_WINDOW_MS || DEFAULT_WINDOW_MS);
+  const threshold = Number(process.env.ABUSE_FB_SHARE_RESOLVE_THRESHOLD || DEFAULT_FB_SHARE_RESOLVE_THRESHOLD);
+  const record = increment(suspiciousRequestCounts, getClientKey(ip, 'facebook-share-resolve'), windowMs);
+
+  return {
+    count: record.count,
+    thresholdExceeded: record.count >= threshold,
+  };
+}
+
 export function getAbuseProtectionSnapshot() {
   return {
     failedAuthAttempts: failedAuthAttempts.size,

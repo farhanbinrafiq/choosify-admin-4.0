@@ -32,6 +32,57 @@ export function detectBrandablePlatform(url: string | undefined | null): Creator
   return null;
 }
 
+/**
+ * Facebook share links (`/share/r/<token>/`, `/share/v/<token>/`) are opaque,
+ * session-resolved redirect tokens, not embeddable content URLs -- confirmed
+ * by direct testing: an unauthenticated fetch returns HTTP 400 with no
+ * redirect, and Meta's tokenless oEmbed echoes the same unresolved URL back
+ * rather than resolving it. There is no legitimate, credential-free way to
+ * turn the opaque token into a real Reel/video id, so these must be caught
+ * here at input time rather than silently saved and left to fail on the
+ * storefront. Mirrors the identical check in the storefront's
+ * `src/lib/videoEmbed.ts` (`isUnsupportedFacebookShareUrl`) -- kept in sync
+ * by hand since the two repos share no package.
+ */
+export function isUnsupportedFacebookShareUrl(url: string | undefined | null): boolean {
+  const clean = (url ?? '').trim();
+  if (!clean) return false;
+  const host = safeHostname(clean);
+  if (!host.endsWith('facebook.com')) return false;
+  return /\/share\/[rv]\//i.test(clean);
+}
+
+/**
+ * The Facebook URL shapes this app actually knows how to embed -- numeric
+ * Reel/video ids, mirroring the shapes the storefront's `canonicalizeFacebookUrl`
+ * (`src/lib/videoEmbed.ts`) recognizes. Used by the server-side share-link
+ * resolver (`server/lib/facebookShareResolver.ts`) to recognize when a
+ * redirect chain has reached a real, embeddable destination rather than
+ * another opaque hop -- one canonical-shape definition, reused instead of a
+ * second Facebook URL parser.
+ */
+export function isCanonicalFacebookVideoUrl(url: string | undefined | null): boolean {
+  const clean = (url ?? '').trim();
+  if (!clean) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(clean);
+  } catch {
+    return false;
+  }
+  if (parsed.hostname.toLowerCase() !== 'www.facebook.com' && parsed.hostname.toLowerCase() !== 'facebook.com') {
+    return false;
+  }
+  if (/^\/reel\/\d+\/?$/.test(parsed.pathname)) return true;
+  // `/videos/<id>/` may be prefixed by a page/profile name segment
+  // (e.g. `/facebook/videos/10153231379946729/`).
+  if (/^\/(?:[^/]+\/)?videos\/\d+\/?$/.test(parsed.pathname)) return true;
+  if (parsed.pathname === '/watch' || parsed.pathname === '/watch/') {
+    return /^\d+$/.test(parsed.searchParams.get('v') || '');
+  }
+  return false;
+}
+
 const pending = new Map<string, Promise<string | null>>();
 
 async function fetchTikTokThumbnail(url: string): Promise<string | null> {
