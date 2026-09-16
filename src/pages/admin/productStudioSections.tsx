@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState, CSSProperties } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { resolveCreatorThumbnail } from '../../lib/productVideo';
 import { CreatorReviewThumbnailPreview } from '../../components/admin/product-studio/CreatorReviewThumbnailPreview';
+import { detectBrandablePlatform } from '../../lib/creatorReviewPlatform';
 import { uploadCreatorImage, uploadProductImages } from '../../services/mediaUpload';
 import {
   checkCategorySchemaCompatibility,
@@ -2050,6 +2051,13 @@ function CreatorThumbField({
   const explicit = (video.thumbnail || '').trim();
   const resolved = resolveCreatorThumbnail(video.videoUrl, explicit);
   const usingVideoPoster = !explicit && !!resolved;
+  // Facebook/Instagram have no reliable credential-free provider thumbnail,
+  // so a custom one is required for these two platforms specifically.
+  // Derived from the actual videoUrl (never the free-text platform
+  // dropdown, which has already been observed mislabeled in real data).
+  const brandablePlatform = detectBrandablePlatform(video.videoUrl);
+  const thumbnailRequired = brandablePlatform === 'facebook' || brandablePlatform === 'instagram';
+  const missingRequiredThumbnail = thumbnailRequired && !explicit;
 
   const pick = async (file?: File | null) => {
     if (!file) return;
@@ -2068,7 +2076,9 @@ function CreatorThumbField({
 
   return (
     <div>
-      <div style={x.label}>Thumbnail image</div>
+      <div style={x.label}>
+        {thumbnailRequired ? <span style={{ color: '#DC2626' }}>Thumbnail *</span> : 'Thumbnail image'}
+      </div>
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
         <div
           style={{
@@ -2110,10 +2120,15 @@ function CreatorThumbField({
             placeholder="…or paste an image link"
             style={{ ...x.input, height: 30, fontSize: 11.5 }}
           />
-          {usingVideoPoster ? (
+          {missingRequiredThumbnail ? (
+            <div style={{ fontSize: 10, color: '#DC2626', fontWeight: 700 }}>
+              {brandablePlatform === 'facebook'
+                ? 'Facebook doesn’t provide a reliable preview image for this Reel. Upload a thumbnail so users can see the content before opening it.'
+                : 'Upload a thumbnail so users can see the content before opening it.'}
+            </div>
+          ) : usingVideoPoster ? (
             <div style={{ ...x.note, fontSize: 10 }}>Using the video&rsquo;s own thumbnail. Upload an image to override it.</div>
-          ) : null}
-          {!resolved ? (
+          ) : !resolved ? (
             <div style={{ ...x.note, fontSize: 10 }}>
               No image yet — a provider thumbnail is used automatically where one is available (YouTube, TikTok),
               otherwise the storefront shows a clearly labeled placeholder, never a fabricated photo.

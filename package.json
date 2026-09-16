@@ -22,6 +22,7 @@
     "test:product-guide": "tsx scripts/probe-product-guide.ts",
     "test:brand-studio-persistence": "tsx scripts/probe-brand-studio-persistence.ts",
     "test:creator-studio": "tsx scripts/probe-creator-studio.ts",
+    "test:creator-review-thumbnail": "tsx scripts/probe-creator-review-thumbnail-requirement.ts",
     "test:role-home-dashboards": "tsx scripts/probe-role-home-dashboards.ts",
     "test:messaging-inbox": "tsx scripts/probe-messaging-inbox.ts",
     "test:guide-foundation": "tsx scripts/probe-guide-foundation.ts",

@@ -29,6 +29,7 @@ import {
   CheckoutBuyBoxPreview,
 } from "../../components/admin/product-studio/StorefrontPanels";
 import { OverviewListItem } from "../../components/admin/product-studio/OverviewListIcon";
+import { CreatorReviewThumbnailPreview } from "../../components/admin/product-studio/CreatorReviewThumbnailPreview";
 import {
   BEFORE_YOUR_VISIT_FIELD_LABELS,
   SERVICE_CATEGORIES,
@@ -2941,11 +2942,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                         {/* Live card mini-preview */}
                         <div className="rounded-xl overflow-hidden border border-[#E5E7EB] bg-white">
                           <div className="relative aspect-video bg-slate-100">
-                            {item.thumbnail ? (
-                              <img src={item.thumbnail} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                            ) : (
-                              <div className="absolute inset-0 flex items-center justify-center text-[10px] text-slate-400 font-bold uppercase">Thumbnail</div>
-                            )}
+                            <CreatorReviewThumbnailPreview videoUrl={item.videoUrl} thumbnail={item.thumbnail} />
                             <span className="absolute top-2 left-2 bg-white/95 px-2 py-0.5 rounded-full text-[8px] font-black uppercase text-[#EF3C23]">{item.platform}</span>
                             <span className="absolute bottom-2 right-2 bg-black/70 text-white text-[8px] font-mono px-1.5 py-0.5 rounded">{item.duration || '0:00'}</span>
                           </div>

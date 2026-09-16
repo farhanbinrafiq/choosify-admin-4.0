@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { Logger } from './lib/logger';
+import { detectBrandablePlatform } from '../src/lib/creatorReviewPlatform';
 import { catalogStore, defaultHomepage } from '../lib/vercel-catalog/catalogStore';
 import {
   normalizeBrandInput,
@@ -3272,6 +3273,40 @@ catalogRouter.get('/catalog/product-details/:productId', async (req, res) => {
   }
 });
 
+/**
+ * Facebook/Instagram expose no reliable credential-free provider thumbnail
+ * (confirmed: their tokenless oEmbed never returns thumbnail_url), so a
+ * Creator Review pointed at either now requires an explicit thumbnail --
+ * enforced here, server-side, since client validation alone can be
+ * bypassed. Platform is derived from the actual videoUrl, never the
+ * free-text `platform` field (already observed mislabeled in real data).
+ *
+ * Only flags an entry that is genuinely NEW or CHANGED relative to what was
+ * already stored (compared by id, then videoUrl/thumbnail) -- an existing
+ * legacy entry that is merely carried along unchanged by some other
+ * section's save must never retroactively block that unrelated save.
+ */
+function findCreatorContentMissingRequiredThumbnail(
+  items: CatalogProductDetail['creatorContent'] | undefined,
+  existingItems: CatalogProductDetail['creatorContent'] | undefined,
+): { title: string; platformName: string } | null {
+  if (!Array.isArray(items)) return null;
+  const existingById = new Map((existingItems ?? []).map((it) => [it.id, it]));
+  for (const item of items) {
+    const brandable = detectBrandablePlatform(item.videoUrl);
+    if (brandable !== 'facebook' && brandable !== 'instagram') continue;
+    const thumbnail = (item.thumbnail ?? '').trim();
+    if (thumbnail) continue;
+    const prev = existingById.get(item.id);
+    const isNewOrChanged =
+      !prev || prev.videoUrl !== item.videoUrl || (prev.thumbnail ?? '').trim() !== thumbnail;
+    if (isNewOrChanged) {
+      return { title: item.title || 'Untitled review', platformName: brandable === 'facebook' ? 'Facebook' : 'Instagram' };
+    }
+  }
+  return null;
+}
+
 catalogRouter.put('/catalog/product-details/:productId', ...requireProductEdit, async (req, res) => {
   try {
     const product = await catalogStore.getProduct(req.params.productId);
@@ -3286,6 +3321,16 @@ catalogRouter.put('/catalog/product-details/:productId', ...requireProductEdit, 
       const denied = enforceRelatedInfoOwnership(req, existing, normalized);
       if (denied) {
         res.status(denied.status).json({ error: denied.error });
+        return;
+      }
+    }
+    {
+      const missing = findCreatorContentMissingRequiredThumbnail(normalized.creatorContent, existing?.creatorContent);
+      if (missing) {
+        res.status(400).json({
+          error: `"${missing.title}" needs a thumbnail — ${missing.platformName} doesn't provide a reliable preview image, so one is required before saving.`,
+          code: 'CREATOR_REVIEW_THUMBNAIL_REQUIRED',
+        });
         return;
       }
     }
@@ -3382,6 +3427,16 @@ catalogRouter.patch('/catalog/product-details/:productId', ...requireProductEdit
       const denied = enforceRelatedInfoOwnership(req, existing, normalized);
       if (denied) {
         res.status(denied.status).json({ error: denied.error });
+        return;
+      }
+    }
+    {
+      const missing = findCreatorContentMissingRequiredThumbnail(normalized.creatorContent, existing?.creatorContent);
+      if (missing) {
+        res.status(400).json({
+          error: `"${missing.title}" needs a thumbnail — ${missing.platformName} doesn't provide a reliable preview image, so one is required before saving.`,
+          code: 'CREATOR_REVIEW_THUMBNAIL_REQUIRED',
+        });
         return;
       }
     }

@@ -4,6 +4,7 @@ import { ArrowLeft, History, Image as ImageIcon, RotateCw, Trash2, Upload } from
 import { catalogApi } from '../../services/catalogApi';
 import { uploadProductImages, uploadProductVideoFile } from '../../services/mediaUpload';
 import { classifyProductVideo } from '../../lib/productVideo';
+import { detectBrandablePlatform } from '../../lib/creatorReviewPlatform';
 import { useAuth } from '../../contexts/AuthContext';
 import { useEntityDraft } from '../../hooks/useEntityDraft';
 import { ProductDetailPresentation, type StudioBridge } from '../../components/product-detail';
@@ -615,6 +616,28 @@ export default function ProductEditStudio() {
     if (pendingCategory) {
       triggerToast('Resolve the category change first — Remap, Clear, or Cancel it.');
       return;
+    }
+    // Facebook/Instagram have no reliable credential-free provider thumbnail
+    // (confirmed: their tokenless oEmbed never exposes one), so a Creator
+    // Review pointed at either now requires an explicit thumbnail before the
+    // Creator Reviews section itself can be saved -- scoped to editingId
+    // === 'influencer' only, so editing any OTHER section of a product that
+    // happens to carry an older Facebook/Instagram review with no thumbnail
+    // is never blocked by this. Platform is derived from the actual
+    // videoUrl, never the free-text platform dropdown (already known to be
+    // an unreliable/mislabelable field).
+    if (editingId === 'influencer') {
+      const missing = (sectionDraft.creatorVideos ?? []).find((v) => {
+        const brandable = detectBrandablePlatform(v.videoUrl);
+        return (brandable === 'facebook' || brandable === 'instagram') && !(v.thumbnail ?? '').trim();
+      });
+      if (missing) {
+        const platformName = detectBrandablePlatform(missing.videoUrl) === 'facebook' ? 'Facebook' : 'Instagram';
+        triggerToast(
+          `"${missing.title || 'Untitled review'}" needs a thumbnail — ${platformName} doesn't provide a reliable preview image, so one is required before saving.`,
+        );
+        return;
+      }
     }
     setSaving(true);
     try {
