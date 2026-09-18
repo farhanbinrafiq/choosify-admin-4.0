@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from 'react';
-import { Check, Heart, MapPin, MessageCircleMore, Pencil, Play, ShieldCheck, Star } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Check, Heart, MapPin, MessageCircleMore, Pencil, ShieldCheck, Star } from 'lucide-react';
 import type { ProductEditSection, ProductEditorModel } from '../../pages/admin/productEditorModel';
-import { classifyProductVideo, resolveCreatorThumbnail } from '../../lib/productVideo';
+import { classifyProductVideo } from '../../lib/productVideo';
 import { AddonItemsView, ThingsToKnowView, ProductGuideView, RelatedInfoView, VariantSummaryView, WarrantyInfoView } from '../../pages/admin/productStudioSections';
 import { mergeRelatedStores } from '../../../lib/vercel-catalog/relatedInfoMerge';
+import { CreatorReviewThumbnailPreview } from '../admin/product-studio/CreatorReviewThumbnailPreview';
 
 /**
  * Shared storefront-parity Product Detail presentation.
@@ -24,10 +25,7 @@ import { mergeRelatedStores } from '../../../lib/vercel-catalog/relatedInfoMerge
  * Studio synchronization checklist".
  */
 
-type CarouselMedia =
-  | { kind: 'image'; src: string }
-  | { kind: 'youtube'; embedUrl: string }
-  | { kind: 'video'; src: string };
+type CarouselMedia = { kind: 'image'; src: string };
 
 export type StudioBridge = {
   /** section key currently being edited; '*' = whole-form create mode */
@@ -217,19 +215,76 @@ export function ProductDetailPresentation({
   // squeezed into one narrow column with dead space beside it.
   const coreEditing = isStudio && (creating || studio!.editingSection === 'core');
 
-  // Carousel media = product images (primary first) + the optional product video
-  // appended at the end. The video plays as video, not an image.
+  // Image gallery (primary first) — video is NOT mixed into this carousel; it
+  // gets its own column/slot below (see `videoInfo`) so it has real estate
+  // proportional to the editor's own Product Photos / Product Video split,
+  // instead of being just one more carousel slide with no distinct presence.
   const media = useMemo<CarouselMedia[]>(() => {
     const imgs = [...(model.gallery || [])];
     if (model.image && !imgs.includes(model.image)) imgs.unshift(model.image);
-    const items: CarouselMedia[] = imgs.filter(Boolean).map((src) => ({ kind: 'image', src }));
-    const v = classifyProductVideo(model.videoUrl);
-    if (v.kind === 'youtube') items.push({ kind: 'youtube', embedUrl: v.embedUrl });
-    else if (v.kind === 'file') items.push({ kind: 'video', src: v.src });
-    return items;
-  }, [model.gallery, model.image, model.videoUrl]);
+    return imgs.filter(Boolean).map((src) => ({ kind: 'image', src }));
+  }, [model.gallery, model.image]);
   const [activeMedia, setActiveMedia] = useState(0);
   const active = media[Math.min(activeMedia, Math.max(0, media.length - 1))];
+
+  // The one authoritative video presentation for the saved/view state — same
+  // classification the editor's VideoField uses, so "what the seller entered"
+  // and "what a buyer/admin sees" never disagree on what counts as a real video.
+  const videoInfo = useMemo(() => classifyProductVideo(model.videoUrl), [model.videoUrl]);
+  const hasVideo = videoInfo.kind !== 'invalid';
+  const videoOrientation = 'orientation' in videoInfo ? videoInfo.orientation : 'landscape';
+  // Real pixel dimensions for a direct video FILE, read from the browser's
+  // own `videoWidth`/`videoHeight` once the native <video> element's
+  // metadata loads (a small byte-range fetch, not the whole file) — this is
+  // the one case here where the actual media element is same-page and
+  // genuinely measurable, unlike a cross-origin YouTube/Facebook/Instagram/
+  // TikTok iframe. Takes priority over the classifier's landscape default
+  // the moment it resolves.
+  const [measuredFileDims, setMeasuredFileDims] = useState<{ width: number; height: number } | null>(null);
+  useEffect(() => {
+    setMeasuredFileDims(null);
+  }, [model.videoUrl]);
+  const videoAspectRatio =
+    videoInfo.kind === 'file' && measuredFileDims
+      ? measuredFileDims.width / measuredFileDims.height
+      : videoOrientation === 'portrait'
+        ? 9 / 16
+        : 16 / 9;
+  // Actual rendered width of the video column (the grid cell this box
+  // sits in, which is fluid — `max-w-full`, not a fixed value), measured
+  // via ResizeObserver. Feeds an explicit JS-computed pixel width/height
+  // (same "contain within a width/height budget" arithmetic as the Web
+  // storefront gallery's active stage) instead of CSS `aspect-ratio` +
+  // `max-width`/`max-height` + auto/auto, whose real browser resolution
+  // was found unreliable there for a box with no ordinary in-flow content
+  // driving its own size.
+  const videoColumnRef = useRef<HTMLDivElement>(null);
+  const [videoColumnWidth, setVideoColumnWidth] = useState(400);
+  useEffect(() => {
+    const el = videoColumnRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (w && w > 0) setVideoColumnWidth(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const VIDEO_MAX_HEIGHT = 420;
+  const videoBoxSize = (() => {
+    const safeRatio = videoAspectRatio > 0 ? videoAspectRatio : 16 / 9;
+    let width = videoColumnWidth;
+    let height = width / safeRatio;
+    if (height > VIDEO_MAX_HEIGHT) {
+      height = VIDEO_MAX_HEIGHT;
+      width = height * safeRatio;
+    }
+    return { width: Math.round(width), height: Math.round(height) };
+  })();
+  // Two columns only when there's real video content to put in the second one —
+  // otherwise the gallery takes the full width rather than leaving a blank
+  // reserved column (the bug this fixes).
+  const showMediaVideoColumn = hasVideo && !coreEditing;
 
   const price = model.price || 0;
   const original = model.originalPrice > price ? model.originalPrice : 0;
@@ -255,44 +310,75 @@ export function ProductDetailPresentation({
       {/* -- Gallery hero (media carousel) -- */}
       <div className="w-full choosify-dark-surface">
         <div className="max-w-[1280px] mx-auto px-5 sm:px-8 lg:px-10 py-6">
-          <div className={coreEditing ? 'w-full' : 'grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-6 items-start'}>
+          <div className="w-full">
             <SectionShell ctx={sctx}
               k="core"
               view={
-                <div>
-                  <div className="aspect-[4/3] rounded-none overflow-hidden bg-black/20 flex items-center justify-center">
-                    {!active ? (
-                      <span className="text-[12px] text-white/50 font-semibold">
-                        {isStudio ? 'Add product media' : 'No product image'}
-                      </span>
-                    ) : active.kind === 'youtube' ? (
-                      <iframe title="Product video" src={active.embedUrl} allow="accelerometer; encrypted-media; picture-in-picture" allowFullScreen className="w-full h-full border-0" />
-                    ) : active.kind === 'video' ? (
-                      <video src={active.src} controls preload="metadata" className="w-full h-full object-contain bg-black" />
-                    ) : (
-                      <img src={active.src} alt="" className="w-full h-full object-contain bg-black/10" />
-                    )}
-                  </div>
-                  {media.length > 1 ? (
-                    <div className="flex gap-2 mt-3 overflow-x-auto">
-                      {media.map((m, i) => (
-                        <button
-                          key={`${m.kind}-${i}`}
-                          type="button"
-                          onClick={() => setActiveMedia(i)}
-                          className={`w-16 h-16 shrink-0 overflow-hidden border-2 relative bg-black/40 ${
-                            activeMedia === i ? 'border-[#FF5B00]' : 'border-white/20'
-                          }`}
-                        >
-                          {m.kind === 'image' ? (
+                <div className={showMediaVideoColumn ? 'grid grid-cols-1 md:grid-cols-[1.1fr_0.9fr] gap-6 items-start' : ''}>
+                  <div>
+                    <div className="aspect-[4/3] rounded-none overflow-hidden bg-black/20 flex items-center justify-center">
+                      {!active ? (
+                        <span className="text-[12px] text-white/50 font-semibold">
+                          {isStudio ? 'Add product media' : 'No product image'}
+                        </span>
+                      ) : (
+                        <img src={active.src} alt="" className="w-full h-full object-contain bg-black/10" />
+                      )}
+                    </div>
+                    {media.length > 1 ? (
+                      <div className="flex gap-2 mt-3 overflow-x-auto">
+                        {media.map((m, i) => (
+                          <button
+                            key={`${m.kind}-${i}`}
+                            type="button"
+                            onClick={() => setActiveMedia(i)}
+                            className={`w-16 h-16 shrink-0 overflow-hidden border-2 relative bg-black/40 ${
+                              activeMedia === i ? 'border-[#FF5B00]' : 'border-white/20'
+                            }`}
+                          >
                             <img src={m.src} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            <span className="w-full h-full flex items-center justify-center text-white">
-                              <Play size={18} className="fill-current" />
-                            </span>
-                          )}
-                        </button>
-                      ))}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  {showMediaVideoColumn ? (
+                    <div ref={videoColumnRef}>
+                      <div className="text-[11px] font-extrabold text-[#9AA0AC] uppercase mb-2">Product Video</div>
+                      <div
+                        className="mx-auto max-w-full max-h-[420px] rounded-none overflow-hidden bg-black/20 flex items-center justify-center"
+                        style={{ width: videoBoxSize.width, height: videoBoxSize.height }}
+                      >
+                        {videoInfo.kind === 'youtube' ? (
+                          <iframe title="Product video" src={videoInfo.embedUrl} width="100%" height="100%" allow="accelerometer; encrypted-media; picture-in-picture" allowFullScreen className="w-full h-full border-0" />
+                        ) : videoInfo.kind === 'file' ? (
+                          <video
+                            src={videoInfo.src}
+                            controls
+                            preload="metadata"
+                            className="w-full h-full object-contain bg-black"
+                            onLoadedMetadata={(e) => {
+                              const v = e.currentTarget;
+                              if (v.videoWidth > 0 && v.videoHeight > 0) {
+                                setMeasuredFileDims({ width: v.videoWidth, height: v.videoHeight });
+                              }
+                            }}
+                          />
+                        ) : videoInfo.kind === 'brandable' ? (
+                          // No credential-free way to embed a live Facebook/Instagram/TikTok
+                          // player here (same constraint as the Creator Reviews admin
+                          // preview) — an honest platform-branded thumbnail + link out,
+                          // not a blank/broken box.
+                          <a
+                            href={videoInfo.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="relative w-full h-full block"
+                          >
+                            <CreatorReviewThumbnailPreview videoUrl={videoInfo.url} thumbnail="" />
+                          </a>
+                        ) : null}
+                      </div>
                     </div>
                   ) : null}
                 </div>
@@ -512,11 +598,7 @@ export function ProductDetailPresentation({
                           className="bg-white border border-[#E8EDF2] rounded-[10px] overflow-hidden block"
                         >
                           <div className="aspect-video bg-[#F4F7F9] flex items-center justify-center">
-                            {resolveCreatorThumbnail(c.videoUrl, c.thumbnail) ? (
-                              <img src={resolveCreatorThumbnail(c.videoUrl, c.thumbnail)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                            ) : (
-                              <Play size={22} className="text-[#9AA0AC]" />
-                            )}
+                            <CreatorReviewThumbnailPreview videoUrl={c.videoUrl} thumbnail={c.thumbnail} />
                           </div>
                           <div className="p-3 text-left">
                             <div className="text-[10px] font-extrabold text-[#EF3C23] uppercase">{c.platform}</div>
