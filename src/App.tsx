@@ -64,7 +64,6 @@ const MessagesInbox = lazy(() => import('./pages/admin/MessagesInbox'));
 const PartnerSupportInbox = lazy(() =>
   import('./components/messaging/PartnerSupportInbox').then((m) => ({ default: m.PartnerSupportInbox })),
 );
-const ProductStudio = lazy(() => import('./pages/admin/ProductStudio'));
 const BrandDetails = lazy(() => import('./pages/admin/BrandDetails'));
 const DealsBannersStudio = lazy(() => import('./pages/admin/DealsBannersStudio'));
 const BrandPostsPage = lazy(() => import('./pages/admin/BrandPosts'));

@@ -22,6 +22,7 @@ import {
 } from './productEditorModel';
 import {
   AddonItemsEditor,
+  ThingsToKnowEditor,
   CategoryChangeDecision,
   CategorySearchSelect,
   CreatorReviewsEditor,
@@ -568,7 +569,7 @@ export default function ProductEditStudio() {
     addlspecs: 'Physical Specifications', box: 'Complimentary Features', overview: 'Product Overview',
     tags: 'Best For Tags', delivery: 'Delivery Information',
     influencer: 'Creator Reviews', warranty: 'Warranty & After-Sales Services',
-    relatedinfo: 'Related Information',
+    relatedinfo: 'Related Information', thingsToKnow: 'Things to Know',
   };
 
   const requestEdit = (sectionId: string) => {
@@ -1008,6 +1009,10 @@ export default function ProductEditStudio() {
       case 'addons':
         return (
           <AddonItemsEditor items={d.addonItems} onChange={(next) => patch({ addonItems: next })} />
+        );
+      case 'thingsToKnow':
+        return (
+          <ThingsToKnowEditor items={d.thingsToKnowItems} onChange={(next) => patch({ thingsToKnowItems: next })} />
         );
       case 'delivery':
         return (

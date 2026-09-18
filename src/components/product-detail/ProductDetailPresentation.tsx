@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Check, Heart, MapPin, MessageCircleMore, Pencil, Play, ShieldCheck, Star } from 'lucide-react';
 import type { ProductEditSection, ProductEditorModel } from '../../pages/admin/productEditorModel';
 import { classifyProductVideo, resolveCreatorThumbnail } from '../../lib/productVideo';
-import { AddonItemsView, ProductGuideView, RelatedInfoView, VariantSummaryView, WarrantyInfoView } from '../../pages/admin/productStudioSections';
+import { AddonItemsView, ThingsToKnowView, ProductGuideView, RelatedInfoView, VariantSummaryView, WarrantyInfoView } from '../../pages/admin/productStudioSections';
 import { mergeRelatedStores } from '../../../lib/vercel-catalog/relatedInfoMerge';
 
 /**
@@ -427,6 +427,12 @@ export function ProductDetailPresentation({
                 view={
                   <DeliveryInfoView region={model.deliveryRegion} bullets={model.deliveryBullets} />
                 }
+              />
+
+              <SectionShell ctx={sctx}
+                k="thingsToKnow"
+                className="pt-2 border-t border-[#F1F1F3]"
+                view={<ThingsToKnowView items={model.thingsToKnowItems} />}
               />
             </div>
           </div>

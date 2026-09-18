@@ -106,6 +106,13 @@ export interface ProductEditorModel {
    * `maxQuantity` fields.
    */
   addonItems: NonNullable<CatalogProductDetail['addonItems']>;
+  /**
+   * Optional structured purchase guidance (e.g. "Warranty" / "Official 1-year
+   * manufacturer warranty."). Seller/Admin-entered narrative text only —
+   * never auto-generated per category. Carried faithfully, same shape as
+   * `detail.thingsToKnowItems`.
+   */
+  thingsToKnowItems: NonNullable<CatalogProductDetail['thingsToKnowItems']>;
   /** "Delivery Information" section — region + quick-service delivery facts. */
   deliveryRegion: string;
   deliveryBullets: string[];
@@ -223,6 +230,7 @@ export const OVERVIEW_PRESET_TITLES = [
 export type ProductOptionGroup = NonNullable<CatalogProductDetail['optionGroups']>[number];
 export type ProductVariantRow = NonNullable<CatalogProductDetail['productVariants']>[number];
 export type ProductAddonRow = NonNullable<CatalogProductDetail['addonItems']>[number];
+export type ThingsToKnowRow = NonNullable<CatalogProductDetail['thingsToKnowItems']>[number];
 
 export function createBlankProductModel(id = 'new'): ProductEditorModel {
   return {
@@ -257,6 +265,7 @@ export function createBlankProductModel(id = 'new'): ProductEditorModel {
     boxContents: [],
     additionalSpecs: [],
     addonItems: [],
+    thingsToKnowItems: [],
     deliveryRegion: '',
     deliveryBullets: [],
     warrantyMonths: 0,
@@ -319,6 +328,20 @@ export function mapCatalogProductToEditor(
           ...(typeof a.maxQuantity === 'number' ? { maxQuantity: a.maxQuantity } : {}),
         }))
         .filter((a) => a.title)
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+    : [];
+
+  const thingsToKnowItems = Array.isArray(detail?.thingsToKnowItems)
+    ? detail!.thingsToKnowItems
+        .map((t, i) => ({
+          id: t.id || `ttk-${i}`,
+          title: t.title || '',
+          ...(t.description ? { description: t.description } : {}),
+          ...(t.icon ? { icon: t.icon } : {}),
+          enabled: t.enabled !== false,
+          sortOrder: typeof t.sortOrder === 'number' ? t.sortOrder : i,
+        }))
+        .filter((t) => t.title)
         .sort((a, b) => a.sortOrder - b.sortOrder)
     : [];
 
@@ -456,6 +479,7 @@ export function mapCatalogProductToEditor(
     boxContents,
     additionalSpecs,
     addonItems,
+    thingsToKnowItems,
     deliveryRegion: detail?.deliveryInfo?.region || '',
     deliveryBullets: Array.isArray(detail?.deliveryInfo?.bullets)
       ? detail!.deliveryInfo!.bullets!.map(String).filter(Boolean)
@@ -644,6 +668,20 @@ export function editorModelToDetailPayload(model: ProductEditorModel): Partial<C
       ...(a.badge ? { badge: a.badge } : {}),
       ...(typeof a.maxQuantity === 'number' ? { maxQuantity: a.maxQuantity } : {}),
     })),
+    // Carried faithfully — server normalizer coerces/defaults the additive fields.
+    // `enableThingsToKnow` is content-derived (same convention as
+    // enableDeliveryInfo/enableWarrantyInfo below), not a manual toggle —
+    // the section simply doesn't exist on the storefront until the
+    // seller/admin has entered at least one real, enabled item.
+    thingsToKnowItems: (model.thingsToKnowItems ?? []).map((t, i) => ({
+      id: t.id || `ttk-${i}`,
+      title: t.title,
+      ...(t.description ? { description: t.description } : {}),
+      ...(t.icon ? { icon: t.icon } : {}),
+      enabled: t.enabled !== false,
+      sortOrder: typeof t.sortOrder === 'number' ? t.sortOrder : i,
+    })),
+    enableThingsToKnow: (model.thingsToKnowItems ?? []).some((t) => t.enabled !== false && t.title.trim()),
     deliveryInfo: {
       ...((model.deliveryRegion || '').trim() ? { region: (model.deliveryRegion || '').trim() } : {}),
       bullets: (model.deliveryBullets || []).map((b) => b.trim()).filter(Boolean),

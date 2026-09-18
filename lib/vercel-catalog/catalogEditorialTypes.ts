@@ -445,6 +445,7 @@ export interface CatalogProductDetail {
   enableAddonItems?: boolean;
   enableDeliveryInfo?: boolean;
   enableWarrantyInfo?: boolean;
+  enableThingsToKnow?: boolean;
 
   /**
    * Seller-authored "Delivery Information" block shown on the storefront Product
@@ -494,6 +495,20 @@ export interface CatalogProductDetail {
     badge?: string;
     /** When set (≥1), the buyer may pick a quantity of this add-on up to this cap. */
     maxQuantity?: number;
+  }>;
+  /**
+   * Optional structured purchase guidance the seller/admin explicitly enters
+   * (e.g. "charger included/not included", "fit information", "installation
+   * requirement") — never auto-generated per category. Same additive/
+   * backward-compatible shape as addonItems: absent `enabled` ⇒ true.
+   */
+  thingsToKnowItems?: Array<{
+    id: string;
+    title: string;
+    description?: string;
+    icon?: string;
+    enabled?: boolean;
+    sortOrder?: number;
   }>;
 }
 

@@ -741,6 +741,7 @@ export const normalizePlacementInput = (payload: unknown, existing?: CatalogPlac
 
 type NormalizedVariant = NonNullable<CatalogProductDetail['productVariants']>[number];
 type NormalizedAddon = NonNullable<CatalogProductDetail['addonItems']>[number];
+type NormalizedThingsToKnowItem = NonNullable<CatalogProductDetail['thingsToKnowItems']>[number];
 
 /**
  * Normalize one product variant. Additive canonical fields (variants sprint):
@@ -826,6 +827,31 @@ const normalizeAddon = (raw: unknown, idx: number): NormalizedAddon | null => {
     sortOrder: r.sortOrder !== undefined ? Math.floor(toNumber(r.sortOrder, idx)) : idx,
     ...(badge ? { badge } : {}),
     ...(hasMax ? { maxQuantity: Math.max(1, Math.floor(toNumber(r.maxQuantity, 1))) } : {}),
+  };
+};
+
+/**
+ * Normalize one "Things to Know" item — narrative seller/admin-entered
+ * purchase guidance (never auto-generated). Mirrors normalizeAddon's shape
+ * exactly: same additive/backward-compatible `enabled`/`sortOrder` fields,
+ * no slug/handle sanitization applied to `title`/`description` (they are
+ * plain narrative text — spaces, punctuation, #, multiline all pass through
+ * untouched, matching how `description`/`boxContents` are already handled).
+ */
+const normalizeThingsToKnowItem = (raw: unknown, idx: number): NormalizedThingsToKnowItem | null => {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const title = toString(r.title, toString(r.name)).trim();
+  if (!title) return null;
+  const description = toString(r.description).trim();
+  const icon = toString(r.icon).trim().slice(0, 40);
+  return {
+    id: toString(r.id) || `ttk-${Date.now()}-${idx}`,
+    title,
+    ...(description ? { description } : {}),
+    ...(icon ? { icon } : {}),
+    enabled: typeof r.enabled === 'boolean' ? r.enabled : true,
+    sortOrder: r.sortOrder !== undefined ? Math.floor(toNumber(r.sortOrder, idx)) : idx,
   };
 };
 
@@ -1102,6 +1128,8 @@ export const normalizeProductDetailInput = (
       raw.enableDeliveryInfo !== undefined ? toBoolean(raw.enableDeliveryInfo) : existing?.enableDeliveryInfo,
     enableWarrantyInfo:
       raw.enableWarrantyInfo !== undefined ? toBoolean(raw.enableWarrantyInfo) : existing?.enableWarrantyInfo,
+    enableThingsToKnow:
+      raw.enableThingsToKnow !== undefined ? toBoolean(raw.enableThingsToKnow) : existing?.enableThingsToKnow,
     deliveryInfo: (() => {
       const di = raw.deliveryInfo;
       if (di && typeof di === 'object' && !Array.isArray(di)) {
@@ -1140,6 +1168,12 @@ export const normalizeProductDetailInput = (
           .filter((a): a is NormalizedAddon => a !== null)
           .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
       : existing?.addonItems ?? [],
+    thingsToKnowItems: Array.isArray(raw.thingsToKnowItems)
+      ? raw.thingsToKnowItems
+          .map((t, i) => normalizeThingsToKnowItem(t, i))
+          .filter((t): t is NormalizedThingsToKnowItem => t !== null)
+          .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+      : existing?.thingsToKnowItems ?? [],
   };
 };
 

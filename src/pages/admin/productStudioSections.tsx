@@ -19,6 +19,7 @@ import {
   type EditorRelatedStore,
   type EditorWhatsNearby,
   type ProductAddonRow,
+  type ThingsToKnowRow,
   type ProductEditorModel,
   type ProductOptionGroup,
   type ProductVariantRow,
@@ -1623,6 +1624,112 @@ export function AddonItemsView({ items }: { items: ProductAddonRow[] }) {
             {a.enabled === false ? <span style={{ fontSize: 9, color: '#9CA3AF', fontWeight: 800 }}>DISABLED</span> : null}
           </span>
           <span style={{ color: ACCENT, fontWeight: 800 }}>{a.price > 0 ? `+ ৳${a.price.toLocaleString()}` : 'Free'}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ──────────────────────────────── Things to Know ───────────────────────────────
+
+export function ThingsToKnowEditor({
+  items,
+  onChange,
+}: {
+  items: ThingsToKnowRow[];
+  onChange: (next: ThingsToKnowRow[]) => void;
+}) {
+  const sorted = useMemo(
+    () => [...items].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
+    [items],
+  );
+
+  const patch = (id: string, p: Partial<ThingsToKnowRow>) =>
+    onChange(items.map((t) => (t.id === id ? { ...t, ...p } : t)));
+
+  const add = () =>
+    onChange([
+      ...items,
+      {
+        id: `ttk-${Date.now()}`,
+        title: '',
+        enabled: true,
+        sortOrder: (items.reduce((m, t) => Math.max(m, t.sortOrder ?? 0), 0) || 0) + 1,
+      },
+    ]);
+
+  const remove = (id: string) => onChange(items.filter((t) => t.id !== id));
+
+  const move = (id: string, dir: -1 | 1) => {
+    const ordered = [...sorted];
+    const i = ordered.findIndex((t) => t.id === id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= ordered.length) return;
+    [ordered[i], ordered[j]] = [ordered[j], ordered[i]];
+    onChange(ordered.map((t, idx) => ({ ...t, sortOrder: idx + 1 })));
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={x.note}>
+        Structured purchase guidance the buyer should know before ordering — e.g. "Charger
+        included", "Fit runs small", "Installation required". Plain narrative text is fine:
+        spaces, punctuation, # and multiple lines all work normally. Never auto-generated —
+        only what you enter here appears on the storefront.
+      </div>
+      {sorted.length === 0 ? (
+        <p style={{ ...x.note, fontStyle: 'italic' }}>No items yet.</p>
+      ) : (
+        sorted.map((t, idx) => (
+          <div key={t.id} style={{ border: '1px solid #E8EDF2', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div>
+              <div style={x.label}>Title</div>
+              <input value={t.title} onChange={(e) => patch(t.id, { title: e.target.value })} placeholder="e.g. Warranty" style={x.input} />
+            </div>
+            <div>
+              <div style={x.label}>Description</div>
+              <textarea
+                value={t.description ?? ''}
+                onChange={(e) => patch(t.id, { description: e.target.value })}
+                placeholder="e.g. Official 1-year manufacturer warranty."
+                rows={3}
+                style={{ ...x.input, height: 'auto', resize: 'vertical' as const, fontFamily: 'inherit' }}
+              />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700 }}>
+                <input type="checkbox" checked={t.enabled !== false} onChange={(e) => patch(t.id, { enabled: e.target.checked })} />
+                Enabled
+              </label>
+              <span style={{ display: 'inline-flex', gap: 4 }}>
+                <button type="button" onClick={() => move(t.id, -1)} disabled={idx === 0} style={x.ghostBtn}>↑</button>
+                <button type="button" onClick={() => move(t.id, 1)} disabled={idx === sorted.length - 1} style={x.ghostBtn}>↓</button>
+              </span>
+              <button type="button" onClick={() => remove(t.id)} style={{ ...x.ghostBtn, color: '#DC2626', marginLeft: 'auto' }}>Remove</button>
+            </div>
+          </div>
+        ))
+      )}
+      <div>
+        <button type="button" onClick={add} style={x.accentBtn}>+ Add item</button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────── Things to Know — VIEW mode ───────────────────────
+
+export function ThingsToKnowView({ items }: { items: ThingsToKnowRow[] }) {
+  const shown = [...items].filter((t) => t.enabled !== false).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  if (!shown.length) {
+    return <p style={{ fontSize: 11, color: '#9CA3AF', margin: 0, fontStyle: 'italic' }}>No items.</p>;
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {shown.map((t) => (
+        <div key={t.id} style={{ fontSize: 12 }}>
+          <div style={{ fontWeight: 700, color: '#1A1A2E' }}>{t.title || 'Untitled'}</div>
+          {t.description ? <div style={{ color: '#6B7280', fontSize: 11.5, whiteSpace: 'pre-wrap' }}>{t.description}</div> : null}
         </div>
       ))}
     </div>
