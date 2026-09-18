@@ -4,7 +4,8 @@ import { ArrowLeft, History, Image as ImageIcon, RotateCw, Trash2, Upload } from
 import { catalogApi } from '../../services/catalogApi';
 import { uploadProductImages, uploadProductVideoFile } from '../../services/mediaUpload';
 import { classifyProductVideo } from '../../lib/productVideo';
-import { detectBrandablePlatform } from '../../lib/creatorReviewPlatform';
+import { detectBrandablePlatform, extractUrlFromPastedInput } from '../../lib/creatorReviewPlatform';
+import { CreatorReviewThumbnailPreview } from '../../components/admin/product-studio/CreatorReviewThumbnailPreview';
 import { useAuth } from '../../contexts/AuthContext';
 import { useEntityDraft } from '../../hooks/useEntityDraft';
 import { ProductDetailPresentation, type StudioBridge } from '../../components/product-detail';
@@ -182,7 +183,10 @@ function VideoField({
   };
 
   const applyLink = () => {
-    const s = linkInput.trim();
+    // A seller may paste a platform's "Embed Code" HTML snippet instead of a
+    // plain URL (same paste-and-go handling as Creator Reviews) — extract the
+    // real URL first rather than rejecting the whole input.
+    const s = extractUrlFromPastedInput(linkInput.trim());
     const c = classifyProductVideo(s);
     if (c.kind === 'invalid') { setLinkErr(c.reason); return; }
     onChange(s);
@@ -196,6 +200,13 @@ function VideoField({
       style={{ width: '100%', height: '100%', border: 0 }} />
   ) : info.kind === 'file' ? (
     <video src={info.src} controls preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }} />
+  ) : info.kind === 'brandable' ? (
+    // No credential-free way to embed a live Facebook/Instagram/TikTok player
+    // here (same constraint as the Creator Reviews admin preview) — an honest
+    // platform-branded thumbnail plus the link, not a broken/blank box.
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <CreatorReviewThumbnailPreview videoUrl={info.url} thumbnail="" />
+    </div>
   ) : null;
 
   if (!editing) {
@@ -251,12 +262,12 @@ function VideoField({
           </div>
           <div style={{ ...S.label, marginBottom: 6 }}>OR USE VIDEO LINK</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <input value={linkInput} onChange={(e) => { setLinkInput(e.target.value); setLinkErr(''); }} placeholder="Paste video HTTPS URL (YouTube / MP4)…"
+            <input value={linkInput} onChange={(e) => { setLinkInput(e.target.value); setLinkErr(''); }} placeholder="Paste video HTTPS URL (YouTube / Facebook / Instagram / TikTok / MP4)…"
               style={{ ...S.input, height: 36, flex: 1, minWidth: 180 }} />
             <button type="button" onClick={applyLink} style={{ ...S.ghostBtn, padding: '7px 12px' }}>Apply</button>
           </div>
           {linkErr ? <div style={{ fontSize: 11, color: '#DC2626', fontWeight: 700, marginTop: 6 }}>{linkErr}</div> : null}
-          <div style={{ ...S.readEmpty, marginTop: 6 }}>One video only. YouTube link, a direct .mp4/.webm URL, or an uploaded MP4/WebM (≤ 50 MB; use a link for larger files).</div>
+          <div style={{ ...S.readEmpty, marginTop: 6 }}>One video only. YouTube, Facebook, Instagram, or TikTok video link, a direct .mp4/.webm URL, or an uploaded MP4/WebM (≤ 50 MB; use a link for larger files).</div>
         </>
       )}
     </div>

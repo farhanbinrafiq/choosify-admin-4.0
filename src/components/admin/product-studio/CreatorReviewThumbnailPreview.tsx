@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Facebook, Instagram, Music2 } from 'lucide-react';
 import { resolveCreatorThumbnail } from '../../../lib/productVideo';
-import { detectBrandablePlatform, getTikTokThumbnail } from '../../../lib/creatorReviewPlatform';
+import { detectBrandablePlatform, extractUrlFromPastedInput, getTikTokThumbnail } from '../../../lib/creatorReviewPlatform';
 
 const PLATFORM_STYLE: Record<
   'facebook' | 'instagram' | 'tiktok',
@@ -36,8 +36,12 @@ export function CreatorReviewThumbnailPreview({
   thumbnail: string;
 }) {
   const explicit = (thumbnail || '').trim();
-  const derived = resolveCreatorThumbnail(videoUrl, explicit);
-  const brandablePlatform = detectBrandablePlatform(videoUrl);
+  // A seller pasting a platform's Embed Code (raw HTML) instead of a plain
+  // URL must not silently break platform detection -- extract the real URL
+  // first, exactly like the storefront does before rendering.
+  const cleanUrl = extractUrlFromPastedInput(videoUrl);
+  const derived = resolveCreatorThumbnail(cleanUrl, explicit);
+  const brandablePlatform = detectBrandablePlatform(cleanUrl);
 
   const needsTikTokFetch = !derived && brandablePlatform === 'tiktok';
   const [tiktokThumb, setTiktokThumb] = useState<string | null>(null);
@@ -47,13 +51,13 @@ export function CreatorReviewThumbnailPreview({
       return;
     }
     let cancelled = false;
-    getTikTokThumbnail(videoUrl).then((url) => {
+    getTikTokThumbnail(cleanUrl).then((url) => {
       if (!cancelled) setTiktokThumb(url);
     });
     return () => {
       cancelled = true;
     };
-  }, [needsTikTokFetch, videoUrl]);
+  }, [needsTikTokFetch, cleanUrl]);
 
   const resolvedSrc = derived || (needsTikTokFetch ? tiktokThumb : null);
 
