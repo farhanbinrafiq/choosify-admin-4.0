@@ -1063,6 +1063,23 @@ export const operationsApi = {
     );
     return result.data;
   },
+  getReturn: async (id: string): Promise<import('../contexts/ReturnsContext').ReturnRequest> => {
+    const result = await request<{ data: import('../contexts/ReturnsContext').ReturnRequest }>(
+      `/operations/returns/${encodeURIComponent(id)}`,
+    );
+    return result.data;
+  },
+  getReturnDocument: async (id: string) => {
+    const result = await request<{
+      data: {
+        returnCase: import('../contexts/ReturnsContext').ReturnRequest;
+        buyer: { name: string; choosifyUserId: string | null; email: string } | null;
+        seller: { name: string; choosifyUserId: string | null; email: string } | null;
+        product: { title?: string; variant?: string } | null;
+      };
+    }>(`/operations/returns/${encodeURIComponent(id)}/document`);
+    return result.data;
+  },
   createReturn: async (
     payload: Partial<import('../contexts/ReturnsContext').ReturnRequest>,
   ): Promise<import('../contexts/ReturnsContext').ReturnRequest> => {
@@ -1111,6 +1128,15 @@ export const operationsApi = {
   addReturnNote: async (id: string, note: string) => {
     const result = await request<{ data: import('../contexts/ReturnsContext').ReturnRequest }>(
       `/operations/returns/${encodeURIComponent(id)}/note`,
+      'PATCH',
+      { note },
+    );
+    return result.data;
+  },
+  /** Staff/seller-only — never shown to the buyer. */
+  addReturnInternalNote: async (id: string, note: string) => {
+    const result = await request<{ data: import('../contexts/ReturnsContext').ReturnRequest }>(
+      `/operations/returns/${encodeURIComponent(id)}/internal-note`,
       'PATCH',
       { note },
     );
