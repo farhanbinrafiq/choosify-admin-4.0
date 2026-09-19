@@ -51,6 +51,8 @@ export interface UserDirectoryEntry {
    *  logo/placeholder. Directory UIs must derive their own initials/neutral
    *  placeholder when this is absent, not persist or expect one here. */
   avatarUrl?: string | null;
+  /** Real users.createdAt (registration timestamp) — canonical, not derived. */
+  createdAt?: string;
 }
 
 /**

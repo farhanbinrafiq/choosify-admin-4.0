@@ -2010,6 +2010,7 @@ authRouter.get('/auth/users/directory', ...requireAdmin, async (_req, res) => {
         role: users.role,
         choosifyUserId: users.choosifyUserId,
         avatarUrl: users.avatarUrl,
+        createdAt: users.createdAt,
       })
       .from(users);
     res.json({ success: true, data: rows });

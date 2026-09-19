@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useContact } from '../../contexts/ContactInteractionContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { authApi, UserDirectoryEntry } from '../../services/authApi';
+import { moderationApi, ReportItem } from '../../services/moderationApi';
 import { Avatar } from '../../components/shared/Avatar';
 import {
   Search,
@@ -20,41 +21,87 @@ import {
 
 // ============================================================================
 // Real backend data — GET /auth/users/directory (bulk list) and
-// GET /auth/users/search (CF-ID lookup). See server/authRouter.ts:1419 / :1386
+// GET /auth/users/search (CF-ID lookup). See server/authRouter.ts:2003 / :1969
 // and src/services/authApi.ts.
 // ============================================================================
 //
 // Sprint 13 UI regression lock — Step 2 (restoration method for all dashboard
-// pages). PRESENTATION is a faithful reproduction of the approved standalone
-// `isCustomerList` section (design-reference/Choosify Admin CMS (standalone).html,
-// decoded lines 3400–3486): exact hex, px, grid and DOM structure, expressed as
-// inline styles rather than translated into shared-component defaults. Sanctioned
-// deviation: the accent uses the canonical `--cms-accent` token for dashboard-wide
-// consistency (per product-owner decision), not the raw reference `#FF5B00`.
+// pages). PRESENTATION started as a faithful reproduction of the approved
+// standalone `isCustomerList` section (design-reference/Choosify Admin CMS
+// (standalone).html, decoded lines 3400–3486). The Consumer Management Hub
+// correction (see below) restructures the hierarchy and adds real status
+// segmentation on top of that base — using this file's own established
+// inline-style tab-strip formula (already used by FeatureAccessEntitlements.tsx
+// / the design reference's `settingsTabDefs`/`featureAccessTabDefs` pattern),
+// not a new visual system. Sanctioned deviation: the accent uses the canonical
+// `--cms-accent` token for dashboard-wide consistency (per product-owner
+// decision), not the raw reference `#EF3C23`.
 //
 // FUNCTIONALITY is the current canonical layer: GET /auth/users/directory list,
 // GET /auth/users/search CF-ID lookup, viewMode (consumers/creators/admins)
 // reuse, client pagination, CSV export of selected rows, DM via
 // ContactInteraction. Selecting a consumer for inspection navigates to the
-// existing universal profile route /upe/{consumer,creator}/:id via the
-// canonical getProfilePath() mechanism — the full profile page is the
-// authoritative detail surface. No in-page detail panel / modal is rendered.
+// existing universal profile route via the canonical getProfilePath()
+// mechanism — the full profile page is the authoritative detail surface. No
+// in-page detail panel / modal is rendered.
+//
+// CONSUMER LIFECYCLE AUDIT (2026-09-17) — what actually exists on `users`
+// (server/db/schema.ts:17-37, Postgres via Drizzle): id, email, passwordHash,
+// displayName, role, emailVerified, choosifyUserId, avatarUrl(+crop),
+// createdAt, updatedAt. There is NO status/lifecycle enum on `users` at all —
+// no flagged/suspended/banned/disabled/deactivated/active/inactive column,
+// and no lastLogin/session-tracking table anywhere in the backend. The
+// role enum has no `consumer` value; plain buyers persist as role `user`.
+//   - "New Consumers" IS implementable: `createdAt` is real and now exposed
+//     by GET /auth/users/directory (added alongside this correction — it was
+//     previously selected only by the single-user detail endpoint). No
+//     existing "new account" business rule exists anywhere in the codebase
+//     (verified by repo search) — NEW_CONSUMER_WINDOW_DAYS below is a
+//     deliberately chosen, documented 30-day window, not a silent invention.
+//   - "Flagged" IS implementable, via the exact same real architecture
+//     already used by SellerManagement.tsx / CreatorManagement.tsx: a
+//     seller or creator can file a real abuse report against a consumer via
+//     POST /catalog/workspace/{seller,creator}/customers/:customerId/report
+//     (server/catalogRouter.ts:1882 / :1956), which creates a moderation
+//     report with resourceType:'user', resourceId:<consumer uid>. Cross-
+//     referencing GET /admin/moderation/reports (status open|investigating,
+//     filtered client-side to resourceType==='user') against the directory
+//     is a genuine, reachable, admin-visible signal — not fabricated.
+//   - Active / Inactive / Suspended / Banned / Pending Review are NOT
+//     implementable and are deliberately NOT added as tabs: there is no
+//     session/activity data to define "active", and no status field of any
+//     kind (nothing analogous to CatalogBrand.marketplaceStatus or
+//     CatalogCreator.status exists for a plain `users` row). Inventing these
+//     would be exactly the kind of fabricated frontend-only status the task
+//     explicitly forbids. Final tab set: All / New / Flagged.
+//   - Status precedence (only relevant when a consumer is both new and
+//     flagged): Flagged takes visual priority in the Status Badge column,
+//     since it represents an item needing attention. New/Flagged are
+//     independent predicates, not a mutually-exclusive lifecycle enum —
+//     same non-exclusive-tab pattern already used by Seller/Creator
+//     Management's own flagged/active/inactive tabs.
 //
 // DATA-INTEGRITY NOTES (values only appear where a canonical production source
 // exists; the approved column/panel STRUCTURE is kept regardless):
-//  - Registry columns Sl. | Account Identification | Role Type are backed by the
-//    directory contract. Behavior Intent Segment / Security Trust Score / Status
-//    Badge / Last Access Active have NO field in the list contract (or anywhere
-//    canonical) → rendered as an honest "—".
-//  - The three insight panels (Most Searched / Most Viewed / Most Saved) have no
-//    persisted canonical source. `/api/analytics/trending` exists but its store
-//    (server/analytics/analyticsStorage.ts) is volatile in-memory,
-//    `persistence: 'not_configured'`, empty on boot, and unauthenticated; there
-//    is no wishlist table and no product-search-count concept. Panels are
-//    restored as shells with a neutral empty state.
-//  - "Refine List" and "Invite Consumer" have no canonical implementation
-//    (the prototype buttons carry no handler; there is no consumer-invite
-//    endpoint) → rendered in the approved position but visibly disabled.
+//  - Registry columns Sl. | Account Identification | Role Type are backed by
+//    the directory contract. Status Badge is now backed by the real
+//    flagged/new derivation above (consumer view only). Behavior Intent
+//    Segment / Security Trust Score / Last Access Active still have NO field
+//    in the list contract (or anywhere canonical) → rendered as an honest "—".
+//  - The three insight panels (Most Searched / Most Viewed / Most Saved) have
+//    no persisted canonical source. `/api/analytics/trending` exists but its
+//    store (server/analytics/analyticsStorage.ts) is volatile in-memory,
+//    `persistence: 'not_configured'`, empty on boot, and unauthenticated;
+//    there is no wishlist table and no product-search-count concept. Panels
+//    are restored as shells with a neutral empty state.
+//  - "Refine List" has no canonical implementation (no advanced-filter-panel
+//    endpoint/contract exists) → rendered in the approved position but
+//    visibly disabled.
+//  - "Invite Consumer" was REMOVED for the consumer view: repo-wide search
+//    confirms no consumer-invite backend endpoint/workflow exists anywhere.
+//    Consumer accounts are self-registration only. The button is kept only
+//    for the Creator/Admin viewModes this same component also renders
+//    (unchanged, out of this task's scope), still disabled there.
 //
 // The standalone prototype's mock fields — behavior segment, trust score,
 // last-access, purchased-in-30d, average basket, most-searched/viewed/saved
@@ -124,6 +171,25 @@ const roleLabel = (role: string): string => {
 const PAGE_SIZE = 25;
 
 /**
+ * "New" registration window. No existing business definition for "new" exists
+ * anywhere else in the codebase (verified by repo search before adding this) —
+ * 30 days is a deliberately chosen, explicit, documented default for a
+ * "recently registered" cohort. Change this single constant if Product
+ * defines a different canonical window later; do not fork the logic.
+ */
+const NEW_CONSUMER_WINDOW_DAYS = 30;
+
+type ConsumerStatusFilter = 'all' | 'new' | 'flagged';
+
+/** Only real, backend-supported consumer states — see the lifecycle audit
+ *  comment above for why Active/Inactive/Suspended/Banned are excluded. */
+const CONSUMER_STATUS_TABS: { key: ConsumerStatusFilter; label: string }[] = [
+  { key: 'all', label: 'All Consumers' },
+  { key: 'new', label: 'New Consumers' },
+  { key: 'flagged', label: 'Flagged' },
+];
+
+/**
  * Approved insight panels. No canonical persisted source exists for any of the
  * three, so each renders a neutral empty state (see header notes). The shell —
  * position, proportions, border, title treatment — matches isCustomerList.
@@ -140,6 +206,7 @@ export default function ConsumersPage() {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortKey, setSortKey] = useState<'az' | 'za'>('az');
+  const [statusFilter, setStatusFilter] = useState<ConsumerStatusFilter>('all');
   const [searchParams] = useSearchParams();
   const viewMode = searchParams.get('viewMode') || 'consumers';
 
@@ -191,11 +258,63 @@ export default function ConsumersPage() {
   useEffect(() => {
     setPage(1);
     setSelectedIds(new Set());
-  }, [searchQuery, viewMode]);
+  }, [searchQuery, viewMode, statusFilter]);
+
+  // Status tabs are consumer-only (see lifecycle audit) — reset to 'all' when
+  // navigating away so a stale tab never silently narrows the Creator/Admin
+  // views this same component also renders.
+  useEffect(() => {
+    setStatusFilter('all');
+  }, [viewMode]);
+
+  // ------------------------------------------------------------------------
+  // Flagged-consumer cross-reference — same real architecture as
+  // SellerManagement.tsx / CreatorManagement.tsx's own "Flagged" tab: bulk
+  // fetch open + investigating moderation reports, filter to resourceType
+  // 'user' (the type used by the real seller/creator "report a customer"
+  // endpoints), match by resourceId === consumer uid. Consumer-only fetch —
+  // Creator/Admin views never call this, out of scope for this task.
+  // ------------------------------------------------------------------------
+  const [reports, setReports] = useState<ReportItem[]>([]);
+
+  useEffect(() => {
+    if (authLoading || !profile || !isConsumerView) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [openReports, investigatingReports] = await Promise.all([
+          moderationApi.listReports({ status: 'open' }),
+          moderationApi.listReports({ status: 'investigating' }),
+        ]);
+        if (!cancelled) setReports([...openReports, ...investigatingReports]);
+      } catch {
+        // Non-fatal — the Flagged tab degrades to "no flags visible" rather
+        // than blocking the primary directory fetch/render.
+        if (!cancelled) setReports([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, profile, isConsumerView]);
+
+  const flaggedConsumerIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of reports) {
+      if (r.resourceType === 'user') ids.add(r.resourceId);
+    }
+    return ids;
+  }, [reports]);
+
+  const isRecentlyRegistered = useCallback((u: UserDirectoryEntry) => {
+    if (!u.createdAt) return false;
+    const cutoff = Date.now() - NEW_CONSUMER_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+    return new Date(u.createdAt).getTime() >= cutoff;
+  }, []);
 
   // ------------------------------------------------------------------------
   // Choosify User ID quick lookup — unrelated live search feature, kept as-is
-  // (GET /auth/users/search, server/authRouter.ts:1386).
+  // (GET /auth/users/search, server/authRouter.ts:1969).
   // ------------------------------------------------------------------------
   const [cfLookup, setCfLookup] = useState<{
     uid: string;
@@ -247,11 +366,21 @@ export default function ConsumersPage() {
     [directory, currentViewRole],
   );
 
+  // Real, backend-supported status tabs applied on top of the role filter
+  // (consumer view only — see lifecycle audit for why Active/Inactive/
+  // Suspended/Banned are not offered).
+  const statusFiltered = useMemo(() => {
+    if (!isConsumerView || statusFilter === 'all') return baseFiltered;
+    if (statusFilter === 'new') return baseFiltered.filter((u) => isRecentlyRegistered(u));
+    if (statusFilter === 'flagged') return baseFiltered.filter((u) => flaggedConsumerIds.has(u.uid));
+    return baseFiltered;
+  }, [baseFiltered, isConsumerView, statusFilter, isRecentlyRegistered, flaggedConsumerIds]);
+
   const finalFiltered = useMemo(() => {
     const s = searchQuery.toLowerCase().trim();
     const matched = !s
-      ? baseFiltered
-      : baseFiltered.filter((u) => {
+      ? statusFiltered
+      : statusFiltered.filter((u) => {
           if (
             (u.displayName || '').toLowerCase().includes(s) ||
             (u.email || '').toLowerCase().includes(s) ||
@@ -277,7 +406,7 @@ export default function ConsumersPage() {
       return sortKey === 'za' ? bn.localeCompare(an) : an.localeCompare(bn);
     });
     return sorted;
-  }, [baseFiltered, searchQuery, sortKey]);
+  }, [statusFiltered, searchQuery, sortKey]);
 
   const totalPages = Math.max(1, Math.ceil(finalFiltered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -339,6 +468,20 @@ export default function ConsumersPage() {
     return { ...counts, missingCfId };
   }, [directory, currentViewRole]);
 
+  // Per-tab counts for the status strip — computed off the role-filtered set
+  // (before search), same basis as roleCounts, so badges reflect "how many
+  // in this role group" rather than "how many on the current page".
+  const statusCounts = useMemo(() => {
+    if (!isConsumerView) return { all: 0, new: 0, flagged: 0 };
+    let newCount = 0;
+    let flaggedCount = 0;
+    for (const u of baseFiltered) {
+      if (isRecentlyRegistered(u)) newCount += 1;
+      if (flaggedConsumerIds.has(u.uid)) flaggedCount += 1;
+    }
+    return { all: baseFiltered.length, new: newCount, flagged: flaggedCount };
+  }, [baseFiltered, isConsumerView, isRecentlyRegistered, flaggedConsumerIds]);
+
   const staffRoleBreakdown = useMemo(() => {
     if (!isAdminView) return [] as Array<[string, number]>;
     const counts = new Map<string, number>();
@@ -369,6 +512,16 @@ export default function ConsumersPage() {
     });
   };
 
+  /** Status Badge cell — real derivation only (consumer view). Flagged takes
+   *  visual priority over New when both are true (see lifecycle audit note
+   *  on precedence). Returns null (renders as honest "—") otherwise. */
+  const consumerStatusBadge = (u: UserDirectoryEntry): { label: string; bg: string; fg: string } | null => {
+    if (!isConsumerView) return null;
+    if (flaggedConsumerIds.has(u.uid)) return { label: 'Flagged', bg: 'rgba(220,38,38,0.12)', fg: '#DC2626' };
+    if (isRecentlyRegistered(u)) return { label: 'New', bg: 'rgba(37,99,235,0.12)', fg: '#2563EB' };
+    return null;
+  };
+
   // ── presentation — exact reference values (isCustomerList 3400–3486) ─────
   const S: Record<string, CSSProperties> = {
     headRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, flexWrap: 'wrap', gap: 12 },
@@ -385,10 +538,14 @@ export default function ConsumersPage() {
     statNum: { fontSize: 22, fontWeight: 800, color: '#111827' },
     statLabel: { fontSize: 10, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', marginTop: 4 },
     statSub: { fontSize: 10, color: '#9CA3AF', fontWeight: 600, marginTop: 4 },
-    panelGrid: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, marginBottom: 14 },
+    panelGrid: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, marginBottom: 20 },
     panel: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: 16 },
     panelTitle: { fontSize: 10, fontWeight: 800, color: '#111827', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 12 },
     panelEmpty: { borderTop: '1px solid #F1F3F5', paddingTop: 14, textAlign: 'center', color: '#9CA3AF', fontSize: 11, fontWeight: 600, fontStyle: 'italic' },
+    directoryTitle: { fontSize: '13.5px', fontWeight: 800, color: '#111827' },
+    directorySub: { fontSize: 11.5, color: '#6B7280', fontWeight: 600, marginTop: 2, marginBottom: 12 },
+    tabStrip: { display: 'flex', background: '#fff', border: '1px solid #E8EDF2', borderRadius: 10, padding: 8, marginBottom: 12, overflowX: 'auto', gap: 4 },
+    tabBtn: { flex: 1, textAlign: 'center', padding: '10px 14px', borderRadius: 8, fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', cursor: 'pointer', border: 'none', background: 'transparent', color: '#374151' },
     bulkBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(180deg,rgba(24,21,76,0.94) 0%,rgba(0,6,46,0.92) 80%,rgba(0,2,37,0.94) 100%)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', borderRadius: 8, padding: '12px 16px', marginBottom: 12, flexWrap: 'wrap', gap: 10 },
     bulkChip: { background: ACCENT_WASH, color: ACCENT, padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 800 },
     bulkBtn: { background: 'rgba(255,255,255,0.12)', color: '#fff', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 6, padding: '5px 12px', fontSize: 10.5, fontWeight: 800, cursor: 'pointer' },
@@ -412,12 +569,15 @@ export default function ConsumersPage() {
     ? 'Registered content creator accounts.'
     : isAdminView
       ? 'Registered platform staff accounts (admin, moderator, and operations roles).'
-      : 'Manage registered platform buyers, and audit account safety.';
+      : 'Manage registered platform buyers and account safety.';
   const registeredSub = isCreatorView
     ? 'Enrolled creator accounts'
     : isAdminView
       ? 'Platform staff & operations roles'
       : 'Enrolled platform buyers';
+  const directorySub = isConsumerView
+    ? 'Operational account management — status tabs, search and sort apply to the table below.'
+    : 'Search and sort apply to the table below.';
 
   return (
     <div style={{ color: '#111827' }}>
@@ -435,46 +595,126 @@ export default function ConsumersPage() {
         </div>
       )}
 
-      {/* ── Header (reference) ── */}
-      <div style={S.headRow}>
-        <div>
-          <div style={S.crumb}>
-            <span>Platform Registry</span>
-            <ChevronRight size={13} style={{ opacity: 0.5 }} />
-            <span>Consumers</span>
-            <ChevronRight size={13} style={{ opacity: 0.5 }} />
-            <span style={{ color: ACCENT }}>{currentViewRole}s Directory</span>
-          </div>
-          <div style={S.h1}>{title}</div>
-          <div style={S.sub}>{subtitle}</div>
+      {/* ── Header (title only — controls now live with the directory below) ── */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={S.crumb}>
+          <span>Platform Registry</span>
+          <ChevronRight size={13} style={{ opacity: 0.5 }} />
+          <span>Consumers</span>
+          <ChevronRight size={13} style={{ opacity: 0.5 }} />
+          <span style={{ color: ACCENT }}>{currentViewRole}s Directory</span>
         </div>
+        <div style={S.h1}>{title}</div>
+        <div style={S.sub}>{subtitle}</div>
+      </div>
 
-        <div style={S.controls}>
-          <div style={{ position: 'relative' }}>
-            <Search size={14} color="#9CA3AF" style={{ position: 'absolute', left: 12, top: 12, pointerEvents: 'none' }} />
-            <input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={`Search ${currentViewRole.toLowerCase()}s or User ID (CF-00127)`}
-              style={S.search}
-            />
-          </div>
-          <select value={sortKey} onChange={(e) => setSortKey(e.target.value as 'az' | 'za')} style={S.select}>
-            <option value="az">Name: A → Z</option>
-            <option value="za">Name: Z → A</option>
-          </select>
-          {/* Reference control — no canonical filter-panel implementation → disabled */}
-          <button type="button" disabled aria-disabled title="Advanced filters are not available in this release" style={{ ...S.btnDisabled, background: '#fff', border: '1px solid #E8EDF2', color: '#111827' }}>
-            <SlidersHorizontal size={13} /> Refine List
-          </button>
-          <button onClick={() => fetchDirectory()} disabled={usersLoading} style={{ ...S.btn, opacity: usersLoading ? 0.6 : 1 }}>
-            <RefreshCw size={13} className={usersLoading ? 'animate-spin' : ''} /> Refresh
-          </button>
-          {/* Reference control — no consumer-invite endpoint → disabled */}
-          <button type="button" disabled aria-disabled title="Consumer invitations are not available in this release" style={{ ...S.btnDisabled, background: ACCENT, color: '#fff' }}>
-            <UserPlus size={13} /> Invite Consumer
-          </button>
+      {usersError && (
+        <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, fontSize: 12, color: '#B91C1C' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={15} /> {usersError}</span>
+          <button onClick={() => fetchDirectory()} style={{ ...S.btn, height: 30, background: '#FEE2E2', borderColor: '#FECACA', color: '#B91C1C' }}>Retry</button>
         </div>
+      )}
+
+      {/* ── KPI / Analytics ── */}
+      <div style={S.statGrid}>
+        <div style={{ ...S.statCard, borderLeft: '4px solid #6C4CFF' }}>
+          <div style={S.statNum}>{dataUnavailable ? '—' : roleCounts[currentViewRole]}</div>
+          <div style={S.statLabel}>Registered {pillRoleLabel}</div>
+          <div style={S.statSub}>{registeredSub}</div>
+        </div>
+        <div style={{ ...S.statCard, borderLeft: '4px solid #DC2626' }}>
+          <div style={S.statNum}>{dataUnavailable ? '—' : roleCounts.missingCfId}</div>
+          <div style={S.statLabel}>Missing Choosify ID</div>
+          <div style={S.statSub}>Accounts without a CF-ID</div>
+        </div>
+        <div style={{ ...S.statCard, borderLeft: '4px solid #2563EB' }}>
+          <div style={S.statNum}>{dataUnavailable ? '—' : finalFiltered.length}</div>
+          <div style={S.statLabel}>Matching current filter</div>
+          <div style={S.statSub}>Search + status tab + role applied</div>
+        </div>
+      </div>
+
+      {/* ── Insight panels (approved shells; no canonical source → empty state) ── */}
+      <div style={S.panelGrid}>
+        {INSIGHT_PANELS.map((p) => (
+          <div key={p.title} style={S.panel}>
+            <div style={S.panelTitle}>{p.title}</div>
+            <div style={S.panelEmpty}>{p.emptyLabel}</div>
+          </div>
+        ))}
+      </div>
+
+      {isAdminView && staffRoleBreakdown.length > 0 && (
+        <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: 14, marginBottom: 14, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {staffRoleBreakdown.map(([role, count]) => (
+            <span key={role} style={{ padding: '4px 10px', borderRadius: 6, background: '#F9FAFB', border: '1px solid #E8EDF2', fontSize: 10, fontWeight: 800, color: '#6B7280', fontFamily: 'monospace' }}>
+              {role}: {count}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* ── Consumer Directory — operational account management ── */}
+      <div>
+        <div style={S.directoryTitle}>{pillRoleLabel} Directory</div>
+        <div style={S.directorySub}>{directorySub}</div>
+      </div>
+
+      {/* Status tabs — real, backend-supported states only (see lifecycle audit) */}
+      {isConsumerView && (
+        <div style={S.tabStrip}>
+          {CONSUMER_STATUS_TABS.map((tab) => {
+            const active = statusFilter === tab.key;
+            const count = statusCounts[tab.key];
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setStatusFilter(tab.key)}
+                style={{
+                  ...S.tabBtn,
+                  background: active ? ACCENT : 'transparent',
+                  color: active ? '#fff' : '#374151',
+                }}
+              >
+                {tab.label}
+                {!dataUnavailable ? ` (${count})` : ''}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Directory toolbar — search / sort / refine / refresh operate on the table below */}
+      <div style={{ ...S.controls, marginBottom: 12 }}>
+        <div style={{ position: 'relative' }}>
+          <Search size={14} color="#9CA3AF" style={{ position: 'absolute', left: 12, top: 12, pointerEvents: 'none' }} />
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={`Search ${currentViewRole.toLowerCase()}s by name, email or User ID (CF-00127)`}
+            style={S.search}
+          />
+        </div>
+        <select value={sortKey} onChange={(e) => setSortKey(e.target.value as 'az' | 'za')} style={S.select}>
+          <option value="az">Name: A → Z</option>
+          <option value="za">Name: Z → A</option>
+        </select>
+        {/* Reference control — no canonical filter-panel implementation → disabled */}
+        <button type="button" disabled aria-disabled title="Advanced filters are not available in this release" style={{ ...S.btnDisabled, background: '#fff', border: '1px solid #E8EDF2', color: '#111827' }}>
+          <SlidersHorizontal size={13} /> Refine List
+        </button>
+        <button onClick={() => fetchDirectory()} disabled={usersLoading} style={{ ...S.btn, opacity: usersLoading ? 0.6 : 1 }}>
+          <RefreshCw size={13} className={usersLoading ? 'animate-spin' : ''} /> Refresh
+        </button>
+        {/* Consumer accounts are self-registration only — no invite endpoint exists
+            anywhere in the backend, so the control is removed (not disabled) here.
+            Kept, unchanged, for the Creator/Admin viewModes out of this task's scope. */}
+        {!isConsumerView && (
+          <button type="button" disabled aria-disabled title="Invitations are not available in this release" style={{ ...S.btnDisabled, background: ACCENT, color: '#fff' }}>
+            <UserPlus size={13} /> Invite {isCreatorView ? 'Creator' : 'Admin'}
+          </button>
+        )}
       </div>
 
       {/* CF-ID lookup match (real; no reference equivalent) */}
@@ -501,52 +741,6 @@ export default function ConsumersPage() {
           {cfLookupError}
         </div>
       ) : null}
-
-      {usersError && (
-        <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, fontSize: 12, color: '#B91C1C' }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={15} /> {usersError}</span>
-          <button onClick={() => fetchDirectory()} style={{ ...S.btn, height: 30, background: '#FEE2E2', borderColor: '#FECACA', color: '#B91C1C' }}>Retry</button>
-        </div>
-      )}
-
-      {/* ── Real directory-derived stat cards (reference card chrome) ── */}
-      <div style={S.statGrid}>
-        <div style={{ ...S.statCard, borderLeft: '4px solid #6C4CFF' }}>
-          <div style={S.statNum}>{dataUnavailable ? '—' : roleCounts[currentViewRole]}</div>
-          <div style={S.statLabel}>Registered {pillRoleLabel}</div>
-          <div style={S.statSub}>{registeredSub}</div>
-        </div>
-        <div style={{ ...S.statCard, borderLeft: '4px solid #DC2626' }}>
-          <div style={S.statNum}>{dataUnavailable ? '—' : roleCounts.missingCfId}</div>
-          <div style={S.statLabel}>Missing Choosify ID</div>
-          <div style={S.statSub}>Accounts without a CF-ID</div>
-        </div>
-        <div style={{ ...S.statCard, borderLeft: '4px solid #2563EB' }}>
-          <div style={S.statNum}>{dataUnavailable ? '—' : finalFiltered.length}</div>
-          <div style={S.statLabel}>Matching current filter</div>
-          <div style={S.statSub}>Search + role tab applied</div>
-        </div>
-      </div>
-
-      {/* ── Insight panels (approved shells; no canonical source → empty state) ── */}
-      <div style={S.panelGrid}>
-        {INSIGHT_PANELS.map((p) => (
-          <div key={p.title} style={S.panel}>
-            <div style={S.panelTitle}>{p.title}</div>
-            <div style={S.panelEmpty}>{p.emptyLabel}</div>
-          </div>
-        ))}
-      </div>
-
-      {isAdminView && staffRoleBreakdown.length > 0 && (
-        <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: 14, marginBottom: 14, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {staffRoleBreakdown.map(([role, count]) => (
-            <span key={role} style={{ padding: '4px 10px', borderRadius: 6, background: '#F9FAFB', border: '1px solid #E8EDF2', fontSize: 10, fontWeight: 800, color: '#6B7280', fontFamily: 'monospace' }}>
-              {role}: {count}
-            </span>
-          ))}
-        </div>
-      )}
 
       {/* ── Bulk selection bar (reference) ── */}
       {selectedCount > 0 && (
@@ -601,6 +795,7 @@ export default function ConsumersPage() {
               ) : (
                 pagedRows.map((u, idx) => {
                   const sl = (currentPage - 1) * PAGE_SIZE + idx + 1;
+                  const badge = consumerStatusBadge(u);
                   return (
                     <tr key={u.uid} style={S.row} onClick={() => openProfile(u.uid)}>
                       <td style={{ ...S.td, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
@@ -626,7 +821,15 @@ export default function ConsumersPage() {
                       <td style={S.td}><span style={roleBadgeStyle(u.role)}>{roleLabel(u.role)}</span></td>
                       <td style={S.tdMuted}><span style={S.empty}>—</span></td>
                       <td style={S.tdMuted}><span style={S.empty}>—</span></td>
-                      <td style={S.tdMuted}><span style={S.empty}>—</span></td>
+                      <td style={S.tdMuted}>
+                        {badge ? (
+                          <span style={{ background: badge.bg, color: badge.fg, fontSize: 9, fontWeight: 800, letterSpacing: '0.03em', textTransform: 'uppercase', padding: '3px 8px', borderRadius: 5, whiteSpace: 'nowrap' }}>
+                            {badge.label}
+                          </span>
+                        ) : (
+                          <span style={S.empty}>—</span>
+                        )}
+                      </td>
                       <td style={S.tdMuted}><span style={S.empty}>—</span></td>
                       <td style={{ ...S.td, textAlign: 'right', position: 'relative', overflow: 'visible' }} onClick={(e) => e.stopPropagation()}>
                         <button
