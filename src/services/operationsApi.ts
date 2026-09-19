@@ -474,6 +474,37 @@ export type OpsBookingOfferStatus =
   | 'payment_expired'
   | 'paid';
 
+/** Real ownership-claim / verification record — GET /operations/verifications. */
+export interface OpsVerification {
+  id: string;
+  entityType: 'brand' | 'creator';
+  entityId: string;
+  brand_id?: string;
+  status: string;
+  submitted_by?: string;
+  created_at: string;
+  updated_at?: string;
+  [key: string]: unknown;
+}
+
+/** Real Seller/Creator onboarding application — GET /operations/partner-applications. */
+export interface OpsPartnerApplication {
+  id: string;
+  applicantType: 'seller' | 'creator';
+  status: 'pending' | 'approved' | 'rejected';
+  email: string;
+  displayName: string;
+  businessOrChannelName: string;
+  category?: string;
+  city?: string;
+  provisionedUserId?: string;
+  catalogEntityId?: string;
+  existingUserId?: string;
+  resubmissionRequested?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface OpsBookingOffer {
   kind?: 'booking_offer';
   requestId?: string;
@@ -1099,8 +1130,17 @@ export const operationsApi = {
     if (params?.entityType) qs.set('entityType', params.entityType);
     if (params?.entityId) qs.set('entityId', params.entityId);
     const suffix = qs.toString() ? `?${qs}` : '';
-    const result = await request<{ data: unknown[] }>(`/operations/verifications${suffix}`);
+    const result = await request<{ data: OpsVerification[] }>(`/operations/verifications${suffix}`);
     return result.data;
+  },
+
+  /** Real Seller/Creator onboarding requests — GET /operations/partner-applications (requireAdmin). */
+  listPartnerApplications: async (status?: 'pending' | 'approved' | 'rejected') => {
+    const suffix = status ? `?status=${status}` : '';
+    const result = await request<{ success: boolean; applications: OpsPartnerApplication[] }>(
+      `/operations/partner-applications${suffix}`,
+    );
+    return result.applications;
   },
   getVerification: async (id: string) => {
     const result = await request<{ data: unknown }>(`/operations/verifications/${encodeURIComponent(id)}`);
