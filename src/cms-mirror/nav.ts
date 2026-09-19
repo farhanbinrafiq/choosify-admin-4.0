@@ -23,6 +23,13 @@ export const PAGE_KEY_TO_PATH: Record<string, string> = {
   dashboard: '/admin/dashboard',
   customers: '/admin/consumers',
   creators: '/admin/creator-studio',
+  // Super Admin/Admin directories — real React pages (Sept 2026 migration off
+  // CmsMirrorHost). Deliberately distinct keys/paths from `creators`/`brands`
+  // above, which remain the Creator's/Seller's own self-service Studio route
+  // (shared across roles via BrandStudioHomeEntry/CreatorStudioHome) — this
+  // migration must not touch that existing role-branching logic.
+  sellerManagementStudio: '/admin/seller-management',
+  creatorManagementStudio: '/admin/creator-management',
   creatorProfile: '/admin/creator-profile',
   consumerProfile: '/admin/consumer-profile',
   brands: '/admin/brand-studio',
@@ -108,6 +115,8 @@ export function resolveAdminPageKey(pathname: string): string | null {
   if (pathname.startsWith('/admin/customers')) return 'sellerCustomers';
   if (pathname.startsWith('/admin/coupons')) return 'promoCodes';
   if (pathname.startsWith('/admin/reviews')) return 'reviews';
+  if (pathname.startsWith('/admin/seller-management')) return 'sellerManagementStudio';
+  if (pathname.startsWith('/admin/creator-management')) return 'creatorManagementStudio';
   if (pathname.startsWith('/admin/messages')) return 'messages';
   if (pathname.startsWith('/admin/support')) return 'partnerSupport';
   if (pathname.startsWith('/admin/analytics')) return 'finance';
@@ -222,8 +231,8 @@ export const NAV_DEFS: CmsNavGroup[] = [
   {
     title: 'ACCOUNT MANAGEMENT',
     items: [
-      { key: 'brands', label: 'Seller Management Studio', path: PAGE_KEY_TO_PATH.brands },
-      { key: 'creators', label: 'Creators Management', path: PAGE_KEY_TO_PATH.creators },
+      { key: 'sellerManagementStudio', label: 'Seller Management Studio', path: PAGE_KEY_TO_PATH.sellerManagementStudio },
+      { key: 'creatorManagementStudio', label: 'Creators Management', path: PAGE_KEY_TO_PATH.creatorManagementStudio },
       { key: 'customers', label: 'Consumer Management', path: PAGE_KEY_TO_PATH.customers },
       // The ONE canonical self-profile entry for Admin/Super Admin -- routes
       // to /admin/profile (native MyProfilePage, inside AdminWorkspaceLayout).
@@ -320,6 +329,8 @@ export const PAGE_META: Record<string, [string, string]> = {
   dashboard: ['Dashboard', 'Overview of store performance'],
   products: ['Products & Inventory', 'Manage your product catalog and stock'],
   brands: ['Seller Management Studio', 'Platform seller and brand governance'],
+  sellerManagementStudio: ['Seller Management Studio', 'Real seller directory — verification, marketplace status and ownership'],
+  creatorManagementStudio: ['Creators Management', 'Real creator directory — publication status, requests and ownership claims'],
   brandProfile: ['Seller Profile', 'Your seller account, verification, and profile settings'],
   categories: ['Category Management Studio', 'Organize your catalog'],
   creators: ['Creators Management', 'Manage creator partnerships'],

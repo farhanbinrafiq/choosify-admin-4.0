@@ -61,6 +61,10 @@ const Payouts = lazy(() => import('./pages/admin/Payouts'));
 const Analytics = lazy(() => import('./pages/admin/Analytics'));
 const ModerationCenter = lazy(() => import('./pages/admin/ModerationCenter'));
 const MessagesInbox = lazy(() => import('./pages/admin/MessagesInbox'));
+const SellerManagement = lazy(() => import('./pages/admin/SellerManagement'));
+const CreatorManagement = lazy(() => import('./pages/admin/CreatorManagement'));
+const SellerProfile = lazy(() => import('./pages/admin/SellerProfile'));
+const CreatorProfile = lazy(() => import('./pages/admin/CreatorProfile'));
 const PartnerSupportInbox = lazy(() =>
   import('./components/messaging/PartnerSupportInbox').then((m) => ({ default: m.PartnerSupportInbox })),
 );
@@ -258,6 +262,26 @@ const MessagesInboxRoleGate: React.FC<{ children: React.ReactNode }> = ({ childr
     return <Navigate to="/admin/conversations?tab=support" replace />;
   }
   if (role === 'creator') return <Navigate to="/admin/support" replace />;
+  return <Navigate to="/admin/dashboard" replace />;
+};
+
+/**
+ * Super Admin/Admin Seller + Creator Management directories
+ * (/admin/seller-management, /admin/creator-management) — real React pages,
+ * replacing the legacy CmsMirrorHost "Seller Management Studio"/"Creators
+ * Management" for these two roles only. Sellers/Creators/Consumers/other
+ * staff roles have no legitimate reason to see the platform-wide directory,
+ * so this fails closed to /admin/dashboard for everyone else — mirroring
+ * the same convenience-gate pattern used by MetaInboxAdminRoleGate; the
+ * underlying APIs (`/auth/users/directory`, `/operations/partner-applications`,
+ * `/admin/moderation/reports`) are already server-side admin-gated regardless.
+ */
+const MANAGEMENT_STUDIO_ROLES = new Set(['super_admin', 'admin']);
+const ManagementStudioRoleGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { profile, loading } = useAuth();
+  if (loading) return null;
+  if (!profile) return <Navigate to="/login" replace />;
+  if (MANAGEMENT_STUDIO_ROLES.has(String(profile.role))) return <>{children}</>;
   return <Navigate to="/admin/dashboard" replace />;
 };
 
@@ -1784,6 +1808,88 @@ export default function App() {
               }
             />
 
+            {/*
+              Super Admin/Admin Seller + Creator Management directories.
+              Registered BEFORE the /admin/* catch-all so these two exact
+              paths never reach CmsMirrorHost. Rollback: remove these two
+              routes; each path falls back to CmsMirrorHost (no backend
+              change required, and no other route currently claims either
+              path — /admin/creators/:id, the profile deep-link, is a
+              distinct, more specific pattern that still wins its own match).
+            */}
+            <Route
+              path="/admin/seller-management"
+              element={
+                <ProtectedRoute>
+                  <ManagementStudioRoleGate>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <SellerManagement />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </ManagementStudioRoleGate>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/creator-management"
+              element={
+                <ProtectedRoute>
+                  <ManagementStudioRoleGate>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <CreatorManagement />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </ManagementStudioRoleGate>
+                </ProtectedRoute>
+              }
+            />
+            {/*
+              Real Seller/Creator Profile detail pages (preview scope: Account +
+              Verification + Products + Orders for sellers; Account + Verification
+              for creators -- see SellerProfile.tsx/CreatorProfile.tsx doc comments
+              for why Payment/Ads/Reviews and creator Products/Orders are omitted).
+              Replaces the legacy CmsMirrorHost destination, which rendered blank
+              for every real account.
+              IMPORTANT: the creator one is "/admin/creator-review", NOT
+              "/admin/creator-profile" -- that exact path is already the canonical
+              self-service route a CREATOR uses to view their OWN profile (falls
+              through to CmsMirrorHost, see the "Creator Profile (/admin/creator-profile)
+              stays on CmsMirror identity surface" comments elsewhere in this file).
+              Reusing it here would shadow that route behind the admin-only
+              ManagementStudioRoleGate and lock real creators out of their own profile.
+              Rollback: remove these two routes; SellerManagement/CreatorManagement
+              fall back to the "not yet migrated" notice modal.
+            */}
+            <Route
+              path="/admin/seller-profile"
+              element={
+                <ProtectedRoute>
+                  <ManagementStudioRoleGate>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <SellerProfile />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </ManagementStudioRoleGate>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/creator-review"
+              element={
+                <ProtectedRoute>
+                  <ManagementStudioRoleGate>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <CreatorProfile />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </ManagementStudioRoleGate>
+                </ProtectedRoute>
+              }
+            />
             <Route path="/admin/*" element={<ProtectedRoute><RoleGuard><AdminAreaEntry /></RoleGuard></ProtectedRoute>} />
             <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
 
