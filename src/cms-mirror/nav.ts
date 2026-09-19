@@ -50,6 +50,7 @@ export const PAGE_KEY_TO_PATH: Record<string, string> = {
   disputes: '/admin/disputes',
   trustCenter: '/admin/trust-center',
   messages: '/admin/messages',
+  metaInboxAdmin: '/admin/meta-inbox',
   partnerSupport: '/admin/support',
   notifications: '/admin/notifications',
   finance: '/admin/analytics',
@@ -117,6 +118,7 @@ export function resolveAdminPageKey(pathname: string): string | null {
   if (pathname.startsWith('/admin/reviews')) return 'reviews';
   if (pathname.startsWith('/admin/seller-management')) return 'sellerManagementStudio';
   if (pathname.startsWith('/admin/creator-management')) return 'creatorManagementStudio';
+  if (pathname.startsWith('/admin/meta-inbox')) return 'metaInboxAdmin';
   if (pathname.startsWith('/admin/messages')) return 'messages';
   if (pathname.startsWith('/admin/support')) return 'partnerSupport';
   if (pathname.startsWith('/admin/analytics')) return 'finance';
@@ -212,9 +214,9 @@ export const ROLE_ALLOWED_PAGE_KEYS: Record<string, string[] | null> = {
     'settings',
   ],
   consumer: ['dashboard', 'orders', 'consumerProfile', 'settings'],
-  moderator: ['dashboard', 'moderationCenter', 'reviews', 'messages', 'adminProfile'],
+  moderator: ['dashboard', 'moderationCenter', 'reviews', 'messages', 'metaInboxAdmin', 'adminProfile'],
   finance_manager: ['dashboard', 'payouts', 'feeCharges', 'finance', 'adminProfile'],
-  support_agent: ['dashboard', 'messages', 'reviews', 'adminProfile'],
+  support_agent: ['dashboard', 'messages', 'metaInboxAdmin', 'reviews', 'adminProfile'],
   marketing_manager: ['dashboard', 'adsDealsStudio', 'promoCodes', 'websiteCmsStudio', 'adminProfile'],
 };
 
@@ -288,6 +290,7 @@ export const NAV_DEFS: CmsNavGroup[] = [
     title: 'COMMUNICATION',
     items: [
       { key: 'messages', label: 'Messages', path: PAGE_KEY_TO_PATH.messages },
+      { key: 'metaInboxAdmin', label: 'Meta Inbox', path: PAGE_KEY_TO_PATH.metaInboxAdmin },
       { key: 'notifications', label: 'Notifications', path: PAGE_KEY_TO_PATH.notifications },
     ],
   },
@@ -348,6 +351,7 @@ export const PAGE_META: Record<string, [string, string]> = {
   adsDealsStudio: ['Ads & Deals Studio', 'Manage promoted ads, deals, coupons, and paid placements'],
   contentStudio: ['Guide Management', 'Manage videos, reels, blogs, and live sessions'],
   messages: ['Choosify Support', 'Support conversations from Consumers, Sellers and Creators'],
+  metaInboxAdmin: ['Meta Inbox', 'Platform-level WhatsApp, Messenger and Instagram conversations'],
   partnerSupport: ['Messages', 'Message the Choosify team'],
   returnsRefunds: ['Returns & Refunds', 'Audit customer return complaints and process refunds'],
   warrantyClaims: ['Warranty Claims', 'Review and resolve customer warranty claims'],

@@ -65,6 +65,7 @@ const Payouts = lazy(() => import('./pages/admin/Payouts'));
 const Analytics = lazy(() => import('./pages/admin/Analytics'));
 const ModerationCenter = lazy(() => import('./pages/admin/ModerationCenter'));
 const MessagesInbox = lazy(() => import('./pages/admin/MessagesInbox'));
+const MetaInboxAdmin = lazy(() => import('./pages/admin/MetaInboxAdmin'));
 const SellerManagement = lazy(() => import('./pages/admin/SellerManagement'));
 const CreatorManagement = lazy(() => import('./pages/admin/CreatorManagement'));
 const SellerProfile = lazy(() => import('./pages/admin/SellerProfile'));
@@ -266,6 +267,22 @@ const MessagesInboxRoleGate: React.FC<{ children: React.ReactNode }> = ({ childr
     return <Navigate to="/admin/conversations?tab=support" replace />;
   }
   if (role === 'creator') return <Navigate to="/admin/support" replace />;
+  return <Navigate to="/admin/dashboard" replace />;
+};
+
+/**
+ * Platform-level Meta Inbox (/admin/meta-inbox) — same staff role set as
+ * `messagingHub.ts`'s `OMNI_MESSAGING_ACCESS_ROLES` server-side gate
+ * (super_admin/admin/moderator/support_agent). This is a convenience
+ * redirect only — the API itself already rejects any other role with 403
+ * regardless of what this component does.
+ */
+const MetaInboxAdminRoleGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { profile, loading } = useAuth();
+  if (loading) return null;
+  if (!profile) return <Navigate to="/login" replace />;
+  const role = String(profile.role);
+  if (SUPPORT_STAFF_ROLES.has(role)) return <>{children}</>;
   return <Navigate to="/admin/dashboard" replace />;
 };
 
@@ -1281,6 +1298,26 @@ export default function App() {
                       </Suspense>
                     </AdminWorkspaceLayout>
                   </MessagesInboxRoleGate>
+                </ProtectedRoute>
+              }
+            />
+            {/*
+              Super Admin platform-level Meta Inbox — reuses the real
+              omni/messagingHub backend (`/api/conversations`, `/api/messages`,
+              already Meta-webhook-fed) rather than the Seller "Meta Inbox"
+              tab's system, whose inbound ingestion path is not wired up.
+            */}
+            <Route
+              path="/admin/meta-inbox"
+              element={
+                <ProtectedRoute>
+                  <MetaInboxAdminRoleGate>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <MetaInboxAdmin />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </MetaInboxAdminRoleGate>
                 </ProtectedRoute>
               }
             />
