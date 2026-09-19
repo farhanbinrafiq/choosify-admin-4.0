@@ -1090,11 +1090,11 @@ export const operationsApi = {
     );
     return result.data;
   },
-  approveReturn: async (id: string, refundAmount: number, note?: string, approvedBy?: string) => {
+  approveReturn: async (id: string, refundAmount: number, requiresReturn: boolean, note?: string, approvedBy?: string) => {
     const result = await request<{ data: import('../contexts/ReturnsContext').ReturnRequest }>(
       `/operations/returns/${encodeURIComponent(id)}/approve`,
       'PATCH',
-      { refundAmount, note, approvedBy },
+      { refundAmount, requiresReturn, note, approvedBy },
     );
     return result.data;
   },

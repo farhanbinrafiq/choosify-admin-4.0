@@ -51,7 +51,11 @@ const BannerDirectAdsStudio = lazy(() => import('./pages/admin/BannerDirectAdsSt
 const FeatureAccessEntitlements = lazy(() => import('./pages/admin/FeatureAccessEntitlements'));
 const Categories = lazy(() => import('./pages/admin/Categories'));
 const Returns = lazy(() => import('./pages/admin/Returns'));
+const ReturnCaseDetail = lazy(() => import('./pages/admin/ReturnCaseDetail'));
+const ReturnCaseDocumentView = lazy(() => import('./pages/admin/ReturnCaseDocumentView'));
 const WarrantyClaims = lazy(() => import('./pages/admin/WarrantyClaims'));
+const WarrantyClaimDetail = lazy(() => import('./pages/admin/WarrantyClaimDetail'));
+const WarrantyClaimDocumentView = lazy(() => import('./pages/admin/WarrantyClaimDocumentView'));
 const Brands = lazy(() => import('./pages/admin/Brands'));
 const Recommendations = lazy(() => import('./pages/admin/Recommendations'));
 const Deals = lazy(() => import('./pages/admin/Deals'));
@@ -878,6 +882,40 @@ export default function App() {
               }
             />
 
+            {/* Full Warranty Claim Details — same pattern as /admin/orders/:orderId (dedicated page, not a modal). */}
+            <Route
+              path="/admin/warranty-claims/:id"
+              element={
+                <ProtectedRoute>
+                  <AdminWorkspaceLayout>
+                    <Suspense fallback={routeSuspenseFallback}>
+                      <WarrantyClaimDetail />
+                    </Suspense>
+                  </AdminWorkspaceLayout>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Printable Warranty Claim Document — same canonical AdminWorkspaceLayout
+                pattern as /admin/invoice/:id (Dashboard-UI-regression-lock lesson:
+                a bare unshelled route here missed the app's normal auth/context
+                bootstrap and hung on "Loading…" indefinitely). Print isolation for
+                the shell already exists globally (adminWorkspace.css
+                .admin-workspace__sidebar/__topbar hidden under @media print), on
+                top of this page's own print rules. */}
+            <Route
+              path="/admin/warranty-claims/:id/document"
+              element={
+                <ProtectedRoute>
+                  <AdminWorkspaceLayout>
+                    <Suspense fallback={routeSuspenseFallback}>
+                      <WarrantyClaimDocumentView />
+                    </Suspense>
+                  </AdminWorkspaceLayout>
+                </ProtectedRoute>
+              }
+            />
+
             {/*
               Creator Studio home:
               - Creator → storefront-parity CreatorEditStudio (via ensure + redirect)
@@ -1478,6 +1516,37 @@ export default function App() {
                       </Suspense>
                     </AdminWorkspaceLayout>
                   </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            {/* Full Return/Refund Case Details — same dedicated-page pattern as
+                /admin/orders/:orderId and /admin/warranty-claims/:id. */}
+            <Route
+              path="/admin/returns/:id"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <ReturnCaseDetail />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            {/* Printable Return/Refund Case Document — same AdminWorkspaceLayout
+                pattern as /admin/warranty-claims/:id/document (a bare unshelled
+                route here would miss the app's auth/context bootstrap). */}
+            <Route
+              path="/admin/returns/:id/document"
+              element={
+                <ProtectedRoute>
+                  <AdminWorkspaceLayout>
+                    <Suspense fallback={routeSuspenseFallback}>
+                      <ReturnCaseDocumentView />
+                    </Suspense>
+                  </AdminWorkspaceLayout>
                 </ProtectedRoute>
               }
             />

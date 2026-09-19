@@ -20,7 +20,41 @@ export type WarrantyClaimStatus =
   | 'rejected'
   | 'service_in_progress'
   | 'resolved'
-  | 'cancelled';
+  | 'cancelled'
+  | 'disputed';
+
+/** Granular progress WITHIN 'service_in_progress' — see server/operations/types.ts. */
+export type WarrantyClaimServiceStage =
+  | 'return_requested'
+  | 'in_transit'
+  | 'received'
+  | 'under_review'
+  | 'repair_in_progress'
+  | 'replacement_in_progress'
+  | 'ready_for_dispatch'
+  | 'dispatched'
+  | 'delivered';
+
+export type WarrantyClaimResolutionType = 'repaired' | 'replaced' | 'refunded' | 'rejected' | 'no_fault_found' | 'other';
+
+/** The four proof categories a warranty claim's evidence is collected under — each its own upload section on the storefront. */
+export type WarrantyClaimAttachmentCategory = 'warrantyCard' | 'productPhoto' | 'box' | 'receipt';
+
+export interface WarrantyClaimTimelineEntry {
+  id: string;
+  status: WarrantyClaimStatus;
+  serviceStage?: WarrantyClaimServiceStage;
+  note?: string;
+  at: string;
+  by?: string;
+}
+
+export interface WarrantyClaimInternalNote {
+  id: string;
+  note: string;
+  by: string;
+  at: string;
+}
 
 export interface WarrantyClaim {
   id: string;
@@ -40,9 +74,16 @@ export interface WarrantyClaim {
   issueType: WarrantyClaimIssueType;
   description: string;
   attachmentMediaIds: string[];
+  attachmentCategories?: Partial<Record<WarrantyClaimAttachmentCategory, string[]>>;
   status: WarrantyClaimStatus;
+  serviceStage?: WarrantyClaimServiceStage;
   sellerResponse?: string;
   resolutionNotes?: string;
+  resolutionType?: WarrantyClaimResolutionType;
+  estimatedCompletionDate?: string;
+  timeline?: WarrantyClaimTimelineEntry[];
+  /** Never populated for a consumer-scoped response — filtered server-side. */
+  internalNotes?: WarrantyClaimInternalNote[];
   conversationId?: string;
   submittedAt: string;
   acknowledgedAt?: string;
@@ -50,6 +91,18 @@ export interface WarrantyClaim {
   cancelledAt?: string;
   createdAt: string;
   updatedAt: string;
+  disputeId?: string;
+}
+
+export interface WarrantyClaimShipment {
+  id: string;
+  orderId: string;
+  status: string;
+  courier: string;
+  trackingNumber: string;
+  sourceType?: 'order' | 'warranty_claim';
+  sourceId?: string;
+  trackingEvents: Array<{ id: string; timestamp: string; status: string; location: string; description: string }>;
 }
 
 function authHeaders(): Record<string, string> {
@@ -100,24 +153,87 @@ export const warrantyClaimsApi = {
     const result = await request<{ data: WarrantyClaim }>(`/operations/warranty-claims/${id}/request-info`, 'PATCH', { sellerResponse });
     return result.data;
   },
-  approve: async (id: string, sellerResponse?: string) => {
-    const result = await request<{ data: WarrantyClaim }>(`/operations/warranty-claims/${id}/approve`, 'PATCH', { sellerResponse });
+  provideInfo: async (id: string, description: string, attachmentMediaIds?: string[]) => {
+    const result = await request<{ data: WarrantyClaim }>(`/operations/warranty-claims/${id}/provide-info`, 'PATCH', {
+      description,
+      attachmentMediaIds,
+    });
+    return result.data;
+  },
+  approve: async (id: string, sellerResponse?: string, estimatedCompletionDate?: string) => {
+    const result = await request<{ data: WarrantyClaim }>(`/operations/warranty-claims/${id}/approve`, 'PATCH', {
+      sellerResponse,
+      estimatedCompletionDate,
+    });
     return result.data;
   },
   reject: async (id: string, sellerResponse: string) => {
     const result = await request<{ data: WarrantyClaim }>(`/operations/warranty-claims/${id}/reject`, 'PATCH', { sellerResponse });
     return result.data;
   },
-  serviceStatus: async (id: string) => {
-    const result = await request<{ data: WarrantyClaim }>(`/operations/warranty-claims/${id}/service-status`, 'PATCH');
+  serviceStatus: async (id: string, serviceStage?: WarrantyClaimServiceStage, estimatedCompletionDate?: string) => {
+    const result = await request<{ data: WarrantyClaim }>(`/operations/warranty-claims/${id}/service-status`, 'PATCH', {
+      serviceStage,
+      estimatedCompletionDate,
+    });
     return result.data;
   },
-  resolve: async (id: string, resolutionNotes: string) => {
-    const result = await request<{ data: WarrantyClaim }>(`/operations/warranty-claims/${id}/resolve`, 'PATCH', { resolutionNotes });
+  advanceServiceStage: async (id: string, serviceStage: WarrantyClaimServiceStage, note?: string, estimatedCompletionDate?: string) => {
+    const result = await request<{ data: WarrantyClaim }>(`/operations/warranty-claims/${id}/service-stage`, 'PATCH', {
+      serviceStage,
+      note,
+      estimatedCompletionDate,
+    });
+    return result.data;
+  },
+  /** resolutionType 'refunded' requires refundAmount — routed through the real escrow refund engine. */
+  resolve: async (id: string, resolutionNotes: string, resolutionType: WarrantyClaimResolutionType, refundAmount?: number) => {
+    const result = await request<{ data: WarrantyClaim; refund?: unknown }>(`/operations/warranty-claims/${id}/resolve`, 'PATCH', {
+      resolutionNotes,
+      resolutionType,
+      refundAmount,
+    });
     return result.data;
   },
   cancel: async (id: string) => {
     const result = await request<{ data: WarrantyClaim }>(`/operations/warranty-claims/${id}/cancel`, 'PATCH');
+    return result.data;
+  },
+  escalateToDispute: async (id: string, reason?: string) => {
+    const result = await request<{ data: WarrantyClaim; dispute: { id: string } }>(`/operations/warranty-claims/${id}/dispute`, 'PATCH', { reason });
+    return result;
+  },
+  /** Customer-visible status note, optionally with an estimated completion date — never an internal note. */
+  addNote: async (id: string, note?: string, estimatedCompletionDate?: string) => {
+    const result = await request<{ data: WarrantyClaim }>(`/operations/warranty-claims/${id}/note`, 'PATCH', { note, estimatedCompletionDate });
+    return result.data;
+  },
+  /** Staff/seller-only — never shown to the buyer. */
+  addInternalNote: async (id: string, note: string) => {
+    const result = await request<{ data: WarrantyClaim }>(`/operations/warranty-claims/${id}/internal-note`, 'PATCH', { note });
+    return result.data;
+  },
+  createShipment: async (id: string, direction: 'return_pickup' | 'redelivery') => {
+    const result = await request<{ data: { shipment: WarrantyClaimShipment; claim: WarrantyClaim } }>(
+      `/operations/warranty-claims/${id}/shipments`,
+      'POST',
+      { direction },
+    );
+    return result.data;
+  },
+  listShipments: async (id: string) => {
+    const result = await request<{ data: WarrantyClaimShipment[] }>(`/operations/warranty-claims/${id}/shipments`, 'GET');
+    return result.data;
+  },
+  getDocument: async (id: string) => {
+    const result = await request<{
+      data: {
+        claim: WarrantyClaim;
+        buyer: { name: string; choosifyUserId: string | null; email: string } | null;
+        seller: { name: string; choosifyUserId: string | null; email: string } | null;
+        product: { title?: string; variant?: string; serialNumber?: string } | null;
+      };
+    }>(`/operations/warranty-claims/${id}/document`, 'GET');
     return result.data;
   },
 };

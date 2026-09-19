@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useReturns, ReturnRequest } from '../../contexts/ReturnsContext';
+import React, { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useReturns } from '../../contexts/ReturnsContext';
 import { useOrders } from '../../contexts/OrdersContext';
 import {
-  Package, Truck, CheckCircle, DollarSign, AlertTriangle, Printer,
-  ArrowRight, Search, Calendar, Filter, Clock, ChevronRight, Trash2,
-  Plus, FileText, X, CheckCircle2, RefreshCw, ZoomIn, Eye, MessageSquare,
-  ArrowUpRight, ExternalLink, Download, TrendingUp, HelpCircle
+  Package, Truck, CheckCircle, DollarSign, AlertTriangle,
+  Search, Calendar, Filter, Clock, X, RefreshCw,
+  ExternalLink, Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -40,16 +40,10 @@ export default function ReturnsPage() {
     loading: returnsLoading,
     error: returnsError,
     refresh: refreshReturns,
-    approveReturn,
-    rejectReturn,
-    processRefund,
-    addReturnNote,
-    updateReturnStatus,
-    generateReturnLabel,
-    linkReturnToDispute
   } = useReturns();
 
   const { orders } = useOrders();
+  const navigate = useNavigate();
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
@@ -59,22 +53,6 @@ export default function ReturnsPage() {
 
   // Tabs: 'queue' | 'transit' | 'refunds' | 'analytics'
   const [activeTab, setActiveTab] = useState<'queue' | 'transit' | 'refunds' | 'analytics'>('queue');
-
-  // Selected Return Detail Modal state
-  const [selectedReturnId, setSelectedReturnId] = useState<string | null>(null);
-
-  // Local Forms State for active Detail Modal
-  const [noteInput, setNoteInput] = useState('');
-  const [refundInput, setRefundInput] = useState<number>(0);
-  const [rejectReasonInput, setRejectReasonInput] = useState('');
-  const [courierInput, setCourierInput] = useState('Pathao Delivery');
-  const [trackingIdInput, setTrackingIdInput] = useState('');
-  const [isRejecting, setIsRejecting] = useState(false);
-  const [zoomImg, setZoomImg] = useState<string | null>(null);
-
-  // Tracks which async action is currently in flight so buttons can disable
-  // themselves and we never show a success toast before the API resolves.
-  const [actionBusy, setActionBusy] = useState<string | null>(null);
 
   // Toast status
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -88,32 +66,7 @@ export default function ReturnsPage() {
     }, 3500);
   };
 
-  const selectedReturn = returnRequests.find(r => r.id === selectedReturnId);
-
-  // Initialize refund amount in modal when selected
-  useEffect(() => {
-    if (selectedReturn) {
-      const order = orders.find(o => o.id === selectedReturn.orderId);
-      const totalPayable = order?.total_payable || order?.product.price || 0;
-      setRefundInput(selectedReturn.refundAmount || totalPayable);
-      setTrackingIdInput(selectedReturn.returnTrackingId || '');
-      setCourierInput(selectedReturn.returnCourier || 'Pathao Delivery');
-      setIsRejecting(false);
-      setRejectReasonInput('');
-    }
-  }, [selectedReturnId, selectedReturn, orders]);
-
-  // Keyboard shortcut: Escape to close modal
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setSelectedReturnId(null);
-        setZoomImg(null);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  const openCase = (id: string) => navigate(`/admin/returns/${id}`);
 
   // Filter returns based on selected range and query
   const filteredReturns = returnRequests.filter(ret => {
@@ -166,95 +119,6 @@ export default function ReturnsPage() {
     { key: 'refunds', label: 'Refund Ledger', badge: refundsTabCount },
     { key: 'analytics', label: 'Insights & Analytics' },
   ];
-
-  // Handle Note Submission
-  const handleAddNoteSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedReturnId || !noteInput.trim()) return;
-    setActionBusy('note');
-    try {
-      await addReturnNote(selectedReturnId, noteInput.trim());
-      setNoteInput('');
-      showToast('Internal note recorded', 'success');
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to record note', 'error');
-    } finally {
-      setActionBusy(null);
-    }
-  };
-
-  // Handle Return Approval
-  const handleApprove = async () => {
-    if (!selectedReturnId) return;
-    const order = orders.find(o => o.id === selectedReturn?.orderId);
-    const limit = order?.total_payable || order?.product.price || 99999;
-
-    if (refundInput <= 0) {
-      showToast('Refund amount must be greater than zero BDT', 'error');
-      return;
-    }
-    if (refundInput > limit) {
-      showToast(`Refund amount cannot exceed order subtotal (৳${limit.toLocaleString()})`, 'error');
-      return;
-    }
-
-    setActionBusy('approve');
-    try {
-      await approveReturn(selectedReturnId, refundInput, 'Approved by Administrator Panel.');
-      showToast('Return Request Approved', 'success');
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to approve return', 'error');
-    } finally {
-      setActionBusy(null);
-    }
-  };
-
-  // Handle Return Rejection
-  const handleReject = async () => {
-    if (!selectedReturnId) return;
-    if (!rejectReasonInput.trim()) {
-      showToast('A reason is required to reject a return.', 'error');
-      return;
-    }
-    setActionBusy('reject');
-    try {
-      await rejectReturn(selectedReturnId, rejectReasonInput.trim());
-      showToast('Return Request Rejected', 'info');
-      setIsRejecting(false);
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to reject return', 'error');
-    } finally {
-      setActionBusy(null);
-    }
-  };
-
-  // Handle Process Refund Channel
-  const handleProcessRefund = async () => {
-    if (!selectedReturnId) return;
-    setActionBusy('refund');
-    try {
-      await processRefund(selectedReturnId);
-      showToast('Refund marked as successfully processed!', 'success');
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to process refund', 'error');
-    } finally {
-      setActionBusy(null);
-    }
-  };
-
-  // Handle Prepaid Return Label Generation
-  const handlePrintLabel = async () => {
-    if (!selectedReturnId) return;
-    setActionBusy('label');
-    try {
-      const info = await generateReturnLabel(selectedReturnId);
-      showToast(`Printable label generated: ${info.trackingId}`, 'success');
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to generate return label', 'error');
-    } finally {
-      setActionBusy(null);
-    }
-  };
 
   // Export Refund batch as accountant-friendly format
   const handleExportRefundBatch = () => {
@@ -333,7 +197,6 @@ export default function ReturnsPage() {
   };
 
   const secondaryBtn = 'px-3 py-1.5 bg-white border border-app-border text-app-text-secondary text-xs font-extrabold rounded-md hover:border-app-accent hover:text-app-accent transition-all';
-  const primaryBtn = 'px-4 py-2 bg-app-accent hover:bg-[#FF5B00] text-white text-xs font-extrabold uppercase tracking-wide rounded-md transition-all shadow-sm';
 
   return (
     <div className="min-h-screen bg-app-bg text-app-text-primary p-4 sm:p-6 font-sans">
@@ -527,7 +390,11 @@ export default function ReturnsPage() {
 
                       return (
                         <tr key={ret.id} className="hover:bg-[#F9FAFB] transition-colors">
-                          <td className="p-4 font-bold font-mono text-app-accent">{ret.id}</td>
+                          <td className="p-4 font-bold font-mono text-app-accent">
+                            <button type="button" onClick={() => openCase(ret.id)} className="hover:underline cursor-pointer">
+                              {ret.referenceId || ret.id}
+                            </button>
+                          </td>
                           <td className="p-4 font-mono font-semibold text-app-text-secondary">{ret.orderId}</td>
                           <td className="p-4">
                             <div className="font-bold text-app-text-primary">{customerName}</div>
@@ -551,10 +418,10 @@ export default function ReturnsPage() {
                           </td>
                           <td className="p-4 text-right">
                             <button
-                              onClick={() => setSelectedReturnId(ret.id)}
+                              onClick={() => openCase(ret.id)}
                               className={secondaryBtn}
                             >
-                              Process Return
+                              Review Request
                             </button>
                           </td>
                         </tr>
@@ -592,7 +459,11 @@ export default function ReturnsPage() {
                   transitReturns.map(ret => {
                       return (
                         <tr key={ret.id} className="hover:bg-[#F9FAFB] transition-colors">
-                          <td className="p-4 font-bold font-mono text-app-accent">{ret.id}</td>
+                          <td className="p-4 font-bold font-mono text-app-accent">
+                            <button type="button" onClick={() => openCase(ret.id)} className="hover:underline cursor-pointer">
+                              {ret.referenceId || ret.id}
+                            </button>
+                          </td>
                           <td className="p-4 font-mono font-semibold text-app-text-secondary">{ret.orderId}</td>
                           <td className="p-4 font-bold text-app-text-primary">
                             {ret.returnCourier || '[Courier Unassigned]'}
@@ -627,7 +498,7 @@ export default function ReturnsPage() {
                               </a>
                             )}
                             <button
-                              onClick={() => setSelectedReturnId(ret.id)}
+                              onClick={() => openCase(ret.id)}
                               className={secondaryBtn}
                             >
                               Dispatch Logistics
@@ -671,7 +542,11 @@ export default function ReturnsPage() {
 
                       return (
                         <tr key={ret.id} className="hover:bg-[#F9FAFB] transition-colors">
-                          <td className="p-4 font-bold font-mono text-app-accent">{ret.id}</td>
+                          <td className="p-4 font-bold font-mono text-app-accent">
+                            <button type="button" onClick={() => openCase(ret.id)} className="hover:underline cursor-pointer">
+                              {ret.referenceId || ret.id}
+                            </button>
+                          </td>
                           <td className="p-4">
                             <div className="font-bold text-app-text-primary">{customerName}</div>
                             <div className="text-[10px] font-semibold text-app-text-disabled font-mono">{customerEmail}</div>
@@ -689,7 +564,7 @@ export default function ReturnsPage() {
                           </td>
                           <td className="p-4 text-right">
                             <button
-                              onClick={() => setSelectedReturnId(ret.id)}
+                              onClick={() => openCase(ret.id)}
                               className={secondaryBtn}
                             >
                               Manage Refund
@@ -846,467 +721,6 @@ export default function ReturnsPage() {
 
       </div>
 
-      {/* DETAIL AUDIT & PROCESS MODAL */}
-      <AnimatePresence>
-        {selectedReturnId && selectedReturn && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-40 backdrop-blur-sm overflow-y-auto">
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white border border-app-border rounded-lg max-w-4xl w-full shadow-2xl overflow-hidden my-8"
-            >
-
-              {/* Modal Title bar */}
-              <div className="bg-[#F9FAFB] border-b border-app-border px-5 py-4 flex items-center justify-between">
-                <div className="flex items-center space-x-2.5">
-                  <div className="w-2.5 h-2.5 rounded-full bg-app-accent animate-ping" />
-                  <h3 className="text-sm font-extrabold uppercase tracking-wide text-app-text-primary">
-                    Audit Return: <span className="text-app-accent font-mono">{selectedReturn.id}</span>
-                  </h3>
-                </div>
-                <button
-                  onClick={() => setSelectedReturnId(null)}
-                  className="p-1 rounded text-app-text-muted hover:text-app-text-primary hover:bg-app-bg transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Split layout inside modal */}
-              <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-app-border">
-
-                {/* LEFT SIDE: INITIATOR AND EVIDENCE DETS */}
-                <div className="p-5 space-y-4">
-
-                  {/* Customer Information */}
-                  <div>
-                    <h4 className="text-[10px] font-extrabold uppercase text-app-text-disabled tracking-widest mb-1.5">
-                      Initiating Customer
-                    </h4>
-                    {(() => {
-                      const order = orders.find(o => o.id === selectedReturn.orderId);
-                      return (
-                        <div className="bg-[#F9FAFB] border border-app-border p-3 rounded-md flex items-center justify-between">
-                          <div>
-                            <div className="font-bold text-app-text-primary text-xs">{order?.customer.name || 'Unknown'}</div>
-                            <div className="text-[10px] font-semibold text-app-text-disabled font-mono">{order?.customer.email || 'N/A'}</div>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-[9px] uppercase font-extrabold text-app-text-disabled">Total Purchase</div>
-                            <div className="text-xs font-extrabold font-mono text-app-text-primary mt-0.5">
-                              ৳{(order?.total_payable || order?.product.price || 0).toLocaleString()}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-
-                  {/* Return details */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-extrabold uppercase text-app-text-disabled tracking-widest">
-                        Return Reason:
-                      </span>
-                      <span className="capitalize text-xs font-extrabold text-app-text-primary bg-[#F9FAFB] border border-app-border px-2 py-0.5 rounded">
-                        {selectedReturn.reason.replace(/_/g, ' ')}
-                      </span>
-                    </div>
-
-                    <div className="bg-[#F9FAFB] border border-app-border p-3 rounded-md text-xs font-semibold text-app-text-secondary min-h-[60px] leading-relaxed">
-                      {selectedReturn.description}
-                    </div>
-                  </div>
-
-                  {/* Evidence Photo Grid with high-res zoom triggers */}
-                  <div>
-                    <h4 className="text-[10px] font-extrabold uppercase text-app-text-disabled tracking-widest mb-2">
-                      Evidence Photos ({selectedReturn.evidencePhotos.length})
-                    </h4>
-                    {selectedReturn.evidencePhotos.length > 0 ? (
-                      <div className="grid grid-cols-4 gap-2">
-                        {selectedReturn.evidencePhotos.map((img, i) => (
-                          <div
-                            key={i}
-                            onClick={() => setZoomImg(img)}
-                            className="relative group aspect-square rounded-md overflow-hidden bg-white border border-app-border cursor-zoom-in"
-                          >
-                            <img src={img} alt="evidence" className="w-full h-full object-cover group-hover:scale-105 transition-all" />
-                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
-                              <ZoomIn className="w-4 h-4 text-white" />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="bg-[#F9FAFB] border border-app-border p-4 rounded-md text-center text-app-text-disabled font-mono text-[11px] font-semibold">
-                        No evidence photographs uploaded with request.
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Print shipment return label */}
-                  <div className="pt-2">
-                    <button
-                      onClick={handlePrintLabel}
-                      disabled={actionBusy === 'label'}
-                      className="w-full flex items-center justify-center space-x-1.5 px-4 py-2.5 bg-white hover:border-app-accent hover:text-app-accent text-app-text-secondary border border-app-border rounded-md text-xs font-extrabold transition-all disabled:opacity-60"
-                    >
-                      <Printer className="w-4 h-4 text-app-accent" />
-                      <span>{actionBusy === 'label' ? 'Generating…' : 'Print Prepaid Shipping Return Label'}</span>
-                    </button>
-                  </div>
-
-                  {/* Status progression Timeline */}
-                  <div>
-                    <h4 className="text-[10px] font-extrabold uppercase text-app-text-disabled tracking-widest mb-3">
-                      Logistics Pipeline Status
-                    </h4>
-                    <div className="relative pl-5 border-l-2 border-app-border space-y-4 text-[11px]">
-
-                      <div className="relative">
-                        <span className="absolute -left-[27px] top-0.5 w-3 h-3 rounded-full bg-app-accent border-2 border-white" />
-                        <div className="font-bold text-app-text-secondary">Complaint Initiated</div>
-                        <div className="text-[9px] font-semibold text-app-text-disabled font-mono">
-                          {new Date(selectedReturn.createdAt).toLocaleString()}
-                        </div>
-                      </div>
-
-                      <div className="relative">
-                        <span className={`absolute -left-[27px] top-0.5 w-3 h-3 rounded-full border-2 border-white ${
-                          selectedReturn.status !== 'initiated' ? 'bg-app-accent' : 'bg-app-border'
-                        }`} />
-                        <div className="font-bold text-app-text-secondary">Review & Approved</div>
-                        {selectedReturn.approvedAt && (
-                          <div className="text-[9px] font-semibold text-app-text-disabled font-mono">
-                            {new Date(selectedReturn.approvedAt).toLocaleString()}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="relative">
-                        <span className={`absolute -left-[27px] top-0.5 w-3 h-3 rounded-full border-2 border-white ${
-                          selectedReturn.status === 'returned_in_transit' || selectedReturn.status === 'received' || selectedReturn.status === 'refunded' ? 'bg-[#6C4CFF]' : 'bg-app-border'
-                        }`} />
-                        <div className="font-bold text-app-text-secondary">Transit & Logistics Pickup</div>
-                      </div>
-
-                      <div className="relative">
-                        <span className={`absolute -left-[27px] top-0.5 w-3 h-3 rounded-full border-2 border-white ${
-                          selectedReturn.status === 'received' || selectedReturn.status === 'refunded' ? 'bg-[#16A34A]' : 'bg-app-border'
-                        }`} />
-                        <div className="font-bold text-app-text-secondary">Item Received & Verified</div>
-                      </div>
-
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* RIGHT SIDE: AUDITING CONTROLS AND NOTE WRITER */}
-                <div className="p-5 flex flex-col justify-between space-y-5">
-
-                  {/* Audit Control Desk Form */}
-                  <div className="space-y-4">
-                    <h4 className="text-[10px] font-extrabold uppercase text-app-text-disabled tracking-widest">
-                      Auditor Control Actions
-                    </h4>
-
-                    {/* Pending review approvals */}
-                    {selectedReturn.status === 'initiated' && (
-                      <div className="bg-[#F9FAFB] border border-app-border p-4 rounded-lg space-y-3">
-                        <p className="text-[11px] font-semibold text-app-text-secondary leading-relaxed">
-                          Analyze complaint details. To approve, specify correct refund ledger value (cannot exceed order total).
-                        </p>
-
-                        {!isRejecting ? (
-                          <>
-                            <div>
-                              <label className="text-[9px] font-extrabold text-app-text-disabled uppercase tracking-wider block mb-1">
-                                Lock Refund Ledger (BDT)
-                              </label>
-                              <div className="relative">
-                                <span className="absolute left-2.5 top-2 text-xs font-bold text-app-text-secondary">৳</span>
-                                <input
-                                  type="number"
-                                  value={refundInput}
-                                  onChange={(e) => setRefundInput(parseFloat(e.target.value) || 0)}
-                                  className="w-full pl-6 pr-3 py-1.5 bg-white border border-app-border rounded-md text-xs font-bold font-mono text-app-accent"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-2">
-                              <button
-                                onClick={() => setIsRejecting(true)}
-                                disabled={actionBusy === 'approve'}
-                                className="px-3 py-2 bg-white text-[#DC2626] border border-app-border hover:bg-[#FEF2F2] text-xs font-extrabold rounded-md transition-all disabled:opacity-60"
-                              >
-                                Reject Return
-                              </button>
-                              <button
-                                onClick={handleApprove}
-                                disabled={actionBusy === 'approve'}
-                                className="px-4 py-2 bg-app-accent hover:bg-[#FF5B00] text-white text-xs font-extrabold uppercase tracking-wider rounded-md transition-all shadow-sm disabled:opacity-60"
-                              >
-                                {actionBusy === 'approve' ? 'Approving…' : 'Approve Return'}
-                              </button>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="space-y-3">
-                            <div>
-                              <label className="text-[9px] font-extrabold text-app-text-disabled uppercase tracking-wider block mb-1">
-                                Rejection Justification
-                              </label>
-                              <textarea
-                                value={rejectReasonInput}
-                                onChange={(e) => setRejectReasonInput(e.target.value)}
-                                placeholder="Describe why this complaint is rejected (e.g. item worn/missing box)..."
-                                className="w-full px-3 py-1.5 bg-white border border-app-border rounded-md text-xs font-semibold text-app-text-secondary placeholder-app-text-disabled focus:outline-none"
-                                rows={2}
-                              />
-                            </div>
-                            <div className="flex justify-end space-x-2">
-                              <button
-                                onClick={() => setIsRejecting(false)}
-                                disabled={actionBusy === 'reject'}
-                                className="px-3 py-1.5 text-xs font-bold text-app-text-secondary hover:text-app-text-primary transition-colors disabled:opacity-60"
-                              >
-                                Cancel
-                              </button>
-                              <button
-                                onClick={handleReject}
-                                disabled={actionBusy === 'reject'}
-                                className="px-4 py-1.5 bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-extrabold rounded-md transition-all disabled:opacity-60"
-                              >
-                                {actionBusy === 'reject' ? 'Rejecting…' : 'Confirm Rejection'}
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Logistics Courier assignment controls */}
-                    {selectedReturn.status === 'approved' && (
-                      <div className="bg-[#F9FAFB] border border-app-border p-4 rounded-lg space-y-3">
-                        <div className="text-[11px] font-bold text-app-text-secondary">
-                          Configure Reverse Shipment Courier
-                        </div>
-                        <p className="text-[10px] font-semibold text-app-text-disabled leading-relaxed">
-                          Provide courier routing information to notify courier warehouse pickup.
-                        </p>
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[8px] font-extrabold text-app-text-disabled uppercase tracking-wider block mb-1">
-                              Courier
-                            </label>
-                            <select
-                              value={courierInput}
-                              onChange={(e) => setCourierInput(e.target.value)}
-                              className="w-full px-2 py-1.5 bg-white border border-app-border rounded-md text-xs font-semibold text-app-text-secondary focus:outline-none"
-                            >
-                              <option value="Pathao Delivery">Pathao Delivery</option>
-                              <option value="Steadfast Courier">Steadfast Courier</option>
-                              <option value="Paperfly">Paperfly</option>
-                              <option value="RedX">RedX Logistics</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="text-[8px] font-extrabold text-app-text-disabled uppercase tracking-wider block mb-1">
-                              Tracking ID
-                            </label>
-                            <input
-                              type="text"
-                              value={trackingIdInput}
-                              onChange={(e) => setTrackingIdInput(e.target.value)}
-                              placeholder="e.g. TRACK-91283"
-                              className="w-full px-2 py-1.5 bg-white border border-app-border rounded-md text-xs font-semibold text-app-text-secondary focus:outline-none"
-                            />
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={async () => {
-                            if (!trackingIdInput.trim()) {
-                              showToast('Please specify a valid tracking identifier.', 'error');
-                              return;
-                            }
-                            setActionBusy('transit');
-                            try {
-                              await updateReturnStatus(selectedReturn.id, 'returned_in_transit');
-                              showToast('Logistics configured & transit started', 'success');
-                            } catch (err) {
-                              showToast(err instanceof Error ? err.message : 'Failed to update status', 'error');
-                            } finally {
-                              setActionBusy(null);
-                            }
-                          }}
-                          disabled={actionBusy === 'transit'}
-                          className="w-full py-2 bg-app-accent hover:bg-[#FF5B00] text-white text-xs font-extrabold rounded-md transition-all disabled:opacity-60"
-                        >
-                          {actionBusy === 'transit' ? 'Updating…' : 'Mark as Shipped/In Transit'}
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Item receipt verification */}
-                    {selectedReturn.status === 'returned_in_transit' && (
-                      <div className="bg-[#F9FAFB] border border-app-border p-4 rounded-lg space-y-3">
-                        <div className="text-[11px] font-bold text-app-text-secondary">
-                          Inspect & Verify Returned Goods
-                        </div>
-                        <p className="text-[10px] font-semibold text-app-text-disabled leading-relaxed">
-                          Once the return package lands in the seller warehouse, mark as received to trigger final refund ledger step.
-                        </p>
-                        <button
-                          onClick={async () => {
-                            setActionBusy('received');
-                            try {
-                              await updateReturnStatus(selectedReturn.id, 'received');
-                              showToast('Item received and logged into ERP ledger.', 'success');
-                            } catch (err) {
-                              showToast(err instanceof Error ? err.message : 'Failed to update status', 'error');
-                            } finally {
-                              setActionBusy(null);
-                            }
-                          }}
-                          disabled={actionBusy === 'received'}
-                          className="w-full py-2 bg-app-accent hover:bg-[#FF5B00] text-white text-xs font-extrabold rounded-md transition-all disabled:opacity-60"
-                        >
-                          {actionBusy === 'received' ? 'Updating…' : 'Mark as Received at Warehouse'}
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Process Refund to Gateway */}
-                    {selectedReturn.status === 'received' && (
-                      <div className="bg-[#F9FAFB] border border-app-border p-4 rounded-lg space-y-3">
-                        <div className="text-[11px] font-bold text-app-text-secondary">
-                          Ready for Payment Refund Channels
-                        </div>
-                        <p className="text-[10px] font-semibold text-app-text-disabled leading-relaxed">
-                          Verification successfully audited. Click to authorize BDT <strong>৳{(selectedReturn.refundAmount || 0).toLocaleString()}</strong> payout back to customer's source account.
-                        </p>
-                        <button
-                          onClick={handleProcessRefund}
-                          disabled={actionBusy === 'refund'}
-                          className="w-full py-2 bg-app-accent hover:bg-[#FF5B00] text-white text-xs font-extrabold rounded-md transition-all disabled:opacity-60"
-                        >
-                          {actionBusy === 'refund' ? 'Processing…' : 'Process & Issue Refund Payment'}
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Resolved view */}
-                    {(selectedReturn.status === 'refunded' || selectedReturn.status === 'rejected') && (
-                      <div className="bg-[#F9FAFB] border border-app-border p-4 rounded-lg text-center space-y-2">
-                        <CheckCircle2 className="w-8 h-8 text-[#16A34A] mx-auto" />
-                        <div className="text-xs font-extrabold text-app-text-primary uppercase tracking-wider">
-                          Taxonomy Rule Closed
-                        </div>
-                        <p className="text-[11px] font-semibold text-app-text-disabled leading-relaxed">
-                          This return complaint has reached a final resolution state and the order ledger remains locked.
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Dispute escalation tool */}
-                    {selectedReturn.status !== 'dispute' && selectedReturn.status !== 'refunded' && selectedReturn.status !== 'rejected' && (
-                      <div className="border-t border-app-border pt-3 flex justify-between items-center text-xs">
-                        <span className="text-app-text-muted font-semibold">Logistics conflict?</span>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            setActionBusy('dispute');
-                            try {
-                              await linkReturnToDispute(selectedReturn.id, `Return ${selectedReturn.id} escalated to dispute from Returns & Refunds`);
-                              showToast('Return escalated to Dispute channels', 'info');
-                            } catch (err) {
-                              showToast(err instanceof Error ? err.message : 'Failed to escalate return', 'error');
-                            } finally {
-                              setActionBusy(null);
-                            }
-                          }}
-                          disabled={actionBusy === 'dispute'}
-                          className="text-[#DC2626] hover:text-[#B91C1C] font-extrabold hover:underline disabled:opacity-60"
-                        >
-                          {actionBusy === 'dispute' ? 'Escalating…' : 'Escalate to Dispute Resolution'}
-                        </button>
-                      </div>
-                    )}
-
-                  </div>
-
-                  {/* NOTE KEEPER LOG */}
-                  <div className="flex-1 flex flex-col min-h-[160px] bg-[#F9FAFB] border border-app-border p-3 rounded-lg">
-                    <h5 className="text-[9px] font-extrabold text-app-text-disabled uppercase tracking-wider mb-2 flex items-center space-x-1">
-                      <MessageSquare className="w-3.5 h-3.5 text-app-text-disabled" />
-                      <span>Internal Admin Notes Log</span>
-                    </h5>
-
-                    <div className="flex-1 overflow-y-auto max-h-[120px] custom-scrollbar space-y-2 pr-1 text-[10px] font-semibold text-app-text-secondary mb-3">
-                      {selectedReturn.notes.map((n, i) => (
-                        <div key={i} className="bg-white p-2 rounded border border-app-border leading-relaxed">
-                          {n}
-                        </div>
-                      ))}
-                    </div>
-
-                    <form onSubmit={handleAddNoteSubmit} className="flex gap-2">
-                      <input
-                        type="text"
-                        value={noteInput}
-                        onChange={(e) => setNoteInput(e.target.value)}
-                        placeholder="Write auditor logs (Press Enter to submit)..."
-                        className="flex-1 px-2.5 py-1.5 bg-white border border-app-border rounded-md text-xs font-semibold text-app-text-secondary placeholder-app-text-disabled focus:outline-none"
-                      />
-                      <button
-                        type="submit"
-                        disabled={actionBusy === 'note'}
-                        className="px-3 bg-white border border-app-border hover:border-app-accent hover:text-app-accent text-app-text-secondary font-extrabold rounded-md text-xs transition-colors disabled:opacity-60"
-                      >
-                        {actionBusy === 'note' ? '…' : 'Add'}
-                      </button>
-                    </form>
-                  </div>
-
-                </div>
-
-              </div>
-
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* PICTURE ZOOM VIEW LIGHTBOX */}
-      <AnimatePresence>
-        {zoomImg && (
-          <div
-            className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 cursor-zoom-out"
-            onClick={() => setZoomImg(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="relative max-w-3xl w-full"
-            >
-              <img src={zoomImg} alt="Evidence high-res view" className="w-full h-auto rounded-md border border-app-border shadow-2xl" />
-              <button
-                onClick={() => setZoomImg(null)}
-                className="absolute top-4 right-4 p-2 rounded-full bg-black/40 text-white hover:bg-black/60 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
     </div>
   );

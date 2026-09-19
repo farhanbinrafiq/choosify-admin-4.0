@@ -3,26 +3,53 @@ import { useOrders } from './OrdersContext';
 import { useAuth } from './AuthContext';
 import { operationsApi } from '../services/operationsApi';
 
+export interface ReturnTimelineEntry {
+  id: string;
+  status: ReturnRequest['status'];
+  note?: string;
+  at: string;
+  by?: string;
+}
+
+export interface ReturnInternalNote {
+  id: string;
+  note: string;
+  by: string;
+  at: string;
+}
+
 export interface ReturnRequest {
   id: string;
+  /** Permanent Choosify Return Reference ID (RT-#####). */
+  referenceId?: string;
   orderId: string;
   itemId: string;
   initiatedBy: 'customer' | 'admin';
   reason: 'defective' | 'damaged' | 'wrong_item' | 'not_as_described' | 'customer_changed_mind';
   description: string;
   evidencePhotos: string[];
+  evidenceMediaIds?: string[];
+  /** Buyer-supplied external video link (e.g. Google Drive) — never a raw video upload. */
+  videoLink?: string;
   status: 'initiated' | 'approved' | 'rejected' | 'returned_in_transit' | 'received' | 'refunded' | 'dispute';
   approvalDecision?: 'approved' | 'rejected';
   approvalReason?: string;
   approvedAt?: string;
   approvedBy?: string;
+  /** Recorded at approval time — does the buyer have to send the item back before the refund? */
+  requiresReturn?: boolean;
   refundAmount?: number;
   refundStatus: 'pending' | 'processed' | 'failed';
   returnTrackingId?: string;
   returnCourier?: string;
   pickupDate?: string;
   deliveryDate?: string;
+  /** Seller/admin-writable, buyer-readable decision log (existing behavior). */
   notes: string[];
+  /** Full buyer-visible structured history — every status transition. */
+  timeline?: ReturnTimelineEntry[];
+  /** Staff/seller-only notes — never sent to the buyer. */
+  internalNotes?: ReturnInternalNote[];
   createdAt: string;
   updatedAt: string;
   sellerId: string;
@@ -38,10 +65,11 @@ interface ReturnsContextType {
   error: string | null;
   refresh: () => void;
   createReturnRequest: (params: Omit<ReturnRequest, 'id' | 'createdAt' | 'updatedAt' | 'notes'>) => Promise<ReturnRequest>;
-  approveReturn: (id: string, refundAmount: number, note?: string) => Promise<ReturnRequest>;
+  approveReturn: (id: string, refundAmount: number, requiresReturn: boolean, note?: string) => Promise<ReturnRequest>;
   rejectReturn: (id: string, reason: string) => Promise<ReturnRequest>;
   processRefund: (id: string) => Promise<ReturnRequest>;
   addReturnNote: (id: string, note: string) => Promise<ReturnRequest>;
+  addInternalNote: (id: string, note: string) => Promise<ReturnRequest>;
   updateReturnStatus: (id: string, newStatus: ReturnRequest['status']) => Promise<ReturnRequest>;
   generateReturnLabel: (id: string) => Promise<{ labelUrl: string; trackingId: string; courier: string }>;
   linkReturnToDispute: (returnId: string, reason?: string) => Promise<ReturnRequest>;
@@ -122,11 +150,16 @@ export const ReturnsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  const approveReturn = async (id: string, refundAmount: number, note?: string): Promise<ReturnRequest> => {
-    const saved = await operationsApi.approveReturn(id, refundAmount, note, 'Admin Main');
+  const approveReturn = async (id: string, refundAmount: number, requiresReturn: boolean, note?: string): Promise<ReturnRequest> => {
+    const saved = await operationsApi.approveReturn(id, refundAmount, requiresReturn, note, 'Admin Main');
     setReturnRequests((prev) => upsertLocal(prev, saved));
     updateOrderStatus(saved.orderId, 'Returned');
-    addAdminNote(saved.orderId, `Return approved. Refund amount locked at ৳${refundAmount}.`);
+    addAdminNote(
+      saved.orderId,
+      requiresReturn
+        ? `Return approved. Refund amount locked at ৳${refundAmount}. Item must be returned first.`
+        : `Return approved as refund-without-return. Refund amount locked at ৳${refundAmount}.`,
+    );
     return saved;
   };
 
@@ -146,6 +179,12 @@ export const ReturnsProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const addReturnNote = async (id: string, note: string): Promise<ReturnRequest> => {
     const saved = await operationsApi.addReturnNote(id, note);
+    setReturnRequests((prev) => upsertLocal(prev, saved));
+    return saved;
+  };
+
+  const addInternalNote = async (id: string, note: string): Promise<ReturnRequest> => {
+    const saved = await operationsApi.addReturnInternalNote(id, note);
     setReturnRequests((prev) => upsertLocal(prev, saved));
     return saved;
   };
@@ -191,6 +230,7 @@ export const ReturnsProvider: React.FC<{ children: React.ReactNode }> = ({ child
         rejectReturn,
         processRefund,
         addReturnNote,
+        addInternalNote,
         updateReturnStatus,
         generateReturnLabel,
         linkReturnToDispute,
