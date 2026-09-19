@@ -155,13 +155,14 @@ const requireCatalogMediaPartner = [
 
 /**
  * A subset of media categories any authenticated user may upload to for
- * their own account — avatar + review-evidence photos — without holding
- * partner entitlement/marketplace-access (those gate seller/creator/admin
- * catalog content, not a consumer's own profile/review media). Ownership is
- * still enforced at write time via `uploaderId = req.userId`, matching every
- * other category's authorization boundary.
+ * their own account — avatar + review-evidence photos, plus warranty-claim
+ * and return/refund-claim evidence — without holding partner entitlement/
+ * marketplace-access (those gate seller/creator/admin catalog content, not
+ * a consumer's own profile/review/claim media). Ownership is still enforced
+ * at write time via `uploaderId = req.userId`, matching every other
+ * category's authorization boundary.
  */
-const CONSUMER_UPLOAD_CATEGORIES = new Set(['users', 'reviews', 'warranty-claims']);
+const CONSUMER_UPLOAD_CATEGORIES = new Set(['users', 'reviews', 'warranty-claims', 'return-evidence']);
 
 /**
  * Routes an authenticated request through the partner-gated chain for every

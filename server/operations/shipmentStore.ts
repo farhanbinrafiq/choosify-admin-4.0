@@ -52,6 +52,19 @@ export interface OpsShipment {
   trackingUrl?: string;
   estimatedDelivery?: string;
   dispatchNote?: string;
+  /**
+   * Discriminator so a warranty return/redelivery shipment can reference the
+   * original commercial Order ID without being mistaken for — or colliding
+   * with — that order's own commercial shipment. Absent/'order' = the
+   * original behavior (one shipment per commercial order, `id: ship_<orderId>`).
+   * 'warranty_claim' shipments still carry the real `orderId` for traceability
+   * but are never a new commercial order and never returned by
+   * `getShipmentByOrderId` (which existing Order Hub / courier UI relies on
+   * meaning "this order's own parcel").
+   */
+  sourceType?: 'order' | 'warranty_claim';
+  /** Set only when sourceType === 'warranty_claim' — the OpsWarrantyClaim id. */
+  sourceId?: string;
 }
 
 const nowIso = () => new Date().toISOString();
@@ -61,8 +74,15 @@ const state: OpsShipment[] = [];
 export const shipmentStore = {
   listShipments: () => [...state].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
   getShipment: (id: string) =>
-    state.find((row) => row.id === id || row.orderId === id || row.trackingNumber === id) ?? null,
-  getShipmentByOrderId: (orderId: string) => state.find((row) => row.orderId === orderId) ?? null,
+    state.find((row) => row.id === id) ??
+    state.find((row) => (row.orderId === id && row.sourceType !== 'warranty_claim') || row.trackingNumber === id) ??
+    null,
+  /** The order's own commercial shipment only — never a warranty return/redelivery shipment for the same order. */
+  getShipmentByOrderId: (orderId: string) =>
+    state.find((row) => row.orderId === orderId && row.sourceType !== 'warranty_claim') ?? null,
+  /** All warranty-logistics shipments (return pickup + redelivery) for one claim. */
+  getShipmentsByWarrantyClaimId: (claimId: string) =>
+    state.filter((row) => row.sourceType === 'warranty_claim' && row.sourceId === claimId),
 
   /**
    * Sprint 14: a shipment record is now created EMPTY — no courier, no tracking
@@ -99,6 +119,65 @@ export const shipmentStore = {
           status: 'awaiting_dispatch',
           location: order.shipping?.region || 'Dhaka',
           description: `Order ${order.orderId} received — awaiting dispatch (no courier assigned yet)`,
+        },
+      ],
+    };
+    state.unshift(shipment);
+    return shipment;
+  },
+
+  /**
+   * A warranty return-pickup or redelivery shipment — references the
+   * original commercial Order ID + a Warranty Claim ID, but is NOT a new
+   * commercial order and never overwrites/duplicates the order's own
+   * shipment (`createFromOrder`). `direction` distinguishes a return-to-
+   * seller pickup from an outbound redelivery back to the buyer — both can
+   * exist for the same claim over its lifetime (e.g. return pickup first,
+   * then a separate redelivery once repaired).
+   */
+  createForWarrantyClaim: (params: {
+    claimId: string;
+    orderId: string;
+    buyerId: string;
+    direction: 'return_pickup' | 'redelivery';
+    recipientName: string;
+    recipientPhone: string;
+    deliveryAddress: string;
+    region: string;
+  }): OpsShipment => {
+    const existing = state.find(
+      (row) => row.sourceType === 'warranty_claim' && row.sourceId === params.claimId && row.id.endsWith(params.direction),
+    );
+    if (existing) return existing;
+
+    const ts = nowIso();
+    const shipment: OpsShipment = {
+      id: `warranty_${params.claimId}_${params.direction}`,
+      orderId: params.orderId,
+      buyerId: params.buyerId,
+      status: 'awaiting_dispatch',
+      courier: '',
+      trackingNumber: '',
+      recipientName: params.recipientName,
+      recipientPhone: params.recipientPhone,
+      deliveryAddress: params.deliveryAddress,
+      region: params.region || 'Dhaka',
+      codAmount: 0,
+      deliveryCharge: 0,
+      createdAt: ts,
+      updatedAt: ts,
+      sourceType: 'warranty_claim',
+      sourceId: params.claimId,
+      trackingEvents: [
+        {
+          id: `evt_${Date.now()}`,
+          timestamp: ts,
+          status: 'awaiting_dispatch',
+          location: params.region || 'Dhaka',
+          description:
+            params.direction === 'return_pickup'
+              ? `Warranty claim ${params.claimId} — return pickup requested for order ${params.orderId}`
+              : `Warranty claim ${params.claimId} — redelivery scheduled for order ${params.orderId}`,
         },
       ],
     };

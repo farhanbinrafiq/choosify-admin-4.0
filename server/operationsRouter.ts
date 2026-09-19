@@ -21,15 +21,28 @@ import type {
   OpsFeeCharge,
   OpsReturnRequest,
   OpsReturnStatus,
+  OpsReturnTimelineEntry,
   OpsReview,
   OpsStorefrontOrder,
   OpsOrderInternalNote,
   OpsVerificationDocument,
   OpsVerificationRequest,
   OpsWarrantyClaim,
+  OpsWarrantyClaimStatus,
+  OpsWarrantyClaimServiceStage,
+  OpsWarrantyClaimResolutionType,
+  OpsWarrantyClaimTimelineEntry,
+  OpsWarrantyClaimAttachmentCategory,
   PermissionKey,
 } from './operations/types';
-import { OPEN_DISPUTE_STATUSES } from './operations/types';
+import { OPEN_DISPUTE_STATUSES, WARRANTY_CLAIM_SERVICE_STAGE_ORDER, WARRANTY_CLAIM_ATTACHMENT_CATEGORIES } from './operations/types';
+import { ensureEntityReferenceId } from './referenceIds/referenceIdService';
+import { processEscrowRefund } from './escrow/escrowService';
+import { escrowStore } from './escrow/escrowStore';
+import { CommerceError } from './commerce/cartService';
+import { db } from './db/client';
+import { users } from './db/schema';
+import { eq } from 'drizzle-orm';
 import { validate } from './middleware/validate';
 import { authenticateRequest } from './middleware/auth';
 import { requireRole } from './middleware/authorization';
@@ -539,6 +552,19 @@ function userCanManageReturnAsSellerOrAdmin(
 ): boolean {
   if (userIsStaff(req)) return true;
   return userIsReturnSeller(req, row);
+}
+
+/**
+ * Actual money movement (the /refund endpoint, and once a case is
+ * disputed) is staff-only — a seller can approve/reject a case (the
+ * decision layer) but never triggers the real escrow payout themselves.
+ * Once a case reaches 'dispute', only staff decide the outcome at all
+ * (refunded or rejected) — this is the deliberate "seller refuses, admin
+ * still has final say" override: the seller's earlier decision (or lack
+ * of one) does not block staff from resolving the case either way.
+ */
+function userCanProcessRefund(req: { userRole?: (typeof ROLES)[keyof typeof ROLES] }): boolean {
+  return userIsStaff(req);
 }
 
 /** Notes: Returns.tsx (admin) can add notes; MyReturnsSection has no note UI.
@@ -2356,6 +2382,86 @@ operationsRouter.post('/operations/manual-offers/:id/reject', ...requireAuth, as
 
 // ─── Returns ─────────────────────────────────────────────────────────────────
 
+/**
+ * Controlled state machine — mirrors WARRANTY_CLAIM_TRANSITIONS below. Before
+ * this, /status accepted ANY enum value regardless of current status (no
+ * guard at all), and /approve+/reject only checked "is this still initiated"
+ * — /refund, /label and /dispute had no transition guard whatsoever.
+ *
+ * "Return + Refund" vs "Refund without return" are two structurally
+ * different outcomes (product rule #3) and must never be simultaneously
+ * available with no explicit decision recorded — the seller/staff chooses
+ * `requiresReturn` AT APPROVAL TIME (see /approve), and that single boolean
+ * on the row is what actually gates which of these two branches is legal
+ * from here on, not just "is 'refunded' in this list at all":
+ *   requiresReturn=true  → approved → returned_in_transit → received → refunded
+ *   requiresReturn=false → approved → refunded directly (no transit/received)
+ * Both branches appear in RETURN_TRANSITIONS below for the type to compile;
+ * assertReturnTransition() takes the full row and enforces the split.
+ * 'refunded'/'rejected' are terminal; 'dispute' is reachable from any
+ * non-terminal status and is also terminal here (the dispute layer takes
+ * over from there), matching the warranty claim model.
+ */
+const RETURN_TRANSITIONS: Record<OpsReturnStatus, OpsReturnStatus[]> = {
+  initiated: ['approved', 'rejected', 'dispute'],
+  approved: ['returned_in_transit', 'refunded', 'dispute'],
+  returned_in_transit: ['received', 'dispute'],
+  received: ['refunded', 'dispute'],
+  refunded: [],
+  rejected: [],
+  // A disputed case is adjudicated by staff (POST /operations/disputes/:id/decision,
+  // requireAdmin), independent of whether the seller ever approved it — staff
+  // must be able to force EITHER outcome from here, which is exactly the
+  // "seller refuses, admin still has final say" override the product needs.
+  dispute: ['refunded', 'rejected'],
+};
+
+/**
+ * `row` is optional only for call sites that don't yet have one (there are
+ * none left, but keeps this safe to call defensively). When present, the
+ * requiresReturn split is enforced on top of the base RETURN_TRANSITIONS
+ * table: from 'approved', only ONE of returned_in_transit/refunded is ever
+ * legal, per that case's own recorded decision — never both.
+ */
+function assertReturnTransition(
+  current: OpsReturnStatus,
+  next: OpsReturnStatus,
+  row?: Pick<OpsReturnRequest, 'requiresReturn'>,
+): string | null {
+  const allowed = RETURN_TRANSITIONS[current] || [];
+  if (!allowed.includes(next)) {
+    return `Cannot move a return from "${current}" to "${next}".`;
+  }
+  if (current === 'approved' && row) {
+    const requiresReturn = row.requiresReturn !== false; // default true — matches the common case
+    if (requiresReturn && next === 'refunded') {
+      return 'This case requires the item back before a refund — mark it shipped and received first.';
+    }
+    if (!requiresReturn && next === 'returned_in_transit') {
+      return 'This case was approved as refund-without-return — no physical return is expected.';
+    }
+  }
+  return null;
+}
+
+/** Every status transition appends here — never mutated after the fact. */
+function appendReturnTimeline(
+  ret: OpsReturnRequest,
+  entry: { status: OpsReturnStatus; note?: string; by?: string },
+): OpsReturnTimelineEntry[] {
+  const existing = ret.timeline || [];
+  return [
+    ...existing,
+    { id: `tl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, at: new Date().toISOString(), ...entry },
+  ];
+}
+
+/** Strip staff/seller-only notes before a response ever reaches the buyer. */
+function sanitizeReturnForConsumer(row: OpsReturnRequest): OpsReturnRequest {
+  const { internalNotes, ...rest } = row;
+  return { ...rest, internalNotes: [] };
+}
+
 operationsRouter.get('/operations/returns', ...requireAuth, (req, res) => {
   let buyerId = typeof req.query.buyerId === 'string' ? req.query.buyerId : undefined;
   let sellerId = typeof req.query.sellerId === 'string' ? req.query.sellerId : undefined;
@@ -2383,7 +2489,8 @@ operationsRouter.get('/operations/returns', ...requireAuth, (req, res) => {
   }
 
   const rows = operationsStore.listReturns({ buyerId, sellerId, status, orderId });
-  res.json({ data: rows });
+  const isBuyerRequest = !userIsStaff(req) && !sellerId;
+  res.json({ data: isBuyerRequest ? rows.map(sanitizeReturnForConsumer) : rows });
 });
 
 operationsRouter.get('/operations/returns/:id', ...requireAuth, (req, res) => {
@@ -2397,7 +2504,50 @@ operationsRouter.get('/operations/returns/:id', ...requireAuth, (req, res) => {
     res.status(403).json({ error: 'Not authorized to view this return' });
     return;
   }
-  res.json({ data: row });
+  res.json({ data: isBuyer && !userCanManageReturnAsSellerOrAdmin(req, row) ? sanitizeReturnForConsumer(row) : row });
+});
+
+/**
+ * Flat, document-ready payload for the Return / Refund Case Document —
+ * resolves buyer/seller identity server-side (never via the admin-only
+ * GET /auth/users/:id, which a seller can't call) so both buyer and seller
+ * can render the same document. Internal-only notes are never included.
+ */
+operationsRouter.get('/operations/returns/:id/document', ...requireAuth, async (req, res) => {
+  const row = operationsStore.getReturn(req.params.id);
+  if (!row) {
+    res.status(404).json({ error: 'Return not found' });
+    return;
+  }
+  const isBuyer = Boolean(req.userId && row.buyerId === req.userId);
+  if (!isBuyer && !userCanManageReturnAsSellerOrAdmin(req, row)) {
+    res.status(403).json({ error: 'Not authorized to view this return' });
+    return;
+  }
+
+  const order = operationsStore.getOrder(row.orderId);
+  const located = order ? findOrderItem(order, row.itemId) : null;
+  const item = located?.item;
+
+  const [buyer, seller] = await Promise.all([
+    db.select({ displayName: users.displayName, choosifyUserId: users.choosifyUserId, email: users.email }).from(users).where(eq(users.id, row.buyerId)).limit(1),
+    db.select({ displayName: users.displayName, choosifyUserId: users.choosifyUserId, email: users.email }).from(users).where(eq(users.id, row.sellerId)).limit(1),
+  ]);
+
+  const returnCase = sanitizeReturnForConsumer(row);
+  res.json({
+    data: {
+      returnCase,
+      buyer: buyer[0] ? { name: buyer[0].displayName, choosifyUserId: buyer[0].choosifyUserId, email: buyer[0].email } : null,
+      seller: seller[0] ? { name: seller[0].displayName, choosifyUserId: seller[0].choosifyUserId, email: seller[0].email } : null,
+      product: item
+        ? {
+            title: typeof item.productTitle === 'string' ? item.productTitle : undefined,
+            variant: typeof item.variantLabel === 'string' ? item.variantLabel : undefined,
+          }
+        : null,
+    },
+  });
 });
 
 /**
@@ -2428,6 +2578,21 @@ operationsRouter.post('/operations/returns', ...requireAuth, async (req, res) =>
     });
     return;
   }
+  const evidenceMediaIds = Array.isArray(body.evidenceMediaIds)
+    ? (body.evidenceMediaIds as unknown[]).filter((v): v is string => typeof v === 'string').slice(0, 8)
+    : [];
+  // External link only (e.g. Google Drive) — never a raw video upload; a basic
+  // http(s) sanity check, not full validation of the destination.
+  const videoLink =
+    typeof body.videoLink === 'string' && /^https?:\/\//i.test(body.videoLink.trim())
+      ? body.videoLink.trim().slice(0, 500)
+      : undefined;
+  // Proof requirement: a return claim (damage/wrong item/etc.) must carry at
+  // least one photo or a video link — never taken purely on the buyer's word.
+  if (evidenceMediaIds.length === 0 && !videoLink) {
+    res.status(400).json({ error: 'At least one evidence photo or a video link is required to submit a return request' });
+    return;
+  }
   if (!req.userId) {
     res.status(401).json({ error: 'Authentication required' });
     return;
@@ -2453,7 +2618,27 @@ operationsRouter.post('/operations/returns', ...requireAuth, async (req, res) =>
     res.status(400).json({ error: 'This item has not been delivered yet' });
     return;
   }
-  const sellerId = String(located.sub.sellerId || '');
+  // Seller identity — re-resolved server-side from the real product record
+  // (mirroring the warranty-claims create handler), since sub.sellerId isn't
+  // always populated by every order-creation path. Without this fallback the
+  // seller could never see or approve their own return.
+  const returnProductId = String(located.item.productId || '').trim();
+  let sellerId = String(located.sub.sellerId || '').trim();
+  if (returnProductId) {
+    const returnProduct = await catalogStore.getProduct(returnProductId);
+    if (returnProduct?.sellerId) sellerId = returnProduct.sellerId;
+  }
+  if (!sellerId) {
+    res.status(400).json({ error: 'Could not resolve the seller for this order item' });
+    return;
+  }
+
+  const activeExisting = operationsStore.getActiveReturnForItem(itemId);
+  if (activeExisting) {
+    // Policy: at most one ACTIVE case per order item — return the existing one rather than erroring hard.
+    res.status(200).json({ success: true, data: activeExisting, reused: true });
+    return;
+  }
 
   const saved = operationsStore.createReturn({
     orderId,
@@ -2462,6 +2647,8 @@ operationsRouter.post('/operations/returns', ...requireAuth, async (req, res) =>
     reason,
     description,
     evidencePhotos: Array.isArray(body.evidencePhotos) ? body.evidencePhotos : [],
+    evidenceMediaIds,
+    videoLink,
     status: 'initiated',
     refundStatus: 'pending',
     notes: [],
@@ -2470,6 +2657,35 @@ operationsRouter.post('/operations/returns', ...requireAuth, async (req, res) =>
   });
   scheduleOperationsPersist();
 
+  // Link evidence photos to this case via the canonical media polymorphic association.
+  if (evidenceMediaIds.length) {
+    try {
+      const { linkMediaToEntity } = await import('./media/mediaRepository');
+      await Promise.all(
+        evidenceMediaIds.map((mid) => linkMediaToEntity(mid, 'return', saved.id).catch(() => undefined)),
+      );
+    } catch {
+      /* linking is best-effort; the case itself is already saved */
+    }
+  }
+
+  // Canonical RT-##### display id — never generated on the frontend.
+  let savedWithRef = saved;
+  try {
+    const referenceId = await ensureEntityReferenceId({
+      entityType: 'return',
+      internalId: saved.id,
+      current: saved.referenceId,
+    });
+    savedWithRef = operationsStore.updateReturn(saved.id, { referenceId }) || saved;
+    scheduleOperationsPersist();
+  } catch (err) {
+    Logger.warn('return: failed to assign reference id', {
+      returnId: saved.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   if (sellerId) {
     try {
       await notifyUser(sellerId, {
@@ -2477,15 +2693,15 @@ operationsRouter.post('/operations/returns', ...requireAuth, async (req, res) =>
         category: 'seller',
         title: 'New return request',
         summary: `${String(located.item.productTitle || 'An item')} from order ${orderId} — reason: ${reason}.`,
-        actionUrl: '/dashboard?tab=seller-orders',
-        metadata: { orderId, returnId: saved.id },
+        actionUrl: `/admin/returns/${encodeURIComponent(savedWithRef.referenceId || savedWithRef.id)}`,
+        metadata: { orderId, returnId: saved.id, referenceId: savedWithRef.referenceId },
       });
     } catch (err) {
       console.warn('[Returns] Notify seller (new return) failed:', err);
     }
   }
 
-  res.status(201).json({ success: true, data: saved });
+  res.status(201).json({ success: true, data: operationsStore.getReturn(saved.id) || saved });
 });
 
 operationsRouter.patch('/operations/returns/:id/approve', ...requireAuth, async (req, res) => {
@@ -2498,8 +2714,9 @@ operationsRouter.patch('/operations/returns/:id/approve', ...requireAuth, async 
     res.status(403).json({ error: 'Not authorized to approve this return' });
     return;
   }
-  if (existing.status !== 'initiated') {
-    res.status(409).json({ error: `Return is already ${existing.status}; cannot approve again.` });
+  const approveTransitionError = assertReturnTransition(existing.status, 'approved', existing);
+  if (approveTransitionError) {
+    res.status(409).json({ error: approveTransitionError });
     return;
   }
   const refundAmount = Number(req.body?.refundAmount);
@@ -2507,6 +2724,14 @@ operationsRouter.patch('/operations/returns/:id/approve', ...requireAuth, async 
     res.status(400).json({ error: 'refundAmount is required' });
     return;
   }
+  // Explicit decision, recorded once and never re-decided later: does the
+  // buyer have to send the item back before the refund, or not? Defaults to
+  // true (the common case — most defective/damaged/wrong-item claims DO
+  // require the item back) when the caller doesn't say otherwise; only an
+  // explicit `false` opts into the no-return path. This is what actually
+  // stops both "Mark Shipped" and "Refund Without Return" being ambiguously
+  // available on the same case at once.
+  const requiresReturn = req.body?.requiresReturn !== false;
   const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
   const approvedBy =
     typeof req.body?.approvedBy === 'string' && req.body.approvedBy.trim()
@@ -2515,7 +2740,11 @@ operationsRouter.patch('/operations/returns/:id/approve', ...requireAuth, async 
 
   const adminNotes = [...existing.notes];
   if (note) adminNotes.push(note);
-  adminNotes.push(`Return approved with refund of ৳${refundAmount}. Waiting for item return.`);
+  adminNotes.push(
+    requiresReturn
+      ? `Return approved with refund of ৳${refundAmount}. Waiting for item return.`
+      : `Return approved as refund-without-return, ৳${refundAmount}. No physical return required.`,
+  );
 
   const saved = operationsStore.updateReturn(req.params.id, {
     status: 'approved',
@@ -2523,7 +2752,13 @@ operationsRouter.patch('/operations/returns/:id/approve', ...requireAuth, async 
     approvedAt: new Date().toISOString(),
     approvedBy,
     refundAmount,
+    requiresReturn,
     notes: adminNotes,
+    timeline: appendReturnTimeline(existing, {
+      status: 'approved',
+      note: note || (requiresReturn ? undefined : 'Refund without return'),
+      by: req.userId,
+    }),
   });
   scheduleOperationsPersist();
 
@@ -2553,8 +2788,15 @@ operationsRouter.patch('/operations/returns/:id/reject', ...requireAuth, async (
     res.status(403).json({ error: 'Not authorized to reject this return' });
     return;
   }
-  if (existing.status !== 'initiated') {
-    res.status(409).json({ error: `Return is already ${existing.status}; cannot reject again.` });
+  // Once escalated to dispute, only staff decide the outcome — the seller's
+  // own reject/approve authority does not extend past that point.
+  if (existing.status === 'dispute' && !userCanProcessRefund(req)) {
+    res.status(403).json({ error: 'This case is under dispute — only staff can decide the outcome.' });
+    return;
+  }
+  const rejectTransitionError = assertReturnTransition(existing.status, 'rejected', existing);
+  if (rejectTransitionError) {
+    res.status(409).json({ error: rejectTransitionError });
     return;
   }
   const reason = String(req.body?.reason || '').trim();
@@ -2577,6 +2819,7 @@ operationsRouter.patch('/operations/returns/:id/reject', ...requireAuth, async (
     approvedAt: new Date().toISOString(),
     approvedBy,
     notes: adminNotes,
+    timeline: appendReturnTimeline(existing, { status: 'rejected', note: reason, by: req.userId }),
   });
   scheduleOperationsPersist();
 
@@ -2596,30 +2839,84 @@ operationsRouter.patch('/operations/returns/:id/reject', ...requireAuth, async (
   res.json({ success: true, data: saved });
 });
 
-operationsRouter.patch('/operations/returns/:id/refund', ...requireAuth, (req, res) => {
+/**
+ * The canonical Returns & Refunds refund flow — and, per product decision,
+ * the ONLY place warranty-claim "refund" resolutions are allowed to move
+ * money too (see /operations/warranty-claims/:id/resolve). This must
+ * actually touch the real escrow ledger, not just flip a status label:
+ * finds the held escrow for this return's order (the same seller's escrow,
+ * when more than one exists on the order) and calls the real
+ * processEscrowRefund() — the one money-moving entry point in this
+ * codebase (server/escrow/escrowService.ts). A missing/unrefundable
+ * escrow now fails loudly (409) instead of silently "succeeding".
+ *
+ * STAFF-ONLY: the seller may approve/reject a case (the decision layer,
+ * see /approve and /reject), but never dispatches the actual payout
+ * themselves. Once staff decide — including overriding a seller who
+ * refused, via the dispute path — only staff execute the money movement.
+ */
+operationsRouter.patch('/operations/returns/:id/refund', ...requireAuth, async (req, res) => {
   const existing = operationsStore.getReturn(req.params.id);
   if (!existing) {
     res.status(404).json({ error: 'Return not found' });
     return;
   }
-  if (!userCanManageReturnAsSellerOrAdmin(req, existing)) {
-    res.status(403).json({ error: 'Not authorized to process this refund' });
+  if (!userCanProcessRefund(req)) {
+    res.status(403).json({ error: 'Only Choosify staff can process a refund payout.' });
     return;
   }
-  if (existing.status !== 'approved') {
-    res.status(409).json({ error: `Return is ${existing.status}, not approved; cannot process refund.` });
+  // CRITICAL FIX: this previously required exactly 'approved', but the admin
+  // UI only ever reveals the "Process & Issue Refund Payment" button once the
+  // case reaches 'received' — meaning the documented happy path (approve →
+  // in-transit → received → refund) 409'd on every real click. 'approved' is
+  // kept too for a legitimate "refund without return" case (rule #3).
+  const refundTransitionError = assertReturnTransition(existing.status, 'refunded', existing);
+  if (refundTransitionError) {
+    res.status(409).json({ error: refundTransitionError });
     return;
   }
-  const adminNotes = [...existing.notes];
-  adminNotes.push('Refund successfully processed back to customer payment channel.');
+  if (!req.userId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
 
-  const saved = operationsStore.updateReturn(req.params.id, {
-    status: 'refunded',
-    refundStatus: 'processed',
-    notes: adminNotes,
-  });
-  scheduleOperationsPersist();
-  res.json({ success: true, data: saved });
+  try {
+    const escrows = await escrowStore.listEscrowsByOrder(existing.orderId);
+    const escrow = escrows.find((e) => e.sellerId === existing.sellerId) || escrows[0];
+    if (!escrow) {
+      res.status(409).json({ error: 'No escrow found for this order — cannot process a real refund.' });
+      return;
+    }
+    const refund = await processEscrowRefund({
+      escrowId: escrow.escrowId,
+      amount: typeof existing.refundAmount === 'number' ? existing.refundAmount : undefined,
+      reason: `return_refund:${existing.id}`,
+      actor: { userId: req.userId, role: req.userRole },
+    });
+
+    const adminNotes = [...existing.notes];
+    adminNotes.push(
+      `Refund processed via escrow (${refund.refundReferenceId || refund.refundId}, amount ${refund.amount} ${refund.currency}).`,
+    );
+
+    const saved = operationsStore.updateReturn(req.params.id, {
+      status: 'refunded',
+      refundStatus: 'processed',
+      refundAmount: refund.amount,
+      notes: adminNotes,
+      timeline: appendReturnTimeline(existing, {
+        status: 'refunded',
+        note: `Refund ${refund.refundReferenceId || refund.refundId}, amount ${refund.amount} ${refund.currency}`,
+        by: req.userId,
+      }),
+    });
+    scheduleOperationsPersist();
+    res.json({ success: true, data: saved, refund });
+  } catch (error) {
+    res.status(error instanceof CommerceError ? error.statusCode || 409 : 500).json({
+      error: error instanceof Error ? error.message : 'Failed to process refund',
+    });
+  }
 });
 
 operationsRouter.patch('/operations/returns/:id/status', ...requireAuth, (req, res) => {
@@ -2646,6 +2943,16 @@ operationsRouter.patch('/operations/returns/:id/status', ...requireAuth, (req, r
     res.status(400).json({ error: 'Invalid status', allowed });
     return;
   }
+  // Previously accepted ANY value in `allowed` regardless of the case's
+  // current status — a caller could PATCH straight from 'initiated' to
+  // 'refunded', or bounce backward from 'refunded' to 'initiated'. Now
+  // routed through the same RETURN_TRANSITIONS state machine as every
+  // other mutation endpoint.
+  const statusTransitionError = assertReturnTransition(existing.status, status, existing);
+  if (statusTransitionError) {
+    res.status(409).json({ error: statusTransitionError });
+    return;
+  }
 
   const adminNotes = [...existing.notes];
   adminNotes.push(`Status transitioned to: ${status.toUpperCase()}`);
@@ -2653,6 +2960,7 @@ operationsRouter.patch('/operations/returns/:id/status', ...requireAuth, (req, r
   const saved = operationsStore.updateReturn(req.params.id, {
     status,
     notes: adminNotes,
+    timeline: appendReturnTimeline(existing, { status, by: req.userId }),
   });
   scheduleOperationsPersist();
   res.json({ success: true, data: saved });
@@ -2677,6 +2985,7 @@ operationsRouter.patch('/operations/returns/:id/note', ...requireAuth, (req, res
 
   const saved = operationsStore.updateReturn(req.params.id, {
     notes: [...existing.notes, `[${new Date().toISOString()}] ${note}`],
+    timeline: appendReturnTimeline(existing, { status: existing.status, note, by: req.userId }),
   });
   scheduleOperationsPersist();
   res.json({ success: true, data: saved });
@@ -2690,6 +2999,12 @@ operationsRouter.post('/operations/returns/:id/label', ...requireAuth, (req, res
   }
   if (!userCanManageReturnAsSellerOrAdmin(req, existing)) {
     res.status(403).json({ error: 'Not authorized to generate a return label' });
+    return;
+  }
+  // A shipping label only makes sense before/during the physical return leg —
+  // previously callable in any status including after refunded/rejected.
+  if (existing.status !== 'approved' && existing.status !== 'returned_in_transit') {
+    res.status(409).json({ error: `Cannot generate a return label while status is "${existing.status}".` });
     return;
   }
 
@@ -2722,6 +3037,13 @@ operationsRouter.patch('/operations/returns/:id/dispute', ...requireAuth, (req, 
     res.status(403).json({ error: 'Not authorized to escalate this return' });
     return;
   }
+  // Previously callable in any status, including an already-refunded/rejected
+  // case. Escalation only makes sense while the case is still open.
+  const disputeTransitionError = assertReturnTransition(existing.status, 'dispute', existing);
+  if (disputeTransitionError) {
+    res.status(409).json({ error: disputeTransitionError });
+    return;
+  }
 
   // Creates a real Dispute case (server/operations disputes) rather than
   // just stamping a client-fabricated string -- the Disputes module is now
@@ -2747,12 +3069,111 @@ operationsRouter.patch('/operations/returns/:id/dispute', ...requireAuth, (req, 
       ...existing.notes,
       `Escalated to Dispute resolution system. Dispute ID: ${dispute.id}`,
     ],
+    timeline: appendReturnTimeline(existing, { status: 'dispute', note: `Escalated to dispute ${dispute.id}`, by: req.userId }),
   });
   scheduleOperationsPersist();
   res.json({ success: true, data: saved, dispute });
 });
 
+/** Seller/staff/admin: internal note — NEVER returned to the buyer under any circumstance. */
+operationsRouter.patch('/operations/returns/:id/internal-note', ...requireAuth, (req, res) => {
+  const existing = operationsStore.getReturn(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Return not found' });
+    return;
+  }
+  if (!userCanManageReturnAsSellerOrAdmin(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to update this return' });
+    return;
+  }
+  const note = String(req.body?.note || '').trim();
+  if (!note) {
+    res.status(400).json({ error: 'note is required' });
+    return;
+  }
+  const saved = operationsStore.updateReturn(req.params.id, {
+    internalNotes: [
+      ...(existing.internalNotes || []),
+      { id: `in_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, note, by: req.userId || 'unknown', at: new Date().toISOString() },
+    ],
+  });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved });
+});
+
 // ─── Warranty Claims ───────────────────────────────────────────────────────
+
+/**
+ * Controlled state machine — a seller/staff action may only move a claim to
+ * one of these next statuses from its current one. This is what actually
+ * stops "Submitted" jumping straight to "Resolved": every mutation endpoint
+ * below calls assertWarrantyClaimTransition() before writing the new status.
+ * Terminal statuses (rejected/resolved/cancelled) have no further exits;
+ * 'disputed' is reachable from any still-open status via the existing
+ * escalate-to-dispute endpoint, and is also terminal for this state machine
+ * (the dispute layer takes over from there).
+ */
+const WARRANTY_CLAIM_TRANSITIONS: Record<OpsWarrantyClaimStatus, OpsWarrantyClaimStatus[]> = {
+  submitted: ['acknowledged', 'more_info_required', 'rejected', 'cancelled', 'disputed'],
+  more_info_required: ['submitted', 'cancelled', 'disputed'],
+  acknowledged: ['approved', 'more_info_required', 'rejected', 'disputed'],
+  approved: ['service_in_progress', 'resolved', 'disputed'],
+  service_in_progress: ['resolved', 'disputed'],
+  rejected: [],
+  resolved: [],
+  cancelled: [],
+  // Staff adjudicate a disputed claim independent of the seller's earlier
+  // stance — the same "seller refuses, admin has final say" override as
+  // Returns. Resolve here covers all outcomes, including a staff-forced
+  // refund (resolutionType: 'refunded', already staff-gated in /resolve).
+  disputed: ['resolved'],
+};
+
+function assertWarrantyClaimTransition(
+  current: OpsWarrantyClaimStatus,
+  next: OpsWarrantyClaimStatus,
+): string | null {
+  const allowed = WARRANTY_CLAIM_TRANSITIONS[current] || [];
+  if (!allowed.includes(next)) {
+    return `Cannot move a warranty claim from "${current}" to "${next}".`;
+  }
+  return null;
+}
+
+/** Every status transition and every customer-visible note appends here — never mutated after the fact. */
+function appendWarrantyClaimTimeline(
+  claim: OpsWarrantyClaim,
+  entry: {
+    status: OpsWarrantyClaimStatus;
+    serviceStage?: OpsWarrantyClaimServiceStage;
+    note?: string;
+    by?: string;
+  },
+): OpsWarrantyClaimTimelineEntry[] {
+  const existing = claim.timeline || [];
+  return [
+    ...existing,
+    {
+      id: `tl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      at: new Date().toISOString(),
+      ...entry,
+    },
+  ];
+}
+
+/** Strip staff/seller-only notes before a response ever reaches the consumer. */
+function sanitizeWarrantyClaimForConsumer(row: OpsWarrantyClaim): OpsWarrantyClaim {
+  const { internalNotes, ...rest } = row;
+  return { ...rest, internalNotes: [] };
+}
+
+function warrantyServiceStageTier(stage: OpsWarrantyClaimServiceStage): number {
+  return WARRANTY_CLAIM_SERVICE_STAGE_ORDER.findIndex((tier) => tier.includes(stage));
+}
+
+const WARRANTY_SERVICE_STAGES = new Set<OpsWarrantyClaimServiceStage>(
+  WARRANTY_CLAIM_SERVICE_STAGE_ORDER.flat(),
+);
 
 function userIsWarrantyClaimSeller(
   req: { userId?: string; userRole?: (typeof ROLES)[keyof typeof ROLES] },
@@ -2804,7 +3225,8 @@ operationsRouter.get('/operations/warranty-claims', ...requireAuth, (req, res) =
   }
 
   const rows = operationsStore.listWarrantyClaims({ consumerId, sellerId, orderItemId, status });
-  res.json({ data: rows });
+  const isConsumerRequest = !userIsStaff(req) && !sellerId;
+  res.json({ data: isConsumerRequest ? rows.map(sanitizeWarrantyClaimForConsumer) : rows });
 });
 
 operationsRouter.get('/operations/warranty-claims/:id', ...requireAuth, (req, res) => {
@@ -2818,7 +3240,63 @@ operationsRouter.get('/operations/warranty-claims/:id', ...requireAuth, (req, re
     res.status(403).json({ error: 'Not authorized to view this warranty claim' });
     return;
   }
-  res.json({ data: row });
+  res.json({ data: isConsumer && !userCanManageWarrantyClaim(req, row) ? sanitizeWarrantyClaimForConsumer(row) : row });
+});
+
+/**
+ * Flat, document-ready payload for the Warranty Delivery Invoice — resolves
+ * buyer/seller identity server-side (never via the admin-only
+ * GET /auth/users/:id, which a seller can't call) so both buyer and seller
+ * can render the same document. Internal-only notes are never included.
+ *
+ * No document exists before the claim is actually accepted and moving
+ * through repair — there's nothing to print for a request still pending
+ * review; the buyer already sees seller/staff notes and status updates in
+ * the storefront claim view for that. Available from approval through
+ * resolution (the repair/replacement period).
+ */
+const WARRANTY_DELIVERY_INVOICE_ELIGIBLE_STATUSES = new Set<OpsWarrantyClaimStatus>(['approved', 'service_in_progress', 'resolved']);
+
+operationsRouter.get('/operations/warranty-claims/:id/document', ...requireAuth, async (req, res) => {
+  const row = operationsStore.getWarrantyClaim(req.params.id);
+  if (!row) {
+    res.status(404).json({ error: 'Warranty claim not found' });
+    return;
+  }
+  const isConsumer = Boolean(req.userId && row.consumerId === req.userId);
+  if (!isConsumer && !userCanManageWarrantyClaim(req, row)) {
+    res.status(403).json({ error: 'Not authorized to view this warranty claim' });
+    return;
+  }
+  if (!WARRANTY_DELIVERY_INVOICE_ELIGIBLE_STATUSES.has(row.status)) {
+    res.status(400).json({ error: 'A Warranty Delivery Invoice is only available once the claim has been accepted and is moving through repair.' });
+    return;
+  }
+
+  const order = operationsStore.getOrder(row.orderId);
+  const located = order ? findOrderItem(order, row.orderItemId) : null;
+  const item = located?.item;
+
+  const [buyer, seller] = await Promise.all([
+    db.select({ displayName: users.displayName, choosifyUserId: users.choosifyUserId, email: users.email }).from(users).where(eq(users.id, row.consumerId)).limit(1),
+    db.select({ displayName: users.displayName, choosifyUserId: users.choosifyUserId, email: users.email }).from(users).where(eq(users.id, row.sellerId)).limit(1),
+  ]);
+
+  const claim = sanitizeWarrantyClaimForConsumer(row);
+  res.json({
+    data: {
+      claim,
+      buyer: buyer[0] ? { name: buyer[0].displayName, choosifyUserId: buyer[0].choosifyUserId, email: buyer[0].email } : null,
+      seller: seller[0] ? { name: seller[0].displayName, choosifyUserId: seller[0].choosifyUserId, email: seller[0].email } : null,
+      product: item
+        ? {
+            title: typeof item.productTitle === 'string' ? item.productTitle : undefined,
+            variant: typeof item.variantLabel === 'string' ? item.variantLabel : undefined,
+            serialNumber: typeof item.serialNumber === 'string' ? item.serialNumber : undefined,
+          }
+        : null,
+    },
+  });
 });
 
 const WARRANTY_ISSUE_TYPES = new Set([
@@ -2844,9 +3322,29 @@ operationsRouter.post('/operations/warranty-claims', ...requireAuth, async (req,
     const orderItemId = String(req.body?.orderItemId || '').trim();
     const issueType = String(req.body?.issueType || '').trim();
     const description = String(req.body?.description || '').trim();
-    const attachmentMediaIds = Array.isArray(req.body?.attachmentMediaIds)
-      ? (req.body.attachmentMediaIds as unknown[]).filter((v): v is string => typeof v === 'string').slice(0, 12)
+
+    // Evidence is collected as four separate, categorized proof uploads
+    // (warranty card, product photo, box, invoice/receipt) rather than one
+    // generic bucket — each category is its own upload section on the
+    // storefront. attachmentMediaIds is kept as the flat union for backward
+    // compat (media linking, document view) but attachmentCategories is now
+    // the source of truth for what was actually submitted under each proof type.
+    const rawCategories = req.body?.attachmentCategories;
+    const attachmentCategories: Partial<Record<OpsWarrantyClaimAttachmentCategory, string[]>> = {};
+    if (rawCategories && typeof rawCategories === 'object') {
+      for (const cat of WARRANTY_CLAIM_ATTACHMENT_CATEGORIES) {
+        const list = (rawCategories as Record<string, unknown>)[cat];
+        if (Array.isArray(list)) {
+          const filtered = list.filter((v): v is string => typeof v === 'string').slice(0, 6);
+          if (filtered.length) attachmentCategories[cat] = filtered;
+        }
+      }
+    }
+    const categorizedUnion = WARRANTY_CLAIM_ATTACHMENT_CATEGORIES.flatMap((cat) => attachmentCategories[cat] || []);
+    const legacyFlat = Array.isArray(req.body?.attachmentMediaIds)
+      ? (req.body.attachmentMediaIds as unknown[]).filter((v): v is string => typeof v === 'string')
       : [];
+    const attachmentMediaIds = Array.from(new Set([...categorizedUnion, ...legacyFlat])).slice(0, 24);
 
     if (!orderId || !orderItemId || !issueType || !description) {
       res.status(400).json({ error: 'orderId, orderItemId, issueType, and description are required' });
@@ -2854,6 +3352,13 @@ operationsRouter.post('/operations/warranty-claims', ...requireAuth, async (req,
     }
     if (!WARRANTY_ISSUE_TYPES.has(issueType)) {
       res.status(400).json({ error: 'Invalid issueType' });
+      return;
+    }
+    // Proof requirement: a warranty claim must carry at least one photo or
+    // video attachment across the categorized proof sections — never taken
+    // purely on the buyer's word.
+    if (attachmentMediaIds.length === 0) {
+      res.status(400).json({ error: 'At least one evidence photo or video is required to submit a warranty claim' });
       return;
     }
     if (!req.userId) {
@@ -2931,9 +3436,27 @@ operationsRouter.post('/operations/warranty-claims', ...requireAuth, async (req,
       issueType: issueType as OpsWarrantyClaim['issueType'],
       description,
       attachmentMediaIds,
+      attachmentCategories: Object.keys(attachmentCategories).length ? attachmentCategories : undefined,
       status: 'submitted',
     });
     scheduleOperationsPersist();
+
+    // Canonical WC-##### display id — never generated on the frontend.
+    let savedWithRef = saved;
+    try {
+      const referenceId = await ensureEntityReferenceId({
+        entityType: 'warrantyClaim',
+        internalId: saved.id,
+        current: saved.referenceId,
+      });
+      savedWithRef = operationsStore.updateWarrantyClaim(saved.id, { referenceId }) || saved;
+      scheduleOperationsPersist();
+    } catch (err) {
+      Logger.warn('warranty claim: failed to assign reference id', {
+        claimId: saved.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
 
     // Link attachments to this claim via the canonical media polymorphic association.
     if (attachmentMediaIds.length) {
@@ -2977,8 +3500,8 @@ operationsRouter.post('/operations/warranty-claims', ...requireAuth, async (req,
         category: 'seller',
         title: 'New warranty claim',
         summary: `${String(item.productTitle || 'An item')} from order ${orderId} — ${issueType.replace(/_/g, ' ')}.`,
-        actionUrl: claimConversationId ? `/messages/${claimConversationId}` : '/dashboard?tab=seller-orders',
-        metadata: { orderId, claimId: saved.id },
+        actionUrl: `/admin/warranty-claims/${encodeURIComponent(savedWithRef.referenceId || savedWithRef.id)}`,
+        metadata: { orderId, claimId: saved.id, referenceId: savedWithRef.referenceId },
       });
     } catch (err) {
       console.warn('[Warranty] Notify seller (new claim) failed:', err);
@@ -3001,20 +3524,22 @@ operationsRouter.patch('/operations/warranty-claims/:id/acknowledge', ...require
     res.status(403).json({ error: 'Not authorized to acknowledge this warranty claim' });
     return;
   }
-  if (existing.status !== 'submitted') {
-    res.status(400).json({ error: `Cannot acknowledge a claim in status "${existing.status}"` });
+  const transitionError = assertWarrantyClaimTransition(existing.status, 'acknowledged');
+  if (transitionError) {
+    res.status(400).json({ error: transitionError });
     return;
   }
   const saved = operationsStore.updateWarrantyClaim(req.params.id, {
     status: 'acknowledged',
     acknowledgedAt: new Date().toISOString(),
+    timeline: appendWarrantyClaimTimeline(existing, { status: 'acknowledged', by: req.userId }),
   });
   scheduleOperationsPersist();
   res.json({ success: true, data: saved });
 });
 
 /** Seller/staff: request more info from the consumer. */
-operationsRouter.patch('/operations/warranty-claims/:id/request-info', ...requireAuth, (req, res) => {
+operationsRouter.patch('/operations/warranty-claims/:id/request-info', ...requireAuth, async (req, res) => {
   const existing = operationsStore.getWarrantyClaim(req.params.id);
   if (!existing) {
     res.status(404).json({ error: 'Warranty claim not found' });
@@ -3029,11 +3554,33 @@ operationsRouter.patch('/operations/warranty-claims/:id/request-info', ...requir
     res.status(400).json({ error: 'sellerResponse is required' });
     return;
   }
+  const transitionError = assertWarrantyClaimTransition(existing.status, 'more_info_required');
+  if (transitionError) {
+    res.status(400).json({ error: transitionError });
+    return;
+  }
   const saved = operationsStore.updateWarrantyClaim(req.params.id, {
     status: 'more_info_required',
     sellerResponse,
+    timeline: appendWarrantyClaimTimeline(existing, {
+      status: 'more_info_required',
+      note: sellerResponse,
+      by: req.userId,
+    }),
   });
   scheduleOperationsPersist();
+  try {
+    await notifyUser(existing.consumerId, {
+      type: COMMUNICATION_TYPES.ORDER_UPDATE,
+      category: 'buyer',
+      title: 'More information needed for your warranty claim',
+      summary: sellerResponse,
+      actionUrl: '/dashboard?tab=my-warranty',
+      metadata: { orderId: existing.orderId, claimId: existing.id },
+    });
+  } catch (err) {
+    console.warn('[Warranty] Notify buyer (more info required) failed:', err);
+  }
   res.json({ success: true, data: saved });
 });
 
@@ -3048,8 +3595,9 @@ operationsRouter.patch('/operations/warranty-claims/:id/provide-info', ...requir
     res.status(403).json({ error: 'Only the claim owner may provide additional info' });
     return;
   }
-  if (existing.status !== 'more_info_required') {
-    res.status(400).json({ error: `Cannot provide info on a claim in status "${existing.status}"` });
+  const transitionError = assertWarrantyClaimTransition(existing.status, 'submitted');
+  if (transitionError) {
+    res.status(400).json({ error: transitionError });
     return;
   }
   const additionalDescription = String(req.body?.description || '').trim();
@@ -3060,6 +3608,11 @@ operationsRouter.patch('/operations/warranty-claims/:id/provide-info', ...requir
     status: 'submitted',
     description: additionalDescription ? `${existing.description}\n\n[Update] ${additionalDescription}` : existing.description,
     attachmentMediaIds: [...existing.attachmentMediaIds, ...additionalMediaIds],
+    timeline: appendWarrantyClaimTimeline(existing, {
+      status: 'submitted',
+      note: additionalDescription ? `Buyer provided additional information: ${additionalDescription}` : 'Buyer provided additional information.',
+      by: req.userId,
+    }),
   });
   scheduleOperationsPersist();
   res.json({ success: true, data: saved });
@@ -3076,10 +3629,21 @@ operationsRouter.patch('/operations/warranty-claims/:id/approve', ...requireAuth
     res.status(403).json({ error: 'Not authorized to approve this warranty claim' });
     return;
   }
+  const transitionError = assertWarrantyClaimTransition(existing.status, 'approved');
+  if (transitionError) {
+    res.status(400).json({ error: transitionError });
+    return;
+  }
   const sellerResponse = typeof req.body?.sellerResponse === 'string' ? req.body.sellerResponse.trim() : undefined;
+  const estimatedCompletionDate =
+    typeof req.body?.estimatedCompletionDate === 'string' && req.body.estimatedCompletionDate.trim()
+      ? req.body.estimatedCompletionDate.trim()
+      : undefined;
   const saved = operationsStore.updateWarrantyClaim(req.params.id, {
     status: 'approved',
     ...(sellerResponse ? { sellerResponse } : {}),
+    ...(estimatedCompletionDate ? { estimatedCompletionDate } : {}),
+    timeline: appendWarrantyClaimTimeline(existing, { status: 'approved', note: sellerResponse, by: req.userId }),
   });
   scheduleOperationsPersist();
   try {
@@ -3113,10 +3677,17 @@ operationsRouter.patch('/operations/warranty-claims/:id/reject', ...requireAuth,
     res.status(400).json({ error: 'sellerResponse (rejection reason) is required' });
     return;
   }
+  const transitionError = assertWarrantyClaimTransition(existing.status, 'rejected');
+  if (transitionError) {
+    res.status(400).json({ error: transitionError });
+    return;
+  }
   const saved = operationsStore.updateWarrantyClaim(req.params.id, {
     status: 'rejected',
     sellerResponse,
+    resolutionType: 'rejected',
     resolvedAt: new Date().toISOString(),
+    timeline: appendWarrantyClaimTimeline(existing, { status: 'rejected', note: sellerResponse, by: req.userId }),
   });
   scheduleOperationsPersist();
   try {
@@ -3134,7 +3705,7 @@ operationsRouter.patch('/operations/warranty-claims/:id/reject', ...requireAuth,
   res.json({ success: true, data: saved });
 });
 
-/** Seller/staff: mark service in progress. */
+/** Seller/staff: mark service in progress, optionally setting the initial service stage. */
 operationsRouter.patch('/operations/warranty-claims/:id/service-status', ...requireAuth, (req, res) => {
   const existing = operationsStore.getWarrantyClaim(req.params.id);
   if (!existing) {
@@ -3145,12 +3716,87 @@ operationsRouter.patch('/operations/warranty-claims/:id/service-status', ...requ
     res.status(403).json({ error: 'Not authorized to update this warranty claim' });
     return;
   }
-  if (existing.status !== 'approved' && existing.status !== 'service_in_progress') {
-    res.status(400).json({ error: `Cannot start service on a claim in status "${existing.status}"` });
+  const transitionError = assertWarrantyClaimTransition(existing.status, 'service_in_progress');
+  if (existing.status !== 'service_in_progress' && transitionError) {
+    res.status(400).json({ error: transitionError });
     return;
   }
-  const saved = operationsStore.updateWarrantyClaim(req.params.id, { status: 'service_in_progress' });
+  const serviceStage =
+    typeof req.body?.serviceStage === 'string' && WARRANTY_SERVICE_STAGES.has(req.body.serviceStage as OpsWarrantyClaimServiceStage)
+      ? (req.body.serviceStage as OpsWarrantyClaimServiceStage)
+      : existing.serviceStage;
+  const estimatedCompletionDate =
+    typeof req.body?.estimatedCompletionDate === 'string' && req.body.estimatedCompletionDate.trim()
+      ? req.body.estimatedCompletionDate.trim()
+      : existing.estimatedCompletionDate;
+  const saved = operationsStore.updateWarrantyClaim(req.params.id, {
+    status: 'service_in_progress',
+    ...(serviceStage ? { serviceStage } : {}),
+    ...(estimatedCompletionDate ? { estimatedCompletionDate } : {}),
+    timeline: appendWarrantyClaimTimeline(existing, {
+      status: 'service_in_progress',
+      serviceStage,
+      by: req.userId,
+    }),
+  });
   scheduleOperationsPersist();
+  res.json({ success: true, data: saved });
+});
+
+/** Seller/staff: advance the service stage within an in-progress claim — validated as forward-only. */
+operationsRouter.patch('/operations/warranty-claims/:id/service-stage', ...requireAuth, async (req, res) => {
+  const existing = operationsStore.getWarrantyClaim(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Warranty claim not found' });
+    return;
+  }
+  if (!userCanManageWarrantyClaim(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to update this warranty claim' });
+    return;
+  }
+  if (existing.status !== 'service_in_progress') {
+    res.status(400).json({ error: `Cannot set a service stage on a claim in status "${existing.status}"` });
+    return;
+  }
+  const nextStage = String(req.body?.serviceStage || '');
+  if (!WARRANTY_SERVICE_STAGES.has(nextStage as OpsWarrantyClaimServiceStage)) {
+    res.status(400).json({ error: 'Invalid serviceStage' });
+    return;
+  }
+  const currentTier = existing.serviceStage ? warrantyServiceStageTier(existing.serviceStage) : -1;
+  const nextTier = warrantyServiceStageTier(nextStage as OpsWarrantyClaimServiceStage);
+  if (nextTier < currentTier) {
+    res.status(400).json({ error: `Cannot move the service stage backward from "${existing.serviceStage}" to "${nextStage}".` });
+    return;
+  }
+  const note = typeof req.body?.note === 'string' ? req.body.note.trim() : undefined;
+  const estimatedCompletionDate =
+    typeof req.body?.estimatedCompletionDate === 'string' && req.body.estimatedCompletionDate.trim()
+      ? req.body.estimatedCompletionDate.trim()
+      : existing.estimatedCompletionDate;
+  const saved = operationsStore.updateWarrantyClaim(req.params.id, {
+    serviceStage: nextStage as OpsWarrantyClaimServiceStage,
+    ...(estimatedCompletionDate ? { estimatedCompletionDate } : {}),
+    timeline: appendWarrantyClaimTimeline(existing, {
+      status: 'service_in_progress',
+      serviceStage: nextStage as OpsWarrantyClaimServiceStage,
+      note,
+      by: req.userId,
+    }),
+  });
+  scheduleOperationsPersist();
+  try {
+    await notifyUser(existing.consumerId, {
+      type: COMMUNICATION_TYPES.ORDER_UPDATE,
+      category: 'buyer',
+      title: `Warranty claim update: ${nextStage.replace(/_/g, ' ')}`,
+      summary: note || `Your warranty claim for order ${existing.orderId} moved to "${nextStage.replace(/_/g, ' ')}".`,
+      actionUrl: '/dashboard?tab=my-warranty',
+      metadata: { orderId: existing.orderId, claimId: existing.id },
+    });
+  } catch (err) {
+    console.warn('[Warranty] Notify buyer (service stage) failed:', err);
+  }
   res.json({ success: true, data: saved });
 });
 
@@ -3165,15 +3811,82 @@ operationsRouter.patch('/operations/warranty-claims/:id/resolve', ...requireAuth
     res.status(403).json({ error: 'Not authorized to resolve this warranty claim' });
     return;
   }
+  // Once escalated to dispute, only staff decide the outcome — mirrors the
+  // same override rule on Returns.
+  if (existing.status === 'disputed' && !userIsStaff(req)) {
+    res.status(403).json({ error: 'This claim is under dispute — only staff can decide the outcome.' });
+    return;
+  }
   const resolutionNotes = String(req.body?.resolutionNotes || '').trim();
   if (!resolutionNotes) {
     res.status(400).json({ error: 'resolutionNotes is required' });
     return;
   }
+  const WARRANTY_RESOLUTION_TYPES = new Set(['repaired', 'replaced', 'refunded', 'no_fault_found', 'other']);
+  const resolutionType = String(req.body?.resolutionType || '').trim();
+  if (!WARRANTY_RESOLUTION_TYPES.has(resolutionType)) {
+    res.status(400).json({ error: 'resolutionType is required (repaired, replaced, refunded, no_fault_found, or other)' });
+    return;
+  }
+  const transitionError = assertWarrantyClaimTransition(existing.status, 'resolved');
+  if (transitionError) {
+    res.status(400).json({ error: transitionError });
+    return;
+  }
+
+  // A warranty "refund" resolution must move money through the SAME
+  // canonical engine as Returns & Refunds — never a second refund path.
+  // STAFF-ONLY, same rule as Returns: the seller may resolve a claim as
+  // repaired/replaced/rejected/no_fault_found, but the actual payout is
+  // always dispatched by Choosify staff, never the seller directly.
+  let warrantyRefund: Awaited<ReturnType<typeof processEscrowRefund>> | undefined;
+  if (resolutionType === 'refunded') {
+    if (!userIsStaff(req)) {
+      res.status(403).json({ error: 'Only Choosify staff can process a refund payout.' });
+      return;
+    }
+    if (!req.userId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    const refundAmount = Number(req.body?.refundAmount);
+    if (!Number.isFinite(refundAmount) || refundAmount <= 0) {
+      res.status(400).json({ error: 'refundAmount is required and must be greater than 0 when resolutionType is "refunded"' });
+      return;
+    }
+    try {
+      const escrows = await escrowStore.listEscrowsByOrder(existing.orderId);
+      const escrow = escrows.find((e) => e.sellerId === existing.sellerId) || escrows[0];
+      if (!escrow) {
+        res.status(409).json({ error: 'No escrow found for this order — cannot process a real refund.' });
+        return;
+      }
+      warrantyRefund = await processEscrowRefund({
+        escrowId: escrow.escrowId,
+        amount: refundAmount,
+        reason: `warranty_claim_refund:${existing.id}`,
+        actor: { userId: req.userId, role: req.userRole },
+      });
+    } catch (error) {
+      res.status(error instanceof CommerceError ? error.statusCode || 409 : 500).json({
+        error: error instanceof Error ? error.message : 'Failed to process warranty refund',
+      });
+      return;
+    }
+  }
+
   const saved = operationsStore.updateWarrantyClaim(req.params.id, {
     status: 'resolved',
     resolutionNotes,
+    resolutionType: resolutionType as OpsWarrantyClaim['resolutionType'],
     resolvedAt: new Date().toISOString(),
+    timeline: appendWarrantyClaimTimeline(existing, {
+      status: 'resolved',
+      note: warrantyRefund
+        ? `${resolutionNotes} (Refund ${warrantyRefund.refundReferenceId || warrantyRefund.refundId}, ${warrantyRefund.amount} ${warrantyRefund.currency})`
+        : resolutionNotes,
+      by: req.userId,
+    }),
   });
   scheduleOperationsPersist();
   try {
@@ -3181,14 +3894,14 @@ operationsRouter.patch('/operations/warranty-claims/:id/resolve', ...requireAuth
       type: COMMUNICATION_TYPES.ORDER_UPDATE,
       category: 'buyer',
       title: 'Warranty claim resolved',
-      summary: `Your warranty claim for order ${existing.orderId} was resolved: ${resolutionNotes}`,
+      summary: `Your warranty claim for order ${existing.orderId} was resolved (${resolutionType.replace(/_/g, ' ')}): ${resolutionNotes}`,
       actionUrl: existing.conversationId ? `/messages/${existing.conversationId}` : '/dashboard?tab=my-warranty',
       metadata: { orderId: existing.orderId, claimId: existing.id },
     });
   } catch (err) {
     console.warn('[Warranty] Notify buyer (resolved) failed:', err);
   }
-  res.json({ success: true, data: saved });
+  res.json({ success: true, data: saved, refund: warrantyRefund });
 });
 
 /** Consumer: cancel own claim (only while it hasn't reached a terminal/service state). */
@@ -3210,6 +3923,7 @@ operationsRouter.patch('/operations/warranty-claims/:id/cancel', ...requireAuth,
   const saved = operationsStore.updateWarrantyClaim(req.params.id, {
     status: 'cancelled',
     cancelledAt: new Date().toISOString(),
+    timeline: appendWarrantyClaimTimeline(existing, { status: 'cancelled', by: req.userId }),
   });
   scheduleOperationsPersist();
   res.json({ success: true, data: saved });
@@ -3223,6 +3937,11 @@ operationsRouter.patch('/operations/warranty-claims/:id/dispute', ...requireAuth
   }
   if (!userCanManageWarrantyClaim(req, existing)) {
     res.status(403).json({ error: 'Not authorized to escalate this warranty claim' });
+    return;
+  }
+  const transitionError = assertWarrantyClaimTransition(existing.status, 'disputed');
+  if (transitionError) {
+    res.status(400).json({ error: transitionError });
     return;
   }
 
@@ -3242,9 +3961,148 @@ operationsRouter.patch('/operations/warranty-claims/:id/dispute', ...requireAuth
   const saved = operationsStore.updateWarrantyClaim(req.params.id, {
     status: 'disputed',
     disputeId: dispute.id,
+    timeline: appendWarrantyClaimTimeline(existing, { status: 'disputed', note: `Escalated to dispute ${dispute.id}`, by: req.userId }),
   });
   scheduleOperationsPersist();
   res.json({ success: true, data: saved, dispute });
+});
+
+/**
+ * Seller/staff: add a customer-visible status note WITHOUT changing status
+ * (e.g. "Inspection may take up to 15 days after we receive the product.").
+ * Optionally also sets/updates the estimated completion date in the same call.
+ */
+operationsRouter.patch('/operations/warranty-claims/:id/note', ...requireAuth, async (req, res) => {
+  const existing = operationsStore.getWarrantyClaim(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Warranty claim not found' });
+    return;
+  }
+  if (!userCanManageWarrantyClaim(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to update this warranty claim' });
+    return;
+  }
+  const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
+  const estimatedCompletionDate =
+    typeof req.body?.estimatedCompletionDate === 'string' && req.body.estimatedCompletionDate.trim()
+      ? req.body.estimatedCompletionDate.trim()
+      : undefined;
+  if (!note && !estimatedCompletionDate) {
+    res.status(400).json({ error: 'note or estimatedCompletionDate is required' });
+    return;
+  }
+  const saved = operationsStore.updateWarrantyClaim(req.params.id, {
+    ...(note ? { sellerResponse: note } : {}),
+    ...(estimatedCompletionDate ? { estimatedCompletionDate } : {}),
+    timeline: appendWarrantyClaimTimeline(existing, {
+      status: existing.status,
+      serviceStage: existing.serviceStage,
+      note: note || undefined,
+      by: req.userId,
+    }),
+  });
+  scheduleOperationsPersist();
+  if (note) {
+    try {
+      await notifyUser(existing.consumerId, {
+        type: COMMUNICATION_TYPES.ORDER_UPDATE,
+        category: 'buyer',
+        title: 'Update on your warranty claim',
+        summary: note,
+        actionUrl: '/dashboard?tab=my-warranty',
+        metadata: { orderId: existing.orderId, claimId: existing.id },
+      });
+    } catch (err) {
+      console.warn('[Warranty] Notify buyer (note) failed:', err);
+    }
+  }
+  res.json({ success: true, data: saved });
+});
+
+/** Seller/staff/admin: internal note — NEVER returned to the consumer under any circumstance. */
+operationsRouter.patch('/operations/warranty-claims/:id/internal-note', ...requireAuth, (req, res) => {
+  const existing = operationsStore.getWarrantyClaim(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Warranty claim not found' });
+    return;
+  }
+  if (!userCanManageWarrantyClaim(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to update this warranty claim' });
+    return;
+  }
+  const note = String(req.body?.note || '').trim();
+  if (!note) {
+    res.status(400).json({ error: 'note is required' });
+    return;
+  }
+  const saved = operationsStore.updateWarrantyClaim(req.params.id, {
+    internalNotes: [
+      ...(existing.internalNotes || []),
+      { id: `in_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, note, by: req.userId || 'unknown', at: new Date().toISOString() },
+    ],
+  });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved });
+});
+
+/**
+ * Warranty return-pickup / redelivery shipments — reuse the existing
+ * Courier/Order Hub shipment model (shipmentStore), but as a shipment
+ * referencing this claim + the original Order ID, never a new commercial
+ * order. See shipmentStore.createForWarrantyClaim.
+ */
+operationsRouter.post('/operations/warranty-claims/:id/shipments', ...requireAuth, (req, res) => {
+  const existing = operationsStore.getWarrantyClaim(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Warranty claim not found' });
+    return;
+  }
+  if (!userCanManageWarrantyClaim(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to create logistics for this warranty claim' });
+    return;
+  }
+  const direction = req.body?.direction === 'redelivery' ? 'redelivery' : 'return_pickup';
+  const order = operationsStore.getOrder(existing.orderId);
+  if (!order) {
+    res.status(404).json({ error: 'Order not found' });
+    return;
+  }
+  const shipment = shipmentStore.createForWarrantyClaim({
+    claimId: existing.id,
+    orderId: existing.orderId,
+    buyerId: existing.consumerId,
+    direction,
+    recipientName: order.shipping?.fullName || existing.consumerId,
+    recipientPhone: order.shipping?.phone || '',
+    deliveryAddress: order.shipping?.address || '',
+    region: order.shipping?.region || 'Dhaka',
+  });
+  const stage = direction === 'return_pickup' ? 'return_requested' : 'ready_for_dispatch';
+  const saved = operationsStore.updateWarrantyClaim(req.params.id, {
+    timeline: appendWarrantyClaimTimeline(existing, {
+      status: existing.status,
+      serviceStage: stage as OpsWarrantyClaimServiceStage,
+      note: direction === 'return_pickup' ? 'Return pickup requested.' : 'Redelivery scheduled.',
+      by: req.userId,
+    }),
+  });
+  scheduleOperationsPersist();
+  res.status(201).json({ success: true, data: { shipment, claim: saved } });
+});
+
+/** Visible to the claim owner (buyer), the seller who manages it, or staff. */
+operationsRouter.get('/operations/warranty-claims/:id/shipments', ...requireAuth, (req, res) => {
+  const existing = operationsStore.getWarrantyClaim(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Warranty claim not found' });
+    return;
+  }
+  const isConsumer = Boolean(req.userId && existing.consumerId === req.userId);
+  if (!isConsumer && !userCanManageWarrantyClaim(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to view this warranty claim\'s logistics' });
+    return;
+  }
+  res.json({ data: shipmentStore.getShipmentsByWarrantyClaimId(existing.id) });
 });
 
 // ─── Disputes ────────────────────────────────────────────────────────────────

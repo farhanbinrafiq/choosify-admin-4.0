@@ -305,26 +305,75 @@ export type OpsReturnStatus =
   | 'dispute';
 export type OpsRefundStatus = 'pending' | 'processed' | 'failed';
 
+/** Open (non-terminal) return statuses — used for the duplicate-active-return guard, mirrors OPEN_WARRANTY_CLAIM_STATUSES. */
+export const OPEN_RETURN_STATUSES = new Set<OpsReturnStatus>([
+  'initiated',
+  'approved',
+  'returned_in_transit',
+  'received',
+]);
+
+/** One buyer-visible history entry — every status change appends here. Append-only, never mutated. */
+export interface OpsReturnTimelineEntry {
+  id: string;
+  status: OpsReturnStatus;
+  note?: string;
+  at: string;
+  by?: string;
+}
+
+/** Staff/seller-only note — never returned to the buyer under any circumstance. */
+export interface OpsReturnInternalNote {
+  id: string;
+  note: string;
+  by: string;
+  at: string;
+}
+
 export interface OpsReturnRequest {
   id: string;
+  /** Permanent Choosify Return Reference ID (RT-#####). */
+  referenceId?: string;
   orderId: string;
   itemId: string;
   initiatedBy: OpsReturnInitiatedBy;
   reason: OpsReturnReason;
   description: string;
+  /** Legacy raw-URL evidence field — kept for backward compatibility with old rows. New submissions use evidenceMediaIds. */
   evidencePhotos: string[];
+  /** Evidence photos via the canonical private media service (category 'return-evidence'), same pattern as warranty claims. */
+  evidenceMediaIds?: string[];
+  /** Optional buyer-supplied external video link (e.g. Google Drive) — never a raw video upload. */
+  videoLink?: string;
   status: OpsReturnStatus;
   approvalDecision?: 'approved' | 'rejected';
   approvalReason?: string;
   approvedAt?: string;
   approvedBy?: string;
+  /**
+   * Explicit decision made AT APPROVAL TIME — whether the buyer must
+   * physically send the item back before a refund can be processed, or
+   * whether this is a refund-without-return case. Two structurally
+   * different outcomes (rule #3), never conflated into one implicit
+   * status: true → approved → returned_in_transit → received → refunded;
+   * false → approved → refunded directly. Undefined only for legacy rows
+   * persisted before this field existed.
+   */
+  requiresReturn?: boolean;
   refundAmount?: number;
   refundStatus: OpsRefundStatus;
   returnTrackingId?: string;
   returnCourier?: string;
   pickupDate?: string;
   deliveryDate?: string;
+  /** Seller/admin-writable, buyer-readable decision log (existing behavior, unchanged). */
   notes: string[];
+  /** Full buyer-visible structured history — every status transition. Optional for backward
+   *  compatibility with cases persisted before this field existed. */
+  timeline?: OpsReturnTimelineEntry[];
+  /** Staff/seller-only notes — filtered out of every response sent to the buyer. Optional for the
+   *  same backward-compatibility reason as `timeline`. */
+  internalNotes?: OpsReturnInternalNote[];
   createdAt: string;
   updatedAt: string;
   sellerId: string;
@@ -362,6 +411,81 @@ export type OpsWarrantyClaimIssueType =
   | 'missing_damaged_accessory'
   | 'other';
 
+/**
+ * Granular, buyer-visible progress WITHIN the coarse 'service_in_progress'
+ * status — deliberately NOT a replacement for OpsWarrantyClaimStatus. The
+ * canonical status enum stays small and durable; this optional sub-stage
+ * gives the "Return Requested → In Transit → Received → Under Review →
+ * Repair/Replacement In Progress → Ready for Dispatch → Dispatched →
+ * Delivered" resolution detail the product spec asks for, without adding a
+ * dozen new top-level statuses that would fragment every existing guard/
+ * filter/notification keyed off OpsWarrantyClaimStatus.
+ */
+export type OpsWarrantyClaimServiceStage =
+  | 'return_requested'
+  | 'in_transit'
+  | 'received'
+  | 'under_review'
+  | 'repair_in_progress'
+  | 'replacement_in_progress'
+  | 'ready_for_dispatch'
+  | 'dispatched'
+  | 'delivered';
+
+/** Linear progression tiers — 'repair_in_progress' and 'replacement_in_progress'
+ *  share a tier since a claim follows exactly one of those two paths, never both. */
+export const WARRANTY_CLAIM_SERVICE_STAGE_ORDER: OpsWarrantyClaimServiceStage[][] = [
+  ['return_requested'],
+  ['in_transit'],
+  ['received'],
+  ['under_review'],
+  ['repair_in_progress', 'replacement_in_progress'],
+  ['ready_for_dispatch'],
+  ['dispatched'],
+  ['delivered'],
+];
+
+/** Final outcome once a claim reaches 'resolved' (or is 'rejected'). */
+export type OpsWarrantyClaimResolutionType =
+  | 'repaired'
+  | 'replaced'
+  | 'refunded'
+  | 'rejected'
+  | 'no_fault_found'
+  | 'other';
+
+/** One buyer-visible history entry — every status change and every seller
+ *  customer-visible note appends here. This is what the buyer timeline and
+ *  the warranty claim document both render from; it is never mutated after
+ *  the fact, only appended to. */
+export interface OpsWarrantyClaimTimelineEntry {
+  id: string;
+  status: OpsWarrantyClaimStatus;
+  serviceStage?: OpsWarrantyClaimServiceStage;
+  /** Customer-visible note attached to this transition, if any (e.g. "Inspection may take up to 15 days"). */
+  note?: string;
+  at: string;
+  by?: string;
+}
+
+/** Staff/seller-only note — never returned to a consumer under any circumstance. */
+export interface OpsWarrantyClaimInternalNote {
+  id: string;
+  note: string;
+  by: string;
+  at: string;
+}
+
+/** The four proof categories a warranty claim's evidence is collected under — each is its own upload section on the storefront. */
+export type OpsWarrantyClaimAttachmentCategory = 'warrantyCard' | 'productPhoto' | 'box' | 'receipt';
+
+export const WARRANTY_CLAIM_ATTACHMENT_CATEGORIES: OpsWarrantyClaimAttachmentCategory[] = [
+  'warrantyCard',
+  'productPhoto',
+  'box',
+  'receipt',
+];
+
 export interface OpsWarrantyClaim {
   id: string;
   /** Permanent Choosify Warranty Claim Reference ID (WC-#####). */
@@ -381,11 +505,26 @@ export interface OpsWarrantyClaim {
   warrantyExpiresAt?: string;
   issueType: OpsWarrantyClaimIssueType;
   description: string;
-  /** media ids from the canonical media service, category `warranty-claims` */
+  /** media ids from the canonical media service, category `warranty-claims` — flat union of attachmentCategories, kept for backward-compat display and polymorphic media linking. */
   attachmentMediaIds: string[];
+  /** Same media ids as attachmentMediaIds, broken down by proof type. Optional — older claims persisted before this field existed won't have it; always read via `claim.attachmentCategories || {}`. */
+  attachmentCategories?: Partial<Record<OpsWarrantyClaimAttachmentCategory, string[]>>;
   status: OpsWarrantyClaimStatus;
+  /** Only meaningful while status === 'service_in_progress'. */
+  serviceStage?: OpsWarrantyClaimServiceStage;
   sellerResponse?: string;
   resolutionNotes?: string;
+  /** Structured outcome once resolved/rejected — free-text resolutionNotes remains the human detail. */
+  resolutionType?: OpsWarrantyClaimResolutionType;
+  /** Seller/Admin-set expectation only — never fabricated by the platform. */
+  estimatedCompletionDate?: string;
+  /** Full buyer-visible history — every status transition + every customer-visible note. Append-only.
+   *  Optional for backward compatibility with claims persisted before this field existed — always
+   *  read via `claim.timeline || []`, never assume presence. */
+  timeline?: OpsWarrantyClaimTimelineEntry[];
+  /** Staff/seller-only notes — filtered out of every response sent to the consumer. Optional for the
+   *  same backward-compatibility reason as `timeline`. */
+  internalNotes?: OpsWarrantyClaimInternalNote[];
   conversationId?: string;
   submittedAt: string;
   acknowledgedAt?: string;

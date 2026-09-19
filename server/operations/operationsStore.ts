@@ -22,7 +22,7 @@ import type {
   OpsVerificationReview,
   RolePermissionsMap,
 } from './types';
-import { OPEN_WARRANTY_CLAIM_STATUSES, OPS_DISPUTE_TRANSITIONS } from './types';
+import { OPEN_WARRANTY_CLAIM_STATUSES, OPS_DISPUTE_TRANSITIONS, OPEN_RETURN_STATUSES } from './types';
 
 const nowIso = () => new Date().toISOString();
 
@@ -900,7 +900,11 @@ export const operationsStore = {
     }
     return rows;
   },
-  getReturn: (id: string) => state.returns.find((row) => row.id === id) ?? null,
+  /** Matches by internal id OR the canonical RT-##### reference id — either is a valid address for a case. */
+  getReturn: (id: string) => state.returns.find((row) => row.id === id || row.referenceId === id) ?? null,
+  /** Only one ACTIVE (open, non-terminal) return may exist per order item at a time. */
+  getActiveReturnForItem: (itemId: string) =>
+    state.returns.find((row) => row.itemId === itemId && OPEN_RETURN_STATUSES.has(row.status)) ?? null,
   createReturn: (
     payload: Omit<OpsReturnRequest, 'id' | 'createdAt' | 'updatedAt' | 'notes'> & {
       id?: string;
@@ -914,6 +918,10 @@ export const operationsStore = {
       ...payload,
       id: payload.id || `RET-${Date.now()}`,
       notes: payload.notes ?? [],
+      timeline: payload.timeline?.length
+        ? payload.timeline
+        : [{ id: `tl_${Date.now()}`, status: 'initiated', at: ts }],
+      internalNotes: payload.internalNotes || [],
       createdAt: payload.createdAt || ts,
       updatedAt: payload.updatedAt || ts,
     };
@@ -922,7 +930,7 @@ export const operationsStore = {
     return row;
   },
   updateReturn: (id: string, patch: Partial<OpsReturnRequest>) => {
-    const idx = state.returns.findIndex((row) => row.id === id);
+    const idx = state.returns.findIndex((row) => row.id === id || row.referenceId === id);
     if (idx < 0) return null;
     state.returns[idx] = { ...state.returns[idx], ...patch, updatedAt: nowIso() };
     touch();
@@ -937,7 +945,8 @@ export const operationsStore = {
     if (filter?.status) rows = rows.filter((row) => row.status.toLowerCase() === filter.status!.toLowerCase());
     return rows;
   },
-  getWarrantyClaim: (id: string) => state.warrantyClaims.find((row) => row.id === id) ?? null,
+  /** Matches by internal id OR the canonical WC-##### reference id — either is a valid address for a claim. */
+  getWarrantyClaim: (id: string) => state.warrantyClaims.find((row) => row.id === id || row.referenceId === id) ?? null,
   /** Only one ACTIVE (open) claim may exist per order item at a time. */
   getActiveWarrantyClaimForItem: (orderItemId: string) =>
     state.warrantyClaims.find(
@@ -952,19 +961,24 @@ export const operationsStore = {
     },
   ) => {
     const ts = nowIso();
+    const submittedAt = payload.submittedAt || ts;
     const row: OpsWarrantyClaim = {
       ...payload,
       id: payload.id || `WC-${Date.now()}`,
-      submittedAt: payload.submittedAt || ts,
+      submittedAt,
       createdAt: payload.createdAt || ts,
       updatedAt: payload.updatedAt || ts,
+      timeline: payload.timeline?.length
+        ? payload.timeline
+        : [{ id: `tl_${Date.now()}`, status: 'submitted', at: submittedAt }],
+      internalNotes: payload.internalNotes || [],
     };
     state.warrantyClaims.unshift(row);
     touch();
     return row;
   },
   updateWarrantyClaim: (id: string, patch: Partial<OpsWarrantyClaim>) => {
-    const idx = state.warrantyClaims.findIndex((row) => row.id === id);
+    const idx = state.warrantyClaims.findIndex((row) => row.id === id || row.referenceId === id);
     if (idx < 0) return null;
     state.warrantyClaims[idx] = { ...state.warrantyClaims[idx], ...patch, updatedAt: nowIso() };
     touch();

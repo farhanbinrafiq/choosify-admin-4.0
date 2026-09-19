@@ -48,6 +48,8 @@ export const PRIVATE_MEDIA_CATEGORIES = [
   'creator-documents',
   /** Warranty claim evidence photos/videos — buyer/seller/admin only, never public. */
   'warranty-claims',
+  /** Return/refund case evidence photos — buyer/seller/admin only, never public. */
+  'return-evidence',
 ] as const;
 
 export const MEDIA_CATEGORIES = [...PUBLIC_MEDIA_CATEGORIES, ...PRIVATE_MEDIA_CATEGORIES] as const;
