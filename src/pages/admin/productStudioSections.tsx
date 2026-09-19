@@ -2,7 +2,12 @@ import React, { useMemo, useRef, useState, CSSProperties } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { resolveCreatorThumbnail } from '../../lib/productVideo';
 import { CreatorReviewThumbnailPreview } from '../../components/admin/product-studio/CreatorReviewThumbnailPreview';
-import { isUnsupportedFacebookShareUrl, detectBrandablePlatform } from '../../lib/creatorReviewPlatform';
+import {
+  isUnsupportedFacebookShareUrl,
+  isCanonicalFacebookVideoUrl,
+  extractUrlFromPastedInput,
+  detectBrandablePlatform,
+} from '../../lib/creatorReviewPlatform';
 import { uploadCreatorImage, uploadProductImages } from '../../services/mediaUpload';
 import { catalogApi } from '../../services/catalogApi';
 import {
@@ -2266,22 +2271,56 @@ export function CreatorReviewsEditor({
     ]);
 
   // Per-row Facebook share-link resolution state -- a row is never blocked
-  // by another row's in-flight resolve/error. Cleared automatically on
-  // successful resolve (patch() below sets a fresh videoUrl, which drops
-  // shareLinkWarning for that row) or the next edit to that field.
-  const [resolveState, setResolveState] = useState<Record<string, { loading: boolean; error: string | null }>>({});
+  // by another row's in-flight resolve/error. `lastAttemptedUrl` guards
+  // automatic resolution so the same exact value never re-triggers a
+  // network call on its own (e.g. an unrelated re-render, or a failed
+  // resolve that the seller hasn't changed yet) -- only a genuinely new
+  // pasted value, or the manual retry button, resolves again.
+  const [resolveState, setResolveState] = useState<
+    Record<string, { loading: boolean; error: string | null; lastAttemptedUrl: string | null }>
+  >({});
 
   const resolveShareLink = async (id: string, url: string) => {
-    setResolveState((prev) => ({ ...prev, [id]: { loading: true, error: null } }));
+    setResolveState((prev) => ({ ...prev, [id]: { loading: true, error: null, lastAttemptedUrl: url } }));
     try {
       const canonicalUrl = await catalogApi.resolveFacebookShareUrl(url);
       patch(id, { videoUrl: canonicalUrl });
-      setResolveState((prev) => ({ ...prev, [id]: { loading: false, error: null } }));
+      setResolveState((prev) => ({ ...prev, [id]: { loading: false, error: null, lastAttemptedUrl: url } }));
     } catch (err) {
       setResolveState((prev) => ({
         ...prev,
-        [id]: { loading: false, error: err instanceof Error ? err.message : 'Could not resolve this Facebook link.' },
+        [id]: {
+          loading: false,
+          error: err instanceof Error ? err.message : 'Could not resolve this Facebook link.',
+          lastAttemptedUrl: url,
+        },
       }));
+    }
+  };
+
+  /**
+   * Single entry point for every edit to the video-link field.
+   *  1. Normalizes an accidentally-pasted Embed Code snippet down to the
+   *     plain URL it references (never stores/renders the raw HTML).
+   *  2. If the result is a Facebook share link (`/share/v/`, `/share/r/`),
+   *     automatically calls the existing secure resolver -- the seller
+   *     never has to know the difference between a share link and a
+   *     canonical URL, or click a button, for the normal paste-and-go path.
+   *     Gated on `lastAttemptedUrl` so this never fires twice for the same
+   *     value (e.g. on an unrelated re-render) and never re-resolves an
+   *     already-canonical URL (isUnsupportedFacebookShareUrl is false for
+   *     those, so this branch is simply skipped -- no network call at all).
+   *  3. The manual "Resolve to canonical URL" button (still present below)
+   *     remains the fallback for a failed automatic attempt.
+   */
+  const handleVideoUrlChange = (id: string, rawValue: string) => {
+    const cleaned = extractUrlFromPastedInput(rawValue);
+    patch(id, { videoUrl: cleaned });
+    if (isUnsupportedFacebookShareUrl(cleaned)) {
+      const state = resolveState[id];
+      if (!state?.loading && state?.lastAttemptedUrl !== cleaned) {
+        void resolveShareLink(id, cleaned);
+      }
     }
   };
 
@@ -2297,6 +2336,11 @@ export function CreatorReviewsEditor({
       {videos.map((v) => {
         const shareLinkWarning = isUnsupportedFacebookShareUrl(v.videoUrl);
         const rowResolveState = resolveState[v.id];
+        const isResolvingThisRow = rowResolveState?.loading && rowResolveState.lastAttemptedUrl === v.videoUrl;
+        const isCanonicalFacebook = detectBrandablePlatform(v.videoUrl) === 'facebook' && isCanonicalFacebookVideoUrl(v.videoUrl);
+        const isInstagramContent = detectBrandablePlatform(v.videoUrl) === 'instagram';
+        const justAutoResolved =
+          isCanonicalFacebook && rowResolveState && !rowResolveState.loading && !rowResolveState.error;
         return (
         <div key={v.id} style={{ border: '1px solid #E8EDF2', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 8 }}>
@@ -2315,18 +2359,21 @@ export function CreatorReviewsEditor({
             <div style={x.label}>Shareable / embed video link (https)</div>
             <input
               value={v.videoUrl}
-              onChange={(e) => patch(v.id, { videoUrl: e.target.value })}
+              onChange={(e) => handleVideoUrlChange(v.id, e.target.value)}
               placeholder="https://youtube.com/watch?v=… / https://instagram.com/reel/…"
-              style={shareLinkWarning ? { ...x.input, border: '1px solid #DC2626' } : x.input}
+              style={shareLinkWarning && !isResolvingThisRow ? { ...x.input, border: '1px solid #DC2626' } : x.input}
               aria-invalid={shareLinkWarning}
             />
-            {shareLinkWarning ? (
+            {isResolvingThisRow ? (
+              <div style={{ marginTop: 4, fontSize: 10, color: '#6B7280', fontWeight: 700 }}>
+                ✓ Facebook link detected — resolving to canonical URL…
+              </div>
+            ) : rowResolveState?.error ? (
               <div style={{ marginTop: 4, fontSize: 10, color: '#DC2626', fontWeight: 700 }}>
-                Facebook share links can’t be embedded directly.
+                Choosify couldn’t resolve this Facebook link: {rowResolveState.error}
                 <button
                   type="button"
                   onClick={() => resolveShareLink(v.id, v.videoUrl)}
-                  disabled={rowResolveState?.loading}
                   style={{
                     marginLeft: 6,
                     fontSize: 10,
@@ -2335,20 +2382,54 @@ export function CreatorReviewsEditor({
                     background: 'none',
                     border: 'none',
                     padding: 0,
-                    cursor: rowResolveState?.loading ? 'default' : 'pointer',
+                    cursor: 'pointer',
                     textDecoration: 'underline',
                   }}
                 >
-                  {rowResolveState?.loading ? 'Resolving…' : 'Resolve to canonical URL'}
+                  Try again
                 </button>
                 <div style={{ marginTop: 2, fontWeight: 500, color: '#7A1F1F' }}>
                   Or paste the video’s canonical Facebook Reel URL directly, e.g. https://www.facebook.com/reel/123456789/
                 </div>
               </div>
-            ) : null}
-            {rowResolveState?.error ? (
+            ) : shareLinkWarning ? (
+              // Automatic resolution normally handles this the instant the
+              // link is pasted (see handleVideoUrlChange) -- this manual
+              // fallback only remains visible if, for some reason, that
+              // hasn't happened yet (e.g. the value was set programmatically
+              // rather than typed/pasted).
               <div style={{ marginTop: 4, fontSize: 10, color: '#DC2626', fontWeight: 700 }}>
-                Choosify couldn’t resolve this Facebook link: {rowResolveState.error}
+                Facebook share links can’t be embedded directly.
+                <button
+                  type="button"
+                  onClick={() => resolveShareLink(v.id, v.videoUrl)}
+                  style={{
+                    marginLeft: 6,
+                    fontSize: 10,
+                    fontWeight: 800,
+                    color: '#FF5B00',
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                  }}
+                >
+                  Resolve to canonical URL
+                </button>
+              </div>
+            ) : isCanonicalFacebook ? (
+              <div style={{ marginTop: 4, fontSize: 10, color: '#0A8A3C', fontWeight: 700 }}>
+                ✓ Facebook Reel detected{justAutoResolved ? ' — ✓ Canonical URL resolved' : ' — canonical URL'}
+              </div>
+            ) : isInstagramContent ? (
+              // Instagram links need no resolution step (no share-link
+              // opacity problem like Facebook's) -- this is confirmation
+              // only, kept visually consistent with the Facebook success
+              // state above so a seller sees the same "this was understood"
+              // signal for both platforms instead of Facebook alone.
+              <div style={{ marginTop: 4, fontSize: 10, color: '#0A8A3C', fontWeight: 700 }}>
+                ✓ Instagram link detected
               </div>
             ) : null}
           </div>

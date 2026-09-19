@@ -17,6 +17,7 @@ import type {
 } from '../src/types/catalog';
 import type { ProfileImageCropParams } from '../shared/media/profileImageCrop';
 import { parseProductStatusInput } from './catalog/productLifecycle';
+import { detectBrandablePlatform, isUnsupportedFacebookShareUrl } from '../src/lib/creatorReviewPlatform';
 
 const nonEmpty = z.string().trim().min(1);
 const isoDate = z.string().datetime();
@@ -102,7 +103,11 @@ const toCropParams = (value: unknown, existing?: ProfileImageCropParams): Profil
  * A product video is one canonical source. Accepts:
  *  - an app-owned upload path (`/media/...`, produced by POST /catalog/media/upload),
  *  - a YouTube URL (youtube.com / youtu.be / *.youtube-nocookie.com),
- *  - a direct HTTPS video file URL (.mp4 / .webm / .mov / .m4v).
+ *  - a direct HTTPS video file URL (.mp4 / .webm / .mov / .m4v),
+ *  - a Facebook (Reel/video — not an opaque `/share/` redirect token), Instagram,
+ *    or TikTok video URL — the same platforms Creator Reviews already accepts
+ *    (`detectBrandablePlatform`), so a seller isn't blocked from reusing the
+ *    exact link they'd already paste into a Creator Review.
  * Anything else is rejected so the storefront never gets a link it cannot render.
  * `undefined` in the payload keeps the existing value; an empty string clears it.
  */
@@ -124,10 +129,19 @@ export const normalizeProductVideoUrl = (raw: unknown, existing?: string): strin
   const isYouTube =
     host === 'youtube.com' || host === 'm.youtube.com' || host === 'youtu.be' || host === 'youtube-nocookie.com';
   const isDirectFile = /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(url.pathname);
-  if (!isYouTube && !isDirectFile) {
-    throw new Error('Unsupported product video URL. Use a YouTube link or a direct .mp4/.webm/.mov URL.');
+  if (isYouTube || isDirectFile) return url.toString();
+  const brandablePlatform = detectBrandablePlatform(s);
+  if (brandablePlatform) {
+    if (isUnsupportedFacebookShareUrl(s)) {
+      throw new Error(
+        "Facebook share links (facebook.com/share/...) can't be embedded directly. Use the video's canonical Facebook Reel/video URL instead.",
+      );
+    }
+    return url.toString();
   }
-  return url.toString();
+  throw new Error(
+    'Unsupported product video URL. Use a YouTube, Facebook, Instagram, or TikTok video link, or a direct .mp4/.webm/.mov URL.',
+  );
 };
 
 const categorySchema = z.object({
