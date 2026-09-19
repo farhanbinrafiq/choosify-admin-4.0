@@ -474,17 +474,28 @@ export type OpsBookingOfferStatus =
   | 'payment_expired'
   | 'paid';
 
-/** Real ownership-claim / verification record — GET /operations/verifications. */
+/**
+ * Real ownership-claim / verification record — GET /operations/verifications.
+ * Mirrors the server contract (server/operations/types.ts: OpsVerificationRequest),
+ * which itself mirrors TrustContext's VerificationRequest — reusing those field
+ * types here instead of redeclaring them keeps the three in lockstep.
+ */
 export interface OpsVerification {
   id: string;
   entityType: 'brand' | 'creator';
   entityId: string;
-  brand_id?: string;
-  status: string;
-  submitted_by?: string;
+  entityName: string;
+  brand_id: string;
+  brand_name: string;
+  logo_url: string;
+  submitted_by: string;
+  submitted_by_name?: string;
+  status: 'Draft' | 'Submitted' | 'Under Review' | 'Approved' | 'Rejected';
+  documents: import('../contexts/TrustContext').VerificationDocument[];
+  reviews: import('../contexts/TrustContext').VerificationReview[];
+  audit_trail: { timestamp: string; action: string; actor: string; details: string }[];
   created_at: string;
-  updated_at?: string;
-  [key: string]: unknown;
+  updated_at: string;
 }
 
 /** Real Seller/Creator onboarding application — GET /operations/partner-applications. */
