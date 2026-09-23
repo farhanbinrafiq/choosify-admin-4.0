@@ -19,7 +19,7 @@ export type Deal = CatalogDeal;
 // CMS (standalone).html, decoded lines 2957–2979): "Deals & Promotions" header +
 // "+ Create Deal" + a Deal | Brand | Discount | Starts | Ends | Status table,
 // expressed as inline styles. Sanctioned deviation: accent = var(--cms-accent),
-// not the raw reference #FF5B00.
+// not the raw reference #EF3C23.
 //
 // FUNCTIONALITY is the current canonical layer, unchanged: catalogApi.listDeals /
 // createDeal / updateDeal / deleteDeal, computed live/expiring/expired status,
@@ -303,10 +303,10 @@ export default function DealsPage() {
     controls: { display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 },
     search: { height: 38, boxSizing: 'border-box', borderRadius: 8, border: '1px solid #E8EDF2', padding: '0 14px 0 34px', fontSize: '12.5px', minWidth: 240, outline: 'none', background: '#fff' },
     select: { height: 38, boxSizing: 'border-box', borderRadius: 8, border: '1px solid #E8EDF2', padding: '0 12px', fontSize: 12, color: '#111827', background: '#fff', outline: 'none', cursor: 'pointer' },
-    bulkBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(180deg,rgba(24,21,76,0.94) 0%,rgba(0,6,46,0.92) 80%,rgba(0,2,37,0.94) 100%)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', borderRadius: 8, padding: '12px 16px', marginBottom: 12, flexWrap: 'wrap', gap: 10 },
+    bulkBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F7F8FA', border: '1px solid #E5E7EB', color: '#172033', borderRadius: 8, padding: '12px 16px', marginBottom: 12, flexWrap: 'wrap', gap: 10 },
     bulkChip: { background: ACCENT_WASH, color: ACCENT, padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 800 },
-    bulkBtn: { background: 'rgba(255,255,255,0.12)', color: '#fff', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 6, padding: '5px 12px', fontSize: 10.5, fontWeight: 800, cursor: 'pointer' },
-    bulkClear: { cursor: 'pointer', fontSize: 10.5, fontWeight: 700, color: 'rgba(255,255,255,0.7)', background: 'none', border: 0 },
+    bulkBtn: { background: '#FFFFFF', color: '#172033', border: '1px solid #E5E7EB', borderRadius: 6, padding: '5px 12px', fontSize: 10.5, fontWeight: 800, cursor: 'pointer' },
+    bulkClear: { cursor: 'pointer', fontSize: 10.5, fontWeight: 700, color: '#667085', background: 'none', border: 0 },
     tableWrap: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, overflow: 'hidden' },
     th: { textAlign: 'left', padding: '12px 16px', fontSize: '10.5px', fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em', textTransform: 'uppercase', whiteSpace: 'nowrap' },
     td: { padding: '14px 16px', fontSize: 13, color: '#111827', verticalAlign: 'middle' },

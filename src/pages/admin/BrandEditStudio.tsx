@@ -588,7 +588,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
   }
 
   return (
-    <div className="w-full bg-[#F0F8FF] min-h-screen">
+    <div className="bg-white">
       {!isNested ? (
         <header className="sticky top-[var(--cms-topbar-height,64px)] z-[8] flex items-center justify-between gap-3 border-b border-[#E8EDF2] bg-white/95 px-4 py-2.5 backdrop-blur">
           <div className="flex items-center gap-3 min-w-0">

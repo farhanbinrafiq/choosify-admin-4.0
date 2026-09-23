@@ -321,19 +321,19 @@ export function BrandProfileHero({
       {/* Cover — Choosify-Web BrandDetailHero feed silhouette */}
       <div className="w-full px-5 sm:px-8 lg:px-10 pt-4">
         <div className="max-w-[1440px] mx-auto relative">
-          <div className="relative h-[220px] sm:h-[280px] md:h-[320px] overflow-hidden choosify-dark-surface rounded-none">
+          <div className="relative h-[220px] sm:h-[280px] md:h-[320px] overflow-hidden bg-[#F1F3F5] border border-dashed border-[#D9DEE7] rounded-none">
             {isStudio ? <BrandStudioEditPill onClick={() => studio!.onEdit('cover')} /> : null}
             {cover ? (
               <img src={cover} alt="" className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-[11px] text-white/50 font-semibold">
+              <div className="w-full h-full flex items-center justify-center text-[11px] text-app-text-secondary font-semibold">
                 {mode !== 'public' ? 'Add a brand cover image' : ''}
               </div>
             )}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent rounded-none" />
+            {cover ? <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent rounded-none" /> : null}
           </div>
           <div className="absolute left-1/2 top-full -translate-x-1/2 -translate-y-[60px] w-[100px] h-[100px] md:w-[120px] md:h-[120px] z-[5]">
-            <div className="w-full h-full rounded-full bg-white border-[5px] border-white shadow-[0_16px_36px_rgba(0,0,0,0.28),0_0_0_4px_rgba(35,35,255,0.18)] overflow-hidden flex items-center justify-center">
+            <div className="w-full h-full rounded-full bg-white border-[5px] border-white shadow-[0_16px_36px_rgba(0,0,0,0.28),0_0_0_4px_rgba(239,60,35,0.18)] overflow-hidden flex items-center justify-center">
               {logo ? (
                 // Matches the storefront's own circular-avatar treatment
                 // (Choosify-Web BrandDetailHero) so this Studio preview

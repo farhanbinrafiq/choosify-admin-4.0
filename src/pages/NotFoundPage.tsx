@@ -111,7 +111,7 @@ export default function NotFoundPage({
         </p>
 
         {isError && errorMessage ? (
-          <p className="mt-2 max-w-md text-[13px] font-medium text-[#FF5B00]/90">{errorMessage}</p>
+          <p className="mt-2 max-w-md text-[13px] font-medium text-[#EF3C23]/90">{errorMessage}</p>
         ) : null}
 
         <p className="mt-2 text-[15px] sm:text-base font-medium text-white/65">
@@ -120,7 +120,7 @@ export default function NotFoundPage({
               <button
                 type="button"
                 onClick={onRetry}
-                className="inline-flex items-center gap-1.5 text-[#FF5B00] font-semibold underline underline-offset-2 hover:opacity-90"
+                className="inline-flex items-center gap-1.5 text-[#EF3C23] font-semibold underline underline-offset-2 hover:opacity-90"
               >
                 <RefreshCcw size={14} /> Refresh
               </button>
@@ -131,7 +131,7 @@ export default function NotFoundPage({
           )}
           <Link
             to="/"
-            className="text-[#FF5B00] font-semibold underline underline-offset-2 hover:opacity-90"
+            className="text-[#EF3C23] font-semibold underline underline-offset-2 hover:opacity-90"
           >
             Home
           </Link>

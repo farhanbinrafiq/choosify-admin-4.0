@@ -110,7 +110,7 @@ export default function DisputeCenter() {
             type="button"
             onClick={() => setFilter(f)}
             className={`rounded-full px-3.5 py-1.5 text-[11px] font-extrabold uppercase tracking-wide ${
-              filter === f ? 'bg-[#111827] text-white' : 'bg-[#F3F4F6] text-[#374151]'
+              filter === f ? 'bg-[#EF3C23] text-white' : 'bg-[#F3F4F6] text-[#374151]'
             }`}
           >
             {f === 'open' ? 'Open' : f === 'all' ? 'All' : STATUS_LABELS[f as DisputeStatus]}

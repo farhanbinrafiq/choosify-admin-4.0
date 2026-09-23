@@ -16,7 +16,7 @@ import { Badge, BadgeVariant } from '../../components/ui/Badge';
 import { StatTile } from '../../components/ui/StatTile';
 import { Tabs, TabItem } from '../../components/ui/Tabs';
 
-const COLORS = ['#FF5B00', '#F59E0B', '#6C4CFF', '#16A34A', '#DC2626'];
+const COLORS = ['#EF3C23', '#F59E0B', '#6C4CFF', '#16A34A', '#DC2626'];
 
 const RETURN_STATUS_VARIANT: Record<string, BadgeVariant> = {
   initiated: 'warning',
@@ -628,15 +628,15 @@ export default function ReturnsPage() {
                     <AreaChart data={get7DayTrendData()}>
                       <defs>
                         <linearGradient id="colorReturns" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#FF5B00" stopOpacity={0.4}/>
-                          <stop offset="95%" stopColor="#FF5B00" stopOpacity={0}/>
+                          <stop offset="5%" stopColor="#EF3C23" stopOpacity={0.4}/>
+                          <stop offset="95%" stopColor="#EF3C23" stopOpacity={0}/>
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#E8EDF2" />
                       <XAxis dataKey="date" stroke="#9CA3AF" fontSize={10} />
                       <YAxis stroke="#9CA3AF" fontSize={10} />
                       <Tooltip />
-                      <Area type="monotone" dataKey="Returns" stroke="#FF5B00" fillOpacity={1} fill="url(#colorReturns)" />
+                      <Area type="monotone" dataKey="Returns" stroke="#EF3C23" fillOpacity={1} fill="url(#colorReturns)" />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>

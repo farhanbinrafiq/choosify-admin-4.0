@@ -110,8 +110,8 @@ function DerivedNote({ children }: { children: React.ReactNode }) {
 function OverviewCardHeader({ title }: { title: string }) {
   return (
     <div className="flex items-center gap-2.5 mb-4 border-b border-[#F1F1F3] pb-3">
-      <div className="w-8 h-8 rounded-lg bg-[#FFF3EA] text-[#FF5B00] flex items-center justify-center shrink-0">
-        <CheckCircle2 size={16} fill="currentColor" className="text-[#FF5B00] stroke-white" />
+      <div className="w-8 h-8 rounded-lg bg-[#FFF3EA] text-[#EF3C23] flex items-center justify-center shrink-0">
+        <CheckCircle2 size={16} fill="currentColor" className="text-[#EF3C23] stroke-white" />
       </div>
       <h3 className="text-[11px] font-extrabold uppercase tracking-wider text-[#1A1A2E] m-0">{title}</h3>
     </div>
@@ -183,10 +183,10 @@ export function CreatorProfilePresentation({
   const infoFacts = [
     { icon: '📹', label: 'Videos', value: String(model.videos.length || '—') },
     { icon: '✦', label: 'Reels', value: String(model.reels.length || '—') },
-    { icon: '✍', label: 'Blogs', value: String(model.blogs.length || '—') },
+    { icon: '📝', label: 'Blogs', value: String(model.blogs.length || '—') },
     { icon: '♥', label: 'Followers', value: model.followerTotal || '—' },
     { icon: '★', label: 'Trust', value: trust > 0 ? String(trust) : '—' },
-    { icon: '🏷', label: 'Best for', value: model.bestFor || model.bestForTags[0] || '—' },
+    { icon: '🎯', label: 'Best for', value: model.bestFor || model.bestForTags[0] || '—' },
   ];
 
   const editingId = isStudio ? studio!.editingSection : null;
@@ -324,7 +324,7 @@ export function CreatorProfilePresentation({
                         : 'bg-white text-[#1A1A2E] border border-[#E5E7EB] font-semibold'
                     } ${isStudio ? 'opacity-60' : ''}`}
                   >
-                    {i === 1 ? <MessageCircleMore size={13} className="text-[#FF5B00]" /> : null}
+                    {i === 1 ? <MessageCircleMore size={13} className="text-[#EF3C23]" /> : null}
                     {i === 2 ? <Share2 size={13} /> : null}
                     {i === 3 ? <Heart size={13} /> : null}
                     {i === 4 ? <Sparkles size={13} /> : null}
@@ -484,7 +484,7 @@ export function CreatorProfilePresentation({
                               )}
                             </div>
                             <div className="p-3">
-                              <div className="text-[10px] font-extrabold text-[#FF5B00] uppercase mb-1 flex items-center gap-1">
+                              <div className="text-[10px] font-extrabold text-[#EF3C23] uppercase mb-1 flex items-center gap-1">
                                 {item.kind}
                                 {item.external ? <ExternalLink className="w-2.5 h-2.5" /> : null}
                               </div>
@@ -498,7 +498,7 @@ export function CreatorProfilePresentation({
                             key={`${item.kind}-${item.id}`}
                             href={item.url}
                             {...(item.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                            className="block border border-[#E8EDF2] rounded-[10px] overflow-hidden bg-[#F9FAFB] hover:border-[#FF5B00]/40 transition-colors"
+                            className="block border border-[#E8EDF2] rounded-[10px] overflow-hidden bg-[#F9FAFB] hover:border-[#EF3C23]/40 transition-colors"
                           >
                             {Card}
                           </a>
@@ -596,7 +596,7 @@ export function CreatorProfilePresentation({
                       </p>
                     </div>
                     <div className="mb-3.5">
-                      <div className="text-[11.5px] font-bold text-[#1A1A2E] flex items-center gap-1.5 mb-1">📁 Areas of Expertise</div>
+                      <div className="text-[11.5px] font-bold text-[#1A1A2E] flex items-center gap-1.5 mb-1">🎯 Areas of Expertise</div>
                       <p className="text-[11px] text-[#4B5563] leading-relaxed m-0">
                         {model.bestForTags.length ? model.bestForTags.join(', ') : isStudio ? 'Add expertise topics.' : 'No expertise listed.'}
                       </p>

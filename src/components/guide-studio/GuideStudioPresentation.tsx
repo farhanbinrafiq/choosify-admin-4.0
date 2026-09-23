@@ -150,9 +150,9 @@ function ProductCardMini({ p, badge, external, tags }: { p?: CatalogProduct; bad
         {p.image ? <img src={p.image} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : null}
       </div>
       <div className="p-2.5 text-left">
-        {badge ? <div className="text-[8.5px] font-extrabold text-[#FF5B00] uppercase tracking-wide mb-0.5">{badge}</div> : null}
+        {badge ? <div className="text-[8.5px] font-extrabold text-[#EF3C23] uppercase tracking-wide mb-0.5">{badge}</div> : null}
         <div className="text-[11.5px] font-bold text-[#1A1A2E] line-clamp-2">{p.title}</div>
-        <div className="text-[11px] font-bold text-[#FF5B00] mt-0.5">৳{Number(p.price || 0).toLocaleString()}</div>
+        <div className="text-[11px] font-bold text-[#EF3C23] mt-0.5">৳{Number(p.price || 0).toLocaleString()}</div>
         <TagChips tags={tags} />
       </div>
     </div>
@@ -347,7 +347,7 @@ export function GuideStudioPresentation({
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {model.awards.map((a) => (
                   <div key={a.id}>
-                    <div className="text-[9px] font-extrabold text-[#FF5B00] uppercase tracking-wide mb-1">{a.label || 'Award'}</div>
+                    <div className="text-[9px] font-extrabold text-[#EF3C23] uppercase tracking-wide mb-1">{a.label || 'Award'}</div>
                     <RefCard ref={a.ref} />
                   </div>
                 ))}
@@ -388,7 +388,7 @@ export function GuideStudioPresentation({
       case 'takeaways':
         return model.takeawayTitle || model.takeawayBody ? (
           <div className="bg-white rounded-[10px] border border-[#E8EDF2] p-6">
-            {model.takeawayTitle ? <p className="text-[13px] font-extrabold text-[#FF5B00] mb-1 m-0">{model.takeawayTitle}</p> : null}
+            {model.takeawayTitle ? <p className="text-[13px] font-extrabold text-[#EF3C23] mb-1 m-0">{model.takeawayTitle}</p> : null}
             <p className="text-[13px] font-medium text-[#4B5563] leading-relaxed m-0 whitespace-pre-wrap">{model.takeawayBody}</p>
           </div>
         ) : (
@@ -398,7 +398,7 @@ export function GuideStudioPresentation({
         return model.reviewMethodSteps.length ? (
           <div className="bg-white rounded-[10px] border border-[#E8EDF2] p-6">
             <div className="text-[12px] font-extrabold text-[#1A1A2E] mb-3">
-              HOW <span className="text-[#FF5B00]">THIS REVIEW</span> WAS MADE
+              HOW <span className="text-[#EF3C23]">THIS REVIEW</span> WAS MADE
             </div>
             <ul className="m-0 pl-4 space-y-1.5">
               {model.reviewMethodSteps.map((x, i) => (
@@ -419,7 +419,7 @@ export function GuideStudioPresentation({
               return (
                 <div key={o.id} className="flex items-center justify-between gap-2 rounded-lg border border-[#E8EDF2] bg-white px-3 py-2">
                   <span className="text-[12px] font-semibold text-[#1A1A2E] truncate">{p?.title || o.productId}</span>
-                  <span className="text-[11px] font-bold text-[#FF5B00] shrink-0">
+                  <span className="text-[11px] font-bold text-[#EF3C23] shrink-0">
                     {typeof o.promoPrice === 'number'
                       ? `৳${o.promoPrice.toLocaleString()}`
                       : `${o.discountValue}${o.discountType === 'percent' ? '% off' : ' off'}`}
@@ -499,9 +499,9 @@ export function GuideStudioPresentation({
   };
 
   return (
-    <div className="bg-[#F0F8FF] text-[#1A1A2E]">
+    <div className="bg-white text-[#1A1A2E]">
       {/* ── Media hero (core) ── */}
-      <section className="relative w-full choosify-dark-surface py-7 border-b border-white/5">
+      <section className="relative bg-white py-7 border-b border-[#E5E7EB]">
         <div className="max-w-[1180px] mx-auto px-5 sm:px-8">
           {editingHero ? (
             <GuideInlineEditFrame title="Media" studio={studio!}>
@@ -516,8 +516,8 @@ export function GuideStudioPresentation({
                 const videoSrc = model.format === 'live' ? model.liveEmbedUrl || model.videoUrl : model.videoUrl;
                 if (!primary && !videoSrc) {
                   return (
-                    <div className="aspect-[16/9] max-h-[400px] rounded-lg bg-black/20 flex items-center justify-center">
-                      <span className="text-[12px] text-white/50 font-semibold">
+                    <div className="aspect-[16/9] max-h-[400px] rounded-lg bg-[#F1F3F5] border border-dashed border-[#D9DEE7] flex items-center justify-center">
+                      <span className="text-[12px] text-app-text-secondary font-semibold">
                         {isStudio ? 'Add photos and/or a video' : 'No media'}
                       </span>
                     </div>
@@ -543,7 +543,7 @@ export function GuideStudioPresentation({
                     </div>
                     {videoSrc ? (
                       <div>
-                        <div className="text-[9px] font-extrabold text-white/50 uppercase tracking-wider mb-1">
+                        <div className="text-[9px] font-extrabold text-app-text-secondary uppercase tracking-wider mb-1">
                           {model.format === 'live' ? 'Live / video' : 'Video'}
                         </div>
                         <div className="aspect-video rounded-lg overflow-hidden bg-black">
@@ -569,7 +569,7 @@ export function GuideStudioPresentation({
 
       <div className="max-w-[1180px] mx-auto px-5 sm:px-8 py-6 space-y-8">
         {/* Metrics strip — preview only */}
-        <div className="bg-white rounded-xl border border-[#E8EDF2] border-t-[3px] border-t-[#2323FF] px-6 py-4 flex flex-wrap items-center justify-center gap-10 text-center">
+        <div className="bg-white rounded-xl border border-[#E8EDF2] border-t-[3px] border-t-[#EF3C23] px-6 py-4 flex flex-wrap items-center justify-center gap-10 text-center">
           {[
             { v: model.views && Number(model.views.replace(/\D/g, '')) > 0 ? Number(model.views.replace(/\D/g, '')).toLocaleString() : '—', l: 'Views' },
             { v: '—', l: <span className="inline-flex items-center gap-1"><Heart size={11} /> Love</span> },
@@ -591,7 +591,7 @@ export function GuideStudioPresentation({
         ) : (
           <div className="relative bg-white rounded-xl border border-[#E8EDF2] p-6 text-left">
             {isStudio ? <EditPill onClick={() => studio!.onEdit('identity')} /> : null}
-            <span className="inline-block bg-[#FF5B00] text-white text-[9px] font-extrabold px-2.5 py-1 rounded-[5px] mb-3 uppercase tracking-wide">
+            <span className="inline-block bg-[#EF3C23] text-white text-[9px] font-extrabold px-2.5 py-1 rounded-[5px] mb-3 uppercase tracking-wide">
               {formatLabel}
             </span>
             <h1 className="text-2xl font-extrabold text-[#1A1A2E] mb-2 leading-snug m-0">

@@ -27,9 +27,9 @@ export const CASHBOOK_CATEGORIES = [
 /** Payment channels — from the approved standalone Cashbook reference. */
 export const CASHBOOK_PAYMENT_MODES = ['Bank Transfer', 'bKash', 'Nagad', 'Cash (Manual)'] as const;
 
-export const CASHBOOK_ICON_CHOICES = ['📒', '🛒', '🛍️', '💼', '🧵', '🎥', '✨', '📦', '🏦', '🎨'];
+export const CASHBOOK_ICON_CHOICES = ['📒', '🛒', '💰', '💼', '🧵', '🎥', '✨', '📦', '🏷', '🎨'];
 export const CASHBOOK_COLOR_CHOICES = [
-  '#FF5B00',
+  '#EF3C23',
   '#EF3C23',
   '#18154C',
   '#16A34A',

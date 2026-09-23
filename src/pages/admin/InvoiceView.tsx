@@ -197,7 +197,7 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
         <p className="text-xs mb-6 max-w-sm">Please log in to your merchant credential profile to authorize viewing of this transaction invoice.</p>
         <button
           onClick={() => navigate('/login')}
-          className="px-4 py-2 bg-app-accent hover:bg-[#FF5B00] text-white rounded-md text-xs font-bold uppercase tracking-wider"
+          className="px-4 py-2 bg-app-accent hover:bg-[#EF3C23] text-white rounded-md text-xs font-bold uppercase tracking-wider"
         >
           Forward to Login
         </button>
@@ -1065,7 +1065,7 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
 
           <button
             onClick={downloadHtmlTemplate}
-            className="flex items-center gap-1.5 px-4 py-2 bg-app-accent hover:bg-[#FF5B00] text-white rounded-lg text-[10.5px] font-extrabold uppercase tracking-wider cursor-pointer shadow-lg shadow-app-accent/10 transition-all"
+            className="flex items-center gap-1.5 px-4 py-2 bg-app-accent hover:bg-[#EF3C23] text-white rounded-lg text-[10.5px] font-extrabold uppercase tracking-wider cursor-pointer shadow-lg shadow-app-accent/10 transition-all"
           >
             <Download className="w-3.5 h-3.5" />
             Export Static A4 HTML

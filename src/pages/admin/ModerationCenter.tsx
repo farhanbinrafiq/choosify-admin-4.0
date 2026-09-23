@@ -435,7 +435,7 @@ export default function ModerationCenter() {
         <button
           type="button"
           onClick={() => setShowFlagForm(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#111827] px-3.5 py-2 text-[12px] font-bold text-white"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[#EF3C23] px-3.5 py-2 text-[12px] font-bold text-white"
         >
           <Flag className="h-3.5 w-3.5" /> Flag Content
         </button>
@@ -448,7 +448,7 @@ export default function ModerationCenter() {
             type="button"
             onClick={() => setTab(t.key)}
             className={`rounded-full px-3.5 py-1.5 text-[11px] font-extrabold uppercase tracking-wide ${
-              tab === t.key ? 'bg-[#111827] text-white' : 'bg-[#F3F4F6] text-[#374151]'
+              tab === t.key ? 'bg-[#EF3C23] text-white' : 'bg-[#F3F4F6] text-[#374151]'
             }`}
           >
             {t.label}
@@ -1129,7 +1129,7 @@ function FlagContentForm({
         </div>
       </div>
       <div className="mt-3 flex items-center gap-2">
-        <button type="button" disabled={saving} onClick={submit} className="inline-flex items-center gap-1.5 rounded-lg bg-[#FF5B00] px-4 py-2 text-[12px] font-bold text-white disabled:opacity-50">
+        <button type="button" disabled={saving} onClick={submit} className="inline-flex items-center gap-1.5 rounded-lg bg-[#EF3C23] px-4 py-2 text-[12px] font-bold text-white disabled:opacity-50">
           {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Flag className="h-3.5 w-3.5" />} Flag
         </button>
         <button type="button" disabled={saving} onClick={onCancel} className="rounded-lg border border-[#E8EDF2] px-4 py-2 text-[12px] font-bold text-[#374151]">
@@ -1245,7 +1245,7 @@ function DecisionModal({
           disabled={saving}
           onClick={submit}
           className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-[12px] font-bold text-white disabled:opacity-50 ${
-            action === 'reject' ? 'bg-red-600' : action === 'revoke' ? 'bg-amber-600' : 'bg-[#FF5B00]'
+            action === 'reject' ? 'bg-red-600' : action === 'revoke' ? 'bg-amber-600' : 'bg-[#EF3C23]'
           }`}
         >
           {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
@@ -1363,7 +1363,7 @@ function AssignModal({
       )}
 
       <div className="flex items-center gap-2">
-        <button type="button" disabled={saving} onClick={submit} className="inline-flex items-center gap-1.5 rounded-lg bg-[#111827] px-4 py-2 text-[12px] font-bold text-white disabled:opacity-50">
+        <button type="button" disabled={saving} onClick={submit} className="inline-flex items-center gap-1.5 rounded-lg bg-[#EF3C23] px-4 py-2 text-[12px] font-bold text-white disabled:opacity-50">
           {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Confirm assignment
         </button>
         <button type="button" disabled={saving} onClick={onCancel} className="rounded-lg border border-[#E8EDF2] px-4 py-2 text-[12px] font-bold text-[#374151]">
@@ -1422,7 +1422,7 @@ function NoteModal({
         placeholder={required ? 'Required…' : 'Optional…'}
       />
       <div className="flex items-center gap-2">
-        <button type="button" disabled={saving} onClick={submit} className="inline-flex items-center gap-1.5 rounded-lg bg-[#111827] px-4 py-2 text-[12px] font-bold text-white disabled:opacity-50">
+        <button type="button" disabled={saving} onClick={submit} className="inline-flex items-center gap-1.5 rounded-lg bg-[#EF3C23] px-4 py-2 text-[12px] font-bold text-white disabled:opacity-50">
           {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />} {confirmLabel}
         </button>
         <button type="button" disabled={saving} onClick={onCancel} className="rounded-lg border border-[#E8EDF2] px-4 py-2 text-[12px] font-bold text-[#374151]">

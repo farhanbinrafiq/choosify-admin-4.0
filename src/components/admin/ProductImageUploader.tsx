@@ -181,7 +181,7 @@ export function ProductImageUploader({
         <p className="mt-1 text-[11px] font-medium text-slate-500">
           JPG or PNG · up to {remainingSlots} more image{remainingSlots === 1 ? '' : 's'}
         </p>
-        <span className="mt-4 inline-block rounded-xl bg-[#FF5B00] px-4 py-2 text-[10px] font-extrabold uppercase tracking-wider text-white">
+        <span className="mt-4 inline-block rounded-xl bg-[#EF3C23] px-4 py-2 text-[10px] font-extrabold uppercase tracking-wider text-white">
           Browse Files
         </span>
       </div>

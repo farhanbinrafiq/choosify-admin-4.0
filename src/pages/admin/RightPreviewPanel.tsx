@@ -50,9 +50,9 @@ export const RightPreviewPanel: React.FC<RightPreviewPanelProps> = ({
           e.stopPropagation();
           triggerLeftEditFocus(sectionKey);
         }}
-        className="absolute inset-0 bg-transparent group-hover:bg-[#FF5B00]/[0.03] border-2 border-transparent group-hover:border-dashed group-hover:border-[#FF5B00]/40 rounded-xl cursor-all-scroll transition-all flex items-start justify-end p-2 z-[60]"
+        className="absolute inset-0 bg-transparent group-hover:bg-[#EF3C23]/[0.03] border-2 border-transparent group-hover:border-dashed group-hover:border-[#EF3C23]/40 rounded-xl cursor-all-scroll transition-all flex items-start justify-end p-2 z-[60]"
       >
-        <span className="opacity-0 group-hover:opacity-100 bg-[#FF5B00] text-[#FFFFFF] text-[10px] font-black uppercase px-2 py-1 rounded shadow-lg flex items-center gap-1 shrink-0 select-none animate-fade-in">
+        <span className="opacity-0 group-hover:opacity-100 bg-[#EF3C23] text-[#FFFFFF] text-[10px] font-black uppercase px-2 py-1 rounded shadow-lg flex items-center gap-1 shrink-0 select-none animate-fade-in">
           ✎ Edit {sectionTitle}
         </span>
       </div>
@@ -71,7 +71,7 @@ export const RightPreviewPanel: React.FC<RightPreviewPanelProps> = ({
         <span className="text-[11px] font-bold text-[#6B7280]">🔒 {label} Hidden From Visitor View</span>
         <button 
           onClick={(e) => { e.stopPropagation(); triggerLeftEditFocus("visibility"); }}
-          className="text-[#FF5B00] font-black text-[10px] uppercase tracking-wider mt-1 hover:underline"
+          className="text-[#EF3C23] font-black text-[10px] uppercase tracking-wider mt-1 hover:underline"
         >
           Enable in Visibility Controls
         </button>
@@ -101,21 +101,21 @@ export const RightPreviewPanel: React.FC<RightPreviewPanelProps> = ({
           <div className="bg-[#F5F5F5] p-0.5 rounded-lg border border-gray-200 flex gap-0.5 shrink-0">
             <button 
               onClick={() => setDevicePreview("desktop")} 
-              className={`p-1.5 rounded-md transition-colors ${devicePreview === "desktop" ? "bg-white text-[#FF5B00] shadow-sm" : "text-gray-540 text-gray-500 hover:text-gray-900"}`}
+              className={`p-1.5 rounded-md transition-colors ${devicePreview === "desktop" ? "bg-white text-[#EF3C23] shadow-sm" : "text-gray-540 text-gray-500 hover:text-gray-900"}`}
               title="Desktop View"
             >
               <Laptop className="w-3.5 h-3.5" />
             </button>
             <button 
               onClick={() => setDevicePreview("tablet")} 
-              className={`p-1.5 rounded-md transition-colors ${devicePreview === "tablet" ? "bg-white text-[#FF5B00] shadow-sm" : "text-gray-540 text-gray-500 hover:text-gray-900"}`}
+              className={`p-1.5 rounded-md transition-colors ${devicePreview === "tablet" ? "bg-white text-[#EF3C23] shadow-sm" : "text-gray-540 text-gray-500 hover:text-gray-900"}`}
               title="Tablet View"
             >
               <TabletIcon className="w-3.5 h-3.5" />
             </button>
             <button 
               onClick={() => setDevicePreview("mobile")} 
-              className={`p-1.5 rounded-md transition-colors ${devicePreview === "mobile" ? "bg-white text-[#FF5B00] shadow-sm" : "text-gray-540 text-gray-500 hover:text-gray-900"}`}
+              className={`p-1.5 rounded-md transition-colors ${devicePreview === "mobile" ? "bg-white text-[#EF3C23] shadow-sm" : "text-gray-540 text-gray-500 hover:text-gray-900"}`}
               title="Mobile (390px)"
             >
               <Smartphone className="w-3.5 h-3.5" />
@@ -126,12 +126,12 @@ export const RightPreviewPanel: React.FC<RightPreviewPanelProps> = ({
 
           {/* Core toggle: preview vs visitor preview */}
           <div className="flex items-center gap-1.5 bg-[#FFF4ED] px-2.5 py-1 rounded-lg border border-orange-100">
-            <span className="text-[10px] font-black uppercase text-[#FF5B00] tracking-wide shrink-0">
+            <span className="text-[10px] font-black uppercase text-[#EF3C23] tracking-wide shrink-0">
               {visitorMode ? "👁 Visitor Mode" : "✎ Editor Mode"}
             </span>
             <button 
               onClick={() => setVisitorMode(!visitorMode)}
-              className="text-[#FF5B00] text-[10px] font-semibold underline hover:text-[#EA6C0A] shrink-0"
+              className="text-[#EF3C23] text-[10px] font-semibold underline hover:text-[#EA6C0A] shrink-0"
             >
               Switches
             </button>
@@ -186,7 +186,7 @@ export const RightPreviewPanel: React.FC<RightPreviewPanelProps> = ({
                 <button 
                   onClick={() => setLoved(!loved)} 
                   className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 ${
-                    loved ? "bg-[#FF5B00] text-[#FFFFFF]" : "bg-[#FFFFFF]/10 backdrop-blur-md text-[#FFFFFF] hover:bg-[#FFFFFF]/25"
+                    loved ? "bg-[#EF3C23] text-[#FFFFFF]" : "bg-[#FFFFFF]/10 backdrop-blur-md text-[#FFFFFF] hover:bg-[#FFFFFF]/25"
                   }`}
                 >
                   <Heart className={`w-3.5 h-3.5 ${loved ? "fill-white" : ""}`} /> {loved ? "Loved ✓" : "Love Brand"}
@@ -212,9 +212,9 @@ export const RightPreviewPanel: React.FC<RightPreviewPanelProps> = ({
                   {/* Mission Statement block */}
                   {model.missionStatement && (
                     <div className="mt-4 border-t border-gray-150 pt-3.5 flex gap-2">
-                      <span className="text-lg text-[#FF5B00]">🎯</span>
+                      <span className="text-lg text-[#EF3C23]">🎯</span>
                       <div className="text-xs text-gray-700 font-medium">
-                        <span className="font-extrabold uppercase tracking-wider block text-[9px] text-[#FF5B00]">Core Mission Statement</span>
+                        <span className="font-extrabold uppercase tracking-wider block text-[9px] text-[#EF3C23]">Core Mission Statement</span>
                         "{model.missionStatement}"
                       </div>
                     </div>
@@ -237,7 +237,7 @@ export const RightPreviewPanel: React.FC<RightPreviewPanelProps> = ({
                   
                   <div className="flex items-center gap-4 text-center md:text-left">
                     <div className="p-4 bg-[#FFFFFF]/5 rounded-full border border-[#FFFFFF]/10 shrink-0">
-                      🏅
+                      🛡
                     </div>
                     <div>
                       <h4 className="font-extrabold text-[15px] leading-tight text-[#FFFFFF]">Choosify Verified Scorecard</h4>
@@ -247,7 +247,7 @@ export const RightPreviewPanel: React.FC<RightPreviewPanelProps> = ({
 
                   <div className="flex gap-4 md:gap-6 shrink-0 w-full md:w-auto justify-around border-t md:border-t-0 border-[#2D2D4E] pt-3 md:pt-0">
                     <div className="text-center">
-                      <div className="text-xl font-black font-mono text-[#FF5B00]">{model.choosifyScore}</div>
+                      <div className="text-xl font-black font-mono text-[#EF3C23]">{model.choosifyScore}</div>
                       <div className="text-[8px] uppercase tracking-wider text-slate-400 font-extrabold font-mono">Trust Score</div>
                     </div>
                     <div className="text-center border-l border-[#2D2D4E] pl-4 md:pl-6">
@@ -269,15 +269,15 @@ export const RightPreviewPanel: React.FC<RightPreviewPanelProps> = ({
                 <div className="relative group space-y-4">
                   {renderOverlay("products", "Featured Items")}
                   <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-3.5 bg-[#FF5B00] rounded" />
+                    <span className="w-1.5 h-3.5 bg-[#EF3C23] rounded" />
                     <h3 className="text-sm font-black uppercase text-[#1a1a2e] tracking-wider">Featured Highlights</h3>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     {featuredProds.map((p) => (
                       <div key={p.id} className="border border-amber-100 bg-amber-50/[0.04] p-3 rounded-xl relative hover:shadow-md transition-all flex flex-col justify-between">
-                        <span className="absolute top-2 left-2 bg-[#FF5B00] text-[#FFFFFF] text-[8px] font-black uppercase px-2 py-0.5 rounded-full shadow z-10">
-                          Featured ⭐
+                        <span className="absolute top-2 left-2 bg-[#EF3C23] text-[#FFFFFF] text-[8px] font-black uppercase px-2 py-0.5 rounded-full shadow z-10">
+                          Featured ★
                         </span>
                         <div className="space-y-2">
                           <img src={p.thumbnail} alt="" className="w-full h-32 object-cover rounded-lg border border-gray-100" />
@@ -287,7 +287,7 @@ export const RightPreviewPanel: React.FC<RightPreviewPanelProps> = ({
                           </div>
                         </div>
                         <div className="flex items-center justify-between pt-2 border-t border-gray-100 mt-2">
-                          <span className="font-extrabold font-mono text-xs text-[#FF5B00]">৳{p.price.toLocaleString()}</span>
+                          <span className="font-extrabold font-mono text-xs text-[#EF3C23]">৳{p.price.toLocaleString()}</span>
                           <span className="text-[9px] text-[#6B7280] font-mono bg-white px-1.5 py-0.5 border border-gray-100 rounded">Stock: {p.stock}</span>
                         </div>
                       </div>
@@ -303,7 +303,7 @@ export const RightPreviewPanel: React.FC<RightPreviewPanelProps> = ({
                 <div className="relative group space-y-4">
                   {renderOverlay("products", "Storefront Catalog")}
                   <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-3.5 bg-[#FF5B00] rounded" />
+                    <span className="w-1.5 h-3.5 bg-[#EF3C23] rounded" />
                     <h3 className="text-sm font-black uppercase text-[#1a1a2e] tracking-wider">Browse Product Catalog</h3>
                   </div>
 
@@ -331,7 +331,7 @@ export const RightPreviewPanel: React.FC<RightPreviewPanelProps> = ({
                 <div className="relative group space-y-3">
                   {renderOverlay("deals", "Active Campaign Deals")}
                   <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-3.5 bg-[#FF5B00] rounded" />
+                    <span className="w-1.5 h-3.5 bg-[#EF3C23] rounded" />
                     <h3 className="text-sm font-black uppercase text-[#1a1a2e] tracking-wider">Current Campaigns & Promotions</h3>
                   </div>
 
@@ -339,13 +339,13 @@ export const RightPreviewPanel: React.FC<RightPreviewPanelProps> = ({
                     {model.deals.filter(d => d.status === "Active").map((dl) => (
                       <div key={dl.id} className="bg-gradient-to-r from-orange-50 to-[#FFF4ED] p-4 rounded-xl border border-orange-200 flex flex-col sm:flex-row justify-between items-center gap-3">
                         <div className="flex items-center gap-3">
-                          <span className="text-3xl shrink-0">🎁</span>
+                          <span className="text-3xl shrink-0">🏷</span>
                           <div>
                             <span className="font-extrabold text-[13px] text-orange-950 block leading-tight">{dl.title}</span>
                             <span className="text-[10px] text-[#6B7280] font-mono block mt-0.5">Active discount ends {dl.endDate}</span>
                           </div>
                         </div>
-                        <div className="bg-[#FF5B00] text-[#FFFFFF] font-mono font-black py-1.5 px-4 rounded-lg text-sm shrink-0">
+                        <div className="bg-[#EF3C23] text-[#FFFFFF] font-mono font-black py-1.5 px-4 rounded-lg text-sm shrink-0">
                           CLAIM {dl.discountValue}{dl.discountType === "Percentage" ? "%" : " BDT"} OFF
                         </div>
                       </div>
@@ -361,13 +361,13 @@ export const RightPreviewPanel: React.FC<RightPreviewPanelProps> = ({
                 <div className="relative group space-y-3">
                   {renderOverlay("deals", "Promo Vouchers")}
                   <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-3.5 bg-[#FF5B00] rounded" />
+                    <span className="w-1.5 h-3.5 bg-[#EF3C23] rounded" />
                     <h3 className="text-sm font-black uppercase text-[#1a1a2e] tracking-wider">Verified Vouchers & Coupon Codes</h3>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {model.promoCodes.filter(pr => pr.enabled).map((pr) => (
-                      <div key={pr.id} className="border-2 border-dashed border-[#FF5B00]/30 bg-orange-50/10 rounded-xl p-3 flex justify-between items-center gap-2 relative">
+                      <div key={pr.id} className="border-2 border-dashed border-[#EF3C23]/30 bg-orange-50/10 rounded-xl p-3 flex justify-between items-center gap-2 relative">
                         <div>
                           <span className="text-[11px] font-black text-[#1a1a2e] uppercase block">{pr.code}</span>
                           <span className="text-[10px] text-[#6B7280]">
@@ -379,7 +379,7 @@ export const RightPreviewPanel: React.FC<RightPreviewPanelProps> = ({
                           className={`px-3 py-1 text-[10px] font-bold rounded-lg flex items-center gap-1 transition-colors ${
                             copiedCodeId === pr.id 
                               ? "bg-green-600 text-white" 
-                              : "bg-[#EA6C0A] text-[#FFFFFF] hover:bg-[#FF5B00]"
+                              : "bg-[#EA6C0A] text-[#FFFFFF] hover:bg-[#EF3C23]"
                           }`}
                         >
                           {copiedCodeId === pr.id ? <Check className="w-3 h-3" /> : null}
@@ -398,7 +398,7 @@ export const RightPreviewPanel: React.FC<RightPreviewPanelProps> = ({
                 <div className="relative group space-y-3">
                   {renderOverlay("creator", "Creator Content")}
                   <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-3.5 bg-[#FF5B00] rounded" />
+                    <span className="w-1.5 h-3.5 bg-[#EF3C23] rounded" />
                     <h3 className="text-sm font-black uppercase text-[#1a1a2e] tracking-wider">Creator Reviews & Hand-on Clips</h3>
                   </div>
 
@@ -409,7 +409,7 @@ export const RightPreviewPanel: React.FC<RightPreviewPanelProps> = ({
                         <div className="relative h-28 bg-[#101117] shrink-0">
                           <img src={cr.thumbnailUrl} alt="" className="w-full h-full object-cover opacity-75" />
                           <div className="absolute inset-0 flex items-center justify-center">
-                            <span className="w-9 h-9 bg-[#FF5B00] text-white rounded-full flex items-center justify-center text-xs shadow-lg transition-transform hover:scale-110 cursor-pointer">
+                            <span className="w-9 h-9 bg-[#EF3C23] text-white rounded-full flex items-center justify-center text-xs shadow-lg transition-transform hover:scale-110 cursor-pointer">
                               <Play className="w-4 h-4 fill-white ml-0.5" />
                             </span>
                           </div>
@@ -435,7 +435,7 @@ export const RightPreviewPanel: React.FC<RightPreviewPanelProps> = ({
                 <div className="relative group space-y-3">
                   {renderOverlay("reviews", "Buyer Feedback Logs")}
                   <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-3.5 bg-[#FF5B00] rounded" />
+                    <span className="w-1.5 h-3.5 bg-[#EF3C23] rounded" />
                     <h3 className="text-sm font-black uppercase text-[#1a1a2e] tracking-wider">Recent Buyer Experiences</h3>
                   </div>
 
@@ -468,32 +468,32 @@ export const RightPreviewPanel: React.FC<RightPreviewPanelProps> = ({
                 <div className="relative group bg-gray-50 rounded-xl p-4 border border-gray-200 text-[11px] leading-relaxed space-y-3.5">
                   {renderOverlay("info", "Operations Specs")}
                   <div className="flex items-center gap-2 border-b border-gray-200 pb-2">
-                    <span className="text-lg">🏢</span>
+                    <span className="text-lg">📍</span>
                     <div className="text-[10px] font-black uppercase tracking-wider text-[#1a1a2e]">Operating Address & Customer Desk</div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-slate-700 text-xs">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <MapPin className="w-3.5 h-3.5 text-[#FF5B00] shrink-0" />
+                        <MapPin className="w-3.5 h-3.5 text-[#EF3C23] shrink-0" />
                         <span className="truncate">{model.address}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Mail className="w-3.5 h-3.5 text-[#FF5B00] shrink-0" />
+                        <Mail className="w-3.5 h-3.5 text-[#EF3C23] shrink-0" />
                         <span className="font-mono">{model.contactEmail}</span>
                       </div>
                       <div 
                         onClick={() => triggerPhone({ id: model.brandName || 'brand', name: model.brandName || 'Brand Support', avatarUrl: model.logoUrl || model.logo || '', phone: model.phone, role: 'Brand Support' })}
-                        className="flex items-center gap-2 cursor-pointer hover:text-[#FF5B00] transition-colors"
+                        className="flex items-center gap-2 cursor-pointer hover:text-[#EF3C23] transition-colors"
                         title="Click to copy & call"
                       >
-                        <Phone className="w-3.5 h-3.5 text-[#FF5B00] shrink-0" />
+                        <Phone className="w-3.5 h-3.5 text-[#EF3C23] shrink-0" />
                         <span>{model.phone}</span>
                       </div>
                     </div>
                     <div className="space-y-1 border-t sm:border-t-0 sm:border-l border-gray-200 pt-2.5 sm:pt-0 sm:pl-4">
                       <div className="flex items-center gap-2">
-                        <Clock className="w-3.5 h-3.5 text-[#FF5B00] shrink-0" />
+                        <Clock className="w-3.5 h-3.5 text-[#EF3C23] shrink-0" />
                         <span>Hours: {model.customerServiceHours}</span>
                       </div>
                       <div className="text-[10px] text-gray-540 text-gray-500">

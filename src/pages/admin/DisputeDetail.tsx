@@ -202,7 +202,7 @@ export default function DisputeDetail() {
               type="button"
               disabled={busy || !evidenceDraft.trim()}
               onClick={() => withBusy(async () => { await disputesApi.addEvidence(dispute.id, evidenceDraft.trim()); setEvidenceDraft(''); })}
-              className="rounded-lg bg-[#111827] px-4 py-2 text-[12px] font-bold text-white disabled:opacity-50"
+              className="rounded-lg bg-[#EF3C23] px-4 py-2 text-[12px] font-bold text-white disabled:opacity-50"
             >
               Add
             </button>
@@ -245,7 +245,7 @@ export default function DisputeDetail() {
                 type="button"
                 disabled={busy || !noteDraft.trim()}
                 onClick={() => withBusy(async () => { await disputesApi.addNote(dispute.id, noteDraft.trim()); setNoteDraft(''); })}
-                className="rounded-lg bg-[#111827] px-4 py-2 text-[12px] font-bold text-white disabled:opacity-50"
+                className="rounded-lg bg-[#EF3C23] px-4 py-2 text-[12px] font-bold text-white disabled:opacity-50"
               >
                 Add note
               </button>
@@ -290,7 +290,7 @@ export default function DisputeDetail() {
                     setDecisionResultNote(result.note ?? null);
                   })
                 }
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#FF5B00] px-4 py-2 text-[12px] font-bold text-white disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#EF3C23] px-4 py-2 text-[12px] font-bold text-white disabled:opacity-50"
               >
                 {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} Record decision
               </button>

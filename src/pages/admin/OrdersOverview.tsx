@@ -91,9 +91,9 @@ export default function OrdersOverview() {
 
   // Live intelligence ticker logs state
   const [liveLogEntries, setLiveLogEntries] = useState([
-    { id: 'l1', time: '09:35 AM', type: 'Order Created', icon: '🛍️', text: 'WhatsApp Manual Order recorded by Admin farhanbinrafiq' },
+    { id: 'l1', time: '09:35 AM', type: 'Order Created', icon: '🛒', text: 'WhatsApp Manual Order recorded by Admin farhanbinrafiq' },
     { id: 'l2', time: '09:12 AM', type: 'Status Change', icon: '⚡', text: 'Order #OD-9051 updated to "In Transit" via Pathao' },
-    { id: 'l3', time: '08:44 AM', type: 'Invoice Sent', icon: '📝', text: 'Digital PDF Invoice successfully emailed to customer "Sumon Khan"' },
+    { id: 'l3', time: '08:44 AM', type: 'Invoice Sent', icon: '🧾', text: 'Digital PDF Invoice successfully emailed to customer "Sumon Khan"' },
     { id: 'l4', time: '07:30 AM', type: 'Order Delivered', icon: '✓', text: 'Direct Marketplace checkout #MRK-8812 marked Delivered' },
     { id: 'l5', time: '07:12 AM', type: 'Dispute Raised', icon: '🚩', text: 'Refund request opened for Order #MRK-8012 - Item Damaged' },
     { id: 'l6', time: '06:50 AM', type: 'User Flagged', icon: '🚫', text: 'Auto-Risk Monitor flagged high cancellation rate for farid.pete@gmail.com' },
@@ -697,7 +697,7 @@ export default function OrdersOverview() {
               <div className="text-lg font-black">{stage.count}</div>
               <div className="text-[8px] opacity-70">Avg: {stage.t}</div>
               <div className="text-[8px] font-mono opacity-80 border-t border-app-border pt-1 uppercase">
-                {stage.alert ? '⚠️ STUCK' : stage.status}
+                {stage.alert ? '⚠ STUCK' : stage.status}
               </div>
             </div>
           ))}
@@ -782,8 +782,8 @@ export default function OrdersOverview() {
               <AreaChart data={getChartDataset()} margin={{ top: 15, right: 10, left: -10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorGross" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#FF5B00" stopOpacity={0.25}/>
-                    <stop offset="95%" stopColor="#FF5B00" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#EF3C23" stopOpacity={0.25}/>
+                    <stop offset="95%" stopColor="#EF3C23" stopOpacity={0}/>
                   </linearGradient>
                   <linearGradient id="colorNet" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#10B981" stopOpacity={0.25}/>
@@ -794,7 +794,7 @@ export default function OrdersOverview() {
                 <YAxis stroke="#475569" fontSize={10} tickLine={false} />
                 <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px', fontSize: '11px', color: '#fff' }} />
                 <Legend wrapperStyle={{ fontSize: '10px' }} />
-                <Area type="monotone" name="Gross Marketplace Revenue" dataKey="gross" stroke="#FF5B00" strokeWidth={2.5} fillOpacity={1} fill="url(#colorGross)" />
+                <Area type="monotone" name="Gross Marketplace Revenue" dataKey="gross" stroke="#EF3C23" strokeWidth={2.5} fillOpacity={1} fill="url(#colorGross)" />
                 <Area type="monotone" name="Platform Commission Net" dataKey="commission" stroke="#10B981" strokeWidth={2} fillOpacity={1} fill="url(#colorNet)" />
               </AreaChart>
             ) : activeRevenueChart === 'Line' ? (
@@ -803,7 +803,7 @@ export default function OrdersOverview() {
                 <YAxis stroke="#475569" fontSize={10} tickLine={false} />
                 <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px', fontSize: '11px', color: '#fff' }} />
                 <Legend wrapperStyle={{ fontSize: '10px' }} />
-                <Line type="monotone" name="Gross Revenue" dataKey="gross" stroke="#FF5B00" strokeWidth={3} activeDot={{ r: 6 }} />
+                <Line type="monotone" name="Gross Revenue" dataKey="gross" stroke="#EF3C23" strokeWidth={3} activeDot={{ r: 6 }} />
                 <Line type="monotone" name="Seller Settlement values" dataKey="net" stroke="#3B82F6" strokeWidth={2} />
                 <Line type="monotone" name="Platform Earnings" dataKey="commission" stroke="#10B981" strokeWidth={2} />
               </LineChart>
@@ -813,9 +813,9 @@ export default function OrdersOverview() {
                 <YAxis stroke="#475569" fontSize={10} tickLine={false} />
                 <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px', fontSize: '11px', color: '#fff' }} />
                 <Legend wrapperStyle={{ fontSize: '10px' }} />
-                <Bar name="Gross Revenue Flow" dataKey="gross" fill="#FF5B00" radius={[4, 4, 0, 0]}>
+                <Bar name="Gross Revenue Flow" dataKey="gross" fill="#EF3C23" radius={[4, 4, 0, 0]}>
                   {getChartDataset().map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#EF3C23' : '#FF5B00'} />
+                    <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#EF3C23' : '#EF3C23'} />
                   ))}
                 </Bar>
                 <Bar name="Platform Fee Split" dataKey="commission" fill="#10B981" radius={[4, 4, 0, 0]} />
@@ -840,7 +840,7 @@ export default function OrdersOverview() {
 
           <button
             onClick={() => handleTriggerExport('Financial Payout Outward Ledger')}
-            className="px-4 py-2 bg-app-accent hover:bg-[#FF5B00] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-colors shrink-0"
+            className="px-4 py-2 bg-app-accent hover:bg-[#EF3C23] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-colors shrink-0"
           >
             <FileSpreadsheet className="w-4 h-4" /> Export Ledger to Finance
           </button>
@@ -942,7 +942,7 @@ export default function OrdersOverview() {
                       to={`/dashboard/content-studio/brands`}
                       className="text-xs text-[#EF3C23] font-black hover:underline inline-flex items-center gap-1"
                     >
-                      🏷️ {s.brand} <ArrowUpRight className="w-3 h-3" />
+                      🏷 {s.brand} <ArrowUpRight className="w-3 h-3" />
                     </Link>
                   </td>
                   <td className="p-4 text-center font-mono font-bold text-app-text-primary">{s.orders}</td>
@@ -984,7 +984,7 @@ export default function OrdersOverview() {
                   onClick={() => setProductFilterTab(tabKey)}
                   className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all${productFilterTab === tabKey ? 'bg-app-accent text-white' : 'text-slate-400 hover:text-white'}`}
                 >
-                  {tabKey === 'Revenue' ? '🏆 Top Revenue' : tabKey === 'Units' ? '📦 Top Units' : tabKey === 'Returns' ? '↩️ Returned' : '🚨 Complained'}
+                  {tabKey === 'Revenue' ? '💰 Top Revenue' : tabKey === 'Units' ? '📦 Top Units' : tabKey === 'Returns' ? '↩ Returned' : '🚨 Complained'}
                 </button>
               ))}
             </div>
@@ -1013,7 +1013,7 @@ export default function OrdersOverview() {
                       <div className="text-[9px] text-slate-500 font-mono">SKU-{prod.id.slice(0, 10).toUpperCase()}</div>
                     </td>
                     <td className="p-3 text-center font-bold text-app-text-secondary">
-                      🏷️ {prod.brand}
+                      🏷 {prod.brand}
                     </td>
                     <td className="p-3 text-center font-bold text-app-text-primary pr-4">{prod.unitsSold} units</td>
                     <td className="p-3 text-right font-semibold text-emerald-400">৳ {prod.commission.toLocaleString()}</td>

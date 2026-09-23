@@ -752,12 +752,12 @@ export default function SellerConversations() {
         <div
           className={`w-fit max-w-[75%] rounded-2xl px-3.5 py-2 text-xs font-bold leading-relaxed ${
             mine
-              ? 'bg-orange-600 bg-gradient-to-br from-[#EF3C23] to-[#FF5B00] text-white rounded-br-sm'
-              : 'bg-navy bg-gradient-to-br from-[#18154C] to-[#3D1D6B] text-white rounded-bl-sm'
+              ? 'bg-[#EF3C23] text-white rounded-br-sm'
+              : 'bg-[#F1F3F5] text-app-text-primary rounded-bl-sm'
           }`}
         >
-          <p className="whitespace-pre-wrap break-words !text-[#FFFFFF]">{displayBody(m.content?.body || '')}</p>
-          <p className="text-[9px] mt-1 text-white/70">{when}</p>
+          <p className={`whitespace-pre-wrap break-words ${mine ? '!text-[#FFFFFF]' : ''}`}>{displayBody(m.content?.body || '')}</p>
+          <p className={`text-[9px] mt-1 ${mine ? 'text-white/70' : 'text-app-text-secondary'}`}>{when}</p>
         </div>
       </div>
     );
@@ -799,7 +799,7 @@ export default function SellerConversations() {
               type="button"
               onClick={() => void openSupport()}
               disabled={supportBusy}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#FF5B00] text-white text-xs font-bold hover:opacity-90 transition-opacity disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#EF3C23] text-white text-xs font-bold hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               <MessageCircleMore className="w-3.5 h-3.5" /> Contact Choosify Support
             </button>
@@ -869,7 +869,7 @@ export default function SellerConversations() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-bold text-sm text-app-text-primary truncate flex items-center gap-1.5">
-                      <span className="inline-flex items-center text-[8.5px] font-black uppercase tracking-wide px-1 py-0.5 rounded border bg-[#FF5B00]/10 text-[#FF5B00] border-[#FF5B00]/20">
+                      <span className="inline-flex items-center text-[8.5px] font-black uppercase tracking-wide px-1 py-0.5 rounded border bg-[#EF3C23]/10 text-[#EF3C23] border-[#EF3C23]/20">
                         Choosify Support
                       </span>
                       Choosify team
@@ -927,7 +927,7 @@ export default function SellerConversations() {
               {supportSelected ? (
                 <>
                   <div className="p-3 border-b border-app-border flex items-center gap-2">
-                    <span className="inline-flex items-center text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded border bg-[#FF5B00]/10 text-[#FF5B00] border-[#FF5B00]/20">
+                    <span className="inline-flex items-center text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded border bg-[#EF3C23]/10 text-[#EF3C23] border-[#EF3C23]/20">
                       Choosify Support
                     </span>
                     <span className="font-bold text-sm text-app-text-primary">Choosify team</span>
@@ -960,17 +960,17 @@ export default function SellerConversations() {
                             <div
                               className={`w-fit max-w-[75%] rounded-2xl px-3.5 py-2 text-xs font-bold leading-relaxed ${
                                 m.senderId === profile?.id
-                                  ? 'bg-orange-600 bg-gradient-to-br from-[#EF3C23] to-[#FF5B00] text-white rounded-br-sm'
-                                  : 'bg-navy bg-gradient-to-br from-[#18154C] to-[#3D1D6B] text-white rounded-bl-sm'
+                                  ? 'bg-[#EF3C23] text-white rounded-br-sm'
+                                  : 'bg-[#F1F3F5] text-app-text-primary rounded-bl-sm'
                               }`}
                             >
                               {m.senderRole === 'admin' ? (
-                                <p className="text-[9px] font-bold uppercase tracking-wide text-white/70 m-0 mb-0.5">
+                                <p className={`text-[9px] font-bold uppercase tracking-wide m-0 mb-0.5 ${m.senderId === profile?.id ? 'text-white/70' : 'text-app-text-secondary'}`}>
                                   Choosify Support
                                 </p>
                               ) : null}
-                              <p className="whitespace-pre-wrap break-words m-0 !text-[#FFFFFF]">{m.body}</p>
-                              <p className="text-[9px] mt-1 text-white/70">
+                              <p className={`whitespace-pre-wrap break-words m-0 ${m.senderId === profile?.id ? '!text-[#FFFFFF]' : ''}`}>{m.body}</p>
+                              <p className={`text-[9px] mt-1 ${m.senderId === profile?.id ? 'text-white/70' : 'text-app-text-secondary'}`}>
                                 {formatElapsed(m.createdAt)}
                               </p>
                             </div>

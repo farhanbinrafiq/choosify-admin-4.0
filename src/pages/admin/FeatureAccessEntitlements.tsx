@@ -111,7 +111,7 @@ const ROLE_TABS: { key: RoleScope; label: string }[] = [
  */
 const FEATURE_EMOJI: Partial<Record<PartnerFeatureKey, string>> = {
   products: '📦',
-  brandStudio: '🏬',
+  brandStudio: '🏪',
   reviews: '⭐',
   cashbooks: '📒',
   myEarnings: '💰',
@@ -123,8 +123,8 @@ const FEATURE_EMOJI: Partial<Record<PartnerFeatureKey, string>> = {
   metaMessaging: '💬',
   adsDeals: '📣',
   guideManagement: '🎬',
-  promoCodes: '🎟️',
-  returnsRefunds: '↩️',
+  promoCodes: '🎟',
+  returnsRefunds: '↩',
   logistics: '🚚',
   customerInsights: '🧭',
   notifications: '🔔',
@@ -187,7 +187,7 @@ function DesignToggle({
         width: 38,
         height: 22,
         borderRadius: 11,
-        background: checked ? '#FF5B00' : '#D1D5DB',
+        background: checked ? '#EF3C23' : '#D1D5DB',
         position: 'relative',
         cursor: disabled ? 'not-allowed' : 'pointer',
         flexShrink: 0,
@@ -242,7 +242,7 @@ function FeatureRow({
   planRequired: boolean;
   onToggle: () => void;
 }) {
-  const emoji = FEATURE_EMOJI[feature.key] || '⚙️';
+  const emoji = FEATURE_EMOJI[feature.key] || '⚙';
 
   return (
     <div
@@ -519,7 +519,7 @@ function RoleAnalyticsSummary({ summary }: { summary: RoleSummary }) {
                 }}
               >
                 <span aria-hidden style={{ fontSize: 13, lineHeight: 1 }}>
-                  {FEATURE_EMOJI[f.key] || '⚙️'}
+                  {FEATURE_EMOJI[f.key] || '⚙'}
                 </span>
                 {f.label}
               </span>
@@ -810,7 +810,7 @@ export default function FeatureAccessEntitlementsPage() {
                     minWidth: 20,
                     padding: '2px 7px',
                     borderRadius: 999,
-                    background: '#FF5B00',
+                    background: '#EF3C23',
                     color: '#fff',
                     fontSize: 11,
                     fontWeight: 800,
@@ -898,7 +898,7 @@ export default function FeatureAccessEntitlementsPage() {
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 800 }}>
                         {app.businessOrChannelName}{' '}
-                        <span style={{ fontSize: 11, fontWeight: 800, color: '#FF5B00' }}>{app.applicantType.toUpperCase()}</span>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: '#EF3C23' }}>{app.applicantType.toUpperCase()}</span>
                       </div>
                       <div style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 600, marginTop: 2 }}>
                         {app.displayName} · {app.email} · {app.category} · {app.city}
@@ -1015,7 +1015,7 @@ export default function FeatureAccessEntitlementsPage() {
                   whiteSpace: 'nowrap',
                   cursor: 'pointer',
                   border: 'none',
-                  background: active ? '#FF5B00' : 'transparent',
+                  background: active ? '#EF3C23' : 'transparent',
                   color: active ? '#fff' : '#374151',
                 }}
               >

@@ -161,7 +161,7 @@ function PlanListView({ onSelectPlan, onCreated }: { onSelectPlan: (id: string) 
         </div>
         <button
           onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#18154C] text-white text-[12px] font-extrabold px-3.5 py-2 hover:opacity-90"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[#EF3C23] text-white text-[12px] font-extrabold px-3.5 py-2 hover:opacity-90"
         >
           <Plus className="w-3.5 h-3.5" /> Create Plan
         </button>
@@ -179,7 +179,7 @@ function PlanListView({ onSelectPlan, onCreated }: { onSelectPlan: (id: string) 
           action={
             <button
               onClick={() => setShowCreate(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#18154C] text-white text-[12px] font-extrabold px-4 py-2 hover:opacity-90"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#EF3C23] text-white text-[12px] font-extrabold px-4 py-2 hover:opacity-90"
             >
               <Plus className="w-3.5 h-3.5" /> Create Plan
             </button>
@@ -193,7 +193,7 @@ function PlanListView({ onSelectPlan, onCreated }: { onSelectPlan: (id: string) 
             <button
               key={p.id}
               onClick={() => onSelectPlan(p.id)}
-              className="text-left bg-app-card border border-app-border rounded-xl p-4 hover:border-[#18154C] transition-colors"
+              className="text-left bg-app-card border border-app-border rounded-xl p-4 hover:border-[#EF3C23] transition-colors"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="text-[13.5px] font-extrabold text-app-text-primary truncate">{p.name}</div>
@@ -284,7 +284,7 @@ function CreatePlanModal({ onClose, onCreated }: { onClose: () => void; onCreate
               <button
                 key={r}
                 onClick={() => setRole(r)}
-                className={`flex-1 rounded-lg border px-3 py-2 text-[12px] font-extrabold ${role === r ? 'bg-[#18154C] text-white border-[#18154C]' : 'border-app-border text-app-text-primary'}`}
+                className={`flex-1 rounded-lg border px-3 py-2 text-[12px] font-extrabold ${role === r ? 'bg-[#EF3C23] text-white border-[#EF3C23]' : 'border-app-border text-app-text-primary'}`}
               >
                 {r === 'seller' ? 'Seller' : 'Creator'}
               </button>
@@ -303,7 +303,7 @@ function CreatePlanModal({ onClose, onCreated }: { onClose: () => void; onCreate
         <p className="text-[10.5px] text-app-text-secondary font-semibold">This creates catalog identity only — no price is required yet. You'll configure a Draft Version with real billing offers next.</p>
         <div className="flex justify-end gap-2 pt-2">
           <button onClick={onClose} className="rounded-lg border border-app-border px-4 py-2 text-[12px] font-extrabold text-app-text-primary">Cancel</button>
-          <button onClick={submit} disabled={saving} className="rounded-lg bg-[#18154C] text-white px-4 py-2 text-[12px] font-extrabold disabled:opacity-60">
+          <button onClick={submit} disabled={saving} className="rounded-lg bg-[#EF3C23] text-white px-4 py-2 text-[12px] font-extrabold disabled:opacity-60">
             {saving ? 'Creating…' : 'Create Plan'}
           </button>
         </div>
@@ -385,7 +385,7 @@ function PlanEditorView({ planId, onBack }: { planId: string; onBack: () => void
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`inline-flex items-center gap-1.5 px-3.5 py-2.5 text-[12px] font-extrabold border-b-2 whitespace-nowrap ${
-              tab === t.key ? 'border-[#18154C] text-app-text-primary' : 'border-transparent text-app-text-secondary hover:text-app-text-primary'
+              tab === t.key ? 'border-[#EF3C23] text-app-text-primary' : 'border-transparent text-app-text-secondary hover:text-app-text-primary'
             }`}
           >
             {t.icon} {t.label}
@@ -531,7 +531,7 @@ function IdentitySection({ plan, onChanged }: { plan: PlanDetail['plan']; onChan
           </div>
           <div className="flex justify-end gap-2 pt-1">
             <button onClick={() => setEditing(false)} className="rounded-lg border border-app-border px-4 py-2 text-[12px] font-extrabold text-app-text-primary">Cancel</button>
-            <button onClick={save} disabled={saving} className="rounded-lg bg-[#18154C] text-white px-4 py-2 text-[12px] font-extrabold disabled:opacity-60">
+            <button onClick={save} disabled={saving} className="rounded-lg bg-[#EF3C23] text-white px-4 py-2 text-[12px] font-extrabold disabled:opacity-60">
               {saving ? 'Saving…' : 'Save'}
             </button>
           </div>
@@ -697,13 +697,13 @@ function DraftVersionTab({ plan, draft, onChanged }: { plan: PlanDetail['plan'];
           description="Create a new Draft Version to configure pricing, features, and limits. It stays fully editable until you explicitly publish it."
           action={
             !creating ? (
-              <button onClick={() => setCreating(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#18154C] text-white text-[12px] font-extrabold px-4 py-2">
+              <button onClick={() => setCreating(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#EF3C23] text-white text-[12px] font-extrabold px-4 py-2">
                 <Plus className="w-3.5 h-3.5" /> Create Draft Version
               </button>
             ) : (
               <div className="flex items-center gap-2">
                 <input value={nameSnapshot} onChange={(e) => setNameSnapshot(e.target.value)} className="rounded-lg border border-app-border px-3 py-2 text-[12.5px] font-semibold bg-transparent" />
-                <button onClick={createDraft} className="rounded-lg bg-[#18154C] text-white px-3.5 py-2 text-[12px] font-extrabold">Create</button>
+                <button onClick={createDraft} className="rounded-lg bg-[#EF3C23] text-white px-3.5 py-2 text-[12px] font-extrabold">Create</button>
                 <button onClick={() => setCreating(false)} className="rounded-lg border border-app-border px-3.5 py-2 text-[12px] font-extrabold">Cancel</button>
               </div>
             )
@@ -786,7 +786,7 @@ function DraftMetadataSection({ plan, draft, onChanged, setError, setSuccess }: 
           <LabeledInput label="Trial Days (0 = none)" type="number" value={String(trialDays)} onChange={(v) => setTrialDays(Math.max(0, Number(v) || 0))} />
           <div className="flex justify-end gap-2">
             <button onClick={() => setEditing(false)} className="rounded-lg border border-app-border px-4 py-2 text-[12px] font-extrabold">Cancel</button>
-            <button onClick={save} disabled={saving} className="rounded-lg bg-[#18154C] text-white px-4 py-2 text-[12px] font-extrabold disabled:opacity-60">{saving ? 'Saving…' : 'Save'}</button>
+            <button onClick={save} disabled={saving} className="rounded-lg bg-[#EF3C23] text-white px-4 py-2 text-[12px] font-extrabold disabled:opacity-60">{saving ? 'Saving…' : 'Save'}</button>
           </div>
         </>
       )}
@@ -890,7 +890,7 @@ function DraftOffersSection({ plan, draft, onChanged, setError, setSuccess }: Dr
           </div>
           <div className="flex justify-end gap-2 pt-1">
             <button onClick={() => setEditing(false)} className="rounded-lg border border-app-border px-4 py-2 text-[12px] font-extrabold">Cancel</button>
-            <button onClick={save} disabled={saving} className="rounded-lg bg-[#18154C] text-white px-4 py-2 text-[12px] font-extrabold disabled:opacity-60">{saving ? 'Saving…' : 'Save'}</button>
+            <button onClick={save} disabled={saving} className="rounded-lg bg-[#EF3C23] text-white px-4 py-2 text-[12px] font-extrabold disabled:opacity-60">{saving ? 'Saving…' : 'Save'}</button>
           </div>
         </>
       )}
@@ -964,7 +964,7 @@ function DraftFeaturesSection({ plan, draft, onChanged, setError, setSuccess }: 
           </div>
           <div className="flex justify-end gap-2 pt-1">
             <button onClick={() => setEditing(false)} className="rounded-lg border border-app-border px-4 py-2 text-[12px] font-extrabold">Cancel</button>
-            <button onClick={save} disabled={saving} className="rounded-lg bg-[#18154C] text-white px-4 py-2 text-[12px] font-extrabold disabled:opacity-60">{saving ? 'Saving…' : 'Save'}</button>
+            <button onClick={save} disabled={saving} className="rounded-lg bg-[#EF3C23] text-white px-4 py-2 text-[12px] font-extrabold disabled:opacity-60">{saving ? 'Saving…' : 'Save'}</button>
           </div>
         </>
       )}
@@ -1062,7 +1062,7 @@ function DraftLimitsSection({ plan, draft, onChanged, setError, setSuccess }: Dr
           </div>
           <div className="flex justify-end gap-2 pt-1">
             <button onClick={() => setEditing(false)} className="rounded-lg border border-app-border px-4 py-2 text-[12px] font-extrabold">Cancel</button>
-            <button onClick={save} disabled={saving} className="rounded-lg bg-[#18154C] text-white px-4 py-2 text-[12px] font-extrabold disabled:opacity-60">{saving ? 'Saving…' : 'Save'}</button>
+            <button onClick={save} disabled={saving} className="rounded-lg bg-[#EF3C23] text-white px-4 py-2 text-[12px] font-extrabold disabled:opacity-60">{saving ? 'Saving…' : 'Save'}</button>
           </div>
         </>
       )}
@@ -1165,7 +1165,7 @@ function SubscribersTab({ plan, publishedVersion }: { plan: PlanDetail['plan']; 
         <button
           onClick={() => setShowGrant(true)}
           disabled={!publishedVersion || publishedVersion.offers.length === 0}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#18154C] text-white text-[12px] font-extrabold px-3.5 py-2 disabled:opacity-40"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[#EF3C23] text-white text-[12px] font-extrabold px-3.5 py-2 disabled:opacity-40"
           title={!publishedVersion ? 'Publish a version with an offer first' : undefined}
         >
           <Gift className="w-3.5 h-3.5" /> Manual Grant
@@ -1348,7 +1348,7 @@ function ManualGrantModal({ plan, onClose, onGranted }: { plan: PlanDetail['plan
 
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onClose} className="rounded-lg border border-app-border px-4 py-2 text-[12px] font-extrabold">Cancel</button>
-          <button onClick={submit} disabled={saving} className="rounded-lg bg-[#18154C] text-white px-4 py-2 text-[12px] font-extrabold disabled:opacity-60">{saving ? 'Granting…' : 'Grant Plan'}</button>
+          <button onClick={submit} disabled={saving} className="rounded-lg bg-[#EF3C23] text-white px-4 py-2 text-[12px] font-extrabold disabled:opacity-60">{saving ? 'Granting…' : 'Grant Plan'}</button>
         </div>
       </div>
     </Modal>
@@ -1405,7 +1405,7 @@ function ReplaceGrantModal({ plan, subscription, onClose, onReplaced }: { plan: 
         </div>
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onClose} className="rounded-lg border border-app-border px-4 py-2 text-[12px] font-extrabold">Cancel</button>
-          <button onClick={submit} disabled={saving} className="rounded-lg bg-[#18154C] text-white px-4 py-2 text-[12px] font-extrabold disabled:opacity-60">{saving ? 'Saving…' : 'Save Change'}</button>
+          <button onClick={submit} disabled={saving} className="rounded-lg bg-[#EF3C23] text-white px-4 py-2 text-[12px] font-extrabold disabled:opacity-60">{saving ? 'Saving…' : 'Save Change'}</button>
         </div>
       </div>
     </Modal>

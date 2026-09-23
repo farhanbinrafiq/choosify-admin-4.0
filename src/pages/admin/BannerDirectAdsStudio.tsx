@@ -100,7 +100,7 @@ export default function BannerDirectAdsStudio() {
         <button
           type="button"
           onClick={() => navigate('/admin/ads-studio/new')}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-[#C8321A] to-[#EF3C23] px-4 py-2.5 text-[12px] font-extrabold text-white"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-[#EF3C23] to-[#D4331B] px-4 py-2.5 text-[12px] font-extrabold text-white"
         >
           <Plus className="h-4 w-4" /> Create Ad
         </button>

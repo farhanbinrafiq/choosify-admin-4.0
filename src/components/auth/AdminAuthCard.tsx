@@ -26,7 +26,7 @@ export function AdminAuthCard({
   return (
     <AdminAuthShell>
       <>
-        <span className="mb-3 inline-block rounded-full bg-[rgba(255,90,44,0.12)] px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#FF5B00]">
+        <span className="mb-3 inline-block rounded-full bg-[rgba(255,90,44,0.12)] px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#EF3C23]">
           {kicker}
         </span>
         <h1 className="text-[20px] font-extrabold leading-tight text-[#111827]">{title}</h1>

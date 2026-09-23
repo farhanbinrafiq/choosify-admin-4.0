@@ -16,7 +16,7 @@ export default function CreatorsStudioList() {
     <div className="space-y-6 pb-12 text-left">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-[#FF5B00] block mb-1">
+          <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-[#EF3C23] block mb-1">
             People · Profile CMS
           </span>
           <h1 className="text-xl font-black text-[#111827] tracking-tight">Creator Studio</h1>
@@ -40,7 +40,7 @@ export default function CreatorsStudioList() {
             localStorage.setItem(CREATOR_STUDIO_LIST_KEY, JSON.stringify(next));
             refresh();
           }}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#FF5B00] hover:bg-[#FF5B00] text-white text-xs font-extrabold uppercase tracking-wider rounded-xl shadow-sm"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#EF3C23] hover:bg-[#EF3C23] text-white text-xs font-extrabold uppercase tracking-wider rounded-xl shadow-sm"
         >
           <Plus className="w-4 h-4" />
           New Creator Profile
@@ -81,7 +81,7 @@ export default function CreatorsStudioList() {
                 </div>
                 <Link
                   to={`/admin/creator-studio/${c.id}`}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 bg-orange-50 hover:bg-[#FF5B00] hover:text-white text-[#FF5B00] border border-orange-200 text-[10px] font-black uppercase tracking-wider rounded-xl transition-colors"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 bg-orange-50 hover:bg-[#EF3C23] hover:text-white text-[#EF3C23] border border-orange-200 text-[10px] font-black uppercase tracking-wider rounded-xl transition-colors"
                 >
                   <Pencil className="w-3.5 h-3.5" />
                   Edit Profile

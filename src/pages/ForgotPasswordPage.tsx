@@ -57,14 +57,14 @@ export default function AdminForgotPasswordPage() {
         title="Check your email"
         intro={`If a dashboard account exists for ${email}, we've sent a password reset link.`}
         footer={
-          <button type="button" onClick={() => navigate('/login')} className="font-bold text-[#FF5B00]">
+          <button type="button" onClick={() => navigate('/login')} className="font-bold text-[#EF3C23]">
             Back to sign in
           </button>
         }
       >
         <div className="flex flex-col items-center text-center">
           <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#FFF3EA]">
-            <MailCheck className="h-7 w-7 text-[#FF5B00]" />
+            <MailCheck className="h-7 w-7 text-[#EF3C23]" />
           </div>
           <p className="text-[12.5px] leading-relaxed text-[#4B5563]">
             The link expires in <span className="font-bold text-[#111827]">1 hour</span> and can be used once. Check
@@ -73,7 +73,7 @@ export default function AdminForgotPasswordPage() {
           <button
             type="button"
             onClick={() => setSent(false)}
-            className="mt-4 text-[11px] font-bold text-[#FF5B00] hover:underline"
+            className="mt-4 text-[11px] font-bold text-[#EF3C23] hover:underline"
           >
             Use a different email
           </button>
@@ -87,7 +87,7 @@ export default function AdminForgotPasswordPage() {
       title="Reset your password"
       intro="Enter your dashboard account email and we'll send a secure reset link."
       footer={
-        <button type="button" onClick={() => navigate('/login')} className="font-bold text-[#FF5B00]">
+        <button type="button" onClick={() => navigate('/login')} className="font-bold text-[#EF3C23]">
           Back to sign in
         </button>
       }

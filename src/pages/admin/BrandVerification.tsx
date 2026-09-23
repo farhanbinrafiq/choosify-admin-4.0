@@ -341,11 +341,11 @@ export default function BrandVerification() {
       </div>
 
       {listError && (
-        <div className="p-3 bg-red-950/30 border border-red-500/30 rounded-[4px] flex items-center justify-between gap-3 text-xs text-red-300">
+        <div className="p-3 bg-red-50 border border-red-200 rounded-[4px] flex items-center justify-between gap-3 text-xs text-red-600">
           <span className="flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> {listError}</span>
           <button
             onClick={() => fetchVerifications()}
-            className="px-2 py-1 bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 rounded-[2px] font-bold uppercase tracking-wider text-[10px] cursor-pointer"
+            className="px-2 py-1 bg-red-100 hover:bg-red-200 border border-red-200 rounded-[2px] font-bold uppercase tracking-wider text-[10px] cursor-pointer text-red-700"
           >
             Retry
           </button>
@@ -353,7 +353,7 @@ export default function BrandVerification() {
       )}
 
       {actionError && (
-        <div className="p-3 bg-red-950/30 border border-red-500/30 rounded-[4px] flex items-center justify-between gap-3 text-xs text-red-300">
+        <div className="p-3 bg-red-50 border border-red-200 rounded-[4px] flex items-center justify-between gap-3 text-xs text-red-600">
           <span className="flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> {actionError}</span>
           <button
             onClick={() => setActionError(null)}

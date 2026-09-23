@@ -39,7 +39,7 @@ const getIconComponent = (name: string) => AVAILABLE_ICONS.find(i => i.name === 
  * exact hex, px, grid and DOM structure, expressed as inline styles rather than
  * translated into shared-component defaults. The single sanctioned deviation is
  * the accent, which uses the canonical `--cms-accent` token for dashboard-wide
- * consistency (per product-owner decision), not the raw reference `#FF5B00`.
+ * consistency (per product-owner decision), not the raw reference `#EF3C23`.
  *
  * FUNCTIONALITY is the current canonical layer, copied verbatim from f97c826:
  * useAuth() category CRUD/reorder/import, catalogApi.*CategoryAttribute,

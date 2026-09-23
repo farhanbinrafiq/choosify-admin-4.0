@@ -47,7 +47,7 @@ export function BrandLogoCropModal({ open, imageSrc, initialCrop, onCancel, onSa
       aspectPresets={ASPECT_PRESETS}
       outputLongSide={800}
       transparentOutput
-      accentColor="#FF5B00"
+      accentColor="#EF3C23"
       onCancel={onCancel}
       onSave={onSave}
     />

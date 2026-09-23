@@ -15,7 +15,7 @@ const ROLE_STYLE: Record<MsgRole, string> = {
   Consumer: 'bg-sky-500/10 text-sky-600 border-sky-500/20',
   Seller: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
   Creator: 'bg-violet-500/10 text-violet-600 border-violet-500/20',
-  Admin: 'bg-[#FF5B00]/10 text-[#FF5B00] border-[#FF5B00]/20',
+  Admin: 'bg-[#EF3C23]/10 text-[#EF3C23] border-[#EF3C23]/20',
   System: 'bg-slate-400/10 text-slate-500 border-slate-400/20',
 };
 
@@ -582,12 +582,12 @@ export function MessageBubble({
           <div
             className={`w-fit max-w-full rounded-2xl px-3.5 py-2 text-[12px] font-bold leading-relaxed whitespace-pre-wrap break-words ${
               mine
-                ? 'bg-orange-600 bg-gradient-to-br from-[#EF3C23] to-[#FF5B00] text-white rounded-br-sm'
-                : 'bg-navy bg-gradient-to-br from-[#18154C] to-[#3D1D6B] text-white rounded-bl-sm'
+                ? 'bg-[#EF3C23] text-white rounded-br-sm'
+                : 'bg-[#F1F3F5] text-app-text-primary rounded-bl-sm'
             }`}
           >
             {body}
-            <div className="text-[9px] mt-1 text-white/70">
+            <div className={`text-[9px] mt-1 ${mine ? 'text-white/70' : 'text-app-text-secondary'}`}>
               {when}
             </div>
           </div>

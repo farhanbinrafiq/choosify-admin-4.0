@@ -16,7 +16,7 @@ import { Avatar } from '../../../components/shared/Avatar';
 // approved standalone `isCustomerDetail` section (design-reference/Choosify
 // Admin CMS (standalone).html, decoded lines 3489–3830): exact hex, px, grid
 // and DOM structure as inline styles. Sanctioned deviation: the accent uses the
-// canonical `--cms-accent` token, not the raw reference `#FF5B00`.
+// canonical `--cms-accent` token, not the raw reference `#EF3C23`.
 //
 // FUNCTIONALITY: identity, role, CF-ID and lifecycle come from the real
 // GET /api/v1/auth/users/:id (server/authRouter.ts:1440). Impersonation
@@ -62,7 +62,7 @@ const initialsFor = (name: string) =>
 const TABS: Array<{ key: string; label: string; icon: string }> = [
   { key: 'account', label: 'Account Information', icon: '⚙' },
   { key: 'orders', label: 'Order History', icon: '▤' },
-  { key: 'reviews', label: 'Reviews & Score', icon: '●' },
+  { key: 'reviews', label: 'Reviews & Score', icon: '⭐' },
   { key: 'brands', label: 'Followed Brands', icon: '♦' },
   { key: 'saved', label: 'Saved Items', icon: '📌' },
   { key: 'creators', label: 'Followed Creators', icon: '🎞' },

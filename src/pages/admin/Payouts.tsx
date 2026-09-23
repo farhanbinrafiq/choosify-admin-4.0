@@ -437,7 +437,7 @@ export const Payouts = () => {
 
       {/* Floating Toast */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-[600] bg-[#1A1A2E] border border-[#FF5B00]/30 p-4 rounded-xl shadow-2xl flex items-center gap-3 text-xs font-bold text-white">
+        <div className="fixed bottom-6 right-6 z-[600] bg-[#1A1A2E] border border-[#EF3C23]/30 p-4 rounded-xl shadow-2xl flex items-center gap-3 text-xs font-bold text-white">
           <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
           <span>{toast}</span>
         </div>

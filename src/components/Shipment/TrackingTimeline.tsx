@@ -31,8 +31,8 @@ const getStatusIcon = (status: string) => {
       );
     default:
       return (
-        <div className="w-8 h-8 rounded-full bg-[#FF5B00]/10 border border-[#FF5B00]/30 flex items-center justify-center">
-          <Clock size={16} className="text-[#FF5B00]" />
+        <div className="w-8 h-8 rounded-full bg-[#EF3C23]/10 border border-[#EF3C23]/30 flex items-center justify-center">
+          <Clock size={16} className="text-[#EF3C23]" />
         </div>
       );
   }

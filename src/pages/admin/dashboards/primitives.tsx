@@ -86,9 +86,10 @@ export function RangeToggle({
 
 /**
  * Panel that hosts the KPI tile row.
- * Default: a soft warm tint (role dashboards stay professional / light).
- * `branded`: the connected Choosify brand gradient — reserved for the actual
- * Platform Command Center; tiles inside become translucent glass.
+ * Dashboard Design System: light-gray panel with white tiles inside --
+ * both the default and `branded` (Platform Command Center) variants use the
+ * same light surface. `branded` keeps only a very subtle orange-tinted
+ * accent (not a large saturated gradient) to mark it as the primary panel.
  */
 export function KpiPanel({
   cols = 4,
@@ -110,11 +111,8 @@ export function KpiPanel({
       className={`rounded-[20px] p-5${branded ? ' dash-kpi-panel--branded' : ''}`}
       style={
         branded
-          ? { background: 'var(--choosify-gradient-command)' }
-          : {
-              backgroundImage:
-                'linear-gradient(120deg, color-mix(in srgb, var(--choosify-orange) 10%, transparent), color-mix(in srgb, var(--choosify-navy) 7%, transparent))',
-            }
+          ? { background: 'linear-gradient(120deg, #FFF7F2 0%, #F7F8FA 100%)' }
+          : { background: 'var(--color-app-bg)' }
       }
     >
       <div className={`grid grid-cols-1 ${grid} gap-5`}>{children}</div>
@@ -148,7 +146,7 @@ export function KpiTile({
       <div className="dash-kpi-sub text-[11px] font-medium flex items-center gap-1 min-h-[16px]">
         {sub}
         {to ? (
-          <ArrowUpRight className="w-3.5 h-3.5 text-[#EF3C23] opacity-0 group-hover:opacity-100 transition-opacity" />
+          <ArrowUpRight className="w-3.5 h-3.5 text-app-accent opacity-0 group-hover:opacity-100 transition-opacity" />
         ) : null}
       </div>
     </div>
@@ -357,7 +355,7 @@ export function TrendChart({
   data,
   seriesLabel,
   emptyMessage,
-  color = '#FF5B00',
+  color = '#EF3C23',
   gradientId = 'dashTrend',
   valuePrefix = '',
 }: {

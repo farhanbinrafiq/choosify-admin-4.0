@@ -665,7 +665,7 @@ export const ContactInteractionProvider: React.FC<{ children: React.ReactNode }>
                             className="w-10 h-10 rounded-full border border-slate-700 object-cover bg-slate-900"
                           />
                         ) : (
-                          <div className="w-10 h-10 rounded-full bg-[#FF5B00] text-white font-bold flex items-center justify-center text-xs border border-slate-700 lowercase">
+                          <div className="w-10 h-10 rounded-full bg-[#EF3C23] text-white font-bold flex items-center justify-center text-xs border border-slate-700 lowercase">
                             {chatTarget.name.substring(0, 2)}
                           </div>
                         )}
@@ -823,7 +823,7 @@ export const ContactInteractionProvider: React.FC<{ children: React.ReactNode }>
                               }}
                               className={`p-3 rounded-2xl cursor-pointer transition-all border flex gap-3 relative justify-between items-center ${
                                 thread.unread 
-                                  ? 'bg-[#FF5B00]/5 border-orange-500/10 hover:bg-[#FF5B00]/10' 
+                                  ? 'bg-[#EF3C23]/5 border-orange-500/10 hover:bg-[#EF3C23]/10' 
                                   : 'bg-white hover:bg-slate-100 border-slate-100/80 shadow-xs'
                               }`}
                             >
@@ -841,7 +841,7 @@ export const ContactInteractionProvider: React.FC<{ children: React.ReactNode }>
                                     </div>
                                   )}
                                   {thread.unread && (
-                                    <span id="NotificationBadge" className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-[#FF5B00] rounded-full border-2 border-white animate-pulse NotificationBadge" />
+                                    <span id="NotificationBadge" className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-[#EF3C23] rounded-full border-2 border-white animate-pulse NotificationBadge" />
                                   )}
                                 </div>
                                 <div className="min-w-0 flex-1">
@@ -927,7 +927,7 @@ export const ContactInteractionProvider: React.FC<{ children: React.ReactNode }>
                                 <div
                                   className={`rounded-2xl px-4 py-3 text-xs leading-relaxed ${
                                     isMe
-                                      ? 'bg-[#FF5B00] text-white rounded-br-none shadow-sm shadow-orange-500/10'
+                                      ? 'bg-[#EF3C23] text-white rounded-br-none shadow-sm shadow-orange-500/10'
                                       : 'bg-white text-slate-800 border border-slate-200/80 rounded-bl-none shadow-xs'
                                   }`}
                                 >
@@ -958,7 +958,7 @@ export const ContactInteractionProvider: React.FC<{ children: React.ReactNode }>
                       <button
                         type="submit"
                         disabled={!inputText.trim()}
-                        className="p-2.5 bg-[#FF5B00] text-white rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                        className="p-2.5 bg-[#EF3C23] text-white rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
                         title="Send message"
                       >
                         <Send className="w-4 h-4" />

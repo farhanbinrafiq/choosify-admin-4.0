@@ -342,7 +342,7 @@ export function OperationsInvoiceView() {
           <button
             onClick={() => void downloadPdf()}
             disabled={pdfState === 'generating'}
-            className="flex items-center gap-1.5 px-4 py-2 bg-app-accent hover:bg-[#FF5B00] text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 px-4 py-2 bg-app-accent hover:bg-[#EF3C23] text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {pdfState === 'generating' ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
             {pdfState === 'generating' ? 'Generating PDF…' : 'Download PDF'}

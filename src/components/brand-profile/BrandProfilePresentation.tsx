@@ -226,7 +226,7 @@ export function BrandProfilePresentation({
   ].filter(Boolean) as Array<{ value: string; label: string }>;
 
   return (
-    <div className="bg-[#F0F8FF] text-[#1A1A2E] overflow-hidden">
+    <div className="bg-white text-[#1A1A2E] overflow-hidden">
       <BrandProfileHero
         model={model}
         mode={mode}
@@ -242,7 +242,7 @@ export function BrandProfilePresentation({
       />
 
       {/* Choosify-Web DcUnderlineTabs parity */}
-      <div className="choosify-sticky-section-nav sticky top-[64px] z-[15] w-full mb-4 bg-[#F0F8FF]">
+      <div className="choosify-sticky-section-nav sticky top-[64px] z-[15] w-full mb-4 bg-white">
         <div className="max-w-[1440px] mx-auto px-5 sm:px-8 lg:px-10">
           <div className="w-full flex border border-[#E8EDF2] rounded-none bg-white overflow-x-auto">
             {SECTION_NAV.map((item) => {
@@ -254,7 +254,7 @@ export function BrandProfilePresentation({
                   onClick={() => scrollTo(item.id)}
                   className={`shrink-0 px-4 sm:px-5 py-4 text-[12.5px] font-bold cursor-pointer whitespace-nowrap border-0 border-b-2 bg-transparent transition-colors ${
                     active
-                      ? 'text-[#FF5B00] border-[#FF5B00]'
+                      ? 'text-[#EF3C23] border-[#EF3C23]'
                       : 'text-[#6B7280] border-transparent hover:text-[#1A1A2E]'
                   }`}
                 >
@@ -447,7 +447,7 @@ export function BrandProfilePresentation({
               <div className="bg-white rounded-[10px] p-[18px] border border-[#E8EDF2] text-left">
                 <p className="text-[11.5px] text-[#6B7280] font-semibold m-0 mb-2">{model.address || '—'}</p>
                 {model.website ? (
-                  <a href={model.website} target="_blank" rel="noopener noreferrer" className="block text-[11px] font-bold text-[#FF5B00] hover:underline">
+                  <a href={model.website} target="_blank" rel="noopener noreferrer" className="block text-[11px] font-bold text-[#EF3C23] hover:underline">
                     {model.website}
                   </a>
                 ) : null}
@@ -470,7 +470,7 @@ export function BrandProfilePresentation({
               <div className="bg-white rounded-[10px] p-[18px] border border-[#E8EDF2] text-left">
                 <p className="text-[11.5px] text-[#6B7280] font-semibold m-0 mb-1">{model.priceRange || '—'}</p>
                 <p className="text-[11.5px] text-[#6B7280] font-semibold m-0 mb-1">{model.ageRange || '—'}</p>
-                <p className="text-[11.5px] text-[#FF5B00] font-extrabold m-0 uppercase">{model.audienceType || '—'}</p>
+                <p className="text-[11.5px] text-[#EF3C23] font-extrabold m-0 uppercase">{model.audienceType || '—'}</p>
               </div>
             </SectionShell>
           </div>
@@ -729,7 +729,7 @@ export function BrandProfilePresentation({
                           href={model.storyVideoUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-[11.5px] font-bold text-[#FF5B00] hover:underline break-all"
+                          className="text-[11.5px] font-bold text-[#EF3C23] hover:underline break-all"
                         >
                           {model.storyVideoUrl}
                         </a>
@@ -847,22 +847,22 @@ export function BrandProfilePresentation({
         </section>
 
         {/* Trust strip — Choosify-Web structure; stats only when real */}
-        <div className="w-full choosify-dark-surface rounded-xl px-7 py-5 text-center text-white">
+        <div className="w-full bg-white border border-[#E5E7EB] rounded-xl px-7 py-5 text-center text-app-text-primary">
           <div className="text-[13px] font-extrabold mb-1">CHOSEN BY MILLIONS. TRUSTED WORLDWIDE.</div>
-          <div className="text-[11.5px] text-white/50 mb-5">
+          <div className="text-[11.5px] text-app-text-secondary mb-5">
             100% authentic products, official warranty & dedicated support from {brandName}.
           </div>
           {trustStats.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {trustStats.map((ts) => (
                 <div key={ts.label}>
-                  <div className="text-[20px] font-extrabold text-[#FF5B00]">{ts.value}</div>
-                  <div className="text-[10.5px] text-white/50">{ts.label}</div>
+                  <div className="text-[20px] font-extrabold text-[#EF3C23]">{ts.value}</div>
+                  <div className="text-[10.5px] text-app-text-secondary">{ts.label}</div>
                 </div>
               ))}
             </div>
           ) : mode === 'editor' ? (
-            <p className="text-[11px] text-white/40 m-0">
+            <p className="text-[11px] text-app-text-secondary m-0">
               Trust metrics appear here once followers, reviews, and scores exist for this Brand.
             </p>
           ) : null}

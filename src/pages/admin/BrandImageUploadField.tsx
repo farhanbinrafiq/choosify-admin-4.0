@@ -217,11 +217,11 @@ export function BrandImageUploadField({
         }}
         onDragLeave={() => setDragOver(false)}
         onDrop={onDrop}
-        className={`absolute inset-0 z-[1] ${isAvatar ? 'rounded-full' : ''} ${dragOver ? 'ring-2 ring-[#FF5B00] ring-inset' : ''} ${className}`}
+        className={`absolute inset-0 z-[1] ${isAvatar ? 'rounded-full' : ''} ${dragOver ? 'ring-2 ring-[#EF3C23] ring-inset' : ''} ${className}`}
       >
         {uploading && (
           <div className={`absolute inset-0 z-20 bg-white/80 flex items-center justify-center ${isAvatar ? 'rounded-full' : ''}`}>
-            <Loader2 className="w-5 h-5 animate-spin text-[#FF5B00]" />
+            <Loader2 className="w-5 h-5 animate-spin text-[#EF3C23]" />
           </div>
         )}
         {controls}
@@ -285,7 +285,7 @@ export function BrandImageUploadField({
             : isLogo
               ? 'rounded-2xl aspect-square w-full max-w-[112px]'
               : 'rounded-xl w-full h-28'
-        } ${dragOver ? 'border-[#FF5B00] bg-orange-50' : 'border-slate-200 bg-slate-50'}`}
+        } ${dragOver ? 'border-[#EF3C23] bg-orange-50' : 'border-slate-200 bg-slate-50'}`}
       >
         {value ? (
           <img
@@ -302,7 +302,7 @@ export function BrandImageUploadField({
 
         {uploading && (
           <div className="absolute inset-0 bg-white/80 flex items-center justify-center">
-            <Loader2 className="w-5 h-5 animate-spin text-[#FF5B00]" />
+            <Loader2 className="w-5 h-5 animate-spin text-[#EF3C23]" />
           </div>
         )}
       </div>
@@ -312,7 +312,7 @@ export function BrandImageUploadField({
           type="button"
           disabled={uploading}
           onClick={() => inputRef.current?.click()}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:border-[#FF5B00] text-[10px] font-bold text-slate-700 rounded-lg cursor-pointer disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:border-[#EF3C23] text-[10px] font-bold text-slate-700 rounded-lg cursor-pointer disabled:opacity-50"
         >
           <Upload className="w-3 h-3" />
           {value ? 'Replace' : 'Choose file'}
@@ -322,7 +322,7 @@ export function BrandImageUploadField({
             type="button"
             disabled={uploading}
             onClick={openEditLogo}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:border-[#FF5B00] text-[10px] font-bold text-slate-700 rounded-lg cursor-pointer disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:border-[#EF3C23] text-[10px] font-bold text-slate-700 rounded-lg cursor-pointer disabled:opacity-50"
           >
             <Pencil className="w-3 h-3" />
             Edit logo
@@ -331,7 +331,7 @@ export function BrandImageUploadField({
         <button
           type="button"
           onClick={() => setShowUrlPaste((v) => !v)}
-          className="text-[10px] font-bold text-slate-500 hover:text-[#FF5B00] bg-transparent border-none cursor-pointer underline-offset-2 hover:underline"
+          className="text-[10px] font-bold text-slate-500 hover:text-[#EF3C23] bg-transparent border-none cursor-pointer underline-offset-2 hover:underline"
         >
           {showUrlPaste ? 'Hide URL' : 'Paste URL instead'}
         </button>

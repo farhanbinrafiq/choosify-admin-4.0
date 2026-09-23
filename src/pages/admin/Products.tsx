@@ -13,7 +13,7 @@ import type { CatalogProduct, CatalogInventory } from '../../types/catalog';
  * `isProductsPage` + `isProducts` + `isLowStockView` sections
  * (design-reference/Choosify Admin CMS (standalone).html, decoded 384–563 /
  * 5977–6014): exact hex, px, grid and DOM structure, inline styles. Sanctioned
- * deviation: accent = var(--cms-accent), not the raw reference #FF5B00.
+ * deviation: accent = var(--cms-accent), not the raw reference #EF3C23.
  *
  * Behavioural contract — DO NOT regress (from a2d6b33, 39/39 ownership probe):
  *  - Product list / mutations go through the canonical catalog API
@@ -525,12 +525,12 @@ export default function ProductsPage() {
     h1: { fontSize: 18, fontWeight: 800, color: '#111827' },
     sub: { fontSize: 12, color: '#374151', marginTop: 2 },
     addBtn: { background: ACCENT, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 },
-    statGrid: { display: 'grid', gridTemplateColumns: 'repeat(5,minmax(150px,1fr))', gap: 14, marginBottom: 18 },
+    statGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 14, marginBottom: 18 },
     statCard: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 5, padding: 16 },
     statNum: { fontSize: 22, fontWeight: 800, color: '#111827' },
     statLabel: { fontSize: 10, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 4 },
     statSub: { fontSize: '9.5px', fontWeight: 600, color: ACCENT, marginTop: 6 },
-    analyticsGrid: { display: 'grid', gridTemplateColumns: 'repeat(3,minmax(220px,1fr))', gap: 16, marginBottom: 18 },
+    analyticsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 16, marginBottom: 18 },
     glassCard: { background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', border: '1px solid rgba(255,255,255,0.4)', borderTop: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 8px 20px rgba(17,24,39,0.08)', borderRadius: 16, padding: 18 },
     glassTitle: { fontSize: 11, fontWeight: 800, color: ACCENT, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 },
     glassEmpty: { fontSize: '11.5px', color: '#9CA3AF', fontWeight: 600, fontStyle: 'italic', lineHeight: 1.5 },
@@ -540,9 +540,9 @@ export default function ProductsPage() {
     filterRow: { display: 'flex', gap: 10, background: '#fff', border: '1px solid #E8EDF2', borderRadius: 5, padding: 10, marginBottom: 12, flexWrap: 'wrap' },
     search: { flex: 1, minWidth: 220, height: 38, boxSizing: 'border-box', borderRadius: 8, border: '1px solid #E8EDF2', padding: '0 14px 0 36px', fontSize: '12.5px', outline: 'none', background: '#fff' },
     select: { height: 38, boxSizing: 'border-box', borderRadius: 8, border: '1px solid #E8EDF2', padding: '0 12px', fontSize: 12, color: '#111827', background: '#fff', outline: 'none', cursor: 'pointer' },
-    bulkBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(180deg,rgba(24,21,76,0.94) 0%,rgba(0,6,46,0.92) 80%,rgba(0,2,37,0.94) 100%)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', borderRadius: 8, padding: '12px 16px', marginBottom: 12, flexWrap: 'wrap', gap: 10 },
+    bulkBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F7F8FA', border: '1px solid #E5E7EB', color: '#172033', borderRadius: 8, padding: '12px 16px', marginBottom: 12, flexWrap: 'wrap', gap: 10 },
     bulkChip: { background: ACCENT_WASH, color: ACCENT, padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 800 },
-    bClear: { cursor: 'pointer', fontSize: 10.5, fontWeight: 700, color: 'rgba(255,255,255,0.7)', background: 'none', border: 0 },
+    bClear: { cursor: 'pointer', fontSize: 10.5, fontWeight: 700, color: '#667085', background: 'none', border: 0 },
     tableWrap: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, overflowX: 'auto' },
     th: { textAlign: 'left', padding: '12px 16px', fontSize: '10.5px', fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em', textTransform: 'uppercase', whiteSpace: 'nowrap' },
     td: { padding: '14px 16px', fontSize: 13, color: '#111827', verticalAlign: 'middle' },

@@ -315,7 +315,7 @@ export default function Coupons() {
           {/* Global CSV Download */}
           <button
             onClick={() => exportCouponCodes()}
-            className="flex items-center gap-2 px-4 py-2.5 bg-app-card hover:bg-slate-800 border border-app-border rounded-xl text-app-text-secondary hover:text-white text-[11px] font-black uppercase tracking-wider transition-all"
+            className="flex items-center gap-2 px-4 py-2.5 bg-app-card hover:bg-slate-50 border border-app-border rounded-xl text-app-text-secondary hover:text-app-text-primary text-[11px] font-black uppercase tracking-wider transition-all"
           >
             <Download className="w-3.5 h-3.5" /> Export Registry
           </button>
@@ -386,9 +386,9 @@ export default function Coupons() {
         {/* Total Discount Given */}
         <div className="bg-app-card border border-app-border p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden">
           <div className="text-[10px] uppercase font-black tracking-widest text-app-text-secondary font-mono">Discount Savings</div>
-          <div className="text-2xl font-black text-purple-400 font-mono mt-2.5">৳ {totalSavings.toLocaleString()}</div>
+          <div className="text-2xl font-black text-app-text-primary font-mono mt-2.5">৳ {totalSavings.toLocaleString()}</div>
           <div className="text-[9px] text-slate-500 mt-2 flex items-center gap-1.5">
-            <DollarSign className="w-3 h-3 text-purple-400" /> BDT Deducted from orders
+            <DollarSign className="w-3 h-3 text-app-accent" /> BDT Deducted from orders
           </div>
           <div className="absolute right-3 bottom-3 text-purple-950/20 font-mono text-5xl font-black select-none pointer-events-none">SAV</div>
         </div>
@@ -396,9 +396,9 @@ export default function Coupons() {
         {/* Average Order Value (AOV) with Coupon */}
         <div className="bg-app-card border border-app-border p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden">
           <div className="text-[10px] uppercase font-black tracking-widest text-app-text-secondary font-mono">AOV with Promo</div>
-          <div className="text-2xl font-black text-blue-400 font-mono mt-2.5">৳ {overallAvgOrderValue.toLocaleString()}</div>
+          <div className="text-2xl font-black text-app-text-primary font-mono mt-2.5">৳ {overallAvgOrderValue.toLocaleString()}</div>
           <div className="text-[9px] text-slate-500 mt-2 flex items-center gap-1.5">
-            <BarChart4 className="w-3 h-3 text-blue-400" /> High customer spend index
+            <BarChart4 className="w-3 h-3 text-app-accent" /> High customer spend index
           </div>
           <div className="absolute right-3 bottom-3 text-blue-950/20 font-mono text-5xl font-black select-none pointer-events-none">AOV</div>
         </div>
@@ -578,7 +578,7 @@ export default function Coupons() {
 
                           <div className="text-right">
                             <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider font-mono">Savings BDT</div>
-                            <div className="text-sm font-black text-purple-400 font-mono mt-0.5">৳ {coupon.totalDiscountGiven.toLocaleString()}</div>
+                            <div className="text-sm font-black text-app-text-primary font-mono mt-0.5">৳ {coupon.totalDiscountGiven.toLocaleString()}</div>
                           </div>
 
                           {/* Expansion toggler */}
@@ -642,7 +642,7 @@ export default function Coupons() {
                                 {coupon.rules.applicableBrands && (
                                   <div className="flex justify-between">
                                     <span className="text-slate-500">Brands:</span>
-                                    <span className="font-bold text-purple-400 truncate max-w-[120px]">{coupon.rules.applicableBrands.join(', ')}</span>
+                                    <span className="font-bold text-app-text-primary truncate max-w-[120px]">{coupon.rules.applicableBrands.join(', ')}</span>
                                   </div>
                                 )}
                               </div>
@@ -680,7 +680,7 @@ export default function Coupons() {
                               <div className="h-16 w-full">
                                 <ResponsiveContainer width="100%" height="100%">
                                   <AreaChart data={coupon.usageByDate}>
-                                    <Area type="monotone" dataKey="count" stroke="#FF5B00" fill="#ff5b001a" strokeWidth={1.5} />
+                                    <Area type="monotone" dataKey="count" stroke="#EF3C23" fill="#EF3C231a" strokeWidth={1.5} />
                                     <Tooltip contentStyle={{ background: '#0F172A', borderColor: '#1E293B', fontSize: '10px' }} />
                                   </AreaChart>
                                 </ResponsiveContainer>
@@ -765,14 +765,14 @@ export default function Coupons() {
                 <AreaChart data={dailyTrendData}>
                   <defs>
                     <linearGradient id="colorRedemptions" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#ff5b00" stopOpacity={0.2}/>
-                      <stop offset="95%" stopColor="#ff5b00" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#EF3C23" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="#EF3C23" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
                   <XAxis dataKey="date" stroke="#475569" fontSize={8} tickLine={false} />
                   <YAxis stroke="#475569" fontSize={8} width={15} tickLine={false} axisLine={false} />
                   <Tooltip contentStyle={{ background: '#0F172A', borderColor: '#1E293B', fontSize: '10px' }} />
-                  <Area type="monotone" dataKey="Redemptions" stroke="#ff5b00" fillOpacity={1} fill="url(#colorRedemptions)" strokeWidth={1.5} />
+                  <Area type="monotone" dataKey="Redemptions" stroke="#EF3C23" fillOpacity={1} fill="url(#colorRedemptions)" strokeWidth={1.5} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -794,7 +794,7 @@ export default function Coupons() {
                     <Tooltip contentStyle={{ background: '#0F172A', borderColor: '#1E293B', fontSize: '10px' }} />
                     <Bar dataKey="Discount Value" fill="#8b5cf6" radius={[0, 4, 4, 0]}>
                       {categoryPerformance.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={index === 0 ? '#ff5b00' : index === 1 ? '#8b5cf6' : '#3b82f6'} />
+                        <Cell key={`cell-${index}`} fill={index === 0 ? '#EF3C23' : index === 1 ? '#8b5cf6' : '#3b82f6'} />
                       ))}
                     </Bar>
                   </BarChart>

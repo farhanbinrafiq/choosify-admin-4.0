@@ -23,7 +23,7 @@ export default function AccountComingSoon({ title, description }: AccountComingS
       </Link>
 
       <div className="rounded-2xl border border-app-border bg-app-card p-8 sm:p-10 shadow-sm">
-        <div className="w-12 h-12 rounded-xl bg-[#FFF4ED] text-[#FF5B00] flex items-center justify-center mb-5">
+        <div className="w-12 h-12 rounded-xl bg-[#FFF4ED] text-[#EF3C23] flex items-center justify-center mb-5">
           <Construction className="w-6 h-6" aria-hidden />
         </div>
         <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-app-accent mb-2">Coming Soon</p>

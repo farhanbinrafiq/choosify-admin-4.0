@@ -9,7 +9,7 @@ import { productStudioPath } from './orderHubModel';
  * Shared visual chrome for the Order Hub surfaces (list + Quick View modal +
  * full Order Details page). Inline-styled reproduction of the approved
  * standalone "Order Console" / "Order Details" design; sanctioned deviation:
- * accent = var(--cms-accent), not the reference #FF5B00.
+ * accent = var(--cms-accent), not the reference #EF3C23.
  */
 
 export const CHOOSIFY_WEB_URL = 'https://choosify.bd';

@@ -228,7 +228,7 @@ export default function CreatorEarnings() {
     // Earnings by source (non-blue categorical palette, per design spec)
     const sources = ['guide_performance', 'recommendation_commission', 'sponsorship', 'affiliate', 'bonus'] as const;
     const sourceColors = {
-      guide_performance: '#FF5B00',
+      guide_performance: '#EF3C23',
       recommendation_commission: '#16A34A',
       sponsorship: '#F59E0B',
       affiliate: '#EC4899',
@@ -706,7 +706,7 @@ export default function CreatorEarnings() {
 
               <button
                 onClick={handleBulkMarkAsPaid}
-                className="px-3.5 py-1.5 bg-app-accent hover:bg-[#FF5B00] text-white font-extrabold uppercase rounded cursor-pointer tracking-wider"
+                className="px-3.5 py-1.5 bg-app-accent hover:bg-[#EF3C23] text-white font-extrabold uppercase rounded cursor-pointer tracking-wider"
               >
                 Mark Approved As Paid
               </button>
@@ -836,7 +836,7 @@ export default function CreatorEarnings() {
                                   markPayoutAsPaid(p.id);
                                   addToast(`Cleared bank transfer payout to ${p.creatorName}`, "success");
                                 }}
-                                className="px-2 py-1 bg-app-accent hover:bg-[#FF5B00] text-white text-[10px] uppercase font-black tracking-wider rounded cursor-pointer"
+                                className="px-2 py-1 bg-app-accent hover:bg-[#EF3C23] text-white text-[10px] uppercase font-black tracking-wider rounded cursor-pointer"
                               >
                                 Clear Transfer
                               </button>
@@ -888,7 +888,7 @@ export default function CreatorEarnings() {
                     <XAxis dataKey="name" stroke="#9CA3AF" tickLine={false} />
                     <YAxis stroke="#9CA3AF" tickLine={false} />
                     <ChartTooltip contentStyle={{ backgroundColor: '#FFFFFF', borderColor: '#E8EDF2', color: '#111827' }} />
-                    <Bar dataKey="Earnings BDT" fill="#FF5B00" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="Earnings BDT" fill="#EF3C23" radius={[2, 2, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -1192,7 +1192,7 @@ export default function CreatorEarnings() {
                           addToast(`No unpaid June earnings to settle`, "warning");
                         }
                       }}
-                      className="w-full py-2 bg-app-accent hover:bg-[#FF5B00] text-white font-extrabold uppercase text-xs tracking-widest rounded-lg cursor-pointer"
+                      className="w-full py-2 bg-app-accent hover:bg-[#EF3C23] text-white font-extrabold uppercase text-xs tracking-widest rounded-lg cursor-pointer"
                     >
                       Trigger June Settlement
                     </button>

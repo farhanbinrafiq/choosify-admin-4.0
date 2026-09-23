@@ -341,7 +341,7 @@ export default function StorefrontCtaBanners() {
             type="button"
             onClick={startCreate}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#111827] px-3.5 py-2 text-[12px] font-bold text-white disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#EF3C23] px-3.5 py-2 text-[12px] font-bold text-white disabled:opacity-50"
           >
             <Plus className="h-3.5 w-3.5" /> Create CTA / Banner
           </button>
@@ -376,7 +376,7 @@ export default function StorefrontCtaBanners() {
               type="button"
               onClick={saveAuthVisual}
               disabled={authVisualSaving || !authVisualDirty}
-              className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-[#FF5B00] px-4 py-2 text-[12px] font-bold text-white disabled:opacity-50"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-[#EF3C23] px-4 py-2 text-[12px] font-bold text-white disabled:opacity-50"
             >
               {authVisualSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} Save Auth Visual
             </button>
@@ -400,7 +400,7 @@ export default function StorefrontCtaBanners() {
             type="button"
             onClick={() => setStatusFilter(f)}
             className={`rounded-full px-3 py-1.5 text-[10.5px] font-extrabold uppercase tracking-wide ${
-              statusFilter === f ? 'bg-[#111827] text-white' : 'bg-[#F3F4F6] text-[#374151]'
+              statusFilter === f ? 'bg-[#EF3C23] text-white' : 'bg-[#F3F4F6] text-[#374151]'
             }`}
           >
             {f}
@@ -429,7 +429,7 @@ export default function StorefrontCtaBanners() {
                 </option>
               ))}
             </select>
-            <button type="button" onClick={confirmCreate} className="rounded-lg bg-[#FF5B00] px-4 py-2 text-[12px] font-bold text-white">
+            <button type="button" onClick={confirmCreate} className="rounded-lg bg-[#EF3C23] px-4 py-2 text-[12px] font-bold text-white">
               Continue
             </button>
             <button
@@ -500,7 +500,7 @@ export default function StorefrontCtaBanners() {
                     <button
                       type="button"
                       onClick={() => startEdit(item)}
-                      className="inline-flex items-center gap-1 rounded-md bg-[#111827] px-3 py-1.5 text-[11px] font-bold text-white"
+                      className="inline-flex items-center gap-1 rounded-md bg-[#EF3C23] px-3 py-1.5 text-[11px] font-bold text-white"
                     >
                       <Pencil className="h-3 w-3" /> Edit
                     </button>
@@ -711,7 +711,7 @@ function CtaEditForm({
                   type="button"
                   onClick={() => setDestinationType(opt.value)}
                   className={`rounded-full px-3 py-1 text-[10px] font-extrabold ${
-                    draft.destinationType === opt.value ? 'bg-[#111827] text-white' : 'bg-[#F3F4F6] text-[#374151]'
+                    draft.destinationType === opt.value ? 'bg-[#EF3C23] text-white' : 'bg-[#F3F4F6] text-[#374151]'
                   }`}
                 >
                   {opt.label}
@@ -782,7 +782,7 @@ function CtaEditForm({
           type="button"
           onClick={onSave}
           disabled={saving}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#FF5B00] px-4 py-2 text-[12px] font-bold text-white disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[#EF3C23] px-4 py-2 text-[12px] font-bold text-white disabled:opacity-50"
         >
           {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} {isCreate ? 'Create CTA' : 'Save Changes'}
         </button>

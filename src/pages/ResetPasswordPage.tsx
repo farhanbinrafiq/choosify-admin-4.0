@@ -78,7 +78,7 @@ export default function AdminResetPasswordPage() {
         title="Link expired or invalid"
         intro="This reset link is no longer valid — it may have been used already, or it's more than an hour old."
         footer={
-          <button type="button" onClick={() => navigate('/login')} className="font-bold text-[#FF5B00]">
+          <button type="button" onClick={() => navigate('/login')} className="font-bold text-[#EF3C23]">
             Back to sign in
           </button>
         }
