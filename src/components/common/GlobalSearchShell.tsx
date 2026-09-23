@@ -30,6 +30,14 @@ export type GlobalSearchShellProps = {
   onCloseOverlay?: () => void;
   className?: string;
   inputAriaLabel?: string;
+  /**
+   * 'dark' (default) = the translucent white-on-dark glass frame, for every
+   * existing dark-chrome caller (storefront navbar, CmsMirrorHost overlay,
+   * AdminLayout). 'light' = a solid, bordered frame for a light chrome
+   * (AdminWorkspaceLayout's white topbar, Dashboard Design System) -- the
+   * translucent white frame is invisible on a white background.
+   */
+  tone?: 'dark' | 'light';
 };
 
 const SUBMIT_LABEL: Record<GlobalSearchShellMode, string> = {
@@ -51,6 +59,7 @@ export function GlobalSearchShell({
   onCloseOverlay,
   className,
   inputAriaLabel,
+  tone = 'dark',
 }: GlobalSearchShellProps) {
   const submitLabel = SUBMIT_LABEL[mode];
   const showClear = Boolean(value) && presentation === 'inline' && typeof onClear === 'function';
@@ -59,7 +68,10 @@ export function GlobalSearchShell({
     <form
       onSubmit={onSubmit}
       className={cn(
-        'relative w-full bg-white/10 backdrop-blur-md rounded-full border border-white/10 shadow-lg focus-within:border-white/20 transition-all duration-300',
+        'relative w-full rounded-full transition-all duration-300',
+        tone === 'light'
+          ? 'bg-[#F8F9FB] border border-[#E1E5EA] focus-within:border-[#EF3C23]/40'
+          : 'bg-white/10 backdrop-blur-md border border-white/10 shadow-lg focus-within:border-white/20',
         presentation === 'overlay' && 'choosify-mobile-search-pill',
         className,
       )}
@@ -69,7 +81,7 @@ export function GlobalSearchShell({
         Clear × gets a dedicated shrink-0 region immediately before the CTA
         so it never collides with or resizes the SEARCH/DISCOVER button.
       */}
-      <div className="global-search-shell__pill flex items-center bg-white rounded-full relative min-w-0">
+      <div className={cn('global-search-shell__pill flex items-center rounded-full relative min-w-0', tone === 'light' ? 'bg-[#F8F9FB]' : 'bg-white')}>
         {presentation === 'overlay' && (
           <button
             type="button"
@@ -81,7 +93,7 @@ export function GlobalSearchShell({
           </button>
         )}
 
-        <div className="pl-2.5 sm:pl-4 text-[#FF5B00] shrink-0">
+        <div className="pl-2.5 sm:pl-4 text-[#EF3C23] shrink-0">
           <SearchCheck className="w-4 h-4" strokeWidth={2} />
         </div>
 
@@ -95,7 +107,7 @@ export function GlobalSearchShell({
           placeholder={placeholder}
           aria-label={inputAriaLabel || (mode === 'discover' ? 'Search storefront' : 'Search dashboard')}
           className={cn(
-            'global-search-shell__input w-full min-w-0 bg-transparent outline-none text-[#18154C] font-semibold placeholder-gray-500 focus:outline-none focus:ring-0 border-none',
+            'global-search-shell__input w-full min-w-0 bg-transparent outline-none text-[#172033] font-semibold placeholder-gray-500 focus:outline-none focus:ring-0 border-none',
             presentation === 'overlay'
               ? 'h-10 pl-2 pr-2 text-xs'
               : 'h-9 sm:h-9 md:h-10 pl-2 sm:pl-3 pr-2 text-[11px] sm:text-xs',
@@ -122,7 +134,7 @@ export function GlobalSearchShell({
           type="submit"
           aria-label={submitLabel}
           className={cn(
-            'global-search-shell__cta shrink-0 m-1 sm:m-1.5 rounded-full bg-[#FF5B00] hover:bg-[#EF3C23] text-white font-extrabold tracking-wide uppercase flex items-center justify-center gap-1 transition-all duration-200 cursor-pointer',
+            'global-search-shell__cta shrink-0 m-1 sm:m-1.5 rounded-full bg-[#EF3C23] hover:bg-[#D4331B] text-white font-extrabold tracking-wide uppercase flex items-center justify-center gap-1 transition-all duration-200 cursor-pointer',
             presentation === 'overlay'
               ? 'px-4 h-8 text-[9px]'
               : 'px-2 sm:px-2.5 md:px-4 lg:px-5 h-7 sm:h-7 md:h-8 text-[8px] sm:text-[8px] md:text-[9px] min-w-[3.25rem] sm:min-w-[2.25rem] md:min-w-0',

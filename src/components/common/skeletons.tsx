@@ -24,20 +24,20 @@ export function SkeletonAvatar({ className, style }: SkeletonProps) {
   return <div className={cn(bone, 'rounded-full shrink-0', className || 'w-9 h-9')} style={style} aria-hidden />;
 }
 
-/** Matches GlobalSearchShell white pill geometry (rounded-full, ~40–44px). */
+/** Matches GlobalSearchShell pill geometry (rounded-full, ~40–44px), light chrome. */
 export function SkeletonPill({ className, style }: SkeletonProps) {
   return (
     <div
       className={cn(
-        'w-full h-full min-h-[40px] rounded-full bg-white/15 border border-white/10 flex items-center px-3 gap-2',
+        'w-full h-full min-h-[40px] rounded-full bg-[#F8F9FB] border border-[#E1E5EA] flex items-center px-3 gap-2',
         className,
       )}
       style={style}
       aria-hidden
     >
-      <div className="w-4 h-4 rounded-full bg-white/25 shrink-0" />
-      <div className="flex-1 h-3 rounded-full bg-white/20" />
-      <div className="w-[72px] h-8 rounded-full bg-white/25 shrink-0" />
+      <div className="w-4 h-4 rounded-full bg-[#E5E7EB] shrink-0 animate-pulse" />
+      <div className="flex-1 h-3 rounded-full bg-[#E5E7EB] animate-pulse" />
+      <div className="w-[72px] h-8 rounded-full bg-[#EF3C23]/20 shrink-0 animate-pulse" />
     </div>
   );
 }
@@ -127,23 +127,22 @@ export function DashboardSearchSkeleton({ className }: SkeletonProps) {
 export function DashboardHeaderSkeleton({ className }: SkeletonProps) {
   return (
     <div
-      className={cn('h-16 flex items-center gap-4 px-8', className)}
-      style={{ background: 'var(--choosify-header-gradient)' }}
+      className={cn('h-16 flex items-center gap-4 px-8 bg-white border-b border-[#E5E7EB]', className)}
       role="status"
       aria-busy="true"
       aria-label="Loading dashboard header"
     >
       <div className="shrink-0 w-[min(280px,28vw)] space-y-2">
-        <div className="h-4 w-36 rounded bg-white/20 animate-pulse" />
-        <div className="h-2.5 w-48 rounded bg-white/10 animate-pulse" />
+        <div className="h-4 w-36 rounded bg-[#E5E7EB] animate-pulse" />
+        <div className="h-2.5 w-48 rounded bg-[#EAECF0] animate-pulse" />
       </div>
       <div className="flex-1 min-w-0 h-11">
         <SkeletonPill />
       </div>
       <div className="flex items-center gap-4 shrink-0">
-        <div className="w-7 h-7 rounded-full bg-white/20 animate-pulse" />
-        <div className="w-px h-5 bg-white/15" />
-        <SkeletonAvatar className="w-8 h-8 bg-white/20" />
+        <div className="w-7 h-7 rounded-full bg-[#E5E7EB] animate-pulse" />
+        <div className="w-px h-5 bg-[#E5E7EB]" />
+        <SkeletonAvatar className="w-8 h-8 bg-[#E5E7EB]" />
       </div>
     </div>
   );
@@ -169,19 +168,15 @@ export function AdminPageSkeleton({
           </div>
           <SkeletonBlock className="h-10 w-40 rounded-lg" />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 p-5 rounded-[20px] bg-gradient-to-br from-[#EF3C23]/10 to-[#18154C]/5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 p-5 rounded-[20px] bg-[#F7F8FA]">
           {Array.from({ length: 4 }).map((_, i) => (
             <div
               key={i}
-              className="rounded-[18px] h-[127px] p-5 border border-white/10"
-              style={{
-                background: 'var(--choosify-gradient-command)',
-                opacity: 0.55,
-              }}
+              className="rounded-[18px] h-[127px] p-5 border border-[#E5E7EB] bg-white"
             >
-              <div className="h-2.5 w-24 rounded bg-white/25 mb-4" />
-              <div className="h-7 w-20 rounded bg-white/30 mb-3" />
-              <div className="h-2.5 w-32 rounded bg-white/20" />
+              <div className="h-2.5 w-24 rounded bg-[#EAECF0] mb-4 animate-pulse" />
+              <div className="h-7 w-20 rounded bg-[#E5E7EB] mb-3 animate-pulse" />
+              <div className="h-2.5 w-32 rounded bg-[#EAECF0] animate-pulse" />
             </div>
           ))}
         </div>

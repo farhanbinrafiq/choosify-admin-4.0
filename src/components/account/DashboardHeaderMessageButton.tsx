@@ -9,16 +9,27 @@ import { useAuth } from '../../contexts/AuthContext';
 type DashboardHeaderMessageButtonProps = {
   className?: string;
   buttonRef?: React.Ref<HTMLButtonElement>;
+  /**
+   * 'dark' (default) = white icon for a dark chrome header (legacy
+   * CmsMirrorHost iframe header). 'light' = dark navy icon for the real
+   * AdminWorkspaceLayout topbar, which is now solid white (Dashboard Design
+   * System). Same component, same click behavior -- only the icon color
+   * needs to branch since it's rendered in both header treatments.
+   */
+  variant?: 'dark' | 'light';
 };
 
 /**
  * Storefront Navbar uses lucide `MessageCircleMore` at 19px / stroke 2 / white
- * on the dark chrome. Dashboard header reuses that exact icon treatment.
+ * on the dark chrome. Dashboard header reuses that exact icon treatment for
+ * the `dark` variant; `light` matches the white AdminWorkspaceLayout topbar.
  */
 export function DashboardHeaderMessageButton({
   className = '',
   buttonRef,
+  variant = 'dark',
 }: DashboardHeaderMessageButtonProps) {
+  const iconColorClass = variant === 'light' ? 'text-[#475467]' : 'text-white';
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { counts } = useNavAttention();
@@ -41,14 +52,14 @@ export function DashboardHeaderMessageButton({
     <button
       ref={buttonRef}
       type="button"
-      className={`relative text-white hover:opacity-90 transition-opacity cursor-pointer bg-transparent border-0 p-0 w-7 h-7 flex items-center justify-center ${className}`}
+      className={`relative ${iconColorClass} hover:opacity-90 transition-opacity cursor-pointer bg-transparent border-0 p-0 w-7 h-7 flex items-center justify-center ${className}`}
       aria-label={unread > 0 ? `Messages, ${unread} unread` : 'Message inbox'}
       title="Messages"
       onClick={() => navigate(inboxPath)}
     >
-      <MessageCircleMore size={19} strokeWidth={2} className="text-white transition-colors" aria-hidden />
+      <MessageCircleMore size={19} strokeWidth={2} className={`${iconColorClass} transition-colors`} aria-hidden />
       {unread > 0 ? (
-        <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 text-white text-[9px] font-bold bg-[#FF5B00] rounded-full flex items-center justify-center leading-none">
+        <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 text-white text-[9px] font-bold bg-[#EF3C23] rounded-full flex items-center justify-center leading-none">
           {formatNavAttentionCount(unread)}
         </span>
       ) : null}

@@ -44,6 +44,7 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
   const { state: impersonation, exitImpersonation } = useImpersonation();
   const location = useLocation();
   const [navSearch, setNavSearch] = useState('');
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const activePageKey = pathToPageKey(location.pathname);
   const role = profile?.role;
@@ -99,19 +100,62 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
     activeNavItemRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [location.pathname]);
 
+  // Close the off-canvas mobile nav on every navigation so it never stays
+  // open across route changes.
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname]);
+
   return (
     <div className="admin-workspace">
-      <aside className="admin-workspace__sidebar" aria-label="Admin navigation">
-        <div className="admin-workspace__logo">
+      <header className="admin-workspace__topbar">
+        <button
+          type="button"
+          className="admin-workspace__nav-toggle"
+          onClick={() => setMobileNavOpen((v) => !v)}
+          aria-label={mobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
+          aria-expanded={mobileNavOpen}
+        >
+          <span />
+          <span />
+          <span />
+        </button>
+        <div className="admin-workspace__topbar-logo">
           <Link to="/admin/dashboard" aria-label="Choosify Dashboard">
             <img
-              src="/brand/choosify-logo-horizontal-white.svg"
+              src="/brand/choosify-logo-horizontal-navy.svg"
               alt="Choosify"
               draggable={false}
             />
           </Link>
         </div>
+        <div className="admin-workspace__topbar-title-block">
+          <div className="admin-workspace__topbar-title">{title}</div>
+          <div className="admin-workspace__topbar-subtitle">{subtitle}</div>
+        </div>
+        <div className="admin-workspace__topbar-search-wrap">
+          <GlobalDashboardSearch variant="topbar" tone="light" className="w-full" ready={Boolean(profile?.role)} />
+        </div>
+        <div className="admin-workspace__topbar-actions">
+          <DashboardHeaderMessageButton variant="light" />
+          <NotificationBellDropdown />
+          <div className="admin-workspace__topbar-divider" aria-hidden />
+          <UserProfileDropdown variant="header" light />
+        </div>
+      </header>
 
+      <div className="admin-workspace__body">
+      {mobileNavOpen ? (
+        <div
+          className="admin-workspace__sidebar-backdrop"
+          onClick={() => setMobileNavOpen(false)}
+          aria-hidden
+        />
+      ) : null}
+      <aside
+        className={`admin-workspace__sidebar${mobileNavOpen ? ' admin-workspace__sidebar--open' : ''}`}
+        aria-label="Admin navigation"
+      >
         <div className="admin-workspace__nav-search">
           <input
             value={navSearch}
@@ -195,22 +239,6 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
       </aside>
 
       <div className="admin-workspace__main">
-        <header className="admin-workspace__topbar">
-          <div className="admin-workspace__topbar-title-block">
-            <div className="admin-workspace__topbar-title">{title}</div>
-            <div className="admin-workspace__topbar-subtitle">{subtitle}</div>
-          </div>
-          <div className="admin-workspace__topbar-search-wrap">
-            <GlobalDashboardSearch variant="topbar" className="w-full" ready={Boolean(profile?.role)} />
-          </div>
-          <div className="admin-workspace__topbar-actions">
-            <DashboardHeaderMessageButton />
-            <NotificationBellDropdown />
-            <div className="admin-workspace__topbar-divider" aria-hidden />
-            <UserProfileDropdown variant="header" />
-          </div>
-        </header>
-
         {impersonation.active ? (
           <div
             className="mx-6 mt-4 mb-0 px-4 py-3 rounded-lg border border-rose-300/40 bg-rose-600/10 text-rose-100 flex items-center justify-between gap-4"
@@ -238,6 +266,7 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
         <main className="admin-workspace__content">
           <Suspense fallback={<AdminPageSkeleton variant="generic" />}>{children}</Suspense>
         </main>
+      </div>
       </div>
     </div>
   );

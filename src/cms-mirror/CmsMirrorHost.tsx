@@ -530,12 +530,12 @@ export const CmsMirrorHost: React.FC = () => {
         ref={searchAnchorRef}
         className={`cms-mirror-search-anchor${!shellInteractive ? ' cms-mirror-search-anchor--booting' : ''}`}
       >
-        <GlobalDashboardSearch variant="topbar" className="w-full" ready={shellInteractive} />
+        <GlobalDashboardSearch variant="topbar" tone="light" className="w-full" ready={shellInteractive} />
       </div>
 
       {shellInteractive ? (
         <div ref={messageAnchorRef} className="cms-mirror-message-anchor">
-          <DashboardHeaderMessageButton />
+          <DashboardHeaderMessageButton variant="light" />
         </div>
       ) : null}
 

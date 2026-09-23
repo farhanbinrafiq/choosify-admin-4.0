@@ -7,10 +7,18 @@
 
 .admin-workspace {
   display: flex;
+  flex-direction: column;
   min-height: 100vh;
-  background: var(--cms-page-bg, #f0f2f5);
-  color: var(--cms-text, #111827);
+  background: var(--cms-page-bg, #F7F8FA);
+  color: var(--cms-text, #172033);
   font-family: var(--cms-font-sans, 'DM Sans', system-ui, sans-serif);
+}
+
+/* Row containing the sidebar + main content, below the global header. */
+.admin-workspace__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
 }
 
 .admin-workspace__sidebar {
@@ -18,26 +26,61 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: var(--cms-sidebar-bg, var(--cms-gradient-dark-surface));
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  border-right: 1px solid var(--cms-on-dark-hairline, rgba(255, 255, 255, 0.12));
-  box-shadow: inset -1px 0 0 var(--cms-on-dark-hairline-soft, rgba(255, 255, 255, 0.05));
-  height: 100vh;
+  background: var(--cms-sidebar-bg, #ffffff);
+  border-right: 1px solid var(--cms-border, #E5E7EB);
+  /* Sits below the global header now, not the full viewport -- sticks to
+     just beneath it (rather than to the very top) as the page scrolls. */
+  height: calc(100vh - var(--cms-topbar-height, 64px));
   position: sticky;
-  top: 0;
+  top: var(--cms-topbar-height, 64px);
   z-index: 20;
 }
 
-.admin-workspace__logo {
-  display: flex;
+.admin-workspace__nav-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
   align-items: center;
-  gap: 10px;
-  padding: 20px 20px 18px;
+  gap: 4px;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  background: none;
+  border: 0;
+  border-radius: var(--cms-radius-control, 8px);
+  cursor: pointer;
+  padding: 0;
 }
 
-.admin-workspace__logo img {
-  height: 40px;
+.admin-workspace__nav-toggle:hover {
+  background: var(--cms-sidebar-hover, #F7F8FA);
+}
+
+.admin-workspace__nav-toggle span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--cms-text, #172033);
+}
+
+.admin-workspace__sidebar-backdrop {
+  display: none;
+}
+
+.admin-workspace__topbar-logo {
+  /* Was width: var(--cms-sidebar-width) -- a legacy coupling from when the
+     header logo box was meant to seam visually with the sidebar below it.
+     It never actually aligned: the topbar's own padding grows 16->24->32px
+     across breakpoints while the sidebar's content stays fixed at 20px, so
+     the two edges drift apart instead of lining up. Sized to content instead. */
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.admin-workspace__topbar-logo img {
+  height: 32px;
   width: auto;
   max-width: 180px;
   display: block;
@@ -45,7 +88,7 @@
 }
 
 .admin-workspace__nav-search {
-  padding: 0 20px 12px;
+  padding: 16px 20px 12px;
   position: relative;
 }
 
@@ -74,14 +117,14 @@
 .admin-workspace__nav-search-clear {
   position: absolute;
   right: 32px;
-  top: 0;
+  top: 16px;
   height: 34px;
   width: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--cms-sidebar-label-muted, #667085);
   font-size: 12px;
   background: none;
   border: 0;
@@ -89,7 +132,7 @@
 }
 
 .admin-workspace__nav-search-clear:hover {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--cms-sidebar-label, #172033);
 }
 
 .admin-workspace__nav {
@@ -103,7 +146,7 @@
    * without the non-standard `overflow: overlay`.
    */
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+  scrollbar-color: #D9DEE7 transparent;
   scrollbar-gutter: stable;
 }
 
@@ -116,12 +159,12 @@
 }
 
 .admin-workspace__nav::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.22);
+  background: #D9DEE7;
   border-radius: 4px;
 }
 
 .admin-workspace__nav::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.35);
+  background: #C2C9D6;
 }
 
 .admin-workspace__nav-group {
@@ -202,7 +245,7 @@
   height: 18px;
   padding: 0 5px;
   border-radius: 999px;
-  background: var(--cms-gradient-orange-button, linear-gradient(90deg, #c8321a, #ef3c23));
+  background: var(--cms-gradient-orange-button, linear-gradient(90deg, #EF3C23, #D4331B));
   color: #fff;
   font-size: 10px;
   font-weight: 800;
@@ -263,7 +306,7 @@
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  background: var(--cms-avatar-gradient, linear-gradient(135deg, #ef3c23, #2323ff));
+  background: var(--cms-avatar-gradient, linear-gradient(135deg, #EF3C23, #000435));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -307,11 +350,12 @@
 
 .admin-workspace__topbar {
   height: var(--cms-topbar-height, 64px);
-  background: var(--cms-gradient-chrome-header);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  border-bottom: 1px solid var(--cms-on-dark-hairline, rgba(255, 255, 255, 0.12));
-  box-shadow: inset 0 1px 0 var(--cms-on-dark-hairline-soft, rgba(255, 255, 255, 0.08));
+  /* Solid white (was var(--cms-gradient-chrome-header), the shared dark
+     navy/purple radial gradient) -- that token stays untouched for the
+     legacy CmsMirrorHost boot skeleton, which still precedes real dark
+     legacy content; the real workspace topbar needs its own light value. */
+  background: var(--cms-surface, #ffffff);
+  border-bottom: 1px solid var(--cms-border, #E5E7EB);
   display: flex;
   align-items: center;
   /* Storefront nav: gap-2 sm:gap-3 */
@@ -320,8 +364,10 @@
   padding: 0 16px;
   position: sticky;
   top: 0;
-  z-index: 10;
+  /* Global chrome sits above the sidebar it sticks flush against. */
+  z-index: 30;
   flex-shrink: 0;
+  width: 100%;
 }
 
 @media (min-width: 640px) {
@@ -424,15 +470,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--cms-text-secondary, #475467);
   background: none;
   border: 0;
   padding: 0;
-  transition: opacity 0.15s ease;
+  transition: color 0.15s ease;
 }
 
 .admin-workspace__topbar-icon:hover {
-  opacity: 0.9;
+  color: var(--cms-text, #172033);
 }
 
 .admin-workspace__topbar-badge {
@@ -504,6 +550,49 @@
 
   .admin-workspace__content {
     padding: 20px 16px 48px;
+  }
+
+  /* Below the desktop breakpoint the sidebar becomes an off-canvas drawer,
+     toggled by the hamburger button, instead of a permanent 240px column
+     that would otherwise overflow the viewport and push content off-screen. */
+  .admin-workspace__nav-toggle {
+    display: flex;
+  }
+
+  .admin-workspace__sidebar {
+    position: fixed;
+    top: var(--cms-topbar-height, 64px);
+    left: 0;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    z-index: 40;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.28);
+  }
+
+  .admin-workspace__sidebar--open {
+    transform: translateX(0);
+  }
+
+  .admin-workspace__sidebar-backdrop {
+    display: block;
+    position: fixed;
+    top: var(--cms-topbar-height, 64px);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(15, 15, 20, 0.5);
+    z-index: 35;
+  }
+
+  /* The message/bell/divider/avatar cluster is fixed-width and doesn't
+     shrink -- trim its own gaps and drop the divider so it fits next to the
+     hamburger + logo without pushing past the viewport edge. */
+  .admin-workspace__topbar-actions {
+    gap: 10px;
+  }
+
+  .admin-workspace__topbar-divider {
+    display: none;
   }
 }
 

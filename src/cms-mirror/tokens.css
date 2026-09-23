@@ -1,15 +1,21 @@
 /* Choosify Admin CMS mirror tokens — storefront footer / chrome gradient parity */
 
 :root {
-  --cms-page-bg: #f0f2f5;
+  /* Choosify Dashboard Design System (white/navy/orange). The sidebar/topbar
+     chrome tokens below were flipped from the shared dark navy/purple-leaning
+     gradient chrome (--choosify-gradient-sidebar / --choosify-header-gradient)
+     to a solid light chrome, scoped to the React AdminWorkspaceLayout shell
+     only -- the shared --choosify-* tokens in src/index.css still exist
+     (retinted navy+orange) for any legitimate remaining dark-accent use. */
+  --cms-page-bg: #F7F8FA;
   --cms-surface: #ffffff;
-  --cms-border: #e8edf2;
-  --cms-navy: #18154C;                          /* canonical Choosify Navy */
-  --cms-accent: var(--choosify-red, #ef3c23);   /* canonical Choosify Red/Coral */
-  --cms-accent-hover: #d4331b;
-  --cms-text: #111827;
-  --cms-text-secondary: #374151;
-  --cms-text-muted: #6b7280;
+  --cms-border: #E5E7EB;
+  --cms-navy: #000435;                     /* brand-navy, canonical Choosify Navy */
+  --cms-accent: #EF3C23;                   /* brand-orange, the actual logo orange */
+  --cms-accent-hover: #D4331B;
+  --cms-text: #172033;
+  --cms-text-secondary: #475467;
+  --cms-text-muted: #667085;
   --cms-danger: #dc2626;
   --cms-danger-bg: #fef2f2;
   --cms-sidebar-width: 240px;
@@ -34,9 +40,11 @@
   --cms-gradient-hero: linear-gradient(180deg, color-mix(in srgb, var(--choosify-red) 22%, var(--choosify-navy)) 0%, var(--choosify-navy) 100%);
 
   /* Brand primary button — canonical warm gradient (red → orange) */
-  --cms-gradient-orange-button: var(--choosify-gradient-warm);
+  --cms-gradient-orange-button: linear-gradient(90deg, #EF3C23 0%, #D4331B 100%);
 
-  --cms-sidebar-bg: var(--choosify-gradient-sidebar);
+  /* AdminWorkspaceLayout sidebar: solid white (was the dark navy/purple
+     gradient chrome shared with the legacy prototype's boot skeleton). */
+  --cms-sidebar-bg: #FFFFFF;
 
   /* ── React workspace shell (AdminWorkspaceLayout) ──
      Presentation tokens so adminWorkspace.css stops hardcoding literals.
@@ -54,23 +62,26 @@
   --cms-content-pad-x: 32px;
   --cms-radius-control: 8px;
 
-  /* On-dark chrome (sidebar + topbar) */
-  --cms-on-dark: #ffffff;
-  --cms-on-dark-hairline: rgba(255, 255, 255, 0.12);
-  --cms-on-dark-hairline-soft: rgba(255, 255, 255, 0.08);
-  --cms-sidebar-label: rgba(255, 255, 255, 0.80);
-  --cms-sidebar-label-muted: rgba(255, 255, 255, 0.55);
-  --cms-sidebar-group-title: rgba(255, 255, 255, 0.38);
-  --cms-sidebar-hover: rgba(255, 255, 255, 0.06);
-  --cms-sidebar-role: rgba(255, 255, 255, 0.42);
-  --cms-topbar-subtitle: rgba(255, 255, 255, 0.60);
+  /* Sidebar + topbar chrome text/hairline colors -- variable names kept as
+     "on-dark" for backward compatibility with every existing var() consumer
+     in adminWorkspace.css, but the VALUES now target the new solid-WHITE
+     sidebar/topbar (was on-dark-navy rgba(255,255,255,x) translucent white). */
+  --cms-on-dark: #172033;
+  --cms-on-dark-hairline: #E5E7EB;
+  --cms-on-dark-hairline-soft: #EAECF0;
+  --cms-sidebar-label: #172033;
+  --cms-sidebar-label-muted: #667085;
+  --cms-sidebar-group-title: #7A8499;
+  --cms-sidebar-hover: #F7F8FA;
+  --cms-sidebar-role: #667085;
+  --cms-topbar-subtitle: #667085;
 
-  /* Accent washes for active nav / tags */
-  --cms-accent-wash: rgba(239, 60, 35, 0.16);
-  --cms-accent-wash-strong: rgba(239, 60, 35, 0.22);
-  --cms-accent-wash-tag: rgba(239, 60, 35, 0.14);
+  /* Accent washes for active nav / tags -- soft orange (was translucent red) */
+  --cms-accent-wash: #FFF0E8;
+  --cms-accent-wash-strong: #FFE1D0;
+  --cms-accent-wash-tag: #FFF0E8;
 
-  --cms-avatar-gradient: linear-gradient(135deg, #ef3c23, #2323ff);
+  --cms-avatar-gradient: linear-gradient(135deg, #EF3C23, #000435);
 }
 
 .cms-mirror-host {
@@ -348,11 +359,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid #E5E7EB;
   border-radius: 999px;
   padding: 2px;
-  background: var(--cms-gradient-chrome-header);
-  box-shadow: 0 8px 24px rgba(24, 21, 76, 0.18);
+  background: #FFFFFF;
   cursor: pointer;
   outline: none;
 }
@@ -370,9 +380,9 @@
   height: 34px;
   padding: 0 14px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: var(--cms-gradient-chrome-header);
-  color: #fff;
+  border: 1px solid #E5E7EB;
+  background: #FFFFFF;
+  color: #172033;
   font-family: 'DM Sans', system-ui, sans-serif;
   font-size: 11px;
   font-weight: 800;
@@ -417,9 +427,13 @@
 }
 
 .cms-mirror-boot-sidebar {
+  /* The legacy CmsMirrorHost sidebar (public/cms-mirror/app.html) was
+     retinted to solid white in this same pass, so this boot skeleton can go
+     back to sharing --cms-sidebar-bg like the real AdminWorkspaceLayout one
+     -- no more dark-to-match-legacy special case needed. */
   width: var(--cms-sidebar-width, 240px);
   flex-shrink: 0;
-  background: var(--cms-sidebar-bg, var(--cms-gradient-dark-surface));
+  background: var(--cms-sidebar-bg, #ffffff);
 }
 
 .cms-mirror-boot-main {
@@ -437,8 +451,8 @@
   align-items: center;
   gap: 16px;
   padding: 0 32px;
-  background: var(--cms-gradient-chrome-header);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  background: #ffffff;
+  border-bottom: 1px solid #E5E7EB;
 }
 
 .cms-mirror-boot-topbar--spacer {
@@ -449,7 +463,7 @@
   width: min(200px, 22vw);
   height: 14px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.18);
+  background: #E5E7EB;
   animation: cms-skel-pulse 1.4s ease-in-out infinite;
 }
 

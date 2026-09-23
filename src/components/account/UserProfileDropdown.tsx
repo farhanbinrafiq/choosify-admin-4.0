@@ -15,9 +15,15 @@ import { AvatarCropModal } from './AvatarCropModal';
 import type { ProfileImageAdjustResult } from '../media/ProfileImageAdjustModal';
 
 type UserProfileDropdownProps = {
-  /** `header` = AdminLayout chrome; `overlay` = fixed on CMS mirror iframe host */
+  /** `header` = AdminLayout / AdminWorkspaceLayout chrome; `overlay` = fixed on CMS mirror iframe host */
   variant?: 'header' | 'overlay';
   className?: string;
+  /**
+   * true = the caller's header chrome is light (AdminWorkspaceLayout's white
+   * topbar, Dashboard Design System) so the name/role text needs to be dark,
+   * not white. Default false preserves AdminLayout's still-dark header.
+   */
+  light?: boolean;
 };
 
 type MenuItem = {
@@ -27,7 +33,7 @@ type MenuItem = {
   onSelect: () => void;
 };
 
-export function UserProfileDropdown({ variant = 'header', className = '' }: UserProfileDropdownProps) {
+export function UserProfileDropdown({ variant = 'header', className = '', light = false }: UserProfileDropdownProps) {
   const { profile, logout, updateAvatar } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -263,12 +269,12 @@ export function UserProfileDropdown({ variant = 'header', className = '' }: User
   const triggerClasses =
     variant === 'overlay'
       ? 'cms-mirror-profile-trigger'
-      : 'flex items-center gap-2.5 pl-1 shrink-0 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-white/30';
+      : `flex items-center gap-2.5 pl-1 shrink-0 rounded-lg outline-none focus-visible:ring-2 ${light ? 'focus-visible:ring-app-accent/30' : 'focus-visible:ring-white/30'}`;
 
   const AvatarFace = ({ sizeClass, textClass }: { sizeClass: string; textClass: string }) => (
     <span
       className={`relative flex items-center justify-center rounded-full font-bold text-white shrink-0 overflow-hidden ${sizeClass} ${textClass}`}
-      style={{ backgroundImage: 'linear-gradient(135deg, #EF3C23, #2323FF)' }}
+      style={{ backgroundImage: 'linear-gradient(135deg, #EF3C23, #000435)' }}
     >
       <img
         src={avatarUrl}
@@ -326,8 +332,8 @@ export function UserProfileDropdown({ variant = 'header', className = '' }: User
       >
         {variant === 'header' && (
           <div className="hidden lg:block text-right">
-            <div className="text-[12px] font-bold text-white leading-tight">{displayName}</div>
-            <div className="text-[10px] text-white/50 leading-tight">{roleLabel}</div>
+            <div className={`text-[12px] font-bold leading-tight ${light ? 'text-[#172033]' : 'text-white'}`}>{displayName}</div>
+            <div className={`text-[10px] leading-tight ${light ? 'text-[#667085]' : 'text-white/50'}`}>{roleLabel}</div>
           </div>
         )}
         <AvatarFace

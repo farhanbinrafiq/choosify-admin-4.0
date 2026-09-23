@@ -114,7 +114,7 @@ function normalizeActorKey(profile: { choosifyUserId?: string; id?: string } | n
 
 function groupIcon(group: DashboardSearchGroup) {
   const Icon = GROUP_ICONS[group] || SearchCheck;
-  return <Icon size={12} className="text-[#FF5B00] shrink-0" />;
+  return <Icon size={12} className="text-[#EF3C23] shrink-0" />;
 }
 
 
@@ -126,8 +126,14 @@ export function GlobalDashboardSearch(props: {
    * Defaults to true — internal route navigation should leave search interactive.
    */
   ready?: boolean;
+  /**
+   * 'dark' (default) = every existing dark-chrome caller (CmsMirrorHost,
+   * AdminLayout). 'light' = AdminWorkspaceLayout's white topbar. See
+   * GlobalSearchShell's `tone` prop -- this just threads it through.
+   */
+  tone?: 'dark' | 'light';
 }) {
-  const { ready = true, variant = 'header', className } = props;
+  const { ready = true, variant = 'header', className, tone = 'dark' } = props;
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { can } = useRbac();
@@ -479,6 +485,7 @@ export function GlobalDashboardSearch(props: {
   const renderSearchForm = (presentation: 'inline' | 'overlay') => (
     <GlobalSearchShell
       mode="dashboard"
+      tone={tone}
       presentation={presentation}
       value={query}
       placeholder={placeholder}
@@ -520,7 +527,7 @@ export function GlobalDashboardSearch(props: {
               type="button"
               onClick={() => persistRecent([])}
               disabled={recent.length === 0}
-              className="text-[9.5px] font-bold text-[#FF5B00] hover:text-[#EF3C23] hover:underline bg-transparent border-0 cursor-pointer p-0 shrink-0 whitespace-nowrap disabled:opacity-40 disabled:cursor-default disabled:no-underline"
+              className="text-[9.5px] font-bold text-[#EF3C23] hover:text-[#EF3C23] hover:underline bg-transparent border-0 cursor-pointer p-0 shrink-0 whitespace-nowrap disabled:opacity-40 disabled:cursor-default disabled:no-underline"
             >
               Clear search history
             </button>
@@ -556,7 +563,7 @@ export function GlobalDashboardSearch(props: {
 
       <div className="flex flex-col text-left space-y-2 pt-4 md:pt-0 md:pl-4">
         <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1">
-          <Eye size={12} className="text-[#FF5B00]" />
+          <Eye size={12} className="text-[#EF3C23]" />
           Recently Viewed
         </span>
         {recentlyViewed.length === 0 ? (
@@ -584,7 +591,7 @@ export function GlobalDashboardSearch(props: {
               setRecentlyViewed([]);
               saveRecentlyViewed(actorKey, []);
             }}
-            className="text-[9.5px] font-bold text-[#FF5B00] hover:text-[#EF3C23] hover:underline bg-transparent border-0 cursor-pointer p-0 self-start"
+            className="text-[9.5px] font-bold text-[#EF3C23] hover:text-[#EF3C23] hover:underline bg-transparent border-0 cursor-pointer p-0 self-start"
           >
             Clear recently viewed
           </button>
@@ -594,7 +601,7 @@ export function GlobalDashboardSearch(props: {
 
       <div className="flex flex-col text-left space-y-2 pt-4 md:pt-0 md:pl-4">
         <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1">
-          <Zap size={12} className="text-[#FF5B00]" />
+          <Zap size={12} className="text-[#EF3C23]" />
           Quick Access
         </span>
         <div className="flex flex-wrap gap-2">
@@ -611,7 +618,7 @@ export function GlobalDashboardSearch(props: {
                   route: item.route,
                 })
               }
-              className="px-2.5 py-1.5 rounded-full text-[10px] font-bold border transition-colors bg-gray-50 text-[#1A1A2E] border-gray-100 hover:border-[#FF5B00]/20 hover:bg-[#FF5B00]/5"
+              className="px-2.5 py-1.5 rounded-full text-[10px] font-bold border transition-colors bg-gray-50 text-[#1A1A2E] border-gray-100 hover:border-[#EF3C23]/20 hover:bg-[#EF3C23]/5"
             >
               {item.label}
             </button>
@@ -688,7 +695,7 @@ export function GlobalDashboardSearch(props: {
                   onMouseEnter={() => setActiveIndex(idx)}
                   className={cn(
                     'flex items-center justify-between gap-3 px-3 py-2 rounded-[5px] cursor-pointer transition-colors',
-                    isActive ? 'bg-[#FF5B00]/5 text-[#FF5B00]' : 'text-[#1A1A2E] hover:bg-gray-50',
+                    isActive ? 'bg-[#EF3C23]/5 text-[#EF3C23]' : 'text-[#1A1A2E] hover:bg-gray-50',
                   )}
                 >
                   <div className="min-w-0 text-left flex-1">
@@ -735,13 +742,13 @@ export function GlobalDashboardSearch(props: {
                           setFocused(false);
                           setQuery('');
                         }}
-                        className="text-[8px] font-black uppercase tracking-wider bg-[#FF5B00]/10 text-[#FF5B00] border border-[#FF5B00]/20 px-2 py-0.5 rounded-full inline-flex items-center gap-1"
+                        className="text-[8px] font-black uppercase tracking-wider bg-[#EF3C23]/10 text-[#EF3C23] border border-[#EF3C23]/20 px-2 py-0.5 rounded-full inline-flex items-center gap-1"
                       >
                         <LogIn size={10} />
                         Login As
                       </button>
                     ) : null}
-                    <span className="text-[8px] font-black uppercase tracking-wider bg-[#FF5B00]/10 text-[#FF5B00] border border-[#FF5B00]/20 px-2 py-0.5 rounded-full scale-90">
+                    <span className="text-[8px] font-black uppercase tracking-wider bg-[#EF3C23]/10 text-[#EF3C23] border border-[#EF3C23]/20 px-2 py-0.5 rounded-full scale-90">
                       {item.type}
                     </span>
                   </div>
@@ -771,7 +778,12 @@ export function GlobalDashboardSearch(props: {
         type="button"
         aria-label="Open search"
         onClick={openMobileSearch}
-        className="sm:hidden flex w-10 h-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white hover:bg-white/10 transition-colors"
+        className={cn(
+          'sm:hidden flex w-10 h-10 shrink-0 items-center justify-center rounded-full transition-colors',
+          tone === 'light'
+            ? 'border border-[#E1E5EA] bg-[#F8F9FB] text-[#475467] hover:bg-[#F1F3F5]'
+            : 'border border-white/10 bg-white/5 text-white hover:bg-white/10',
+        )}
       >
         <SearchCheck size={20} strokeWidth={2} />
       </button>

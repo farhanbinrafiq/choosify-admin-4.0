@@ -305,12 +305,12 @@ window.addEventListener('message', function(ev) {
   <!-- SIDEBAR -->
   <div style="{{ sidebarStyle }}">
     <div style="display:flex;align-items:center;gap:10px;padding:22px 22px 20px">
-      <img src="/brand/choosify-logo-horizontal-white.svg" alt="Choosify" style="height:40px;width:auto;max-width:180px;display:block;object-fit:contain" draggable="false">
+      <img src="/brand/choosify-logo-horizontal-navy.svg" alt="Choosify" style="height:40px;width:auto;max-width:180px;display:block;object-fit:contain" draggable="false">
     </div>
     <div style="padding:0 22px 14px;position:relative">
       <input value="{{ navSearchValue }}" sc-camel-on-change="{{ setNavSearch }}" placeholder="Search categories..." style="{{ navSearchInputStyle }}">
       <sc-if value="{{ navSearchValue }}" hint-placeholder-val="{{ false }}">
-        <span sc-camel-on-click="{{ clearNavSearch }}" style="position:absolute;right:32px;top:0;height:34px;width:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:rgba(255,255,255,0.45);font-size:12px" style-hover="color:rgba(255,255,255,0.8)">✕</span>
+        <span sc-camel-on-click="{{ clearNavSearch }}" style="position:absolute;right:32px;top:0;height:34px;width:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#667085;font-size:12px" style-hover="color:#172033">✕</span>
       </sc-if>
     </div>
     <div class="cms-sidebar-nav" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:4px 12px 12px">
@@ -347,10 +347,10 @@ window.addEventListener('message', function(ev) {
 
   <!-- MAIN -->
   <div style="flex:1;min-width:0;display:flex;flex-direction:column">
-    <div style="height:64px;background:radial-gradient(900px 200px at 15% 0%,rgba(255,91,0,0.16),transparent 70%),radial-gradient(700px 200px at 90% 100%,rgba(239,60,35,0.12),transparent 70%),rgba(24,21,76,0.94);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-bottom:1px solid rgba(255,255,255,0.12);box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);display:flex;align-items:center;gap:12px;padding:0 24px;position:sticky;top:0;z-index:10;flex-shrink:0">
+    <div style="height:64px;background:#FFFFFF;border-bottom:1px solid #E5E7EB;display:flex;align-items:center;gap:12px;padding:0 24px;position:sticky;top:0;z-index:10;flex-shrink:0">
       <div style="flex:0 1 auto;min-width:0;max-width:min(220px,20vw)">
-        <div style="font-family:'Outfit',sans-serif;font-size:18px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ pageTitle }}</div>
-        <div style="font-size:11.5px;color:rgba(255,255,255,0.6);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ pageSubtitle }}</div>
+        <div style="font-family:'Outfit',sans-serif;font-size:18px;font-weight:800;color:#172033;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ pageTitle }}</div>
+        <div style="font-size:11.5px;color:#667085;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ pageSubtitle }}</div>
       </div>
       <!-- Flex search slot — storefront navbar-fluid: flex:1 1 0% middle band -->
       <div data-cms-search-slot="1" aria-hidden="true" style="flex:1 1 0%;min-width:0;height:44px;visibility:hidden;pointer-events:none;padding-left:4px;padding-right:4px;box-sizing:border-box"></div>
@@ -358,9 +358,9 @@ window.addEventListener('message', function(ev) {
         <div data-cms-message-slot="1" aria-hidden="true" style="width:28px;height:28px;flex-shrink:0"></div>
         <div data-notif-root="1" style="position:relative">
           <div sc-camel-on-click="{{ toggleNotifMenu }}" style="position:relative;cursor:pointer;width:28px;height:28px;display:flex;align-items:center;justify-content:center" title="Notifications" role="button" aria-label="Notifications">
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#475467" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>
             <sc-if value="{{ notifUnreadVisible }}" hint-placeholder-val="{{ false }}">
-              <span style="position:absolute;top:-5px;right:-6px;background:linear-gradient(90deg,#C8321A,#EF3C23);color:#fff;font-size:8.5px;font-weight:700;border-radius:8px;padding:1px 4px;min-width:14px;text-align:center">{{ notifUnreadLabel }}</span>
+              <span style="position:absolute;top:-5px;right:-6px;background:linear-gradient(90deg,#EF3C23,#D4331B);color:#fff;font-size:8.5px;font-weight:700;border-radius:8px;padding:1px 4px;min-width:14px;text-align:center">{{ notifUnreadLabel }}</span>
             </sc-if>
           </div>
           <sc-if value="{{ notifMenuOpen }}" hint-placeholder-val="{{ false }}">
@@ -13275,7 +13275,7 @@ class Component extends DCLogic {
           onClick: () => this.setPage(it.key),
           rowStyle: `display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:pointer;margin-bottom:2px;opacity:${showLock ? '0.72' : '1'};background:${active ? 'rgba(239,60,35,0.16)' : 'transparent'}`,
           barStyle: `width:3px;height:16px;border-radius:2px;background:${active ? '#EF3C23' : 'transparent'};flex-shrink:0`,
-          labelStyle: `font-size:13px;font-weight:${active?700:600};color:${active ? '#EF3C23' : (showLock ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.8)')};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0`,
+          labelStyle: `font-size:13px;font-weight:${active?700:600};color:${active ? '#EF3C23' : (showLock ? '#9CA3AF' : '#172033')};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0`,
         };
       }),
     }));
@@ -17562,17 +17562,17 @@ class Component extends DCLogic {
       onClick: this.setStatus(s),
       style: `padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;background:${this.state.editingProduct && this.state.editingProduct.status===s ? '#EF3C23' : '#F1F3F5'};color:${this.state.editingProduct && this.state.editingProduct.status===s ? '#fff' : '#374151'}`,
     }));
-    const navSearchInputStyle = `width:100%;box-sizing:border-box;height:34px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);padding:0 28px 0 12px;font-size:11.5px;color:#fff`;
+    const navSearchInputStyle = `width:100%;box-sizing:border-box;height:34px;border-radius:8px;border:1px solid #E5E7EB;background:#F7F8FA;padding:0 28px 0 12px;font-size:11.5px;color:#172033`;
 
     return {
       appShellStyle: `display:flex;min-height:100vh;background:${dark?'#0B0D14':'#F0F2F5'};color:${dark?'#F3F4F6':'#111827'}`,
-      sidebarStyle: 'width:240px;flex-shrink:0;display:flex;flex-direction:column;background:radial-gradient(1200px 500px at 15% 0%,rgba(255,91,0,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,rgba(239,60,35,0.14),transparent 65%),rgba(24,21,76,0.96);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-right:1px solid rgba(255,255,255,0.12);box-shadow:inset -1px 0 0 rgba(255,255,255,0.05);height:100vh;position:sticky;top:0',
-      logoTextStyle: `font-size:16px;font-weight:800;letter-spacing:-0.4px;color:#fff;font-family:'Outfit',sans-serif`,
-      logoSubStyle: `font-size:10px;font-weight:600;color:rgba(255,255,255,0.45)`,
-      groupTitleStyle: `font-size:10px;font-weight:700;letter-spacing:0.08em;color:rgba(255,255,255,0.35);padding:0 10px;margin-bottom:6px`,
-      sidebarFooterStyle: `display:flex;align-items:center;gap:10px;padding:16px 20px;border-top:1px solid rgba(255,255,255,0.08)`,
-      footerNameStyle: `font-size:12.5px;font-weight:700;color:#fff`,
-      footerRoleStyle: `font-size:10.5px;font-weight:600;color:rgba(255,255,255,0.4)`,
+      sidebarStyle: 'width:240px;flex-shrink:0;display:flex;flex-direction:column;background:#FFFFFF;border-right:1px solid #E5E7EB;height:100vh;position:sticky;top:0',
+      logoTextStyle: `font-size:16px;font-weight:800;letter-spacing:-0.4px;color:#172033;font-family:'Outfit',sans-serif`,
+      logoSubStyle: `font-size:10px;font-weight:600;color:#667085`,
+      groupTitleStyle: `font-size:10px;font-weight:700;letter-spacing:0.08em;color:#7A8499;padding:0 10px;margin-bottom:6px`,
+      sidebarFooterStyle: `display:flex;align-items:center;gap:10px;padding:16px 20px;border-top:1px solid #E5E7EB`,
+      footerNameStyle: `font-size:12.5px;font-weight:700;color:#172033`,
+      footerRoleStyle: `font-size:10.5px;font-weight:600;color:#667085`,
       footerName: window.__CMS_MIRROR_DISPLAY_NAME__ || window.__CMS_MIRROR_EMAIL__ || 'Loading…',
       footerInitials: String(window.__CMS_MIRROR_DISPLAY_NAME__ || window.__CMS_MIRROR_EMAIL__ || 'U').trim().split(/\s+/).filter(Boolean).slice(0, 2).map(function (p) { return p[0]; }).join('').toUpperCase() || 'U',
       footerAvatarUrl: window.__CMS_MIRROR_AVATAR_URL__ || '',
