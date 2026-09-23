@@ -489,16 +489,19 @@ const ContentStudioEntry: React.FC = () => <CmsMirrorHost />;
 
 /**
  * Products & Inventory list (/admin/products).
- * Seller → migrated React surface (AdminWorkspaceLayout chrome), backed by the
- *   canonical catalog API with server-side ownership scoping.
- * Admin / Super Admin / everyone else → unchanged CmsMirrorHost catalog
- *   management (richer admin catalog tooling not yet ported).
+ * Seller / Admin / Super Admin → migrated React surface (AdminWorkspaceLayout
+ *   chrome), backed by the canonical catalog API with server-side scoping
+ *   (scopeProductsForRequest already returns the full platform-wide catalog
+ *   for admin/super_admin, and the seller's own products for a seller --
+ *   Products.tsx itself is already role-correct, it just wasn't routed for
+ *   admin/super_admin before now).
+ * Everyone else → unchanged CmsMirrorHost catalog management.
  * Rollback: delete this component + its route; /admin/products falls straight
  * back through the /admin/* catch-all to CmsMirrorHost, no backend change.
  */
 const ProductsListEntry: React.FC = () => {
   const { profile } = useAuth();
-  if (profile?.role === 'seller') {
+  if (profile?.role === 'seller' || profile?.role === 'admin' || profile?.role === 'super_admin') {
     return (
       <AdminWorkspaceLayout>
         <MarketplaceAccessGate>

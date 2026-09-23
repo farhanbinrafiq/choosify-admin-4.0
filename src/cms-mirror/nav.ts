@@ -40,7 +40,9 @@ export const PAGE_KEY_TO_PATH: Record<string, string> = {
   sellerCustomers: '/admin/customers',
   returnsRefunds: '/admin/returns',
   warrantyClaims: '/admin/warranty-claims',
-  adsDealsStudio: '/admin/ads-deals-studio',
+  // Points at the real migrated React route (/admin/ads-studio -> BannerDirectAdsStudio),
+  // not the legacy CmsMirrorHost-only path this nav item used to link to.
+  adsDealsStudio: '/admin/ads-studio',
   contentStudio: '/admin/guides',
   courierProviders: '/admin/logistics/couriers',
   shipmentOperations: '/admin/logistics/shipments',
