@@ -53,6 +53,7 @@ export const PAGE_KEY_TO_PATH: Record<string, string> = {
   trustCenter: '/admin/trust-center',
   messages: '/admin/messages',
   metaInboxAdmin: '/admin/meta-inbox',
+  inquiries: '/admin/inquiries',
   partnerSupport: '/admin/support',
   notifications: '/admin/notifications',
   finance: '/admin/analytics',
@@ -121,6 +122,7 @@ export function resolveAdminPageKey(pathname: string): string | null {
   if (pathname.startsWith('/admin/seller-management')) return 'sellerManagementStudio';
   if (pathname.startsWith('/admin/creator-management')) return 'creatorManagementStudio';
   if (pathname.startsWith('/admin/meta-inbox')) return 'metaInboxAdmin';
+  if (pathname.startsWith('/admin/inquiries')) return 'inquiries';
   if (pathname.startsWith('/admin/messages')) return 'messages';
   if (pathname.startsWith('/admin/support')) return 'partnerSupport';
   if (pathname.startsWith('/admin/analytics')) return 'finance';
@@ -293,6 +295,7 @@ export const NAV_DEFS: CmsNavGroup[] = [
     items: [
       { key: 'messages', label: 'Messages', path: PAGE_KEY_TO_PATH.messages },
       { key: 'metaInboxAdmin', label: 'Meta Inbox', path: PAGE_KEY_TO_PATH.metaInboxAdmin },
+      { key: 'inquiries', label: 'Inquiries', path: PAGE_KEY_TO_PATH.inquiries },
       { key: 'notifications', label: 'Notifications', path: PAGE_KEY_TO_PATH.notifications },
     ],
   },
@@ -354,6 +357,7 @@ export const PAGE_META: Record<string, [string, string]> = {
   contentStudio: ['Guide Management', 'Manage videos, reels, blogs, and live sessions'],
   messages: ['Choosify Support', 'Support conversations from Consumers, Sellers and Creators'],
   metaInboxAdmin: ['Meta Inbox', 'Platform-level WhatsApp, Messenger and Instagram conversations'],
+  inquiries: ['Inquiries', 'Brand suggestions, partnership, advertising and contact requests'],
   partnerSupport: ['Messages', 'Message the Choosify team'],
   returnsRefunds: ['Returns & Refunds', 'Audit customer return complaints and process refunds'],
   warrantyClaims: ['Warranty Claims', 'Review and resolve customer warranty claims'],

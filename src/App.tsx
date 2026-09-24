@@ -77,6 +77,7 @@ const BrandDetails = lazy(() => import('./pages/admin/BrandDetails'));
 const DealsBannersStudio = lazy(() => import('./pages/admin/DealsBannersStudio'));
 const BrandPostsPage = lazy(() => import('./pages/admin/BrandPosts'));
 const LeadsInboxPage = lazy(() => import('./pages/admin/LeadsInbox'));
+const InquiryDetailPage = lazy(() => import('./pages/admin/InquiryDetail'));
 const JobPostingsPage = lazy(() => import('./pages/admin/JobPostings'));
 const SellerOffersPage = lazy(() => import('./pages/admin/SellerOffers'));
 const PlatformOrdersPage = lazy(() => import('./pages/admin/PlatformOrders'));
@@ -1324,6 +1325,37 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
+            {/* Public business inquiries (Suggest a Brand / Partnership / Advertise / Contact). Admin-only, matching the API's requireAdmin. */}
+            <Route
+              path="/admin/inquiries"
+              element={
+                <ProtectedRoute>
+                  <ManagementStudioRoleGate>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <LeadsInboxPage />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </ManagementStudioRoleGate>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/inquiries/:id"
+              element={
+                <ProtectedRoute>
+                  <ManagementStudioRoleGate>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <InquiryDetailPage />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </ManagementStudioRoleGate>
+                </ProtectedRoute>
+              }
+            />
+            {/* Legacy "Lead Inbox" links (sidebar, analytics quick links) had no route. */}
+            <Route path="/admin/leads" element={<Navigate to="/admin/inquiries" replace />} />
             {/* Partner (Creator / Seller) own Choosify Support inbox — System A support-only. */}
             <Route
               path="/admin/support"

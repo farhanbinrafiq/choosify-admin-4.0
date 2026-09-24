@@ -44,8 +44,16 @@ import { db } from './db/client';
 import { users } from './db/schema';
 import { eq } from 'drizzle-orm';
 import { validate } from './middleware/validate';
-import { authenticateRequest } from './middleware/auth';
+import { authenticateRequest, softAuthenticateRequest } from './middleware/auth';
 import { requireRole } from './middleware/authorization';
+import {
+  detectBrandDuplicateSignals,
+  findRecentResubmission,
+  inquiryOptionsPayload,
+  notifyInquiryCreated,
+  validateInquiry,
+} from './inquiries/inquiryService';
+import { INQUIRY_STATUSES, type InquiryType } from '../shared/inquiries/inquiryOptions';
 import { requirePartnerEntitlement } from './entitlements/entitlementMiddleware';
 import { requireMarketplaceAccess } from './entitlements/marketplaceAccessMiddleware';
 import { requireModerator as requireModeratorRole } from './middleware/requireModerator';
@@ -4729,48 +4737,199 @@ operationsRouter.delete('/operations/reviews/:id', ...requireAuth, (req, res) =>
   res.json({ success: true });
 });
 
-operationsRouter.get('/operations/leads', (_req, res) => {
-  res.json({ data: operationsStore.listLeads() });
+// ── Public business inquiries (canonical "lead" record) ─────────────────────
+
+/** Controlled options for the public inquiry forms — the server validates against the same lists. */
+operationsRouter.get('/operations/lead-options', async (_req, res) => {
+  try {
+    const categories = await catalogStore.listCategories();
+    res.json({ data: inquiryOptionsPayload(categories) });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to load inquiry options' });
+  }
 });
 
-operationsRouter.post('/operations/leads', (req, res) => {
-  const abuse = recordSuspiciousRequest(req.ip, req.originalUrl);
-  if (abuse.thresholdExceeded) {
+const LEGACY_SOURCE_TYPE: Record<string, InquiryType> = {
+  'suggest-brand': 'suggest_brand',
+  'partnership-page': 'partnership',
+  'advertise-page': 'advertising',
+  'contact-page': 'general_contact',
+  // Creator profile "ask for branding" modal still posts the legacy shape.
+  'creator-ask-for-branding': 'partnership',
+};
+
+async function assignInquiryReference(leadId: string) {
+  try {
+    const referenceId = await ensureEntityReferenceId({ entityType: 'inquiry', internalId: leadId });
+    return operationsStore.updateLead(leadId, { referenceId }) ?? operationsStore.getLead(leadId);
+  } catch (err) {
+    // The inquiry stays persisted without a reference rather than being lost.
+    Logger.warn('[Inquiry] Reference id allocation failed', { leadId, error: err instanceof Error ? err.message : String(err) });
+    return operationsStore.getLead(leadId);
+  }
+}
+
+function notifyInquiryInBackground(leadId: string) {
+  const lead = operationsStore.getLead(leadId);
+  if (!lead) return;
+  void notifyInquiryCreated(lead).then((delivery) => {
+    operationsStore.updateLead(leadId, { delivery });
+  });
+}
+
+/** Per-IP inquiry submissions allowed per abuse window (15 min). Generous enough for shared/CGNAT IPs. */
+const INQUIRY_SUBMISSIONS_PER_WINDOW = Number(process.env.INQUIRY_RATE_LIMIT || 30);
+
+operationsRouter.post('/operations/leads', softAuthenticateRequest, async (req, res) => {
+  // Fixed key (not originalUrl) so query-string variations share one bucket.
+  const abuse = recordSuspiciousRequest(req.ip, 'POST /operations/leads');
+  if (abuse.thresholdExceeded || abuse.count > INQUIRY_SUBMISSIONS_PER_WINDOW) {
     res.status(429).json({ error: 'Too many submissions. Please try again later.' });
     return;
   }
-  const body = req.body as {
-    brandName?: string;
-    contactPerson?: string;
-    email?: string;
-    budget?: string;
-    placementInterest?: string;
-    message?: string;
-    source?: string;
-  };
-  if (!body.brandName?.trim() || !body.email?.trim()) {
-    res.status(400).json({ error: 'brandName and email are required' });
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const submittedByUserId = req.userId || undefined;
+
+  // Legacy storefront payload (no inquiryType) — accepted unchanged so an
+  // older storefront build keeps working until it is redeployed.
+  if (typeof body.inquiryType !== 'string') {
+    const brandName = typeof body.brandName === 'string' ? body.brandName.trim().slice(0, 200) : '';
+    const email = typeof body.email === 'string' ? body.email.trim().slice(0, 500) : '';
+    if (!brandName || !email) {
+      res.status(400).json({ error: 'brandName and email are required' });
+      return;
+    }
+    const source = typeof body.source === 'string' ? body.source.slice(0, 60) : 'advertise-page';
+    const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) || undefined : undefined);
+    const created = operationsStore.createLead({
+      source,
+      inquiryType: LEGACY_SOURCE_TYPE[source] ?? 'general_contact',
+      brandName,
+      contactPerson: str(body.contactPerson, 200),
+      email,
+      budget: str(body.budget, 60),
+      placementInterest: str(body.placementInterest, 60),
+      message: str(body.message, 4000),
+      submittedByUserId,
+    });
+    const saved = await assignInquiryReference(created.id);
+    notifyInquiryInBackground(created.id);
+    res.status(201).json({ success: true, data: { id: created.id, referenceId: saved?.referenceId ?? null } });
     return;
   }
-  const saved = operationsStore.createLead({
-    source: body.source || 'advertise-page',
-    brandName: body.brandName.trim(),
-    contactPerson: body.contactPerson?.trim(),
-    email: body.email.trim(),
-    budget: body.budget,
-    placementInterest: body.placementInterest,
-    message: body.message?.trim(),
-  });
-  res.status(201).json({ success: true, data: saved });
+
+  let categories: Awaited<ReturnType<typeof catalogStore.listCategories>> = [];
+  if (body.inquiryType === 'suggest_brand') {
+    try {
+      categories = await catalogStore.listCategories();
+    } catch {
+      res.status(503).json({ error: 'Categories are temporarily unavailable. Please try again.' });
+      return;
+    }
+  }
+  const result = validateInquiry(body, categories);
+  if ('errors' in result) {
+    res.status(400).json({ error: 'Please check the highlighted fields.', fieldErrors: result.errors });
+    return;
+  }
+  const value = result.value;
+
+  // Hidden honeypot field: kept for review as spam, never notified.
+  const honeypot = typeof body.companyFax === 'string' && body.companyFax.trim().length > 0;
+
+  const existing = findRecentResubmission(value, operationsStore.listLeads());
+  if (existing && !honeypot) {
+    res.status(200).json({ success: true, duplicate: true, data: { id: existing.id, referenceId: existing.referenceId ?? null } });
+    return;
+  }
+
+  let duplicateSignals: ReturnType<typeof detectBrandDuplicateSignals> = [];
+  if (value.inquiryType === 'suggest_brand') {
+    try {
+      duplicateSignals = detectBrandDuplicateSignals(value, await catalogStore.listBrands(), operationsStore.listLeads());
+    } catch {
+      duplicateSignals = [];
+    }
+  }
+
+  const created = operationsStore.createLead(
+    {
+      source: value.sourcePath || value.inquiryType,
+      inquiryType: value.inquiryType,
+      brandName: value.brandName,
+      contactPerson: value.contactPerson,
+      email: value.email,
+      website: value.website,
+      categoryId: value.categoryId,
+      categoryName: value.categoryName,
+      country: value.country,
+      subject: value.subject,
+      partnershipModel: value.partnershipModel,
+      budget: value.budget,
+      placementInterest: value.placementInterest,
+      message: value.message,
+      sourcePath: value.sourcePath,
+      submittedByUserId,
+      duplicateSignals: duplicateSignals.length ? duplicateSignals : undefined,
+    },
+    { status: honeypot ? 'spam' : 'new' },
+  );
+  if (honeypot) {
+    res.status(201).json({ success: true, data: { id: created.id, referenceId: null } });
+    return;
+  }
+  const saved = await assignInquiryReference(created.id);
+  notifyInquiryInBackground(created.id);
+  res.status(201).json({ success: true, data: { id: created.id, referenceId: saved?.referenceId ?? null } });
 });
 
+operationsRouter.get('/operations/leads', ...requireAdmin, (_req, res) => {
+  res.json({ data: operationsStore.listLeads() });
+});
+
+operationsRouter.get('/operations/leads/:id', ...requireAdmin, (req, res) => {
+  const lead = operationsStore.getLead(req.params.id);
+  if (!lead) {
+    res.status(404).json({ error: 'Inquiry not found' });
+    return;
+  }
+  res.json({ data: lead });
+});
+
+/** Status only — the inquiry's submitted fields are never editable through the API. */
 operationsRouter.patch('/operations/leads/:id', ...requireAdmin, (req, res) => {
-  const saved = operationsStore.updateLead(req.params.id, req.body);
+  const status = (req.body as { status?: unknown } | undefined)?.status;
+  if (typeof status !== 'string' || !INQUIRY_STATUSES.some((s) => s.value === status)) {
+    res.status(400).json({ error: 'A valid status is required.' });
+    return;
+  }
+  const saved = operationsStore.setLeadStatus(req.params.id, status as (typeof INQUIRY_STATUSES)[number]['value'], {
+    id: req.userId || 'unknown',
+    name: req.user?.displayName || req.userId || 'Admin',
+  });
   if (!saved) {
-    res.status(404).json({ error: 'Lead not found' });
+    res.status(404).json({ error: 'Inquiry not found' });
     return;
   }
   res.json({ success: true, data: saved });
+});
+
+operationsRouter.post('/operations/leads/:id/notes', ...requireAdmin, (req, res) => {
+  const raw = (req.body as { body?: unknown } | undefined)?.body;
+  const text = typeof raw === 'string' ? raw.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').trim() : '';
+  if (!text || text.length > 2000) {
+    res.status(400).json({ error: 'A note between 1 and 2000 characters is required.' });
+    return;
+  }
+  const saved = operationsStore.addLeadNote(req.params.id, text, {
+    id: req.userId || 'unknown',
+    name: req.user?.displayName || req.userId || 'Admin',
+  });
+  if (!saved) {
+    res.status(404).json({ error: 'Inquiry not found' });
+    return;
+  }
+  res.status(201).json({ success: true, data: saved });
 });
 
 operationsRouter.get('/operations/jobs/public', (_req, res) => {

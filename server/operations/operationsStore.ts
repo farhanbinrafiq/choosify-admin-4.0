@@ -617,17 +617,58 @@ export const operationsStore = {
 
   listLeads: () => [...state.leads].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
   getLead: (id: string) => state.leads.find((lead) => lead.id === id) ?? null,
-  createLead: (payload: Omit<OpsLead, 'id' | 'status' | 'createdAt' | 'updatedAt'>) => {
+  createLead: (
+    payload: Omit<OpsLead, 'id' | 'status' | 'createdAt' | 'updatedAt'>,
+    options?: { status?: OpsLead['status'] },
+  ) => {
+    const at = nowIso();
+    const status = options?.status ?? 'new';
     const lead: OpsLead = {
       ...payload,
-      id: `lead-${Date.now()}`,
-      status: 'new',
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
+      id: `lead-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      status,
+      createdAt: at,
+      updatedAt: at,
+      history: [{ at, action: 'created', toStatus: status }],
     };
     state.leads.unshift(lead);
     touch();
     return lead;
+  },
+  setLeadStatus: (id: string, status: OpsLead['status'], actor: { id: string; name: string }) => {
+    const idx = state.leads.findIndex((lead) => lead.id === id);
+    if (idx < 0) return null;
+    const prev = state.leads[idx];
+    if (prev.status === status) return prev;
+    const at = nowIso();
+    state.leads[idx] = {
+      ...prev,
+      status,
+      updatedAt: at,
+      history: [
+        ...(prev.history ?? []),
+        { at, action: 'status_changed', actorId: actor.id, actorName: actor.name, fromStatus: prev.status, toStatus: status },
+      ],
+    };
+    touch();
+    return state.leads[idx];
+  },
+  addLeadNote: (id: string, body: string, actor: { id: string; name: string }) => {
+    const idx = state.leads.findIndex((lead) => lead.id === id);
+    if (idx < 0) return null;
+    const prev = state.leads[idx];
+    const at = nowIso();
+    state.leads[idx] = {
+      ...prev,
+      updatedAt: at,
+      notes: [
+        ...(prev.notes ?? []),
+        { id: `note-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, body, authorId: actor.id, authorName: actor.name, createdAt: at },
+      ],
+      history: [...(prev.history ?? []), { at, action: 'note_added', actorId: actor.id, actorName: actor.name }],
+    };
+    touch();
+    return state.leads[idx];
   },
   updateLead: (id: string, patch: Partial<OpsLead>) => {
     const idx = state.leads.findIndex((lead) => lead.id === id);

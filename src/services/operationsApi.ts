@@ -275,6 +275,7 @@ export interface OpsReview {
   updatedAt: string;
 }
 
+/** Public business inquiry — mirrors server/operations/types.ts OpsLead. */
 export interface OpsLead {
   id: string;
   source: string;
@@ -284,9 +285,23 @@ export interface OpsLead {
   budget?: string;
   placementInterest?: string;
   message?: string;
-  status: 'new' | 'contacted' | 'qualified' | 'closed';
+  status: import('../../shared/inquiries/inquiryOptions').InquiryStatus;
   createdAt: string;
   updatedAt: string;
+  inquiryType?: import('../../shared/inquiries/inquiryOptions').InquiryType;
+  referenceId?: string;
+  website?: string;
+  categoryId?: string;
+  categoryName?: string;
+  country?: string;
+  subject?: string;
+  partnershipModel?: string;
+  submittedByUserId?: string;
+  sourcePath?: string;
+  duplicateSignals?: Array<{ kind: 'existing_brand' | 'existing_suggestion'; matchId: string; matchLabel: string; matchedOn: 'name' | 'website' }>;
+  notes?: Array<{ id: string; body: string; authorId: string; authorName: string; createdAt: string }>;
+  history?: Array<{ at: string; action: 'created' | 'status_changed' | 'note_added'; actorId?: string; actorName?: string; fromStatus?: string; toStatus?: string }>;
+  delivery?: { adminNotified: boolean; adminNotifyError?: string; emailAttempted: boolean; emailSent: boolean; emailVia?: string; emailSkippedReason?: string };
 }
 
 export type OpsJobEmploymentType = 'full_time' | 'part_time' | 'internship' | 'contract';
@@ -831,8 +846,17 @@ export const operationsApi = {
     const result = await request<{ data: OpsLead[] }>('/operations/leads');
     return result.data;
   },
-  updateLead: async (id: string, payload: Partial<OpsLead>): Promise<OpsLead> => {
-    const result = await request<{ data: OpsLead }>(`/operations/leads/${id}`, 'PATCH', payload);
+  getLead: async (id: string): Promise<OpsLead> => {
+    const result = await request<{ data: OpsLead }>(`/operations/leads/${encodeURIComponent(id)}`);
+    return result.data;
+  },
+  /** Status only — submitted inquiry fields are immutable server-side. */
+  updateLead: async (id: string, payload: { status: OpsLead['status'] }): Promise<OpsLead> => {
+    const result = await request<{ data: OpsLead }>(`/operations/leads/${encodeURIComponent(id)}`, 'PATCH', { status: payload.status });
+    return result.data;
+  },
+  addLeadNote: async (id: string, body: string): Promise<OpsLead> => {
+    const result = await request<{ data: OpsLead }>(`/operations/leads/${encodeURIComponent(id)}/notes`, 'POST', { body });
     return result.data;
   },
 

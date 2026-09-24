@@ -21,7 +21,9 @@ export type ReferenceEntityType =
   /** Sprint 12 — Subscription billing documents. Deliberately a SEPARATE series from 'invoice' (commerce sub-order invoices) — different business document, not to be conflated. */
   | 'subscriptionInvoice'
   /** Warranty & Claims — the WC-##### canonical claim id. Deliberately separate from 'return' (RT), a different case type. */
-  | 'warrantyClaim';
+  | 'warrantyClaim'
+  /** Public business inquiries (Suggest a Brand / Partnership / Advertise / Contact) — the INQ-##### request reference. */
+  | 'inquiry';
 
 export const REFERENCE_PREFIX: Record<ReferenceEntityType, string> = {
   user: 'CF',
@@ -40,6 +42,7 @@ export const REFERENCE_PREFIX: Record<ReferenceEntityType, string> = {
   cashbook: 'CB',
   subscriptionInvoice: 'SINV',
   warrantyClaim: 'WC',
+  inquiry: 'INQ',
 };
 
 export const REFERENCE_FIELD: Record<ReferenceEntityType, string> = {
@@ -61,6 +64,8 @@ export const REFERENCE_FIELD: Record<ReferenceEntityType, string> = {
   subscriptionInvoice: 'referenceId',
   /** Field name only — warranty claims live in the operations JSON store (OpsWarrantyClaim.referenceId), not a Postgres column. */
   warrantyClaim: 'referenceId',
+  /** Field name only — inquiries live in the operations JSON store (OpsLead.referenceId), not a Postgres column. */
+  inquiry: 'referenceId',
 };
 
 export const REFERENCE_ENTITY_TYPES = Object.keys(REFERENCE_PREFIX) as ReferenceEntityType[];

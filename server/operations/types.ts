@@ -183,11 +183,52 @@ export interface OpsReview {
   updatedAt: string;
 }
 
-export type OpsLeadStatus = 'new' | 'contacted' | 'qualified' | 'closed';
+export type OpsLeadStatus = 'new' | 'reviewing' | 'contacted' | 'qualified' | 'closed' | 'rejected' | 'spam';
 
+export type OpsLeadInquiryType = 'suggest_brand' | 'partnership' | 'advertising' | 'general_contact';
+
+export interface OpsLeadNote {
+  id: string;
+  body: string;
+  authorId: string;
+  authorName: string;
+  createdAt: string;
+}
+
+export interface OpsLeadHistoryEntry {
+  at: string;
+  action: 'created' | 'status_changed' | 'note_added';
+  actorId?: string;
+  actorName?: string;
+  fromStatus?: OpsLeadStatus;
+  toStatus?: OpsLeadStatus;
+}
+
+export interface OpsLeadDuplicateSignal {
+  kind: 'existing_brand' | 'existing_suggestion';
+  matchId: string;
+  matchLabel: string;
+  matchedOn: 'name' | 'website';
+}
+
+export interface OpsLeadDelivery {
+  adminNotified: boolean;
+  adminNotifyError?: string;
+  emailAttempted: boolean;
+  emailSent: boolean;
+  emailVia?: 'resend' | 'smtp' | 'none';
+  emailSkippedReason?: string;
+}
+
+/**
+ * Public business inquiry ("lead"). Fields after `updatedAt` were added for
+ * the canonical inquiry system and are all optional so leads captured before
+ * it (legacy advertise/contact submissions) remain valid.
+ */
 export interface OpsLead {
   id: string;
   source: string;
+  /** Primary display name: brand / company, or the contact subject for general contact. */
   brandName: string;
   contactPerson?: string;
   email: string;
@@ -197,6 +238,21 @@ export interface OpsLead {
   status: OpsLeadStatus;
   createdAt: string;
   updatedAt: string;
+  inquiryType?: OpsLeadInquiryType;
+  referenceId?: string;
+  website?: string;
+  categoryId?: string;
+  categoryName?: string;
+  country?: string;
+  subject?: string;
+  partnershipModel?: string;
+  /** Server-derived from the verified session only — never taken from the request body. */
+  submittedByUserId?: string;
+  sourcePath?: string;
+  duplicateSignals?: OpsLeadDuplicateSignal[];
+  notes?: OpsLeadNote[];
+  history?: OpsLeadHistoryEntry[];
+  delivery?: OpsLeadDelivery;
 }
 
 export type OpsJobEmploymentType = 'full_time' | 'part_time' | 'internship' | 'contract';
