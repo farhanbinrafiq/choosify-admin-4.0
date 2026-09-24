@@ -24,8 +24,20 @@ export const BRAND = {
   noticeText: '#8A4B12',
 };
 
+/**
+ * Typography mirrors the platform: Satoshi (the Choosify typeface, self-hosted
+ * on the storefront under /fonts/satoshi/) first, then the platform's own
+ * fallbacks ('Helvetica Neue', Arial) plus system UI fonts. Clients that honour
+ * @font-face load Satoshi; the rest (Gmail, Outlook desktop) use the fallbacks.
+ */
 export const FONT_STACK =
-  "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif,'Apple Color Emoji','Segoe UI Emoji'";
+  "'Satoshi','Helvetica Neue',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif,'Apple Color Emoji','Segoe UI Emoji'";
+
+/** The platform's monospace face (JetBrains Mono) — used for codes / reference IDs. */
+export const MONO_STACK = "'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace";
+
+const SATOSHI_WOFF2_URL =
+  process.env.EMAIL_FONT_URL?.trim() || 'https://choosify.bd/fonts/satoshi/Satoshi-Variable.woff2';
 
 /**
  * The official Choosify horizontal lockup (eyes + wordmark), navy tone — the
@@ -38,6 +50,32 @@ export const FONT_STACK =
 const LOGO_URL =
   process.env.EMAIL_LOGO_URL?.trim() ||
   'https://choosify.bd/brand/choosify-logo-horizontal-navy.png';
+
+/**
+ * Public base for email assets shipped in this app's `public/email/` (served by
+ * the dashboard). Override with EMAIL_ASSET_BASE_URL (e.g. for a pre-deploy preview).
+ */
+const emailAssetBase = (): string =>
+  (process.env.EMAIL_ASSET_BASE_URL?.trim() || 'https://dashboard.choosify.bd').replace(/\/+$/, '');
+
+/**
+ * Official Choosify social profiles — the same URLs the live storefront footer
+ * renders (production site config `socialLinks`, seeded from
+ * lib/vercel-catalog/catalogDefaults.ts). Icons are 96px circular PNG badges
+ * rasterised from the storefront's own brand SVGs (Choosify-Web/public/icons).
+ */
+const SOCIAL_LINKS = [
+  { name: 'Facebook', url: 'https://www.facebook.com/choosify.bd', icon: 'facebook.png' },
+  { name: 'Instagram', url: 'https://www.instagram.com/choosify.bd/', icon: 'instagram.png' },
+  { name: 'TikTok', url: 'https://www.tiktok.com/@choosify5', icon: 'tiktok.png' },
+  { name: 'YouTube', url: 'https://www.youtube.com/@choosify5', icon: 'youtube.png' },
+] as const;
+
+export const CONTACT = {
+  email: 'support@choosify.bd',
+  phoneDisplay: '+880 01410 423014',
+  phoneHref: 'tel:+88001410423014',
+} as const;
 
 const escapeHtml = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -100,7 +138,7 @@ export function emailCodeBlock(code: string): string {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:22px 0 8px;">
     <tr>
       <td align="center" style="border:1px solid ${BRAND.hairline};border-radius:12px;background:${BRAND.infoCardBg};padding:22px 12px;">
-        <div style="font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:34px;line-height:1;font-weight:700;letter-spacing:.34em;color:${BRAND.navy};">${escapeHtml(code)}</div>
+        <div style="font-family:${MONO_STACK};font-size:34px;line-height:1;font-weight:700;letter-spacing:.34em;color:${BRAND.navy};">${escapeHtml(code)}</div>
       </td>
     </tr>
   </table>`;
@@ -114,13 +152,40 @@ export type EmailShellInput = {
   heading: string;
   /** Pre-built inner HTML (paragraphs, button, info card, notice…). */
   bodyHtml: string;
-  supportEmail?: string;
   /** `internal` swaps the customer-facing tagline footer for a minimal team
    *  notification footer (e.g. inquiry alerts sent to the Choosify team). */
   footer?: 'customer' | 'internal';
 };
 
-function renderFooter(footer: 'customer' | 'internal', supportEmail: string): string {
+/** Shared "Follow Choosify" icons + support contact row — on every email. Text
+ *  contact links stay readable with images blocked. */
+function renderSocialContact(): string {
+  const base = emailAssetBase();
+  const icons = SOCIAL_LINKS.map(
+    (s) => `
+                <td style="padding:0 5px;">
+                  <a href="${escapeHtml(s.url)}" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;">
+                    <img src="${escapeHtml(`${base}/email/social/${s.icon}`)}" alt="${s.name}" title="${s.name}" width="28" height="28"
+                         style="display:block;width:28px;height:28px;border:0;outline:none;text-decoration:none;" />
+                  </a>
+                </td>`,
+  ).join('');
+  const link = `color:${BRAND.orange};text-decoration:none;font-weight:600;`;
+  return `
+            <p style="margin:0 0 10px;font-family:${FONT_STACK};font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${BRAND.navy};">Follow Choosify</p>
+            <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 12px;">
+              <tr>${icons}
+              </tr>
+            </table>
+            <p style="margin:0 0 16px;font-family:${FONT_STACK};font-size:12.5px;line-height:1.9;color:${BRAND.muted};">
+              <span style="display:inline-block;white-space:nowrap;padding:0 9px;">Email: <a href="mailto:${CONTACT.email}" style="${link}">${CONTACT.email}</a></span><span style="display:inline-block;white-space:nowrap;padding:0 9px;">Phone: <a href="${CONTACT.phoneHref}" style="${link}">${CONTACT.phoneDisplay}</a></span>
+            </p>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 14px;">
+              <tr><td style="border-top:1px solid ${BRAND.hairline};font-size:0;line-height:0;height:1px;">&nbsp;</td></tr>
+            </table>`;
+}
+
+function renderFooter(footer: 'customer' | 'internal'): string {
   if (footer === 'internal') {
     return `
             <p style="margin:0 0 4px;font-family:${FONT_STACK};font-size:13px;font-weight:700;color:${BRAND.navy};">Choosify</p>
@@ -134,14 +199,13 @@ function renderFooter(footer: 'customer' | 'internal', supportEmail: string): st
               Bangladesh's product discovery platform — verify brands, compare options and shop with confidence.
             </p>
             <p style="margin:0;font-family:${FONT_STACK};font-size:12px;line-height:1.6;color:${BRAND.muted};">
-              Need help? <a href="mailto:${escapeHtml(supportEmail)}" style="color:${BRAND.orange};">${escapeHtml(supportEmail)}</a>
-              &nbsp;·&nbsp; This is an automated message from Choosify.
+              This is an automated message from Choosify.
             </p>`;
 }
 
 /** Wraps template body HTML in the full Choosify shell (wordmark header,
  *  content surface, footer). */
-export function renderEmailShell({ preheader, heading, bodyHtml, supportEmail = 'support@choosify.bd', footer = 'customer' }: EmailShellInput): string {
+export function renderEmailShell({ preheader, heading, bodyHtml, footer = 'customer' }: EmailShellInput): string {
   return `<!DOCTYPE html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
 <head>
@@ -151,7 +215,20 @@ export function renderEmailShell({ preheader, heading, bodyHtml, supportEmail = 
 <meta name="color-scheme" content="light" />
 <meta name="supported-color-schemes" content="light" />
 <title>${escapeHtml(heading)}</title>
+<!--[if mso]><style>body,table,td,p,a,h1,div,span{font-family:Arial,Helvetica,sans-serif !important;}</style><![endif]-->
 <style>
+  /* Platform typefaces for clients that support web fonts; Outlook desktop
+     skips @media screen, so it never sees @font-face (falls back via mso rule). */
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&display=swap');
+  @media screen {
+    @font-face {
+      font-family:'Satoshi';
+      font-style:normal;
+      font-weight:300 900;
+      font-display:swap;
+      src:url('${SATOSHI_WOFF2_URL}') format('woff2');
+    }
+  }
   /* Progressive enhancement only — the layout is fully inline above. */
   @media only screen and (max-width:600px){
     .cf-container{width:100% !important;}
@@ -170,12 +247,13 @@ export function renderEmailShell({ preheader, heading, bodyHtml, supportEmail = 
 
         <!-- Header — the official Choosify horizontal lockup (navy). Public,
              unauthenticated HTTPS asset (the same brand file the storefront
-             ships at /brand/…). Native 2000x447; rendered proportionally. alt
-             text carries the brand name when remote images are blocked. -->
+             ships at /brand/…). Native 2000x447; rendered proportionally
+             (224x50) and centred. alt text carries the brand name when remote
+             images are blocked. -->
         <tr>
-          <td style="padding:6px 4px 20px;">
-            <img src="${LOGO_URL}" alt="Choosify" width="179" height="40"
-                 style="display:block;width:179px;max-width:179px;height:40px;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;" />
+          <td align="center" style="padding:8px 4px 24px;text-align:center;">
+            <img src="${LOGO_URL}" alt="Choosify" width="224" height="50"
+                 style="display:block;margin:0 auto;width:224px;max-width:224px;height:50px;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;" />
           </td>
         </tr>
 
@@ -189,7 +267,7 @@ export function renderEmailShell({ preheader, heading, bodyHtml, supportEmail = 
 
         <!-- Footer -->
         <tr>
-          <td style="padding:24px 8px 8px;">${renderFooter(footer, supportEmail)}
+          <td align="center" style="padding:26px 8px 8px;text-align:center;">${renderSocialContact()}${renderFooter(footer)}
           </td>
         </tr>
 
