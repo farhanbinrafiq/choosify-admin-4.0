@@ -24,7 +24,7 @@ export const BRAND = {
   noticeText: '#8A4B12',
 };
 
-const FONT_STACK =
+export const FONT_STACK =
   "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif,'Apple Color Emoji','Segoe UI Emoji'";
 
 /**
@@ -69,7 +69,7 @@ export function emailInfoCard(title: string, rows: EmailInfoRow[]): string {
       (r) => `
       <tr>
         <td style="padding:6px 0;font-family:${FONT_STACK};font-size:13px;color:${BRAND.muted};">${escapeHtml(r.label)}</td>
-        <td style="padding:6px 0;font-family:${FONT_STACK};font-size:13px;font-weight:600;color:${BRAND.ink};text-align:right;">${escapeHtml(r.value)}</td>
+        <td style="padding:6px 0;font-family:${FONT_STACK};font-size:13px;font-weight:600;color:${BRAND.ink};text-align:right;word-break:break-word;">${escapeHtml(r.value)}</td>
       </tr>`,
     )
     .join('');
@@ -115,11 +115,33 @@ export type EmailShellInput = {
   /** Pre-built inner HTML (paragraphs, button, info card, notice…). */
   bodyHtml: string;
   supportEmail?: string;
+  /** `internal` swaps the customer-facing tagline footer for a minimal team
+   *  notification footer (e.g. inquiry alerts sent to the Choosify team). */
+  footer?: 'customer' | 'internal';
 };
+
+function renderFooter(footer: 'customer' | 'internal', supportEmail: string): string {
+  if (footer === 'internal') {
+    return `
+            <p style="margin:0 0 4px;font-family:${FONT_STACK};font-size:13px;font-weight:700;color:${BRAND.navy};">Choosify</p>
+            <p style="margin:0;font-family:${FONT_STACK};font-size:12px;line-height:1.6;color:${BRAND.muted};">
+              Internal business inquiry notification &nbsp;·&nbsp; This is an automated message for the Choosify team.
+            </p>`;
+  }
+  return `
+            <p style="margin:0 0 6px;font-family:${FONT_STACK};font-size:13px;font-weight:700;color:${BRAND.navy};">Choose, Compare &amp; Decide Wisely.</p>
+            <p style="margin:0 0 4px;font-family:${FONT_STACK};font-size:12px;line-height:1.6;color:${BRAND.muted};">
+              Bangladesh's product discovery platform — verify brands, compare options and shop with confidence.
+            </p>
+            <p style="margin:0;font-family:${FONT_STACK};font-size:12px;line-height:1.6;color:${BRAND.muted};">
+              Need help? <a href="mailto:${escapeHtml(supportEmail)}" style="color:${BRAND.orange};">${escapeHtml(supportEmail)}</a>
+              &nbsp;·&nbsp; This is an automated message from Choosify.
+            </p>`;
+}
 
 /** Wraps template body HTML in the full Choosify shell (wordmark header,
  *  content surface, footer). */
-export function renderEmailShell({ preheader, heading, bodyHtml, supportEmail = 'support@choosify.bd' }: EmailShellInput): string {
+export function renderEmailShell({ preheader, heading, bodyHtml, supportEmail = 'support@choosify.bd', footer = 'customer' }: EmailShellInput): string {
   return `<!DOCTYPE html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
 <head>
@@ -167,15 +189,7 @@ export function renderEmailShell({ preheader, heading, bodyHtml, supportEmail = 
 
         <!-- Footer -->
         <tr>
-          <td style="padding:24px 8px 8px;">
-            <p style="margin:0 0 6px;font-family:${FONT_STACK};font-size:13px;font-weight:700;color:${BRAND.navy};">Choose, Compare &amp; Decide Wisely.</p>
-            <p style="margin:0 0 4px;font-family:${FONT_STACK};font-size:12px;line-height:1.6;color:${BRAND.muted};">
-              Bangladesh's product discovery platform — verify brands, compare options and shop with confidence.
-            </p>
-            <p style="margin:0;font-family:${FONT_STACK};font-size:12px;line-height:1.6;color:${BRAND.muted};">
-              Need help? <a href="mailto:${escapeHtml(supportEmail)}" style="color:${BRAND.orange};">${escapeHtml(supportEmail)}</a>
-              &nbsp;·&nbsp; This is an automated message from Choosify.
-            </p>
+          <td style="padding:24px 8px 8px;">${renderFooter(footer, supportEmail)}
           </td>
         </tr>
 
