@@ -324,23 +324,17 @@ export default function ConsumerProfileView() {
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 2 }}>MARKETPLACE ACCESS</div>
                     <div style={{ fontSize: '10.5px', color: '#9CA3AF', fontWeight: 600 }}>
-                      Suspend or reinstate this consumer&apos;s account access, with an optional auto-reinstate timer.
+                      Current account access for this consumer.
                     </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: marketplaceActive ? '#16A34A' : '#9CA3AF' }}>
-                      {marketplaceActive ? 'ACTIVE' : 'INACTIVE'}
-                    </span>
-                    <div style={S.toggle} aria-disabled title="Consumer account suspension is not available in this release">
-                      <div style={{ ...S.toggleKnob, ...(marketplaceActive ? { left: 'auto', right: 3 } : {}) }} />
-                    </div>
-                  </div>
+                  {/* Read-only status. There is no consumer suspension operation, so no
+                      toggle is shown (the previous switch was a non-functional placeholder). */}
+                  <span style={{ fontSize: 11, fontWeight: 800, color: marketplaceActive ? '#16A34A' : '#9CA3AF' }}>
+                    {marketplaceActive ? 'ACTIVE' : 'INACTIVE'}
+                  </span>
                 </div>
                 <div style={{ fontSize: '11.5px', color: marketplaceActive ? '#16A34A' : '#6B7280', fontWeight: 700 }}>
                   {marketplaceActive ? '✓ Account active — full marketplace access.' : 'Account access is limited.'}
-                </div>
-                <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600, marginTop: 6 }}>
-                  Consumer account suspension is not available in this release.
                 </div>
               </div>
 
@@ -350,7 +344,6 @@ export default function ConsumerProfileView() {
                   <div style={S.commRow}><span>Email Notifications</span><span style={{ color: '#9CA3AF' }}>—</span></div>
                   <div style={S.commRow}><span>SMS Alerts &amp; Broadcasts</span><span style={{ color: '#9CA3AF' }}>—</span></div>
                   <div style={S.commRow}><span>Two-Factor Auth (2FA)</span><span style={{ color: '#9CA3AF' }}>—</span></div>
-                  <button disabled title="Not available in this release" style={S.disBtn}>Trigger Password Reset</button>
                 </div>
                 <div style={S.panel}>
                   <div style={S.sectionTitle}>CONNECTED ACCOUNTS</div>

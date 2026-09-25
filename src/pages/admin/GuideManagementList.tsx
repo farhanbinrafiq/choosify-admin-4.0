@@ -9,6 +9,8 @@ import {
   Search,
 } from 'lucide-react';
 import { catalogApi, type GuideManageRow } from '../../services/catalogApi';
+import { useAuth } from '../../contexts/AuthContext';
+import { AdminEditModeBar, useAdminEditMode } from '../../components/admin/AdminEditMode';
 
 /**
  * Guide Management — real canonical list backed by the authenticated,
@@ -46,6 +48,11 @@ function fmtDate(iso: string): string {
 
 export default function GuideManagementList() {
   const navigate = useNavigate();
+  const { profile } = useAuth();
+  // Platform staff browse guides in View Mode; Create / Archive need Edit Mode.
+  // Creators and sellers managing their own guides are not gated.
+  const editMode = useAdminEditMode(profile?.role);
+  const canMutate = editMode.canMutate;
   const [rows, setRows] = useState<GuideManageRow[]>([]);
   const [scope, setScope] = useState<'staff' | 'creator'>('creator');
   const [loading, setLoading] = useState(true);
@@ -126,12 +133,17 @@ export default function GuideManagementList() {
               : 'Your published and draft guides, stories, videos, reels and live sessions.'}
           </p>
         </div>
-        <Link
-          to="/admin/guides/new"
-          className="flex items-center gap-2 bg-[#EF3C23] hover:bg-[#CF3319] text-white px-5 py-3 rounded-xl text-xs font-bold transition-colors shrink-0"
-        >
-          <Plus className="w-4 h-4" /> Create Guide / Story
-        </Link>
+        <div className="flex items-center gap-3 flex-wrap shrink-0">
+          <AdminEditModeBar mode={editMode} />
+          {canMutate && (
+            <Link
+              to="/admin/guides/new"
+              className="flex items-center gap-2 bg-[#EF3C23] hover:bg-[#CF3319] text-white px-5 py-3 rounded-xl text-xs font-bold transition-colors shrink-0"
+            >
+              <Plus className="w-4 h-4" /> Create Guide / Story
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="bg-white border border-[#E5E7EB] p-4 rounded-2xl shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
@@ -205,8 +217,10 @@ export default function GuideManagementList() {
               {filtered.map((r) => (
                 <tr
                   key={r.id}
-                  className="hover:bg-slate-50/80 transition-colors cursor-pointer"
-                  onClick={() => navigate(`/admin/guides/${r.id}/edit`)}
+                  // View Mode (staff): the row is read-only — it must not open the editor.
+                  // There is no read-only guide page in the Admin, so the row simply isn't a link.
+                  className={`hover:bg-slate-50/80 transition-colors ${canMutate ? 'cursor-pointer' : ''}`}
+                  onClick={canMutate ? () => navigate(`/admin/guides/${r.id}/edit`) : undefined}
                 >
                   <td className="p-4">
                     <div className="flex items-center gap-3">
@@ -272,7 +286,7 @@ export default function GuideManagementList() {
                           <ExternalLink className="w-3.5 h-3.5" />
                         </a>
                       ) : null}
-                      {r.status !== 'archived' ? (
+                      {canMutate && r.status !== 'archived' ? (
                         <button
                           onClick={() => archive(r.id)}
                           disabled={busyId === r.id}

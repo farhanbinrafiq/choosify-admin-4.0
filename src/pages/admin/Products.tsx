@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useAuth } from '../../contexts/AuthContext';
 import { catalogApi } from '../../services/catalogApi';
 import type { CatalogProduct, CatalogInventory } from '../../types/catalog';
+import { AdminEditModeBar, useAdminEditMode } from '../../components/admin/AdminEditMode';
 
 /**
  * Products & Inventory (Sprint 13 UI restoration).
@@ -237,6 +238,15 @@ export default function ProductsPage() {
   // server/permissions/permissions.ts). Don't surface a Delete control that
   // would 403; create / edit / inventory are available to a plain seller.
   const canDeleteProducts = ['verified_seller', 'admin', 'super_admin'].includes(profile?.role ?? '');
+  // Super Admin operating model: platform staff see this catalog in View Mode
+  // and must Enter Edit Mode before any mutation control appears. Sellers
+  // managing their own products are not gated (canMutate is always true).
+  const editMode = useAdminEditMode(profile?.role);
+  const canMutate = editMode.canMutate;
+  const viewHref = (id: string) => (canMutate ? `/admin/products/${id}/edit` : `/admin/products/${id}/preview?from=products`);
+  React.useEffect(() => {
+    if (!canMutate) setConfirmDeleteId(null);
+  }, [canMutate]);
 
   // ----- Load products from the canonical, server-scoped catalog API -----
   React.useEffect(() => {
@@ -245,7 +255,10 @@ export default function ProductsPage() {
       setIsLoadingProducts(true);
       setCatalogError(null);
       try {
-        const params = selectedBrandFilter ? { brandId: selectedBrandFilter } : undefined;
+        // The owned-brand filter is a seller control (its selector is only shown to
+        // sellers). Platform staff always see the full server-scoped catalog — an
+        // auto-selected "active brand" must not silently narrow their list.
+        const params = isSeller && selectedBrandFilter ? { brandId: selectedBrandFilter } : undefined;
         const catalogProducts = await catalogApi.listProducts(params);
         if (cancelled) return;
         setProducts(catalogProducts.map(mapCatalogProduct));
@@ -259,7 +272,7 @@ export default function ProductsPage() {
     };
     loadProducts();
     return () => { cancelled = true; };
-  }, [selectedBrandFilter, profile?.id]);
+  }, [selectedBrandFilter, profile?.id, isSeller]);
 
   React.useEffect(() => { setSelectedBrandFilter(activeBrandId); }, [activeBrandId]);
 
@@ -599,7 +612,12 @@ export default function ProductsPage() {
           <div style={S.h1}>Inventory Management</div>
           <div style={S.sub}>Manage platform catalog, pricing, stock levels and seller listings — all in one place</div>
         </div>
-        <button onClick={() => navigate('/admin/products/new')} style={S.addBtn}><Plus size={14} /> Add Product</button>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <AdminEditModeBar mode={editMode} />
+          {canMutate && (
+            <button onClick={() => navigate('/admin/products/new')} style={S.addBtn}><Plus size={14} /> Add Product</button>
+          )}
+        </div>
       </div>
 
       {/* ── 5-up KPI strip (isProductsPage / combinedProductStats) ── */}
@@ -662,9 +680,13 @@ export default function ProductsPage() {
             <div style={S.bulkBar}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 <span style={S.bulkChip}>{selectedCount} selected</span>
-                <button onClick={handleBulkApprove} disabled={bulkActionLoading} style={bulkBtn('#16A34A')}>Approve All</button>
-                <button onClick={handleBulkReject} disabled={bulkActionLoading} style={bulkBtn('#B45309')}>Reject All</button>
-                {canDeleteProducts && (
+                {canMutate && (
+                  <>
+                    <button onClick={handleBulkApprove} disabled={bulkActionLoading} style={bulkBtn('#16A34A')}>Approve All</button>
+                    <button onClick={handleBulkReject} disabled={bulkActionLoading} style={bulkBtn('#B45309')}>Reject All</button>
+                  </>
+                )}
+                {canMutate && canDeleteProducts && (
                   <button onClick={handleBulkDelete} disabled={bulkActionLoading} style={bulkBtn('#DC2626')}>Delete All</button>
                 )}
                 <button onClick={handleExportProductsCSV} disabled={bulkActionLoading} style={bulkBtn('#4338CA')}>Export CSV</button>
@@ -699,7 +721,11 @@ export default function ProductsPage() {
                   </td></tr>
                 ) : displayedProducts.length === 0 ? (
                   <tr><td colSpan={8} style={{ ...S.tdMuted, textAlign: 'center', padding: '40px 16px', fontStyle: 'italic' }}>
-                    No products yet. Create one from Add Product.
+                    {products.length > 0
+                      ? 'No products match the current search or filters.'
+                      : canMutate
+                        ? 'No products yet. Create one from Add Product.'
+                        : 'No products yet.'}
                   </td></tr>
                 ) : (
                   displayedProducts.map((p, idx) => {
@@ -718,7 +744,7 @@ export default function ProductsPage() {
                           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                             <span style={S.thumb}>{(p.name || '?').charAt(0).toUpperCase()}</span>
                             <div style={{ minWidth: 0 }}>
-                              <Link to={`/admin/products/${p.id}/edit`} style={{ fontWeight: 700, color: '#111827', textDecoration: 'none' }}>{p.name}</Link>
+                              <Link to={viewHref(p.id)} style={{ fontWeight: 700, color: '#111827', textDecoration: 'none' }}>{p.name}</Link>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
                                 <span style={{ fontSize: 10, color: '#6B7280', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{p.brand}</span>
                                 {p.productReferenceId ? <span style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, color: '#9CA3AF' }}>· {p.productReferenceId}</span> : null}
@@ -759,7 +785,7 @@ export default function ProductsPage() {
                                   : null}
                             </>
                           )}
-                          {publishToggle(p)}
+                          {canMutate && publishToggle(p)}
                         </td>
                         <td style={S.td}><span style={{ fontWeight: 800 }}>{p.price}</span></td>
                         <td style={S.td}><span style={statusPill(displayStatus)}>{displayStatus}</span></td>
@@ -771,6 +797,29 @@ export default function ProductsPage() {
                                 {deletingId === p.id ? '…' : 'Yes'}
                               </button>
                               <button onClick={() => setConfirmDeleteId(null)} style={{ ...actionWord('#6B7280'), fontSize: 11 }}>No</button>
+                            </div>
+                          ) : !canMutate ? (
+                            // View Mode (platform staff): read-only access only — no mutation controls.
+                            <div style={{ display: 'inline-flex', alignItems: 'flex-start', justifyContent: 'flex-end', gap: 16 }}>
+                              {vsum ? (
+                                <span style={S.actionCol}>
+                                  <span style={S.actionCap}>STOCK</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setExpandedStockId(expandedStockId === p.id ? null : p.id);
+                                      void loadVariantMeta(p.id);
+                                    }}
+                                    style={{ ...actionWord('#2563EB'), background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                                  >
+                                    Per-variant stock
+                                  </button>
+                                </span>
+                              ) : null}
+                              <span style={S.actionCol}>
+                                <span style={S.actionCap}>DETAILS</span>
+                                <Link to={viewHref(p.id)} style={actionWord('#374151')}>View</Link>
+                              </span>
                             </div>
                           ) : (
                             <div style={{ display: 'inline-flex', alignItems: 'flex-start', justifyContent: 'flex-end', gap: 16 }}>
@@ -852,9 +901,11 @@ export default function ProductsPage() {
                                 })}
                               </tbody>
                             </table>
-                            <Link to={`/admin/products/${p.id}/edit`} style={{ display: 'inline-block', marginTop: 8, fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: ACCENT, textDecoration: 'none', border: `1px solid ${ACCENT}`, borderRadius: 6, padding: '5px 10px', background: ACCENT_WASH }}>
-                              Adjust per-variant stock in Product Studio →
-                            </Link>
+                            {canMutate && (
+                              <Link to={`/admin/products/${p.id}/edit`} style={{ display: 'inline-block', marginTop: 8, fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: ACCENT, textDecoration: 'none', border: `1px solid ${ACCENT}`, borderRadius: 6, padding: '5px 10px', background: ACCENT_WASH }}>
+                                Adjust per-variant stock in Product Studio →
+                              </Link>
+                            )}
                           </td>
                         </tr>
                       ) : null}
@@ -911,7 +962,7 @@ export default function ProductsPage() {
                   {attentionRows.map((r) => (
                     <tr key={r.productId} style={S.row}>
                       <td style={S.td}>
-                        <Link to={`/admin/products/${r.productId}/edit`} style={{ fontWeight: 700, color: '#111827', textDecoration: 'none' }}>{r.name}</Link>
+                        <Link to={viewHref(r.productId)} style={{ fontWeight: 700, color: '#111827', textDecoration: 'none' }}>{r.name}</Link>
                         <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{r.brand}</div>
                       </td>
                       <td style={S.td}><span style={{ fontFamily: 'monospace', fontWeight: 800 }}>{r.availableQuantity ?? '—'}</span></td>
@@ -919,10 +970,16 @@ export default function ProductsPage() {
                       <td style={S.td}><span style={statusPill(r.state === 'out_of_stock' ? 'Out of Stock' : 'Draft')}>{r.state.replace(/_/g, ' ')}</span></td>
                       <td style={{ ...S.td, textAlign: 'right' }}>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
-                          <button onClick={() => handleQuickRestock(r.productId)} disabled={restockingId === r.productId} style={restockBtn}>
-                            {restockingId === r.productId ? '…' : `⚡ RE-STOCK (+${RESTOCK_STEP})`}
-                          </button>
-                          <Link to={`/admin/products/${r.productId}/edit`} style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: ACCENT, textDecoration: 'none', border: `1px solid ${ACCENT}`, borderRadius: 6, padding: '5px 10px', background: ACCENT_WASH }}>Manage stock</Link>
+                          {canMutate ? (
+                            <>
+                              <button onClick={() => handleQuickRestock(r.productId)} disabled={restockingId === r.productId} style={restockBtn}>
+                                {restockingId === r.productId ? '…' : `⚡ RE-STOCK (+${RESTOCK_STEP})`}
+                              </button>
+                              <Link to={`/admin/products/${r.productId}/edit`} style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: ACCENT, textDecoration: 'none', border: `1px solid ${ACCENT}`, borderRadius: 6, padding: '5px 10px', background: ACCENT_WASH }}>Manage stock</Link>
+                            </>
+                          ) : (
+                            <Link to={viewHref(r.productId)} style={actionWord('#374151')}>View</Link>
+                          )}
                         </div>
                       </td>
                     </tr>

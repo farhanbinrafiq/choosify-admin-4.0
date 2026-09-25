@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, RotateCw } from 'lucide-react';
 import { catalogApi } from '../../services/catalogApi';
 import { ProductDetailPresentation } from '../../components/product-detail';
@@ -16,6 +16,10 @@ import { createBlankProductModel, mapCatalogProductToEditor, type ProductEditorM
 export default function ProductStorefrontPreview() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  // Opened from the Products list in (staff) View Mode → return to the list, never into the editor.
+  // Every other caller (Product Studio's Preview button) keeps "Back to Product Studio".
+  const [searchParams] = useSearchParams();
+  const fromProductsList = searchParams.get('from') === 'products';
   const [model, setModel] = useState<ProductEditorModel | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,9 +59,9 @@ export default function ProductStorefrontPreview() {
   return (
     <div style={{ background: '#F0F8FF', minHeight: '100vh' }}>
       <div style={{ background: '#0A0A1F', color: '#fff', display: 'flex', alignItems: 'center', gap: 12, padding: '10px 20px', fontSize: 11, letterSpacing: '0.05em' }}>
-        <button type="button" onClick={() => navigate(id ? `/admin/products/${id}/edit` : '/admin/products')}
+        <button type="button" onClick={() => navigate(!fromProductsList && id ? `/admin/products/${id}/edit` : '/admin/products')}
           style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 6, color: '#fff', padding: '5px 8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <ArrowLeft size={13} /> Back to Product Studio
+          <ArrowLeft size={13} /> {fromProductsList ? 'Back to Products' : 'Back to Product Studio'}
         </button>
         <span style={{ opacity: 0.6, fontWeight: 700, textTransform: 'uppercase' }}>Storefront preview · read-only · live catalog data</span>
       </div>
