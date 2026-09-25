@@ -8,12 +8,7 @@ import {
   persistCategoryUpdate,
   syncAllCategoriesToApi,
 } from '../lib/categoryCatalogSync';
-import {
-  CATEGORY_CATALOG_VERSION,
-  CATEGORY_VERSION_STORAGE_KEY,
-  getCanonicalAdminCategories,
-  isStaleCategorySet,
-} from '../lib/storefrontCategories';
+import { getCanonicalAdminCategories } from '../lib/storefrontCategories';
 import { refreshAccessToken } from '../services/authRefresh';
 
 export type UserRole =
@@ -731,52 +726,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [categories, setCategories] = useState<CategoryType[]>([]);
   const [categoriesLoaded, setCategoriesLoaded] = useState(false);
 
+  // Startup category load is READ-ONLY: it only GETs the server's categories.
+  // It never creates, updates, deletes, resets or reconciles server categories —
+  // the server seeds its own defaults, and category changes happen only through
+  // explicit Category Management actions. (The former July 2026 client-side
+  // "reset to canonical" migration that ran here on every fresh browser load was
+  // removed: it could delete or overwrite categories just by opening the app.)
   useEffect(() => {
     let cancelled = false;
 
-    const applyCategories = (rows: CategoryType[], source: 'api' | 'local') => {
-      const savedVersion = localStorage.getItem(CATEGORY_VERSION_STORAGE_KEY);
-      const canonical = getCanonicalAdminCategories();
-      const shouldReset =
-        savedVersion !== CATEGORY_CATALOG_VERSION || isStaleCategorySet(rows);
-
-      if (shouldReset) {
-        if (!cancelled) {
-          setCategories(canonical);
-          setCategoriesLoaded(true);
-        }
-        localStorage.setItem(CATEGORY_VERSION_STORAGE_KEY, CATEGORY_CATALOG_VERSION);
-        syncAllCategoriesToApi(canonical).catch((error) => {
-          console.error('[AuthContext] Failed to sync canonical categories to catalog API.', error);
-        });
-        return;
-      }
-
-      if (!cancelled) {
-        setCategories(rows);
-        setCategoriesLoaded(true);
-      }
-
-      if (source === 'api') {
-        localStorage.setItem(CATEGORY_VERSION_STORAGE_KEY, CATEGORY_CATALOG_VERSION);
-      }
-    };
-
     fetchCategoriesFromApi()
       .then((rows) => {
-        if (!cancelled) {
-          applyCategories(rows, 'api');
-        }
+        if (cancelled) return;
+        setCategories(rows);
+        setCategoriesLoaded(true);
       })
       .catch((error) => {
-        console.warn('[AuthContext] Failed to load categories from catalog API, using local fallback.', error);
+        console.warn('[AuthContext] Failed to load categories from catalog API, using local display fallback.', error);
         if (cancelled) return;
-        const saved = localStorage.getItem('choosify_categories');
-        if (saved) {
-          applyCategories(JSON.parse(saved) as CategoryType[], 'local');
-        } else {
-          applyCategories(getCanonicalAdminCategories(), 'local');
+        // Display-only fallback (last cached list, else the built-in defaults). Nothing is written to the server.
+        let fallback: CategoryType[] = getCanonicalAdminCategories();
+        try {
+          const saved = localStorage.getItem('choosify_categories');
+          const parsed = saved ? (JSON.parse(saved) as unknown) : null;
+          if (Array.isArray(parsed) && parsed.length > 0) fallback = parsed as CategoryType[];
+        } catch {
+          /* unreadable cache — keep the built-in defaults */
         }
+        setCategories(fallback);
+        setCategoriesLoaded(true);
       });
 
     return () => {
