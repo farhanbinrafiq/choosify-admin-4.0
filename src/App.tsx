@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useEffect, useMemo } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams, useParams } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams, useParams, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { NavAttentionProvider } from './contexts/NavAttentionContext';
 import { ImpersonationProvider } from './contexts/ImpersonationContext';
@@ -221,6 +221,12 @@ const AdsStudioRoleGate: React.FC<{ children: React.ReactNode }> = ({ children }
     return <Navigate to="/admin/dashboard" replace />;
   }
   return <>{children}</>;
+};
+
+/** Legacy /admin/ads-deals-studio → canonical /admin/ads-studio (query + hash kept; access decided there). */
+const LegacyAdsStudioRedirect: React.FC = () => {
+  const { search, hash } = useLocation();
+  return <Navigate to={{ pathname: '/admin/ads-studio', search, hash }} replace />;
 };
 
 /**
@@ -1097,9 +1103,10 @@ export default function App() {
 
             {/*
               Banner / Direct Ads Visual Builder — surgical cutover.
-              /admin/ads-deals-studio (Ads & Deals Studio chrome) stays on CmsMirrorHost.
+              Legacy /admin/ads-deals-studio (old prototype) redirects to /admin/ads-studio.
               Rollback: remove these routes; Create Ad falls back to cms-mirror button.
             */}
+            <Route path="/admin/ads-deals-studio/*" element={<LegacyAdsStudioRedirect />} />
             <Route
               path="/admin/ads-studio"
               element={
