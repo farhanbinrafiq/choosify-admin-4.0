@@ -19,23 +19,33 @@ import {
 import {
   AdsError,
   approveAd,
+  approvePromotionRequest,
   archiveAd,
+  cancelPromotionRequest,
   createBanner,
   createDeal,
   createDealFromListing,
   createPromotion,
+  createPromotionRequest,
   deleteOwnAd,
+  endDeal,
   getAdForActor,
   listAdminQueue,
   listBanners,
-  listDeals,
+  listDealEligibleListings,
+  listDealViews,
   listOwnedEligibleListings,
+  listPromotionRequestViews,
   listPromotions,
   pauseAd,
   rejectAd,
+  rejectPromotionRequest,
+  resumeDeal,
   submitAdForApproval,
   updateOwnAd,
+  updateOwnDeal,
   type AdsActor,
+  type DealSubmission,
 } from './adsService';
 import type { AdsOwnerRole } from './types';
 
@@ -105,9 +115,23 @@ adsRouter.get('/ads/placements', ...requireAuth, async (req, res) => {
 
 // —— Deals ——
 
+/** Only these client fields are read for Deals — owner/status/prices/review/metadata are server-derived. */
+function dealSubmissionOf(body: Record<string, unknown> | undefined): DealSubmission {
+  const b = body || {};
+  return {
+    listingType: b.listingType,
+    listingId: b.listingId,
+    pricingMode: b.pricingMode,
+    pricingValue: b.pricingValue,
+    startsAt: b.startsAt,
+    endsAt: b.endsAt,
+    title: b.title,
+  };
+}
+
 adsRouter.get('/ads/deals', ...requireAuth, async (req, res) => {
   try {
-    const data = await listDeals(actorOf(req));
+    const data = await listDealViews(actorOf(req));
     res.json({ success: true, data });
   } catch (error) {
     handleError(res, error);
@@ -116,23 +140,7 @@ adsRouter.get('/ads/deals', ...requireAuth, async (req, res) => {
 
 adsRouter.post('/ads/deals', ...requireAuth, async (req, res) => {
   try {
-    const actor = actorOf(req);
-    const body = req.body || {};
-    const data = await createDeal(
-      {
-        ownerId: actor.userId,
-        ownerRole: parseOwnerRole(body.ownerRole, defaultOwnerRole(actor.role)),
-        listingId: body.listingId ? String(body.listingId) : undefined,
-        brandId: body.brandId ? String(body.brandId) : undefined,
-        title: String(body.title || ''),
-        creative: body.creative,
-        cta: body.cta,
-        externalUrl: body.externalUrl ? String(body.externalUrl) : undefined,
-        placement: body.placement ? String(body.placement) : undefined,
-        metadata: body.metadata,
-      },
-      actor,
-    );
+    const data = await createDeal(dealSubmissionOf(req.body), actorOf(req));
     res.status(201).json({ success: true, data });
   } catch (error) {
     handleError(res, error);
@@ -141,17 +149,111 @@ adsRouter.post('/ads/deals', ...requireAuth, async (req, res) => {
 
 adsRouter.post('/ads/deals/from-listing', ...requireAuth, async (req, res) => {
   try {
-    const actor = actorOf(req);
-    const listingId = String(req.body?.listingId || '').trim();
-    if (!listingId) {
-      res.status(400).json({ success: false, error: 'listingId is required' });
-      return;
-    }
-    const data = await createDealFromListing(listingId, actor, {
-      title: req.body?.title ? String(req.body.title) : undefined,
-      metadata: req.body?.metadata,
-    });
+    const data = await createDealFromListing(dealSubmissionOf(req.body), actorOf(req));
     res.status(201).json({ success: true, data });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+adsRouter.patch('/ads/deals/:id', ...requireAuth, async (req, res) => {
+  try {
+    const data = await updateOwnDeal(req.params.id, actorOf(req), {
+      ...dealSubmissionOf(req.body),
+      status: req.body?.status,
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+// Deals are open marketplace inventory: no approve/reject routes. Owner End Now;
+// admin Pause / Resume / Disable are exceptional moderation.
+adsRouter.post('/ads/deals/:id/end', ...requireAuth, async (req, res) => {
+  try {
+    const data = await endDeal(req.params.id, actorOf(req));
+    res.json({ success: true, data });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+adsRouter.post('/ads/deals/:id/pause', ...requireAdmin, async (req, res) => {
+  try {
+    const data = await pauseAd(req.params.id, actorOf(req));
+    res.json({ success: true, data });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+adsRouter.post('/ads/deals/:id/resume', ...requireAdmin, async (req, res) => {
+  try {
+    const data = await resumeDeal(req.params.id, actorOf(req));
+    res.json({ success: true, data });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+adsRouter.post('/ads/deals/:id/disable', ...requireAdmin, async (req, res) => {
+  try {
+    const data = await archiveAd(req.params.id, actorOf(req));
+    res.json({ success: true, data });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+// —— Deal Promotion Requests (the only admin-reviewed Deal workflow) ——
+
+adsRouter.post('/ads/deals/:id/promotion-requests', ...requireAuth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    // Only these client fields are read; owner/listing/brand/title come from the Deal.
+    const data = await createPromotionRequest(
+      req.params.id,
+      { promotionType: b.promotionType, startsAt: b.startsAt, endsAt: b.endsAt, sellerNote: b.sellerNote },
+      actorOf(req),
+    );
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+adsRouter.get('/ads/promotion-requests', ...requireAuth, async (req, res) => {
+  try {
+    const data = await listPromotionRequestViews(actorOf(req));
+    res.json({ success: true, data });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+adsRouter.post('/ads/promotion-requests/:id/cancel', ...requireAuth, async (req, res) => {
+  try {
+    const data = await cancelPromotionRequest(req.params.id, actorOf(req));
+    res.json({ success: true, data });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+adsRouter.post('/ads/promotion-requests/:id/approve', ...requireAdmin, async (req, res) => {
+  try {
+    const data = await approvePromotionRequest(req.params.id, actorOf(req));
+    res.json({ success: true, data });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+adsRouter.post('/ads/promotion-requests/:id/reject', ...requireAdmin, async (req, res) => {
+  try {
+    const data = await rejectPromotionRequest(req.params.id, actorOf(req), req.body?.reason);
+    res.json({ success: true, data });
   } catch (error) {
     handleError(res, error);
   }
@@ -159,7 +261,12 @@ adsRouter.post('/ads/deals/from-listing', ...requireAuth, async (req, res) => {
 
 adsRouter.get('/ads/listings/eligible', ...requireAuth, async (req, res) => {
   try {
-    const data = await listOwnedEligibleListings(actorOf(req));
+    const actor = actorOf(req);
+    // ?purpose=deal → the seller's own products + services with base price for Create Deal.
+    const data =
+      req.query.purpose === 'deal'
+        ? await listDealEligibleListings(actor)
+        : await listOwnedEligibleListings(actor);
     res.json({ success: true, data });
   } catch (error) {
     handleError(res, error);

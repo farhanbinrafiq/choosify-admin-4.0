@@ -366,20 +366,10 @@ export const catalogApi = {
     );
   },
 
+  /** Legacy CatalogDeal records — read-only (writes return 410; canonical Deals are adsApi.listDeals). */
   listDeals: async (): Promise<CatalogDeal[]> => {
     const result = await request<{ data: CatalogDeal[] }>('/catalog/deals');
     return result.data;
-  },
-  createDeal: async (payload: Partial<CatalogDeal>): Promise<CatalogDeal> => {
-    const result = await request<{ data: CatalogDeal }>('/catalog/deals', 'POST', payload);
-    return result.data;
-  },
-  updateDeal: async (id: string, payload: Partial<CatalogDeal>): Promise<CatalogDeal> => {
-    const result = await request<{ data: CatalogDeal }>(`/catalog/deals/${id}`, 'PATCH', payload);
-    return result.data;
-  },
-  deleteDeal: async (id: string): Promise<void> => {
-    await request<{ success: boolean }>(`/catalog/deals/${id}`, 'DELETE');
   },
 
   listDealsBanners: async (opts?: { active?: boolean }): Promise<CatalogDealsBanner[]> => {

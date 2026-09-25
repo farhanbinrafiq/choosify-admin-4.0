@@ -68,7 +68,7 @@ async function main() {
   if (!pr.ok || !prBody.success) fail(`password-reset-request ${pr.status}`);
   pass('password-reset-request always succeeds');
 
-  // Ads: create deal as admin (admin-created)
+  // Ads: canonical Deals are seller-only in v1 — admin/platform deal creation is refused.
   const dealRes = await fetch(`${BASE}/ads/deals`, {
     method: 'POST',
     headers: auth(admin.token),
@@ -79,9 +79,8 @@ async function main() {
     }),
   });
   const dealBody = await json(dealRes);
-  if (!dealRes.ok) fail(`create deal ${dealRes.status} ${JSON.stringify(dealBody)}`);
-  const dealStatus = dealBody.data?.status || dealBody.status;
-  pass(`deal created status=${dealStatus}`);
+  if (dealRes.status !== 403) fail(`admin deal create expected 403, got ${dealRes.status} ${JSON.stringify(dealBody)}`);
+  pass('admin deal creation refused (403) — seller-only Deals v1');
 
   // Unsafe URL rejected
   const badBanner = await fetch(`${BASE}/ads/banners`, {

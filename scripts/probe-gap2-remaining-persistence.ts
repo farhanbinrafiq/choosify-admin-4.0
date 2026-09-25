@@ -119,15 +119,17 @@ async function main() {
     assert(sendRes.ok && !!omniMessageId, 'omniStore: message sent', sendBody);
   }
 
-  // --- 2. adsStore: create a deal (auto-approved/active) ---
-  const dealRes = await fetch(`${V1}/ads/deals`, {
+  // --- 2. adsStore: create an ad record (admin promotion request) ---
+  // Canonical Deals are seller-only (admins get 403), so adsStore persistence is
+  // exercised with a promotion — same store, same snapshot.
+  const dealRes = await fetch(`${V1}/ads/promotions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${admin}` },
-    body: JSON.stringify({ title: `Gap2 Probe Deal ${stamp}` }),
+    body: JSON.stringify({ title: `Gap2 Probe Promotion ${stamp}` }),
   });
   const dealBody = (await dealRes.json()) as { data?: { id: string } } & Json;
   const dealId = (dealBody as { data?: { id: string } }).data?.id || (dealBody as { id?: string }).id;
-  assert(dealRes.ok && !!dealId, 'adsStore: deal created', dealBody);
+  assert(dealRes.ok && !!dealId, 'adsStore: ad record created', dealBody);
 
   // --- 3. cashbookStore: create a cashbook (as seller) ---
   const cashbookRes = await fetch(`${V1}/cashbooks`, {
@@ -189,13 +191,13 @@ async function main() {
     );
   }
 
-  // --- Verify ad deal ---
-  const dealsAfter = await fetch(`${V1}/ads/deals`, { headers: { Authorization: `Bearer ${admin2}` } });
+  // --- Verify ad record ---
+  const dealsAfter = await fetch(`${V1}/ads/promotions`, { headers: { Authorization: `Bearer ${admin2}` } });
   const dealsAfterBody = (await dealsAfter.json()) as { data?: Array<{ id: string }> } & Json;
   const dealsList = (dealsAfterBody as { data?: Array<{ id: string }> }).data || [];
   assert(
     dealsList.some((d) => d.id === dealId),
-    'adsStore: deal survives real server restart',
+    'adsStore: ad record survives real server restart',
     { dealId, count: dealsList.length },
   );
 

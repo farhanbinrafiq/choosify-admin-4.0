@@ -381,16 +381,14 @@ async function main() {
       mark('cross-owner-edit-denied', true, 'skipped-no-draft');
     }
 
+    // Canonical Deals: pricing + schedule + owned listing required (open marketplace,
+    // no approval step). A title-only request is refused before anything is written.
     const deal = await req('POST', '/ads/deals', {
       token: sellerToken,
       body: { title: `Deal policy ${suffix}` },
-      expect: [201],
+      expect: [400],
     });
-    mark(
-      'deals-auto-approve-preserved',
-      String(((deal.body.data as Json) || {}).status) === 'active',
-      `status=${((deal.body.data as Json) || {}).status}`,
-    );
+    mark('deals-incomplete-request-refused', deal.status === 400, `status=${deal.status}`);
 
     {
       const fs = await import('node:fs');

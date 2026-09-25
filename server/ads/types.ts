@@ -1,3 +1,10 @@
+import type {
+  DealListingType,
+  DealTerms,
+  PromotionReview,
+  PromotionType,
+} from '../../shared/deals/dealPricing';
+
 export type AdsOwnerRole = 'seller' | 'creator' | 'admin';
 
 export type AdsStatus =
@@ -7,7 +14,9 @@ export type AdsStatus =
   | 'rejected'
   | 'active'
   | 'paused'
-  | 'disabled';
+  | 'disabled'
+  /** Deal-linked Promotion Request withdrawn by the seller while pending. */
+  | 'cancelled';
 
 export type AdsKind = 'deal' | 'promotion' | 'banner' | 'external';
 
@@ -75,7 +84,33 @@ export type AdRecord = {
   createdAt: string;
   updatedAt: string;
   metadata?: Record<string, unknown>;
+  /** Canonical Deal / its Promotion Request — listing kind (server-derived). */
+  listingType?: DealListingType;
+  /** Canonical seller Deal pricing terms (server-derived snapshots included). */
+  dealTerms?: DealTerms;
+  /** Promotion Request (kind 'promotion') → the canonical Deal it promotes. */
+  dealId?: string;
+  /** Promotion Request type (v1: featured | sponsored). */
+  promotionType?: PromotionType;
+  /** Promotion Request note from the seller (plain text). */
+  sellerNote?: string;
+  /** Promotion Request review trail (server-written only). */
+  review?: PromotionReview;
 };
+
+/**
+ * Typed views over the shared AdRecord storage.
+ * DealRecord: kind 'deal'; stored status active | paused | disabled (legacy
+ * pre-canonical deals may carry other values and have no dealTerms).
+ * PromotionRequestRecord: kind 'promotion' with a dealId; stored status
+ * pending | approved | rejected | cancelled.
+ */
+export type DealRecord = AdRecord & { kind: 'deal' };
+export type PromotionRequestRecord = AdRecord & { kind: 'promotion'; dealId: string };
+
+export function isDealPromotionRequest(ad: AdRecord): ad is PromotionRequestRecord {
+  return ad.kind === 'promotion' && typeof ad.dealId === 'string' && ad.dealId.length > 0;
+}
 
 export type CreateAdInput = {
   ownerId: string;
@@ -98,4 +133,10 @@ export type CreateAdInput = {
   asDraft?: boolean;
   /** Admin-only: publish immediately as active. */
   publishNow?: boolean;
+  listingType?: DealListingType;
+  dealTerms?: DealTerms;
+  dealId?: string;
+  promotionType?: PromotionType;
+  sellerNote?: string;
+  review?: PromotionReview;
 };

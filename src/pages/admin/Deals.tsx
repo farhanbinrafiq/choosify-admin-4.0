@@ -1,563 +1,712 @@
-import React, { useState, useMemo, useEffect, useCallback, CSSProperties } from 'react';
-import {
-  Clock, Search, ExternalLink, CheckCircle, XCircle, Plus, Trash2, Edit3, Pause,
-  Loader2, AlertTriangle, Save,
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, CheckCircle, ExternalLink, Eye, Loader2, Pause, Play, Search, Slash, X, XCircle } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  DEAL_PRICING_MODE_LABEL,
+  formatDealDiscount,
+  PROMOTION_TYPE_LABEL,
+  REJECTION_REASON_MAX,
+  type DealFilterKey,
+} from '@/shared/deals/dealPricing';
+import { adsApi, type DealRecord, type PromotionRequestRecord } from '../../services/adsApi';
 import { catalogApi } from '../../services/catalogApi';
 import type { CatalogDeal } from '../../types/catalog';
-
-// Deals use the real catalog contract — src/types/catalog.ts CatalogDeal /
-// server/catalogRouter.ts (GET /catalog/deals public; POST/PATCH/DELETE gated
-// by requireCmsWrite).
-export type Deal = CatalogDeal;
+import {
+  DealStatusPill,
+  fmtDateTime,
+  ListingTypeBadge,
+  money,
+  Pill,
+  PromotionStatusPill,
+  Thumb,
+} from '../../components/deals/dealDisplay';
 
 // ============================================================================
-// Sprint 13 UI regression lock — Step 3. PRESENTATION is a faithful reproduction
-// of the approved standalone `isDeals` section (design-reference/Choosify Admin
-// CMS (standalone).html, decoded lines 2957–2979): "Deals & Promotions" header +
-// "+ Create Deal" + a Deal | Brand | Discount | Starts | Ends | Status table,
-// expressed as inline styles. Sanctioned deviation: accent = var(--cms-accent),
-// not the raw reference #EF3C23.
+// Admin Deals Manager — operational + promotion workspace for canonical seller
+// Deals (Ads Manager AdRecord kind 'deal', /ads/deals).
 //
-// FUNCTIONALITY is the current canonical layer, unchanged: catalogApi.listDeals /
-// createDeal / updateDeal / deleteDeal, computed live/expiring/expired status,
-// search + status + category filter, per-row approve/reject/pause/edit/delete,
-// bulk approve/delete, the real deals-derived metrics, and the ?tab=promocodes
-// redirect to /admin/coupons. Real controls the prototype lacks (checkbox column,
-// per-row Actions, metrics, filters, the Add/Edit form) are integrated into the
-// same visual system rather than dropped.
+// Deals are OPEN marketplace inventory: sellers create them on their own
+// listings and they follow their dates automatically (Scheduled → Active →
+// Expired). There is NO deal approval here. Admin controls on deals are
+// exceptional moderation only: Pause / Resume / Disable (Disable is final and
+// the only action on legacy deals).
 //
-// The former in-page "Promo Code Manager" (5 hardcoded promo codes + its form +
-// table, unreachable dead code since 75b8b4b) is removed — that surface is
-// /admin/coupons, linked from the header.
+// Approve / Reject exist ONLY on Promotion Requests (kind 'promotion' +
+// dealId): a seller asking for Featured / Sponsored visibility for an Active
+// deal. Rejecting a request never affects the deal. Sponsored approval does
+// not imply payment (no billing yet) — it stays "awaiting fulfillment".
+//
+// No customer-facing pricing effect yet. Legacy CatalogDeal records are shown
+// read-only.
 // ============================================================================
 
-const ACCENT = 'var(--cms-accent)';
-const ACCENT_WASH = 'color-mix(in srgb, var(--cms-accent) 10%, transparent)';
+type Tab = 'deals' | 'promotions';
+type DealFilter = 'all' | DealFilterKey | 'promoted';
+type PromoFilter = 'pending' | 'approved' | 'rejected' | 'cancelled';
 
-const capitalize = (v: string) => (v ? v.charAt(0).toUpperCase() + v.slice(1) : v);
+const DEAL_FILTERS: Array<{ key: DealFilter; label: string }> = [
+  { key: 'all', label: 'All' },
+  { key: 'active', label: 'Active' },
+  { key: 'scheduled', label: 'Scheduled' },
+  { key: 'expired', label: 'Expired' },
+  { key: 'paused', label: 'Paused' },
+  { key: 'disabled', label: 'Disabled' },
+  { key: 'legacy', label: 'Legacy' },
+  { key: 'promoted', label: 'Promoted' },
+];
 
-/** Status pill — inline, matching the standalone status-badge chrome. */
-const statusBadge = (status: Deal['status']): CSSProperties => {
-  const map: Record<string, { bg: string; fg: string }> = {
-    live: { bg: 'rgba(34,197,94,0.12)', fg: '#16A34A' },
-    pending: { bg: 'rgba(245,158,11,0.14)', fg: '#B45309' },
-    expiring: { bg: 'rgba(239,68,68,0.1)', fg: '#DC2626' },
-    expired: { bg: '#F1F3F5', fg: '#9CA3AF' },
-    rejected: { bg: '#F1F3F5', fg: '#6B7280' },
-    draft: { bg: '#F1F3F5', fg: '#6B7280' },
-  };
-  const c = map[status] || { bg: '#F1F3F5', fg: '#6B7280' };
-  return {
-    background: c.bg, color: c.fg, fontSize: 9, fontWeight: 800, letterSpacing: '0.03em',
-    textTransform: 'uppercase', padding: '3px 8px', borderRadius: 999, whiteSpace: 'nowrap',
-  };
-};
+const PROMO_FILTERS: Array<{ key: PromoFilter; label: string }> = [
+  { key: 'pending', label: 'Pending' },
+  { key: 'approved', label: 'Approved' },
+  { key: 'rejected', label: 'Rejected' },
+  { key: 'cancelled', label: 'Cancelled' },
+];
 
-const fmtDate = (iso?: string) => {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-};
+type DealAction = 'pause' | 'resume' | 'disable';
+
+/** Moderation available per deal state (the server enforces the same rules). */
+function dealActionsFor(d: DealRecord): DealAction[] {
+  if (d.status === 'disabled') return [];
+  if (d.legacy) return ['disable'];
+  if (d.status === 'paused') return ['resume', 'disable'];
+  if (d.status === 'active') return ['pause', 'disable'];
+  return ['disable'];
+}
+
+/** Base-price drift since the deal was created, as a signed percentage. */
+function basePriceDrift(d: DealRecord): number | null {
+  const at = d.dealTerms?.basePriceAtSubmit;
+  const now = d.listing?.currentBasePrice;
+  if (!at || !now || !d.listing?.exists || at === now) return null;
+  return ((now - at) / at) * 100;
+}
+
+// Selected chips/tabs use a light wash: the platform's global
+// `main [role="tab"][aria-selected="true"]` rule forces dark text.
+const chipCls = (on: boolean) =>
+  `rounded-full px-3 py-1.5 text-[10.5px] font-extrabold outline-none ${
+    on ? 'bg-[#FFF1EE] text-[#111827] shadow-[inset_0_0_0_1px_rgba(239,60,35,0.35)]' : 'bg-[#F3F4F6] text-[#374151]'
+  }`;
 
 export default function DealsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  // Promo codes / vouchers have their own real Operations-backed surface at
-  // /admin/coupons — the former in-page tab redirects there.
+  // Promo codes / vouchers live at /admin/coupons — the former in-page tab redirects there.
   useEffect(() => {
-    if (searchParams.get('tab') === 'promocodes') {
-      navigate('/admin/coupons', { replace: true });
-    }
+    if (searchParams.get('tab') === 'promocodes') navigate('/admin/coupons', { replace: true });
   }, [searchParams, navigate]);
 
-  const [deals, setDeals] = useState<Deal[]>([]);
-  const [dealsLoading, setDealsLoading] = useState(true);
-  const [dealsError, setDealsError] = useState<string | null>(null);
+  const tab: Tab = searchParams.get('view') === 'promotions' ? 'promotions' : 'deals';
+  const setTab = (t: Tab) => setSearchParams(t === 'promotions' ? { view: 'promotions' } : {});
 
-  const loadDeals = useCallback(async () => {
-    setDealsLoading(true);
-    setDealsError(null);
+  const [deals, setDeals] = useState<DealRecord[]>([]);
+  const [requests, setRequests] = useState<PromotionRequestRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [dealFilter, setDealFilter] = useState<DealFilter>('all');
+  const [promoFilter, setPromoFilter] = useState<PromoFilter>('pending');
+  const [query, setQuery] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [reviewingDeal, setReviewingDeal] = useState<DealRecord | null>(null);
+  const [reviewingRequest, setReviewingRequest] = useState<PromotionRequestRecord | null>(null);
+  const [rejectMode, setRejectMode] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+
+  const [legacyDeals, setLegacyDeals] = useState<CatalogDeal[] | null>(null);
+  const [legacyError, setLegacyError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
-      setDeals(await catalogApi.listDeals());
+      const [d, r] = await Promise.all([adsApi.listDeals(), adsApi.listPromotionRequests()]);
+      setDeals(d);
+      setRequests(r);
+      setReviewingDeal((cur) => (cur ? d.find((x) => x.id === cur.id) || null : null));
+      setReviewingRequest((cur) => (cur ? r.find((x) => x.id === cur.id) || null : null));
     } catch (err) {
-      setDealsError(err instanceof Error ? err.message : 'Failed to load deals.');
+      setError(err instanceof Error ? err.message : 'Failed to load deals');
     } finally {
-      setDealsLoading(false);
+      setLoading(false);
     }
   }, []);
 
-  useEffect(() => { void loadDeals(); }, [loadDeals]);
-
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
-  const [categoryFilter, setCategoryFilter] = useState('All');
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [confirmingId, setConfirmingId] = useState<string | null>(null);
-  const [actionPendingId, setActionPendingId] = useState<string | null>(null);
-  const [bulkActionPending, setBulkActionPending] = useState(false);
-
-  // Add / Edit Deal form (real CatalogDeal contract)
-  const [isAdding, setIsAdding] = useState(false);
-  const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
-  const [savingDeal, setSavingDeal] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [formName, setFormName] = useState('');
-  const [formSeller, setFormSeller] = useState('');
-  const [formDiscountType, setFormDiscountType] = useState<'percentage' | 'flat'>('percentage');
-  const [formDiscountValue, setFormDiscountValue] = useState<number>(0);
-  const [formCategory, setFormCategory] = useState('Electronics');
-  const [formValidUntil, setFormValidUntil] = useState('');
-  const [formPromoCode, setFormPromoCode] = useState('');
-
   useEffect(() => {
-    setFormError(null);
-    if (editingDeal) {
-      setFormName(editingDeal.name);
-      setFormSeller(editingDeal.seller);
-      setFormDiscountType(editingDeal.discountType === 'flat' ? 'flat' : 'percentage');
-      setFormDiscountValue(editingDeal.discountValue);
-      setFormCategory(editingDeal.category);
-      const p = new Date(editingDeal.validUntil);
-      setFormValidUntil(`${p.getFullYear()}-${String(p.getMonth() + 1).padStart(2, '0')}-${String(p.getDate()).padStart(2, '0')}`);
-      setFormPromoCode(editingDeal.promoCode || '');
-      setIsAdding(false);
-    } else if (isAdding) {
-      setFormName(''); setFormSeller(''); setFormDiscountType('percentage'); setFormDiscountValue(0); setFormCategory('Electronics');
-      const t = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      setFormValidUntil(`${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`);
-      setFormPromoCode('');
-    }
-  }, [editingDeal, isAdding]);
+    void load();
+    catalogApi
+      .listDeals()
+      .then(setLegacyDeals)
+      .catch((err) => {
+        setLegacyDeals([]);
+        setLegacyError(err instanceof Error ? err.message : 'Failed to load legacy deals');
+      });
+  }, [load]);
 
-  const triggerToast = (message: string, type: 'success' | 'error' = 'success') => {
+  const flash = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3500);
+    window.setTimeout(() => setToast(null), 3500);
   };
 
-  // ── computed status (verbatim) ──
-  const isExpiredDeal = (s: string) => new Date(s).getTime() < Date.now();
-  const isExpiringWithin48h = (s: string, cur: Deal['status']) => {
-    if (cur === 'expired' || cur === 'rejected') return false;
-    const h = (new Date(s).getTime() - Date.now()) / 3.6e6;
-    return h > 0 && h <= 48;
-  };
-  const getComputedStatus = (d: Deal): Deal['status'] => {
-    if (d.status === 'rejected') return 'rejected';
-    if (d.status === 'expired' || isExpiredDeal(d.validUntil)) return 'expired';
-    if (isExpiringWithin48h(d.validUntil, d.status)) return 'expiring';
-    return d.status;
-  };
-  const getExpiryDisplay = (s: string) => {
-    const diff = new Date(s).getTime() - Date.now();
-    if (diff <= 0) return 'Expired';
-    const h = Math.floor(diff / 3.6e6);
-    if (h < 48) return h === 0 ? `${Math.floor(diff / 6e4)}m left` : `${h}h left`;
-    return fmtDate(s);
-  };
-
-  const computedStats = useMemo(() => {
-    const c = deals.map((d) => getComputedStatus(d));
-    return {
-      total: c.length,
-      live: c.filter((s) => s === 'live').length,
-      pending: c.filter((s) => s === 'pending').length,
-      expiring48h: c.filter((s) => s === 'expiring').length,
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const dealCounts = useMemo(() => {
+    const c: Record<string, number> = { all: deals.length, promoted: 0 };
+    for (const d of deals) {
+      c[d.filterKey] = (c[d.filterKey] || 0) + 1;
+      if (d.promotion?.promotedNow) c.promoted += 1;
+    }
+    return c;
   }, [deals]);
 
-  const uniqueCategories = useMemo(() => Array.from(new Set(deals.map((d) => d.category).filter(Boolean))), [deals]);
+  const promoCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const r of requests) c[r.status] = (c[r.status] || 0) + 1;
+    return c;
+  }, [requests]);
 
-  const filteredDeals = useMemo(() => {
-    const q = searchTerm.toLowerCase();
-    return deals.filter((d) => {
-      const matchesSearch = d.name.toLowerCase().includes(q) || d.seller.toLowerCase().includes(q);
-      const cs = getComputedStatus(d);
-      const matchesStatus = statusFilter === 'All' || cs.toLowerCase() === statusFilter.toLowerCase();
-      const matchesCategory = categoryFilter === 'All' || d.category.toLowerCase() === categoryFilter.toLowerCase();
-      return matchesSearch && matchesStatus && matchesCategory;
-    });
+  const q = query.trim().toLowerCase();
+  const matches = (...vals: Array<string | undefined>) => !q || vals.filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
+
+  const filteredDeals = useMemo(
+    () =>
+      deals.filter((d) => {
+        if (dealFilter === 'promoted' ? !d.promotion?.promotedNow : dealFilter !== 'all' && d.filterKey !== dealFilter) return false;
+        return matches(d.dealReferenceId, d.listing?.name, d.title, d.listing?.brandName, d.ownerId);
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deals, searchTerm, statusFilter, categoryFilter]);
+    [deals, dealFilter, q],
+  );
 
-  const allFilteredSelected = filteredDeals.length > 0 && filteredDeals.every((d) => selectedIds.includes(d.id));
-  const toggleSelectAll = () => {
-    const ids = filteredDeals.map((d) => d.id);
-    setSelectedIds((prev) => (allFilteredSelected ? prev.filter((i) => !ids.includes(i)) : Array.from(new Set([...prev, ...ids]))));
-  };
-  const toggleSelect = (id: string) => setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
+  const filteredRequests = useMemo(
+    () =>
+      requests.filter(
+        (r) =>
+          r.status === promoFilter &&
+          matches(r.advertisementReferenceId, r.deal?.dealReferenceId, r.deal?.listing?.name, r.title, r.deal?.listing?.brandName, r.ownerId),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [requests, promoFilter, q],
+  );
 
-  // ── per-row actions (verbatim) ──
-  const patchStatus = async (id: string, status: Deal['status'], okMsg: string, failMsg: string) => {
-    setActionPendingId(id);
+  const moderate = async (d: DealRecord, action: DealAction) => {
+    setBusyId(d.id);
     try {
-      const updated = await catalogApi.updateDeal(id, { status });
-      setDeals((prev) => prev.map((d) => (d.id === id ? updated : d)));
-      triggerToast(okMsg);
+      if (action === 'pause') await adsApi.pauseDeal(d.id);
+      if (action === 'resume') await adsApi.resumeDeal(d.id);
+      if (action === 'disable') await adsApi.disableDeal(d.id);
+      flash(
+        { pause: 'Deal paused.', resume: 'Deal resumed — its dates decide Scheduled / Active / Expired.', disable: 'Deal disabled.' }[action],
+      );
+      await load();
     } catch (err) {
-      triggerToast(err instanceof Error ? err.message : failMsg, 'error');
+      flash(err instanceof Error ? err.message : 'Action failed', 'error');
     } finally {
-      setActionPendingId(null);
+      setBusyId(null);
     }
   };
-  const handleApprove = (id: string) => patchStatus(id, 'live', 'Deal approved and made Live.', 'Failed to approve deal.');
-  const handleReject = (id: string) => patchStatus(id, 'rejected', 'Deal request rejected.', 'Failed to reject deal.');
-  const handlePause = (id: string) => patchStatus(id, 'expired', 'Deal paused (moved to expired).', 'Failed to pause deal.');
 
-  const handleDelete = async (id: string) => {
-    setActionPendingId(id);
+  const decide = async (r: PromotionRequestRecord, action: 'approve' | 'reject', reason?: string) => {
+    setBusyId(r.id);
     try {
-      await catalogApi.deleteDeal(id);
-      setDeals((prev) => prev.filter((d) => d.id !== id));
-      setSelectedIds((prev) => prev.filter((i) => i !== id));
-      triggerToast('Deal removed.');
+      if (action === 'approve') await adsApi.approvePromotionRequest(r.id);
+      else await adsApi.rejectPromotionRequest(r.id, reason || '');
+      flash(
+        action === 'approve'
+          ? r.promotionType === 'sponsored'
+            ? 'Sponsored request approved — awaiting fulfillment (no payment has been taken).'
+            : 'Promotion approved.'
+          : 'Promotion request rejected — the deal is unaffected and the seller can see the reason.',
+      );
+      setRejectMode(false);
+      setRejectReason('');
+      await load();
     } catch (err) {
-      triggerToast(err instanceof Error ? err.message : 'Failed to delete deal.', 'error');
+      flash(err instanceof Error ? err.message : 'Action failed', 'error');
     } finally {
-      setActionPendingId(null);
+      setBusyId(null);
     }
   };
 
-  const handleBulkApprove = async () => {
-    const targets = deals.filter((d) => selectedIds.includes(d.id) && getComputedStatus(d) === 'pending');
-    if (targets.length === 0) { setSelectedIds([]); return; }
-    setBulkActionPending(true);
-    const results = await Promise.allSettled(targets.map((d) => catalogApi.updateDeal(d.id, { status: 'live' })));
-    const updated = new Map<string, Deal>();
-    let fails = 0;
-    results.forEach((r, i) => (r.status === 'fulfilled' ? updated.set(targets[i].id, r.value) : (fails += 1)));
-    setDeals((prev) => prev.map((d) => updated.get(d.id) ?? d));
-    setSelectedIds([]);
-    setBulkActionPending(false);
-    triggerToast(fails === 0 ? 'Approved selected pending deals.' : `Approved ${updated.size}; ${fails} failed.`, fails === 0 ? 'success' : 'error');
+  const openRequest = (r: PromotionRequestRecord, reject = false) => {
+    setReviewingRequest(r);
+    setRejectMode(reject);
+    setRejectReason('');
   };
-
-  const handleBulkDelete = async () => {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    setBulkActionPending(true);
-    const results = await Promise.allSettled(ids.map((id) => catalogApi.deleteDeal(id)));
-    const done = new Set<string>();
-    let fails = 0;
-    results.forEach((r, i) => (r.status === 'fulfilled' ? done.add(ids[i]) : (fails += 1)));
-    setDeals((prev) => prev.filter((d) => !done.has(d.id)));
-    setSelectedIds((prev) => prev.filter((i) => !done.has(i)));
-    setBulkActionPending(false);
-    triggerToast(fails === 0 ? 'Selected deals removed.' : `Removed ${done.size}; ${fails} failed.`, fails === 0 ? 'success' : 'error');
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formName || !formSeller || formDiscountValue <= 0 || !formValidUntil) {
-      setFormError('Please fill out all fields.');
-      return;
-    }
-    const payload: Partial<CatalogDeal> = {
-      name: formName,
-      seller: formSeller,
-      category: formCategory,
-      discountType: formDiscountType,
-      discountValue: Number(formDiscountValue),
-      validUntil: new Date(`${formValidUntil}T23:59:59.000Z`).toISOString(),
-      promoCode: formPromoCode || undefined,
-    };
-    setSavingDeal(true);
-    setFormError(null);
-    try {
-      if (editingDeal) {
-        const updated = await catalogApi.updateDeal(editingDeal.id, payload);
-        setDeals((prev) => prev.map((d) => (d.id === editingDeal.id ? updated : d)));
-        triggerToast('Deal updated.');
-        setEditingDeal(null);
-      } else {
-        const created = await catalogApi.createDeal({ ...payload, status: 'pending' });
-        setDeals((prev) => [created, ...prev]);
-        triggerToast('New deal launched (Pending admin verification).');
-        setIsAdding(false);
-      }
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Failed to save deal.');
-    } finally {
-      setSavingDeal(false);
-    }
-  };
-
-  const isFormActive = isAdding || !!editingDeal;
-  const selectedCount = filteredDeals.filter((d) => selectedIds.includes(d.id)).length;
-
-  // ── presentation — exact reference values (isDeals 2957–2979) ──
-  const S: Record<string, CSSProperties> = {
-    headRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 },
-    h1: { fontSize: 15, fontWeight: 800, color: '#111827' },
-    createBtn: { background: ACCENT, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 },
-    couponLink: { fontSize: '11.5px', fontWeight: 800, color: ACCENT, display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 0, cursor: 'pointer' },
-    statGrid: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 14 },
-    statCard: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: 16 },
-    statNum: { fontSize: 22, fontWeight: 800, color: '#111827' },
-    statLabel: { fontSize: 10, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', marginTop: 4 },
-    controls: { display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 },
-    search: { height: 38, boxSizing: 'border-box', borderRadius: 8, border: '1px solid #E8EDF2', padding: '0 14px 0 34px', fontSize: '12.5px', minWidth: 240, outline: 'none', background: '#fff' },
-    select: { height: 38, boxSizing: 'border-box', borderRadius: 8, border: '1px solid #E8EDF2', padding: '0 12px', fontSize: 12, color: '#111827', background: '#fff', outline: 'none', cursor: 'pointer' },
-    bulkBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F7F8FA', border: '1px solid #E5E7EB', color: '#172033', borderRadius: 8, padding: '12px 16px', marginBottom: 12, flexWrap: 'wrap', gap: 10 },
-    bulkChip: { background: ACCENT_WASH, color: ACCENT, padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 800 },
-    bulkBtn: { background: '#FFFFFF', color: '#172033', border: '1px solid #E5E7EB', borderRadius: 6, padding: '5px 12px', fontSize: 10.5, fontWeight: 800, cursor: 'pointer' },
-    bulkClear: { cursor: 'pointer', fontSize: 10.5, fontWeight: 700, color: '#667085', background: 'none', border: 0 },
-    tableWrap: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, overflow: 'hidden' },
-    th: { textAlign: 'left', padding: '12px 16px', fontSize: '10.5px', fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em', textTransform: 'uppercase', whiteSpace: 'nowrap' },
-    td: { padding: '14px 16px', fontSize: 13, color: '#111827', verticalAlign: 'middle' },
-    tdMuted: { padding: '14px 16px', fontSize: 13, color: '#6B7280', verticalAlign: 'middle' },
-    row: { borderTop: '1px solid #F1F3F5' },
-    discountPill: { background: ACCENT, color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap' },
-    iconBtn: { width: 26, height: 26, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, border: '1px solid #E8EDF2', background: '#fff', cursor: 'pointer', color: '#6B7280' },
-    formCard: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 10, padding: 20 },
-    fLabel: { fontSize: 10, fontWeight: 800, color: '#9CA3AF', letterSpacing: '0.04em', marginBottom: 6, display: 'block' },
-    input: { width: '100%', boxSizing: 'border-box', height: 40, borderRadius: 8, border: '1px solid #E8EDF2', padding: '0 12px', fontSize: '12.5px', outline: 'none', background: '#fff' },
-    saveBtn: { background: ACCENT, color: '#fff', border: 'none', borderRadius: 8, padding: '11px 20px', fontSize: '12.5px', fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 },
-    ghost: { fontSize: 11, fontWeight: 700, color: '#6B7280', background: 'none', border: 0, cursor: 'pointer', padding: 0 },
-  };
-
-  const CATEGORY_OPTIONS = ['Electronics', 'Fashion', 'Home & Living', 'Groceries', 'Beauty', 'Sports & Outdoor', 'Baby & Kids', 'Mobile & Gadgets', ...uniqueCategories]
-    .filter((v, i, a) => a.indexOf(v) === i);
 
   return (
-    <div style={{ color: '#111827' }}>
-      <AnimatePresence>
-        {toast && (
-          <motion.div
-            initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 40 }}
-            style={{
-              position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 100,
-              background: toast.type === 'error' ? '#DC2626' : '#111827', color: '#fff',
-              borderRadius: 12, padding: '11px 18px', fontSize: 12.5, fontWeight: 700,
-              display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 12px 32px rgba(0,0,0,0.22)',
-            }}
-          >
-            {toast.type === 'error' ? <AlertTriangle size={15} /> : <Save size={15} />} {toast.message}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Header (reference) ── */}
-      <div style={S.headRow}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap' }}>
-          <span style={S.h1}>Deals &amp; Promotions</span>
-          <button onClick={() => navigate('/admin/coupons')} style={S.couponLink}>
-            Promo Codes &amp; Vouchers <ExternalLink size={12} />
-          </button>
+    <div className="min-w-0 text-[#111827]">
+      {toast ? (
+        // Background must be a bg-* CLASS (not an inline style): the global
+        // `main .text-white:not([class*="bg-[#1"], [class*="bg-red"] …)` rule
+        // otherwise forces the toast text dark on its dark background.
+        <div
+          role="status"
+          data-testid="deals-toast"
+          className={`fixed bottom-6 left-1/2 z-[100] flex max-w-[92vw] -translate-x-1/2 items-center gap-2 rounded-xl px-4 py-2.5 text-[12.5px] font-bold text-white shadow-xl ${
+            toast.type === 'error' ? 'bg-red-600' : 'bg-[#111827]'
+          }`}
+        >
+          {toast.type === 'error' ? <AlertTriangle size={15} /> : <CheckCircle size={15} />} {toast.message}
         </div>
-        <button onClick={() => { setEditingDeal(null); setIsAdding(true); }} style={S.createBtn}>
-          <Plus size={14} /> Create Deal
-        </button>
+      ) : null}
+
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-baseline gap-3">
+            <span className="text-[15px] font-extrabold">Deals Manager</span>
+            <button
+              type="button"
+              onClick={() => navigate('/admin/coupons')}
+              className="inline-flex items-center gap-1 text-[11.5px] font-extrabold"
+              style={{ color: 'var(--cms-accent)' }}
+            >
+              Promo Codes &amp; Vouchers <ExternalLink size={12} />
+            </button>
+          </div>
+          <div className="text-[11px] font-semibold text-[#6B7280]">
+            Seller deals go live automatically by their dates. Review promotion requests; pause or disable deals only when moderation is needed.
+          </div>
+        </div>
       </div>
 
-      {/* ── Real deals-derived metrics ── */}
-      <div style={S.statGrid}>
+      <div className="mb-4 inline-flex rounded-lg border border-[#E8EDF2] bg-white p-1" role="tablist" aria-label="Deals Manager sections">
         {([
-          ['Total Deals', computedStats.total, '#6C4CFF'],
-          ['Live Deals', computedStats.live, '#16A34A'],
-          ['Pending Approval', computedStats.pending, '#B45309'],
-          ['Expiring 48h', computedStats.expiring48h, '#DC2626'],
-        ] as const).map(([label, val, c]) => (
-          <div key={label} style={{ ...S.statCard, borderLeft: `4px solid ${c}` }}>
-            <div style={S.statNum}>{dealsLoading ? '—' : val}</div>
-            <div style={S.statLabel}>{label}</div>
-          </div>
+          ['deals', 'All Deals', deals.length],
+          ['promotions', 'Promotion Requests', promoCounts.pending || 0],
+        ] as const).map(([key, label, count]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            data-tab={key}
+            onClick={() => setTab(key)}
+            className={`rounded-md px-3.5 py-1.5 text-[11.5px] font-extrabold outline-none ${
+              tab === key ? 'bg-[#FFF1EE] text-[#111827] shadow-[inset_0_0_0_1px_rgba(239,60,35,0.35)]' : 'text-[#374151] hover:bg-[#F9FAFB]'
+            }`}
+          >
+            {label} <span className="opacity-60">{count}</span>
+          </button>
         ))}
       </div>
 
-      {/* ── Controls (real search + filters) ── */}
-      <div style={S.controls}>
-        <div style={{ position: 'relative' }}>
-          <Search size={14} color="#9CA3AF" style={{ position: 'absolute', left: 12, top: 12, pointerEvents: 'none' }} />
-          <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search deals by name or seller…" style={S.search} />
-        </div>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={S.select}>
-          {['All', 'Live', 'Pending', 'Expiring', 'Expired', 'Rejected'].map((s) => (
-            <option key={s} value={s}>{s === 'All' ? 'All statuses' : s}</option>
-          ))}
-        </select>
-        <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={S.select}>
-          <option value="All">All categories</option>
-          {uniqueCategories.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-        {(statusFilter !== 'All' || categoryFilter !== 'All' || searchTerm) && (
-          <button onClick={() => { setStatusFilter('All'); setCategoryFilter('All'); setSearchTerm(''); }} style={S.ghost}>Reset</button>
-        )}
+      <div className="relative mb-3 max-w-sm">
+        <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-[#9CA3AF]" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search reference, listing or seller…"
+          className="h-10 w-full rounded-lg border border-[#E8EDF2] bg-white pl-9 pr-3 text-[12.5px] outline-none"
+          aria-label="Search deals"
+        />
       </div>
 
-      {/* ── Bulk bar (real) ── */}
-      {selectedCount > 0 && (
-        <div style={S.bulkBar}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <span style={S.bulkChip}>{selectedCount} selected</span>
-            <button onClick={handleBulkApprove} disabled={bulkActionPending} style={S.bulkBtn}>Approve pending</button>
-            <button onClick={handleBulkDelete} disabled={bulkActionPending} style={{ ...S.bulkBtn, background: 'rgba(239,68,68,0.25)' }}>Delete</button>
-          </div>
-          <button onClick={() => setSelectedIds([])} style={S.bulkClear}>✕ Clear</button>
+      {error ? (
+        <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-semibold text-red-700">
+          {error}{' '}
+          <button type="button" className="underline" onClick={() => void load()}>
+            Retry
+          </button>
         </div>
-      )}
+      ) : null}
 
-      <div style={{ display: 'grid', gridTemplateColumns: isFormActive ? 'minmax(0,1fr) minmax(0,340px)' : 'minmax(0,1fr)', gap: 20, alignItems: 'start' }} className="deals-grid">
-        {/* ── Table (reference) ── */}
-        <div style={S.tableWrap}>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: '#F9FAFB' }}>
-                  <th style={{ ...S.th, width: 36, textAlign: 'center' }}>
-                    <input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectAll} aria-label="Select all deals" />
-                  </th>
-                  <th style={S.th}>Deal</th>
-                  <th style={S.th}>Brand</th>
-                  <th style={S.th}>Discount</th>
-                  <th style={S.th}>Starts</th>
-                  <th style={S.th}>Ends</th>
-                  <th style={S.th}>Clicks</th>
-                  <th style={S.th}>Status</th>
-                  <th style={{ ...S.th, width: 120, textAlign: 'right' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dealsLoading ? (
-                  <tr><td colSpan={9} style={{ ...S.tdMuted, textAlign: 'center', padding: '40px 0' }}>
-                    <Loader2 size={16} className="animate-spin" style={{ display: 'inline', marginRight: 8, verticalAlign: 'middle' }} /> Loading deals…
-                  </td></tr>
-                ) : dealsError ? (
-                  <tr><td colSpan={9} style={{ ...S.td, textAlign: 'center', padding: '32px 16px' }}>
-                    <div style={{ color: '#DC2626', fontWeight: 600, fontSize: 12, marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                      <AlertTriangle size={15} /> {dealsError}
-                    </div>
-                    <button onClick={() => void loadDeals()} style={{ ...S.iconBtn, width: 'auto', padding: '6px 12px', fontSize: 11, fontWeight: 800 }}>Retry</button>
-                  </td></tr>
-                ) : filteredDeals.length === 0 ? (
-                  <tr><td colSpan={9} style={{ ...S.tdMuted, textAlign: 'center', padding: '40px 16px', fontStyle: 'italic' }}>
-                    No matching deals currently listed.
-                  </td></tr>
-                ) : (
-                  filteredDeals.map((deal) => {
-                    const cs = getComputedStatus(deal);
-                    const isExpiring = cs === 'expiring';
-                    const rowPending = actionPendingId === deal.id;
-                    return (
-                      <tr key={deal.id} style={{ ...S.row, opacity: rowPending ? 0.6 : 1 }}>
-                        <td style={{ ...S.td, textAlign: 'center' }}>
-                          <input type="checkbox" checked={selectedIds.includes(deal.id)} onChange={() => toggleSelect(deal.id)} aria-label={`Select ${deal.name}`} />
-                        </td>
-                        <td style={{ ...S.td, fontWeight: 700, maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{deal.name}</td>
-                        <td style={S.tdMuted}>{deal.seller}</td>
-                        <td style={S.td}>
-                          <span style={S.discountPill}>
-                            {deal.discountType === 'flat' ? `৳${deal.discountValue} OFF` : `${deal.discountValue}% OFF`}
-                          </span>
-                        </td>
-                        <td style={S.tdMuted}>{fmtDate(deal.validFrom)}</td>
-                        <td style={{ ...S.tdMuted, color: isExpiring ? '#DC2626' : '#6B7280' }}>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                            {isExpiring && <Clock size={13} />} {getExpiryDisplay(deal.validUntil)}
-                          </span>
-                        </td>
-                        <td style={S.tdMuted}>{deal.clicks ? deal.clicks.toLocaleString() : '—'}</td>
-                        <td style={S.td}><span style={statusBadge(cs)}>{capitalize(cs)}</span></td>
-                        <td style={{ ...S.td, textAlign: 'right' }}>
-                          <div style={{ display: 'inline-flex', gap: 6, justifyContent: 'flex-end' }}>
-                            {cs === 'pending' ? (
-                              <>
-                                <button onClick={() => handleApprove(deal.id)} disabled={rowPending} title="Approve / publish live" style={{ ...S.iconBtn, color: '#16A34A', borderColor: '#BBF7D0' }}><CheckCircle size={14} /></button>
-                                <button onClick={() => handleReject(deal.id)} disabled={rowPending} title="Reject request" style={{ ...S.iconBtn, color: '#DC2626', borderColor: '#FECACA' }}><XCircle size={14} /></button>
-                              </>
-                            ) : (cs === 'live' || cs === 'expiring') ? (
-                              <button onClick={() => handlePause(deal.id)} disabled={rowPending} title="Pause / end deal" style={{ ...S.iconBtn, color: '#B45309', borderColor: '#FDE68A' }}><Pause size={14} /></button>
-                            ) : null}
-                            <button onClick={() => { setIsAdding(false); setEditingDeal(deal); }} disabled={rowPending} title="Edit deal" style={{ ...S.iconBtn, color: '#2563EB', borderColor: '#BFDBFE' }}><Edit3 size={14} /></button>
-                            <button onClick={() => setConfirmingId(deal.id)} disabled={rowPending} title="Remove deal" style={{ ...S.iconBtn, color: '#DC2626', borderColor: '#FECACA' }}><Trash2 size={14} /></button>
-                          </div>
-                          {confirmingId === deal.id && (
-                            <div style={{ marginTop: 6, padding: 8, background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-                              <span style={{ fontSize: 9, fontWeight: 800, color: '#DC2626' }}>Delete this deal?</span>
-                              <div style={{ display: 'flex', gap: 6 }}>
-                                <button onClick={() => { void handleDelete(deal.id); setConfirmingId(null); }} style={{ padding: '4px 8px', background: '#DC2626', color: '#fff', fontSize: 9, fontWeight: 800, textTransform: 'uppercase', borderRadius: 5, border: 0, cursor: 'pointer' }}>Confirm</button>
-                                <button onClick={() => setConfirmingId(null)} style={{ padding: '4px 8px', background: '#fff', border: '1px solid #E8EDF2', color: '#6B7280', fontSize: 9, fontWeight: 800, textTransform: 'uppercase', borderRadius: 5, cursor: 'pointer' }}>Cancel</button>
+      {tab === 'deals' ? (
+        <>
+          <div className="mb-3 flex flex-wrap gap-2" role="tablist" aria-label="Deal filters">
+            {DEAL_FILTERS.map((f) => (
+              <button key={f.key} type="button" role="tab" aria-selected={dealFilter === f.key} data-filter={f.key} onClick={() => setDealFilter(f.key)} className={chipCls(dealFilter === f.key)}>
+                {f.label} <span className="opacity-60">{dealCounts[f.key] || 0}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="overflow-hidden rounded-lg border border-[#E8EDF2] bg-white">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1500px] border-collapse text-left" data-testid="admin-deals-table">
+                <thead>
+                  <tr className="bg-[#F9FAFB]">
+                    {['Reference', 'Listing', 'Type', 'Seller', 'Base @ creation', 'Current base', 'Deal price', 'Pricing mode', 'Discount', 'Start', 'End', 'Status', 'Promotion', 'Created', 'Actions'].map((h) => (
+                      <th key={h} className="whitespace-nowrap px-3 py-2.5 text-[10px] font-extrabold uppercase tracking-wide text-[#6B7280]">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr><td colSpan={15} className="px-3 py-10 text-center text-[12px] text-[#6B7280]"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" /> Loading deals…</td></tr>
+                  ) : filteredDeals.length === 0 ? (
+                    <tr><td colSpan={15} className="px-3 py-10 text-center text-[12px] italic text-[#9CA3AF]">No deals in this view.</td></tr>
+                  ) : (
+                    filteredDeals.map((d) => {
+                      const t = d.dealTerms;
+                      const drift = basePriceDrift(d);
+                      const acts = dealActionsFor(d);
+                      return (
+                        <tr key={d.id} className="border-t border-[#F1F3F5] align-top" data-deal-id={d.id} style={{ opacity: busyId === d.id ? 0.55 : 1 }}>
+                          <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[11px] font-bold text-[#EF3C23]">{d.dealReferenceId || d.id.slice(0, 12)}</td>
+                          <td className="px-3 py-2.5">
+                            <div className="flex max-w-[240px] items-center gap-2">
+                              <Thumb src={d.listing?.image || (d.creative?.imageUrl as string | undefined)} alt={d.listing?.name || d.title} />
+                              <div className="min-w-0">
+                                <div className="truncate text-[12px] font-bold">{d.listing?.name || d.title}</div>
+                                {d.listing && !d.listing.exists ? (
+                                  <div className="text-[10px] font-bold text-[#B91C1C]">Listing missing</div>
+                                ) : d.listing?.category ? (
+                                  <div className="truncate text-[10.5px] text-[#9CA3AF]">{d.listing.category}</div>
+                                ) : null}
                               </div>
                             </div>
-                          )}
+                          </td>
+                          <td className="px-3 py-2.5"><ListingTypeBadge type={d.listingType} /></td>
+                          <td className="px-3 py-2.5 text-[11.5px]">
+                            <div className="max-w-[160px] truncate font-semibold">{d.listing?.brandName || '—'}</div>
+                            <div className="max-w-[160px] truncate font-mono text-[10px] text-[#9CA3AF]" title={d.ownerId}>{d.ownerRole} · {d.ownerId.slice(0, 10)}</div>
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2.5 text-[12px]">{money(t?.basePriceAtSubmit)}</td>
+                          <td className="whitespace-nowrap px-3 py-2.5 text-[12px]">
+                            {d.listing?.exists ? money(d.listing.currentBasePrice) : '—'}
+                            {drift !== null ? (
+                              <div className={`text-[10px] font-extrabold ${Math.abs(drift) >= 5 ? 'text-[#B45309]' : 'text-[#6B7280]'}`} data-testid="base-price-drift">
+                                {drift > 0 ? '▲' : '▼'} {Math.abs(drift).toFixed(1)}% since creation
+                              </div>
+                            ) : null}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2.5 text-[12px] font-extrabold">
+                            {money(d.currentDealPrice ?? t?.dealPriceAtSubmit)}
+                            {t && d.currentPriceInvalidReason ? <div className="text-[10px] font-bold text-[#B91C1C]">Not applied now</div> : null}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2.5 text-[11px]">{t ? DEAL_PRICING_MODE_LABEL[t.mode] : '—'}</td>
+                          <td className="whitespace-nowrap px-3 py-2.5 text-[11px]">{t ? formatDealDiscount(t.mode, t.value) : '—'}</td>
+                          <td className="whitespace-nowrap px-3 py-2.5 text-[11px] text-[#6B7280]">{fmtDateTime(d.startsAt)}</td>
+                          <td className="whitespace-nowrap px-3 py-2.5 text-[11px] text-[#6B7280]">{fmtDateTime(d.endsAt)}</td>
+                          <td className="px-3 py-2.5"><DealStatusPill filterKey={d.filterKey} /></td>
+                          <td className="px-3 py-2.5"><PromotionStatusPill summary={d.promotion?.latest} /></td>
+                          <td className="whitespace-nowrap px-3 py-2.5 text-[11px] text-[#6B7280]">{fmtDateTime(d.createdAt)}</td>
+                          <td className="whitespace-nowrap px-3 py-2.5">
+                            <div className="flex gap-1.5">
+                              <IconBtn label="Review" onClick={() => setReviewingDeal(d)} icon={<Eye size={13} />} />
+                              {acts.includes('pause') ? <IconBtn label="Pause" tone="amber" disabled={busyId === d.id} onClick={() => void moderate(d, 'pause')} icon={<Pause size={13} />} /> : null}
+                              {acts.includes('resume') ? <IconBtn label="Resume" tone="green" disabled={busyId === d.id} onClick={() => void moderate(d, 'resume')} icon={<Play size={13} />} /> : null}
+                              {acts.includes('disable') ? <IconBtn label="Disable" tone="red" disabled={busyId === d.id} onClick={() => void moderate(d, 'disable')} icon={<Slash size={13} />} /> : null}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <LegacyCatalogDeals rows={legacyDeals} error={legacyError} />
+        </>
+      ) : (
+        <>
+          <div className="mb-3 flex flex-wrap gap-2" role="tablist" aria-label="Promotion request filters">
+            {PROMO_FILTERS.map((f) => (
+              <button key={f.key} type="button" role="tab" aria-selected={promoFilter === f.key} data-promo-filter={f.key} onClick={() => setPromoFilter(f.key)} className={chipCls(promoFilter === f.key)}>
+                {f.label} <span className="opacity-60">{promoCounts[f.key] || 0}</span>
+              </button>
+            ))}
+          </div>
+          <div className="mb-3 text-[11px] text-[#6B7280]">
+            Approving or rejecting a request only changes its promotional visibility — the underlying deal stays live either way.
+          </div>
+
+          <div className="overflow-hidden rounded-lg border border-[#E8EDF2] bg-white">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1400px] border-collapse text-left" data-testid="promotion-requests-table">
+                <thead>
+                  <tr className="bg-[#F9FAFB]">
+                    {['Reference', 'Deal', 'Listing', 'Seller', 'Promotion type', 'Requested period', 'Deal status', 'Seller note', 'Submitted', 'Status', 'Actions'].map((h) => (
+                      <th key={h} className="whitespace-nowrap px-3 py-2.5 text-[10px] font-extrabold uppercase tracking-wide text-[#6B7280]">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr><td colSpan={11} className="px-3 py-10 text-center text-[12px] text-[#6B7280]"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" /> Loading requests…</td></tr>
+                  ) : filteredRequests.length === 0 ? (
+                    <tr><td colSpan={11} className="px-3 py-10 text-center text-[12px] italic text-[#9CA3AF]">No promotion requests in this view.</td></tr>
+                  ) : (
+                    filteredRequests.map((r) => (
+                      <tr key={r.id} className="border-t border-[#F1F3F5] align-top" data-request-id={r.id} style={{ opacity: busyId === r.id ? 0.55 : 1 }}>
+                        <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[11px] font-bold text-[#EF3C23]">{r.advertisementReferenceId || r.id.slice(0, 12)}</td>
+                        <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[11px] font-bold text-[#374151]">{r.deal?.dealReferenceId || '—'}</td>
+                        <td className="max-w-[220px] px-3 py-2.5 text-[12px] font-bold"><div className="truncate">{r.deal?.listing?.name || r.title}</div></td>
+                        <td className="px-3 py-2.5 text-[11.5px]">
+                          <div className="max-w-[160px] truncate font-semibold">{r.deal?.listing?.brandName || '—'}</div>
+                          <div className="max-w-[160px] truncate font-mono text-[10px] text-[#9CA3AF]" title={r.ownerId}>{r.ownerId.slice(0, 10)}</div>
+                        </td>
+                        <td className="px-3 py-2.5"><Pill tone={r.promotionType === 'sponsored' ? 'approved' : 'promoted'}>{PROMOTION_TYPE_LABEL[r.promotionType]}</Pill></td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-[11px] text-[#6B7280]">{fmtDateTime(r.startsAt)}<br />→ {fmtDateTime(r.endsAt)}</td>
+                        <td className="px-3 py-2.5">{r.deal ? <DealStatusPill filterKey={r.deal.filterKey} /> : <span className="text-[11px] text-[#B91C1C]">Deal missing</span>}</td>
+                        <td className="max-w-[220px] px-3 py-2.5 text-[11px] text-[#374151]"><div className="line-clamp-2">{r.sellerNote || '—'}</div></td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-[11px] text-[#6B7280]">{fmtDateTime(r.review?.submittedAt || r.createdAt)}</td>
+                        <td className="px-3 py-2.5"><PromotionStatusPill summary={{ status: r.status, runState: r.runState }} /></td>
+                        <td className="whitespace-nowrap px-3 py-2.5">
+                          <div className="flex gap-1.5">
+                            <IconBtn label="Review" onClick={() => openRequest(r)} icon={<Eye size={13} />} />
+                            {r.status === 'pending' ? (
+                              <>
+                                <IconBtn label="Approve" tone="green" disabled={busyId === r.id} onClick={() => void decide(r, 'approve')} icon={<CheckCircle size={13} />} />
+                                <IconBtn label="Reject" tone="red" disabled={busyId === r.id} onClick={() => openRequest(r, true)} icon={<XCircle size={13} />} />
+                              </>
+                            ) : null}
+                          </div>
                         </td>
                       </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {reviewingDeal ? (
+        <DealReviewPanel deal={reviewingDeal} busy={busyId === reviewingDeal.id} onClose={() => setReviewingDeal(null)} onAction={(a) => void moderate(reviewingDeal, a)} />
+      ) : null}
+      {reviewingRequest ? (
+        <PromotionReviewPanel
+          request={reviewingRequest}
+          busy={busyId === reviewingRequest.id}
+          rejectMode={rejectMode}
+          rejectReason={rejectReason}
+          onRejectMode={setRejectMode}
+          onRejectReason={setRejectReason}
+          onClose={() => setReviewingRequest(null)}
+          onDecide={(a, reason) => void decide(reviewingRequest, a, reason)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function LegacyCatalogDeals({ rows, error }: { rows: CatalogDeal[] | null; error: string | null }) {
+  return (
+    <div className="mt-8" data-testid="legacy-catalog-deals">
+      <div className="mb-2 flex flex-wrap items-baseline gap-2">
+        <span className="text-[13px] font-extrabold">Legacy catalog deals</span>
+        <span className="rounded-full bg-[#F5F5F4] px-2 py-0.5 text-[9.5px] font-extrabold uppercase text-[#57534E]">Legacy — not priced · read-only</span>
+      </div>
+      <div className="mb-2 text-[11px] text-[#6B7280]">
+        Historical free-text deals kept for reference. They cannot be edited, promoted or used as storefront deals.
+      </div>
+      {error ? <div className="text-[12px] font-semibold text-red-700">{error}</div> : null}
+      <div className="overflow-hidden rounded-lg border border-[#E8EDF2] bg-white">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] border-collapse text-left">
+            <thead>
+              <tr className="bg-[#F9FAFB]">
+                {['Deal', 'Seller', 'Discount', 'Valid from', 'Valid until', 'Stored status'].map((h) => (
+                  <th key={h} className="whitespace-nowrap px-3 py-2.5 text-[10px] font-extrabold uppercase tracking-wide text-[#6B7280]">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {!rows ? (
+                <tr><td colSpan={6} className="px-3 py-6 text-center text-[12px] text-[#6B7280]"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Loading…</td></tr>
+              ) : rows.length === 0 ? (
+                <tr><td colSpan={6} className="px-3 py-6 text-center text-[12px] italic text-[#9CA3AF]">No legacy catalog deals.</td></tr>
+              ) : (
+                rows.map((l) => (
+                  <tr key={l.id} className="border-t border-[#F1F3F5]">
+                    <td className="max-w-[260px] truncate px-3 py-2.5 text-[12px] font-bold">{l.name}</td>
+                    <td className="px-3 py-2.5 text-[12px] text-[#6B7280]">{l.seller || '—'}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-[11px]">{l.discountType === 'flat' ? `৳${l.discountValue} off` : `${l.discountValue}% off`}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-[11px] text-[#6B7280]">{fmtDateTime(l.validFrom)}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-[11px] text-[#6B7280]">{fmtDateTime(l.validUntil)}</td>
+                    <td className="px-3 py-2.5 text-[11px] uppercase text-[#6B7280]">{l.status}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function IconBtn({ label, icon, onClick, disabled, tone }: { label: string; icon: React.ReactNode; onClick: () => void; disabled?: boolean; tone?: 'green' | 'red' | 'amber' }) {
+  const color = tone === 'green' ? '#16A34A' : tone === 'red' ? '#DC2626' : tone === 'amber' ? '#B45309' : '#374151';
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} className="inline-flex items-center gap-1 rounded-md border border-[#E8EDF2] bg-white px-2 py-1 text-[10px] font-extrabold disabled:opacity-50" style={{ color }}>
+      {icon} {label}
+    </button>
+  );
+}
+
+function Row({ k, v }: { k: string; v: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-[#F1F3F5] py-1.5 text-[12px]">
+      <span className="shrink-0 font-semibold text-[#6B7280]">{k}</span>
+      <span className="min-w-0 text-right font-bold text-[#111827]">{v}</span>
+    </div>
+  );
+}
+
+function Drawer({ label, onClose, children, testId }: { label: string; onClose: () => void; children: React.ReactNode; testId: string }) {
+  return (
+    <div className="fixed inset-0 z-[90] flex justify-end bg-black/30" onClick={onClose} role="dialog" aria-label={label}>
+      <div className="h-full w-full max-w-[460px] overflow-y-auto bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()} data-testid={testId}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function DrawerHeader({ reference, title, onClose }: { reference?: string; title: string; onClose: () => void }) {
+  return (
+    <div className="mb-3 flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <div className="font-mono text-[11px] font-bold text-[#EF3C23]">{reference}</div>
+        <div className="truncate text-[14px] font-extrabold">{title}</div>
+      </div>
+      <button type="button" onClick={onClose} aria-label="Close" className="rounded-md border border-[#E8EDF2] p-1.5"><X size={14} /></button>
+    </div>
+  );
+}
+
+function DealFacts({ deal: d }: { deal: DealRecord }) {
+  const t = d.dealTerms;
+  const drift = basePriceDrift(d);
+  return (
+    <>
+      <Row k="Seller" v={<>{d.listing?.brandName || '—'} <span className="block font-mono text-[10px] text-[#9CA3AF]">{d.ownerId}</span></>} />
+      <Row k="Listing status" v={d.listing ? (d.listing.exists ? d.listing.status : 'missing') : '—'} />
+      <Row k="Base price at creation" v={money(t?.basePriceAtSubmit)} />
+      <Row
+        k="Current base price"
+        v={
+          <>
+            {d.listing?.exists ? money(d.listing.currentBasePrice) : '—'}
+            {drift !== null ? (
+              <span className={`block text-[10.5px] ${Math.abs(drift) >= 5 ? 'text-[#B45309]' : 'text-[#6B7280]'}`}>
+                {drift > 0 ? '▲' : '▼'} {Math.abs(drift).toFixed(1)}% since creation
+              </span>
+            ) : null}
+          </>
+        }
+      />
+      <Row k="Pricing mode" v={t ? DEAL_PRICING_MODE_LABEL[t.mode] : '—'} />
+      <Row k="Discount / special" v={t ? formatDealDiscount(t.mode, t.value) : '—'} />
+      <Row k="Deal price (current base)" v={d.currentPriceInvalidReason ? <span className="text-[#B91C1C]">{d.currentPriceInvalidReason}</span> : money(d.currentDealPrice ?? t?.dealPriceAtSubmit)} />
+      <Row k="Deal start" v={fmtDateTime(d.startsAt)} />
+      <Row k="Deal end" v={fmtDateTime(d.endsAt)} />
+    </>
+  );
+}
+
+function DealReviewPanel({ deal: d, busy, onClose, onAction }: { deal: DealRecord; busy: boolean; onClose: () => void; onAction: (a: DealAction) => void }) {
+  const acts = dealActionsFor(d);
+  return (
+    <Drawer label="Review deal" onClose={onClose} testId="deal-review-panel">
+      <DrawerHeader reference={d.dealReferenceId || d.id} title={d.listing?.name || d.title} onClose={onClose} />
+      <div className="mb-3 flex flex-wrap gap-2">
+        <DealStatusPill filterKey={d.filterKey} />
+        <ListingTypeBadge type={d.listingType} />
+        <PromotionStatusPill summary={d.promotion?.latest} />
+      </div>
+      {d.legacy ? (
+        <div className="mb-3 rounded-lg bg-[#F5F5F4] px-3 py-2 text-[11.5px] text-[#57534E]">
+          Legacy deal created before canonical Deals — no listing type, pricing terms or schedule. It can only be disabled.
+        </div>
+      ) : null}
+      <DealFacts deal={d} />
+      <Row k="Created" v={fmtDateTime(d.createdAt)} />
+      <div className="mt-4 flex flex-wrap gap-2">
+        {acts.includes('pause') ? <button type="button" disabled={busy} onClick={() => onAction('pause')} className="rounded-lg border border-[#FDE68A] px-3 py-2 text-[11.5px] font-extrabold text-[#B45309]">Pause</button> : null}
+        {acts.includes('resume') ? <button type="button" disabled={busy} onClick={() => onAction('resume')} className="rounded-lg bg-[#16A34A] px-3 py-2 text-[11.5px] font-extrabold text-white disabled:opacity-50">Resume</button> : null}
+        {acts.includes('disable') ? <button type="button" disabled={busy} onClick={() => onAction('disable')} className="rounded-lg border border-[#E8EDF2] px-3 py-2 text-[11.5px] font-extrabold text-[#6B7280]">Disable</button> : null}
+      </div>
+      <p className="mt-4 text-[10.5px] text-[#9CA3AF]">
+        Deals do not need approval. Pause, Resume and Disable are exceptional moderation controls. Deals have no storefront pricing effect in this release.
+      </p>
+    </Drawer>
+  );
+}
+
+function PromotionReviewPanel({
+  request: r,
+  busy,
+  rejectMode,
+  rejectReason,
+  onRejectMode,
+  onRejectReason,
+  onClose,
+  onDecide,
+}: {
+  request: PromotionRequestRecord;
+  busy: boolean;
+  rejectMode: boolean;
+  rejectReason: string;
+  onRejectMode: (v: boolean) => void;
+  onRejectReason: (v: string) => void;
+  onClose: () => void;
+  onDecide: (a: 'approve' | 'reject', reason?: string) => void;
+}) {
+  const pending = r.status === 'pending';
+  return (
+    <Drawer label="Review promotion request" onClose={onClose} testId="promotion-review-panel">
+      <DrawerHeader reference={r.advertisementReferenceId || r.id} title={`${PROMOTION_TYPE_LABEL[r.promotionType]} promotion · ${r.deal?.listing?.name || r.title}`} onClose={onClose} />
+      <div className="mb-3 flex flex-wrap gap-2">
+        <PromotionStatusPill summary={{ status: r.status, runState: r.runState }} />
+        {r.deal ? <DealStatusPill filterKey={r.deal.filterKey} /> : null}
+        <ListingTypeBadge type={r.listingType} />
+      </div>
+      {r.promotionType === 'sponsored' ? (
+        <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11.5px] font-semibold text-amber-800">
+          Sponsored (paid) request. Billing is not implemented: approval records the decision and the request stays “awaiting fulfillment”. No payment has been taken.
+        </div>
+      ) : null}
+      <div className="mb-1 text-[10px] font-extrabold uppercase tracking-wide text-[#6B7280]">Promotion request</div>
+      <Row k="Type" v={PROMOTION_TYPE_LABEL[r.promotionType]} />
+      <Row k="Requested start" v={fmtDateTime(r.startsAt)} />
+      <Row k="Requested end" v={fmtDateTime(r.endsAt)} />
+      <Row k="Seller note" v={r.sellerNote ? <span className="whitespace-pre-wrap font-semibold">{r.sellerNote}</span> : '—'} />
+      <Row k="Submitted" v={fmtDateTime(r.review?.submittedAt || r.createdAt)} />
+      {r.review?.decidedAt ? <Row k="Decided" v={fmtDateTime(r.review.decidedAt)} /> : null}
+      {r.review?.rejectionReason ? <Row k="Rejection reason" v={<span className="text-[#B91C1C]">{r.review.rejectionReason}</span>} /> : null}
+      <div className="mb-1 mt-4 text-[10px] font-extrabold uppercase tracking-wide text-[#6B7280]">Underlying deal {r.deal?.dealReferenceId || ''}</div>
+      {r.deal ? <DealFacts deal={r.deal} /> : <div className="text-[12px] text-[#B91C1C]">The deal no longer exists.</div>}
+      <Row k="Listing rating" v={r.listingRating ? `${r.listingRating.average} ★ (${r.listingRating.count} review${r.listingRating.count === 1 ? '' : 's'})` : 'No reviews yet'} />
+
+      {pending && rejectMode ? (
+        <div className="mt-4">
+          <label htmlFor="reject-reason" className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-wide text-[#6B7280]">
+            Rejection reason (shown to the seller)
+          </label>
+          <textarea
+            id="reject-reason"
+            value={rejectReason}
+            maxLength={REJECTION_REASON_MAX}
+            onChange={(e) => onRejectReason(e.target.value)}
+            rows={3}
+            className="w-full rounded-lg border border-[#E8EDF2] p-2.5 text-[12.5px] outline-none"
+          />
+          <div className="mt-2 flex gap-2">
+            <button type="button" disabled={busy || !rejectReason.trim()} onClick={() => onDecide('reject', rejectReason.trim())} className="rounded-lg bg-[#DC2626] px-3 py-2 text-[11.5px] font-extrabold text-white disabled:opacity-50">
+              Confirm rejection
+            </button>
+            <button type="button" onClick={() => onRejectMode(false)} className="rounded-lg border border-[#E8EDF2] px-3 py-2 text-[11.5px] font-extrabold">Cancel</button>
           </div>
         </div>
-
-        {/* ── Add / Edit Deal — integrated into the same visual system ── */}
-        <AnimatePresence mode="wait">
-          {isFormActive && (
-            <motion.div
-              key={editingDeal ? 'edit' : 'add'}
-              initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }}
-              style={{ ...S.formCard, position: 'sticky', top: 16 }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F3F5', paddingBottom: 12, marginBottom: 14 }}>
-                <span style={{ fontSize: '12.5px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                  {editingDeal ? 'Modify Deal' : 'Publish New Deal'}
-                </span>
-                <button type="button" onClick={() => { setIsAdding(false); setEditingDeal(null); }} style={S.ghost}>Close</button>
-              </div>
-              <form onSubmit={handleSubmit}>
-                <div style={{ marginBottom: 12 }}>
-                  <label style={S.fLabel}>DEAL NAME</label>
-                  <input value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="e.g. Eid Mega Sale" style={S.input} />
-                </div>
-                <div style={{ marginBottom: 12 }}>
-                  <label style={S.fLabel}>BRAND / SELLER</label>
-                  <input value={formSeller} onChange={(e) => setFormSeller(e.target.value)} placeholder="e.g. Aarong" style={S.input} />
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                  <div>
-                    <label style={S.fLabel}>DISCOUNT TYPE</label>
-                    <select value={formDiscountType} onChange={(e) => setFormDiscountType(e.target.value as 'percentage' | 'flat')} style={{ ...S.input, fontSize: 12 }}>
-                      <option value="percentage">Percentage</option>
-                      <option value="flat">Flat (৳)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={S.fLabel}>VALUE</label>
-                    <input type="number" min={0} value={formDiscountValue || ''} onChange={(e) => setFormDiscountValue(Number(e.target.value))} style={S.input} />
-                  </div>
-                </div>
-                <div style={{ marginBottom: 12 }}>
-                  <label style={S.fLabel}>CATEGORY</label>
-                  <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)} style={{ ...S.input, fontSize: 12 }}>
-                    {CATEGORY_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div style={{ marginBottom: 12 }}>
-                  <label style={S.fLabel}>VALID UNTIL</label>
-                  <input type="date" value={formValidUntil} onChange={(e) => setFormValidUntil(e.target.value)} style={{ ...S.input, fontSize: 12 }} />
-                </div>
-                <div style={{ marginBottom: 16 }}>
-                  <label style={S.fLabel}>PROMO CODE <span style={{ color: '#9CA3AF', fontWeight: 600 }}>(optional)</span></label>
-                  <input value={formPromoCode} onChange={(e) => setFormPromoCode(e.target.value)} placeholder="e.g. EID2026" style={S.input} />
-                </div>
-                {formError && (
-                  <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 11.5, fontWeight: 600, color: '#B91C1C' }}>{formError}</div>
-                )}
-                <button type="submit" disabled={savingDeal} style={{ ...S.saveBtn, width: '100%', justifyContent: 'center', opacity: savingDeal ? 0.6 : 1 }}>
-                  <Save size={14} /> {savingDeal ? 'SAVING…' : editingDeal ? 'SAVE CHANGES' : 'PUBLISH DEAL'}
-                </button>
-              </form>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      <style>{`@media (max-width: 980px){ .deals-grid{ grid-template-columns: minmax(0,1fr) !important; } }`}</style>
-    </div>
+      ) : pending ? (
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button type="button" disabled={busy} onClick={() => onDecide('approve')} className="rounded-lg bg-[#16A34A] px-3 py-2 text-[11.5px] font-extrabold text-white disabled:opacity-50">
+            Approve promotion
+          </button>
+          <button type="button" disabled={busy} onClick={() => onRejectMode(true)} className="rounded-lg border border-[#FECACA] px-3 py-2 text-[11.5px] font-extrabold text-[#DC2626]">
+            Reject…
+          </button>
+        </div>
+      ) : null}
+      <p className="mt-4 text-[10.5px] text-[#9CA3AF]">
+        Approval re-checks that the deal is still active, validly priced, and that the period fits the deal. Rejecting never affects the deal.
+      </p>
+    </Drawer>
   );
 }

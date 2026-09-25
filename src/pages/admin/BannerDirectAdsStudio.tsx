@@ -1,10 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle, Loader2, Plus, XCircle } from 'lucide-react';
 import { getFormatDef, getPlacementDef } from '@/shared/ads/placementRegistry';
 import { inferHeroMediaType } from '@/shared/ads/heroMedia';
 import { useAuth } from '../../contexts/AuthContext';
 import { adsApi, type AdsApiRecord } from '../../services/adsApi';
+
+const SellerDeals = lazy(() => import('./SellerDeals'));
 
 type StatusFilter =
   | 'all'
@@ -40,7 +42,67 @@ function statusBadge(status: string) {
   return map[status] || 'background:#F3F4F6;color:#374151';
 }
 
+/**
+ * Ads & Deals Studio tabs. Sellers get Deals (Create Deal + My Deals); admins
+ * manage Deals in the Deals Manager (/admin/deals); creators have no
+ * Deals in v1. Tab lives in ?tab=deals so no new route is needed.
+ */
 export default function BannerDirectAdsStudio() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { profile } = useAuth();
+  const role = String(profile?.role || '');
+  const isSeller = role === 'seller' || role === 'verified_seller';
+  const tab = isSeller && searchParams.get('tab') === 'deals' ? 'deals' : 'ads';
+
+  const tabs = isSeller ? (
+    <div className="mx-auto max-w-[1400px] px-4 pt-5 md:px-6" role="tablist">
+      <div className="inline-flex rounded-lg border border-[#E8EDF2] bg-white p-1">
+        {([
+          ['ads', 'Banner / Direct Ads'],
+          ['deals', 'Deals'],
+        ] as const).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            onClick={() => setSearchParams(key === 'deals' ? { tab: 'deals' } : {})}
+            // Selected tabs use a light wash: the platform's global
+            // `main [role="tab"][aria-selected="true"]` rule forces dark text.
+            className={`rounded-md px-3.5 py-1.5 text-[11.5px] font-extrabold outline-none ${
+              tab === key
+                ? 'bg-[#FFF1EE] text-[#111827] shadow-[inset_0_0_0_1px_rgba(239,60,35,0.35)]'
+                : 'text-[#374151] hover:bg-[#F9FAFB]'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  ) : null;
+
+  if (tab === 'deals') {
+    return (
+      <>
+        {tabs}
+        <div className="mx-auto max-w-[1400px] px-4 py-5 md:px-6">
+          <Suspense fallback={<Loader2 className="h-4 w-4 animate-spin" />}>
+            <SellerDeals />
+          </Suspense>
+        </div>
+      </>
+    );
+  }
+  return (
+    <>
+      {tabs}
+      <BannerAdsList />
+    </>
+  );
+}
+
+function BannerAdsList() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';

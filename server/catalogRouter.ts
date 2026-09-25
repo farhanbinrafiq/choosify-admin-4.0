@@ -8,7 +8,6 @@ import {
   normalizeBrandInput,
   normalizeBrandPostInput,
   normalizeCategoryInput,
-  normalizeDealInput,
   normalizeDealsBannerInput,
   normalizeHomepageInput,
   normalizeProductInput,
@@ -2209,53 +2208,27 @@ catalogRouter.get('/catalog/deals', async (_req, res) => {
   }
 });
 
-catalogRouter.post('/catalog/deals', ...requireCmsWrite, async (req, res) => {
-  try {
-    const normalized = normalizeDealInput(req.body);
-    const saved = await catalogStore.upsertDeal(normalized);
-    res.status(201).json({ success: true, data: saved });
-  } catch (error) {
-    res.status(400).json({ error: validationErrorMessage(error, 'Invalid deal payload') });
-  }
+// Legacy CatalogDeal records are read-only (kept for historical/admin visibility,
+// never canonical storefront Deals). Canonical seller Deals live in the Ads
+// Manager (/ads/deals). Writes return 410 Gone; records are never deleted.
+const LEGACY_DEALS_READ_ONLY = {
+  error: 'Legacy catalog deals are read-only. Sellers create deals in Ads & Deals Studio → Deals.',
+};
+
+catalogRouter.post('/catalog/deals', ...requireCmsWrite, (_req, res) => {
+  res.status(410).json(LEGACY_DEALS_READ_ONLY);
 });
 
-catalogRouter.put('/catalog/deals/:id', ...requireCmsWrite, async (req, res) => {
-  try {
-    const existing = await catalogStore.getDeal(req.params.id);
-    if (!existing) {
-      res.status(404).json({ error: 'Deal not found' });
-      return;
-    }
-    const normalized = normalizeDealInput({ ...req.body, id: req.params.id }, existing);
-    const saved = await catalogStore.upsertDeal(normalized);
-    res.json({ success: true, data: saved });
-  } catch (error) {
-    res.status(400).json({ error: validationErrorMessage(error, 'Invalid deal payload') });
-  }
+catalogRouter.put('/catalog/deals/:id', ...requireCmsWrite, (_req, res) => {
+  res.status(410).json(LEGACY_DEALS_READ_ONLY);
 });
 
-catalogRouter.patch('/catalog/deals/:id', ...requireCmsWrite, async (req, res) => {
-  try {
-    const existing = await catalogStore.getDeal(req.params.id);
-    if (!existing) {
-      res.status(404).json({ error: 'Deal not found' });
-      return;
-    }
-    const normalized = normalizeDealInput({ ...existing, ...req.body, id: req.params.id }, existing);
-    const saved = await catalogStore.upsertDeal(normalized);
-    res.json({ success: true, data: saved });
-  } catch (error) {
-    res.status(400).json({ error: validationErrorMessage(error, 'Invalid deal patch payload') });
-  }
+catalogRouter.patch('/catalog/deals/:id', ...requireCmsWrite, (_req, res) => {
+  res.status(410).json(LEGACY_DEALS_READ_ONLY);
 });
 
-catalogRouter.delete('/catalog/deals/:id', ...requireCmsWrite, async (req, res) => {
-  try {
-    await catalogStore.deleteDeal(req.params.id);
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to delete deal' });
-  }
+catalogRouter.delete('/catalog/deals/:id', ...requireCmsWrite, (_req, res) => {
+  res.status(410).json(LEGACY_DEALS_READ_ONLY);
 });
 
 /** Max active banners in the homepage Today's Deals horizontal carousel. */

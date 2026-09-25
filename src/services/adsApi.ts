@@ -3,6 +3,16 @@
  */
 
 import type { AdFormatDef, AdPlacementDef, AdPageKey } from '@/shared/ads/placementRegistry';
+import type {
+  DealFilterKey,
+  DealListingType,
+  DealPricingMode,
+  DealTerms,
+  DealTimeState,
+  PromotionReview,
+  PromotionRunState,
+  PromotionType,
+} from '@/shared/deals/dealPricing';
 
 const API_BASE =
   ((import.meta as ImportMeta & { env?: Record<string, string> }).env?.VITE_API_BASE_URL as
@@ -41,6 +51,81 @@ export type EligibleListing = {
   brandId?: string;
   image?: string;
   status?: string;
+};
+
+export type PromotionSummary = {
+  id: string;
+  reference?: string;
+  promotionType?: PromotionType;
+  status: string;
+  runState: PromotionRunState | null;
+  startsAt?: string;
+  endsAt?: string;
+  rejectionReason?: string;
+};
+
+/** Canonical seller Deal as returned by GET /ads/deals (server-derived state included). */
+export type DealRecord = AdsApiRecord & {
+  listingType?: DealListingType;
+  dealTerms?: DealTerms;
+  legacy: boolean;
+  promotion?: { latest?: PromotionSummary; promotedNow: boolean };
+  timeState: DealTimeState | null;
+  filterKey: DealFilterKey;
+  listing?: {
+    name: string;
+    image?: string;
+    category?: string;
+    brandName?: string;
+    status: string;
+    currentBasePrice: number;
+    exists: boolean;
+  };
+  currentDealPrice?: number | null;
+  currentPriceInvalidReason?: string;
+};
+
+export type DealEligibleListing = {
+  id: string;
+  listingType: DealListingType;
+  title: string;
+  image?: string;
+  category?: string;
+  brandName?: string;
+  basePrice: number;
+  status: string;
+  selectable: boolean;
+  reason?: string;
+};
+
+/** Deal-linked Promotion Request (GET /ads/promotion-requests). */
+export type PromotionRequestRecord = AdsApiRecord & {
+  dealId: string;
+  listingType?: DealListingType;
+  promotionType: PromotionType;
+  sellerNote?: string;
+  review?: PromotionReview;
+  runState: PromotionRunState | null;
+  deal?: DealRecord;
+  listingRating: { average: number; count: number } | null;
+};
+
+export type PromotionRequestBody = {
+  promotionType: PromotionType;
+  startsAt: string;
+  endsAt: string;
+  sellerNote?: string;
+};
+
+/** Only these fields are sent; the server derives owner, status, prices and review. */
+export type DealSubmissionBody = {
+  listingType: DealListingType;
+  listingId: string;
+  pricingMode: DealPricingMode;
+  pricingValue: number;
+  startsAt: string;
+  endsAt: string;
+  title?: string;
 };
 
 export type PlacementsResponse = {
@@ -121,4 +206,45 @@ export const adsApi = {
 
   disableAd: (id: string) =>
     request<AdsApiRecord>(`/ads/${encodeURIComponent(id)}/disable`, 'POST', {}),
+
+  // —— Canonical seller Deals ——
+  listDeals: () => request<DealRecord[]>('/ads/deals'),
+
+  listDealEligibleListings: () =>
+    request<DealEligibleListing[]>('/ads/listings/eligible?purpose=deal'),
+
+  createDeal: (body: DealSubmissionBody) => request<AdsApiRecord>('/ads/deals', 'POST', body),
+
+  updateDeal: (id: string, body: Partial<DealSubmissionBody>) =>
+    request<AdsApiRecord>(`/ads/deals/${encodeURIComponent(id)}`, 'PATCH', body),
+
+  withdrawDeal: (id: string) =>
+    request<{ id: string }>(`/ads/${encodeURIComponent(id)}`, 'DELETE'),
+
+  endDeal: (id: string) =>
+    request<AdsApiRecord>(`/ads/deals/${encodeURIComponent(id)}/end`, 'POST', {}),
+
+  pauseDeal: (id: string) =>
+    request<AdsApiRecord>(`/ads/deals/${encodeURIComponent(id)}/pause`, 'POST', {}),
+
+  resumeDeal: (id: string) =>
+    request<AdsApiRecord>(`/ads/deals/${encodeURIComponent(id)}/resume`, 'POST', {}),
+
+  disableDeal: (id: string) =>
+    request<AdsApiRecord>(`/ads/deals/${encodeURIComponent(id)}/disable`, 'POST', {}),
+
+  // —— Deal Promotion Requests ——
+  requestPromotion: (dealId: string, body: PromotionRequestBody) =>
+    request<AdsApiRecord>(`/ads/deals/${encodeURIComponent(dealId)}/promotion-requests`, 'POST', body),
+
+  listPromotionRequests: () => request<PromotionRequestRecord[]>('/ads/promotion-requests'),
+
+  cancelPromotionRequest: (id: string) =>
+    request<AdsApiRecord>(`/ads/promotion-requests/${encodeURIComponent(id)}/cancel`, 'POST', {}),
+
+  approvePromotionRequest: (id: string) =>
+    request<AdsApiRecord>(`/ads/promotion-requests/${encodeURIComponent(id)}/approve`, 'POST', {}),
+
+  rejectPromotionRequest: (id: string, reason: string) =>
+    request<AdsApiRecord>(`/ads/promotion-requests/${encodeURIComponent(id)}/reject`, 'POST', { reason }),
 };

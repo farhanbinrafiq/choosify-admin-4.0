@@ -288,13 +288,14 @@ async function main() {
       });
       mark('ads-listings-eligible', Array.isArray(listings.body.data), `n=${(listings.body.data as unknown[])?.length}`);
 
+      // Canonical Deals need a listing, pricing and schedule; a title-only request
+      // is refused before anything is written (no incomplete deal is ever created).
       const deal = await req('POST', '/ads/deals', {
         token: sellerAfter.accessToken,
         body: { title: `Probe Deal ${suffix}` },
-        expect: [201],
+        expect: [400],
       });
-      const dealStatus = String(((deal.body.data as Json) || {}).status || '');
-      mark('deal-auto-approve', dealStatus === 'active' || dealStatus === 'approved', `status=${dealStatus}`);
+      mark('deal-incomplete-request-refused', deal.status === 400, `status=${deal.status}`);
 
       const promo = await req('POST', '/ads/promotions', {
         token: sellerAfter.accessToken,
