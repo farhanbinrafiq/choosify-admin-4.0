@@ -391,7 +391,11 @@ export default function AdsVisualBuilder() {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => navigate('/admin/ads-deals-studio')}
+            // Return to the canonical Ads & Deals Studio page (the one the seller
+            // nav and "Create Ad" come from). The legacy /admin/ads-deals-studio
+            // path has no React route and falls through to the cms-mirror
+            // prototype, which has no real Ads/Deals tabs.
+            onClick={() => navigate('/admin/ads-studio')}
             className="inline-flex items-center gap-1 rounded-lg border border-[#E8EDF2] bg-white px-3 py-2 text-[11px] font-bold text-[#374151]"
           >
             <ArrowLeft className="h-3.5 w-3.5" /> Back
