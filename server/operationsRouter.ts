@@ -4358,7 +4358,14 @@ operationsRouter.post('/operations/disputes/:id/decision', ...requireAdmin, (req
   });
 });
 
-operationsRouter.get('/operations/coupons', (_req, res) => {
+// The full coupon dataset (incl. usage/redemption totals) is for coupon
+// managers only — same roles as create/update/delete. The public storefront
+// uses GET /catalog/storefront/coupons (eligible coupons, public-safe fields).
+operationsRouter.get('/operations/coupons', ...requireAuth, (req, res) => {
+  if (!userCanManageCoupons(req)) {
+    res.status(403).json({ error: 'Not authorized to list coupons' });
+    return;
+  }
   res.json({ data: operationsStore.listCoupons() });
 });
 

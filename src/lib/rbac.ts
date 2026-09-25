@@ -152,6 +152,19 @@ const ROUTE_PERMISSION: Array<{ prefix: string; permission: PermissionKey }> = [
   { prefix: '/admin/dashboard', permission: 'analytics' },
 ];
 
+/**
+ * Routes only the super_admin role may open — independent of the editable RBAC
+ * matrix and of the admin/super_admin "all pages" mirror allowlist. Storefront
+ * Curation editing is Super Admin only (V1); the server enforces the same rule
+ * on every curation write.
+ */
+export const SUPER_ADMIN_ONLY_ROUTE_PREFIXES = ['/admin/storefront-curation'] as const;
+
+export function isSuperAdminOnlyPath(pathname: string): boolean {
+  const normalized = pathname.split('?')[0];
+  return SUPER_ADMIN_ONLY_ROUTE_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+}
+
 export function permissionForPath(pathname: string): PermissionKey | null {
   const normalized = pathname.split('?')[0];
   const match = ROUTE_PERMISSION.find((entry) => normalized.startsWith(entry.prefix));
@@ -173,6 +186,7 @@ export function canAccessPath(
   pathname: string,
   matrix: Record<string, Record<PermissionKey, boolean>>,
 ): boolean {
+  if (isSuperAdminOnlyPath(pathname)) return role === 'super_admin';
   const permission = permissionForPath(pathname);
   if (!permission) return true;
   return hasPermission(role, permission, matrix);

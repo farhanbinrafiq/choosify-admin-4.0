@@ -69,6 +69,9 @@ export const PAGE_KEY_TO_PATH: Record<string, string> = {
   promoCodes: '/admin/coupons',
   auditLogs: '/admin/audit-logs',
   websiteCmsStudio: '/admin/website-cms',
+  dealsManager: '/admin/deals',
+  curationDeals: '/admin/storefront-curation/deals',
+  curationAssurance: '/admin/storefront-curation/assurance',
   settings: '/admin/settings',
   adminProfile: '/admin/profile',
   featureAccess: '/admin/feature-access',
@@ -142,6 +145,9 @@ export function resolveAdminPageKey(pathname: string): string | null {
   }
   if (pathname.startsWith('/admin/logistics')) return 'shipmentOperations';
   if (pathname.startsWith('/admin/website-cms') || pathname.startsWith('/admin/cms')) return 'websiteCmsStudio';
+  if (pathname === '/admin/deals' || pathname.startsWith('/admin/deals/')) return 'dealsManager';
+  if (pathname.startsWith('/admin/storefront-curation/deals')) return 'curationDeals';
+  if (pathname.startsWith('/admin/storefront-curation/assurance')) return 'curationAssurance';
   if (pathname.startsWith('/admin/moderation')) return 'moderationCenter';
   if (pathname.startsWith('/admin/disputes')) return 'disputes';
   if (pathname.startsWith('/admin/trust-center')) return 'trustCenter';
@@ -269,8 +275,19 @@ export const NAV_DEFS: CmsNavGroup[] = [
   {
     title: 'MARKETING & CONTENT',
     items: [
-      { key: 'adsDealsStudio', label: 'Ads & Deals Studio', tag: 'NEW', path: PAGE_KEY_TO_PATH.adsDealsStudio },
       { key: 'contentStudio', label: 'Guide Management', tag: 'NEW', path: PAGE_KEY_TO_PATH.contentStudio },
+    ],
+  },
+  {
+    // Advertising (paid) + Deals & Curation (editorial). Only pages that exist
+    // are linked; sub-levels live inside each page as sections/tabs.
+    title: 'ADS & DEALS',
+    items: [
+      { key: 'adsDealsStudio', label: 'Ads Manager', path: PAGE_KEY_TO_PATH.adsDealsStudio },
+      { key: 'dealsManager', label: 'Deals Manager', path: PAGE_KEY_TO_PATH.dealsManager },
+      { key: 'curationDeals', label: 'Deals Curation', tag: 'NEW', path: PAGE_KEY_TO_PATH.curationDeals },
+      { key: 'curationAssurance', label: 'Trust & Assurance', tag: 'NEW', path: PAGE_KEY_TO_PATH.curationAssurance },
+      { key: 'websiteCmsStudio', label: 'CTA & Banners', path: PAGE_KEY_TO_PATH.websiteCmsStudio },
     ],
   },
   {
@@ -322,12 +339,6 @@ export const NAV_DEFS: CmsNavGroup[] = [
     ],
   },
   {
-    title: 'STOREFRONT CURATION',
-    items: [
-      { key: 'websiteCmsStudio', label: 'CTA & Banners', tag: 'NEW', path: PAGE_KEY_TO_PATH.websiteCmsStudio },
-    ],
-  },
-  {
     title: 'SETTINGS',
     items: [{ key: 'settings', label: 'Settings', path: PAGE_KEY_TO_PATH.settings }],
   },
@@ -353,6 +364,9 @@ export const PAGE_META: Record<string, [string, string]> = {
   planBilling: ['Plan & Billing', 'Your subscription plan, billing history, and usage'],
   adminProfile: ['My Profile', 'Account, security, RBAC scope, and preferences'],
   websiteCmsStudio: ['CTA & Banners', 'Manage editorial CTA/banner strips shown across the storefront'],
+  dealsManager: ['Deals Manager', 'Seller-created deals and their lifecycle — moderation and promotion requests'],
+  curationDeals: ['Deals Curation', 'Top Coupons, Popular Deal Categories and Brand Deals on the Deals page'],
+  curationAssurance: ['Trust & Assurance', 'Per-page trust and assurance strips on the storefront'],
   adsDealsStudio: ['Ads & Deals Studio', 'Manage promoted ads, deals, coupons, and paid placements'],
   contentStudio: ['Guide Management', 'Manage videos, reels, blogs, and live sessions'],
   messages: ['Choosify Support', 'Support conversations from Consumers, Sellers and Creators'],
@@ -521,6 +535,9 @@ export const ADMIN_ONLY_PAGE_KEYS = [
   'monetizationCenter',
   'auditLogs',
   'websiteCmsStudio',
+  'curationDeals',
+  'curationAssurance',
+  'dealsManager',
   'feeCharges',
   'customers',
   'categories',
@@ -529,6 +546,15 @@ export const ADMIN_ONLY_PAGE_KEYS = [
   'trustCenter',
   'adminProfile',
 ] as const;
+
+/** Storefront Curation is Super Admin only (V1) — hidden from every other role's nav, admin included. */
+export const SUPER_ADMIN_ONLY_PAGE_KEYS: readonly string[] = ['curationDeals', 'curationAssurance'];
+
+function withoutSuperAdminOnly(groups: CmsNavGroup[]): CmsNavGroup[] {
+  return groups
+    .map((group) => ({ ...group, items: group.items.filter((item) => !SUPER_ADMIN_ONLY_PAGE_KEYS.includes(item.key)) }))
+    .filter((group) => group.items.length > 0);
+}
 
 export function pageKeysFromNavGroups(groups: CmsNavGroup[]): string[] {
   return groups.flatMap((g) => g.items.map((item) => item.key));
@@ -552,7 +578,7 @@ export function navGroupsForRole(role: string | undefined): CmsNavGroup[] {
   if (role === 'creator') return CREATOR_NAV_GROUPS;
 
   const allowed = allowedPageKeysForRole(role);
-  if (!allowed) return NAV_DEFS;
+  if (!allowed) return role === 'super_admin' ? NAV_DEFS : withoutSuperAdminOnly(NAV_DEFS);
   const allow = new Set(allowed);
   return NAV_DEFS.map((group) => ({
     ...group,

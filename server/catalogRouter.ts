@@ -104,6 +104,22 @@ import {
 import { validateListingAgainstCategorySchema } from './catalog/categorySchemaValidation';
 import { publishEvent } from './events/eventBus';
 import { operationsStore } from './operations/operationsStore';
+import {
+  brandDealEligibility,
+  listEligibleCoupons,
+  loadCurationEntities,
+  resolveAssurance,
+  resolveDealsCuration,
+  validateCurationChange,
+} from './storefront/storefrontCurationService';
+import { recordCurationSave, requireCurationEditor, siteForViewer } from './storefront/curationAuth';
+import {
+  isAssurancePlacementKey,
+  isCurationPlacementKey,
+  sanitizeAssurancePlacement,
+  sanitizeCurationPlacement,
+} from '../shared/storefront/storefrontCurationSanitize';
+import type { CurationCoupon } from '../shared/storefront/storefrontCuration';
 import { getCatalogPersistenceMode } from '../lib/vercel-catalog/catalogStore';
 import { stampReferenceId } from './referenceIds/stampReferenceId';
 import { normalizeReferenceIdQuery } from '../shared/referenceIds/registry';
@@ -2371,9 +2387,11 @@ catalogRouter.delete('/catalog/deals-banners/:id', ...requireCmsWrite, async (re
   }
 });
 
-catalogRouter.get('/catalog/site', async (_req, res) => {
+catalogRouter.get('/catalog/site', softAuthenticateRequest, async (req, res) => {
   try {
-    res.json({ site: await catalogStore.getSiteConfig() });
+    // Curation internals (raw pins, editor metadata, audit trail) are only
+    // returned to the curation editor; the storefront uses /catalog/storefront/*.
+    res.json({ site: siteForViewer(await catalogStore.getSiteConfig(), req.userRole) });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to load site config' });
   }
@@ -2387,6 +2405,92 @@ catalogRouter.put('/catalog/site', ...requireCmsWrite, async (req, res) => {
     res.json({ success: true, site: saved });
   } catch (error) {
     res.status(400).json({ error: validationErrorMessage(error, 'Invalid site config payload') });
+  }
+});
+
+// ── Storefront Curation (Deals modules + Trust & Assurance strips) ──────────
+// Public reads resolve stored editorial pins against the canonical entities
+// and apply eligibility at read time. Writes are placement-scoped (they only
+// replace their own key of the site doc), SUPER ADMIN ONLY (dedicated guard,
+// not CMS_EDIT), and each successful save is stamped + audit-trailed.
+const requireCurationWrite = [authenticateRequest, requireCurationEditor];
+
+catalogRouter.get('/catalog/storefront/deals-curation', async (_req, res) => {
+  try {
+    const [site, ent] = await Promise.all([catalogStore.getSiteConfig(), loadCurationEntities()]);
+    res.json({ data: resolveDealsCuration(site, ent) });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to load deals curation' });
+  }
+});
+
+catalogRouter.get('/catalog/storefront/coupons', (_req, res) => {
+  res.json({ data: listEligibleCoupons({ coupons: operationsStore.listCoupons() as CurationCoupon[] }) });
+});
+
+catalogRouter.get('/catalog/storefront/assurance', async (_req, res) => {
+  try {
+    res.json({ data: resolveAssurance(await catalogStore.getSiteConfig()) });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to load assurance strips' });
+  }
+});
+
+/** Curation editor only: brands that currently satisfy the Brand Deals rule (brandId → "Up to X%"). */
+catalogRouter.get('/catalog/site/curation/brand-deal-eligibility', ...requireCurationWrite, async (_req, res) => {
+  try {
+    res.json({ data: brandDealEligibility({ products: await catalogStore.listProducts() }) });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to load brand deal eligibility' });
+  }
+});
+
+catalogRouter.put('/catalog/site/curation/:placement', ...requireCurationWrite, async (req, res) => {
+  const key = req.params.placement;
+  if (!isCurationPlacementKey(key)) {
+    res.status(404).json({ error: 'Unknown curation placement' });
+    return;
+  }
+  try {
+    const existing = await catalogStore.getSiteConfig();
+    const next = sanitizeCurationPlacement(key, req.body);
+    const checked = validateCurationChange(key, next, existing?.storefrontCuration?.[key], await loadCurationEntities());
+    if ('errors' in checked) {
+      res.status(400).json({ error: checked.errors[0], errors: checked.errors });
+      return;
+    }
+    const { stamped, audit } = recordCurationSave(req, existing, 'deals', key, checked.value, checked.dropped.length);
+    const saved = await catalogStore.upsertSiteConfig({
+      ...existing,
+      storefrontCuration: { ...(existing?.storefrontCuration ?? {}), [key]: stamped },
+      storefrontCurationAudit: audit,
+      updatedAt: new Date().toISOString(),
+    });
+    res.json({ success: true, data: saved.storefrontCuration?.[key], dropped: checked.dropped });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to save curation' });
+  }
+});
+
+catalogRouter.put('/catalog/site/assurance/:placement', ...requireCurationWrite, async (req, res) => {
+  const key = req.params.placement;
+  if (!isAssurancePlacementKey(key)) {
+    res.status(404).json({ error: 'Unknown assurance placement' });
+    return;
+  }
+  try {
+    const existing = await catalogStore.getSiteConfig();
+    const next = sanitizeAssurancePlacement(req.body);
+    const { stamped, audit } = recordCurationSave(req, existing, 'assurance', key, next);
+    const saved = await catalogStore.upsertSiteConfig({
+      ...existing,
+      assuranceStrips: { ...(existing?.assuranceStrips ?? {}), [key]: stamped },
+      storefrontCurationAudit: audit,
+      updatedAt: new Date().toISOString(),
+    });
+    res.json({ success: true, data: saved.assuranceStrips?.[key] });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to save assurance strip' });
   }
 });
 

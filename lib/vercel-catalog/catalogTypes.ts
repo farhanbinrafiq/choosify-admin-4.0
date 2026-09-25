@@ -425,6 +425,12 @@ export type SiteConfig = {
     storefrontImage?: string;
     storefrontImageAlt?: string;
   };
+  /** Storefront Curation -> Deals: editorial pins (Top Coupons / Popular Deal Categories / Brand Deals), keyed by placement. Not paid placement (see CatalogPlacement). */
+  storefrontCuration?: import('../../shared/storefront/storefrontCuration').StorefrontCurationConfig;
+  /** Storefront Curation -> Trust & Assurance: per-placement strip content. Absent placement = live-content defaults. */
+  assuranceStrips?: import('../../shared/storefront/storefrontCuration').AssuranceStripsConfig;
+  /** Storefront Curation audit trail (newest first, capped). Super Admin only — stripped from public reads. */
+  storefrontCurationAudit?: import('../../shared/storefront/storefrontCuration').CurationAuditEntry[];
   updatedAt: string;
 };
 

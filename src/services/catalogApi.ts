@@ -431,6 +431,35 @@ export const catalogApi = {
     const result = await request<{ site: SiteConfig }>('/catalog/site', 'PUT', payload);
     return result.site;
   },
+  /** Storefront Curation — replaces ONE placement's pins (server validates entities/eligibility). */
+  updateCurationPlacement: async (
+    placement: import('../../shared/storefront/storefrontCuration').CurationPlacementKey,
+    payload: import('../../shared/storefront/storefrontCuration').CurationPlacementConfig,
+  ): Promise<{ data: import('../../shared/storefront/storefrontCuration').CurationPlacementConfig; dropped: string[] }> => {
+    const result = await request<{ data: import('../../shared/storefront/storefrontCuration').CurationPlacementConfig; dropped?: string[] }>(
+      `/catalog/site/curation/${encodeURIComponent(placement)}`,
+      'PUT',
+      payload,
+    );
+    return { data: result.data, dropped: result.dropped ?? [] };
+  },
+  /** Storefront Curation — brands with an active Deal (brandId → "Up to X%"); others can't be added to Brand Deals. */
+  getBrandDealEligibility: async (): Promise<Record<string, number>> => {
+    const result = await request<{ data: Record<string, number> }>('/catalog/site/curation/brand-deal-eligibility');
+    return result.data ?? {};
+  },
+  /** Storefront Curation — replaces ONE Trust & Assurance strip. */
+  updateAssurancePlacement: async (
+    placement: import('../../shared/storefront/storefrontCuration').AssurancePlacementKey,
+    payload: import('../../shared/storefront/storefrontCuration').AssurancePlacementConfig,
+  ): Promise<import('../../shared/storefront/storefrontCuration').AssurancePlacementConfig> => {
+    const result = await request<{ data: import('../../shared/storefront/storefrontCuration').AssurancePlacementConfig }>(
+      `/catalog/site/assurance/${encodeURIComponent(placement)}`,
+      'PUT',
+      payload,
+    );
+    return result.data;
+  },
 
   listCreators: async (): Promise<CatalogCreator[]> => {
     const result = await request<{ data: CatalogCreator[] }>('/catalog/creators');

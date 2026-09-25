@@ -1,0 +1,40 @@
+import {
+  Award,
+  Banknote,
+  BadgeCheck,
+  CreditCard,
+  Headphones,
+  Heart,
+  Lock,
+  RefreshCw,
+  RotateCcw,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Star,
+  ThumbsUp,
+  Truck,
+  Users,
+  type LucideIcon,
+} from 'lucide-react';
+import type { AssuranceIconKey } from '../../shared/storefront/storefrontCuration';
+
+/** Approved Trust & Assurance icons (registry keys → lucide). Mirrors Choosify-Web's copy. */
+export const ASSURANCE_ICON_COMPONENTS: Record<AssuranceIconKey, LucideIcon> = {
+  'shield-check': ShieldCheck,
+  'badge-check': BadgeCheck,
+  lock: Lock,
+  'credit-card': CreditCard,
+  'rotate-ccw': RotateCcw,
+  headphones: Headphones,
+  banknote: Banknote,
+  truck: Truck,
+  award: Award,
+  star: Star,
+  users: Users,
+  'refresh-cw': RefreshCw,
+  sparkles: Sparkles,
+  'thumbs-up': ThumbsUp,
+  heart: Heart,
+  search: Search,
+};

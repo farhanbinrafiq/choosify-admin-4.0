@@ -119,6 +119,8 @@ const GuideManagementList = lazy(() => import('./pages/admin/GuideManagementList
 const GuideEditStudio = lazy(() => import('./pages/admin/GuideEditStudio'));
 
 const StorefrontCtaBanners = lazy(() => import('./pages/admin/StorefrontCtaBanners'));
+const StorefrontDealsCuration = lazy(() => import('./pages/admin/StorefrontDealsCuration'));
+const StorefrontAssurance = lazy(() => import('./pages/admin/StorefrontAssurance'));
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { profile, loading, mustChangePassword } = useAuth();
@@ -1060,6 +1062,35 @@ export default function App() {
                       <StorefrontCtaBanners />
                     </Suspense>
                   </AdminWorkspaceLayout>
+                </ProtectedRoute>
+              }
+            />
+            {/* Storefront Curation -> Deals (Top Coupons / Popular Deal Categories / Brand Deals) and Trust & Assurance strips. Super Admin only (RoleGuard + server). */}
+            <Route
+              path="/admin/storefront-curation/deals"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <StorefrontDealsCuration />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/storefront-curation/assurance"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <StorefrontAssurance />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
                 </ProtectedRoute>
               }
             />

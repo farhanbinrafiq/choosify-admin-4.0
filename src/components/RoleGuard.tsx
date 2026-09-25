@@ -5,6 +5,7 @@ import { useRbac } from '../contexts/RbacContext';
 import { useEntitlements } from '../contexts/EntitlementsContext';
 import { allowedPageKeysForRole, pathToPageKey } from '../cms-mirror/nav';
 import { isEntitlementControlledPageKey, type PartnerRole } from '../../shared/entitlements/registry';
+import { isSuperAdminOnlyPath } from '../lib/rbac';
 
 /**
  * Gate /admin/* by RBAC matrix, but never block pages that the CMS-mirror
@@ -37,6 +38,15 @@ export const RoleGuard: React.FC<{ children: React.ReactNode }> = ({ children })
   }
   const mirrorKeys = filterAllowedPageKeys(allowedPageKeysForRole(profile?.role));
   const allowedByMirror = !mirrorKeys || mirrorKeys.includes(pageKey);
+
+  // Super-Admin-only routes (Storefront Curation): redirect every other role,
+  // including admin, whose mirror allowlist is otherwise "all pages".
+  if (isSuperAdminOnlyPath(location.pathname)) {
+    if (role !== 'super_admin') {
+      return <Navigate to="/admin/dashboard" replace />;
+    }
+    return <>{children}</>;
+  }
 
   // Admin feature-access is never seller/creator-entitlement-gated
   if (pageKey === 'featureAccess') {

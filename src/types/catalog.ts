@@ -505,6 +505,12 @@ export interface SiteConfig {
     storefrontImage?: string;
     storefrontImageAlt?: string;
   };
+  /** Storefront Curation → Deals editorial pins, keyed by placement. */
+  storefrontCuration?: import('../../shared/storefront/storefrontCuration').StorefrontCurationConfig;
+  /** Storefront Curation → Trust & Assurance strips, keyed by placement. */
+  assuranceStrips?: import('../../shared/storefront/storefrontCuration').AssuranceStripsConfig;
+  /** Storefront Curation audit trail (Super Admin reads only). */
+  storefrontCurationAudit?: import('../../shared/storefront/storefrontCuration').CurationAuditEntry[];
   updatedAt: string;
 }
 

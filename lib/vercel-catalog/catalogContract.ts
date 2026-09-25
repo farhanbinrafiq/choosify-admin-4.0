@@ -952,6 +952,13 @@ export const normalizeSiteInput = (payload: unknown, existing?: SiteConfig): Sit
     supportEmail: toString(raw.supportEmail, existing?.supportEmail ?? ''),
     supportPhone: toString(raw.supportPhone, existing?.supportPhone ?? ''),
     ctaBanners: normalizeCtaBanners(raw.ctaBanners, existing?.ctaBanners ?? null),
+    // Storefront Curation is written ONLY by the Super-Admin-only curation
+    // endpoints. A full-site save (e.g. the CTA page, open to CMS editors)
+    // always carries the stored values forward and ignores any client-sent
+    // curation fields, so it can never bypass the curation permission.
+    storefrontCuration: existing?.storefrontCuration,
+    assuranceStrips: existing?.assuranceStrips,
+    storefrontCurationAudit: existing?.storefrontCurationAudit,
     updatedAt: nowIso(),
   };
 };
