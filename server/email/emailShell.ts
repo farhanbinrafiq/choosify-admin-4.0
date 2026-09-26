@@ -1,7 +1,8 @@
 /**
  * Choosify transactional email design system — one reusable shell + components,
  * shared by every template. Email-client-safe: table layout, fully inline
- * styles, a single progressive-enhancement <style> block for mobile, no
+ * styles, a fluid 600px-max container, a small progressive-enhancement mobile
+ * style block (kept separate from the web-font block), no
  * JavaScript, no external CSS, no remote decorative images. Every template also
  * ships a plain-text alternative (see `toPlainText`).
  *
@@ -138,7 +139,7 @@ export function emailCodeBlock(code: string): string {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:22px 0 8px;">
     <tr>
       <td align="center" style="border:1px solid ${BRAND.hairline};border-radius:12px;background:${BRAND.infoCardBg};padding:22px 12px;">
-        <div style="font-family:${MONO_STACK};font-size:34px;line-height:1;font-weight:700;letter-spacing:.34em;color:${BRAND.navy};">${escapeHtml(code)}</div>
+        <div class="cf-code" style="font-family:${MONO_STACK};font-size:34px;line-height:1;font-weight:700;letter-spacing:.34em;color:${BRAND.navy};word-break:break-all;">${escapeHtml(code)}</div>
       </td>
     </tr>
   </table>`;
@@ -216,6 +217,20 @@ export function renderEmailShell({ preheader, heading, bodyHtml, footer = 'custo
 <meta name="supported-color-schemes" content="light" />
 <title>${escapeHtml(heading)}</title>
 <!--[if mso]><style>body,table,td,p,a,h1,div,span{font-family:Arial,Helvetica,sans-serif !important;}</style><![endif]-->
+<!-- Mobile overrides live in their OWN simple style block, first: email
+     sanitisers (notably Gmail) drop a whole style block when it contains a
+     rule they reject, so the web-font rules below must not share a block with
+     these. The layout is already fluid inline; this only refines small screens. -->
+<style>
+  @media only screen and (max-width:600px){
+    .cf-outer{padding-top:20px !important;padding-left:8px !important;padding-right:8px !important;}
+    .cf-container{width:100% !important;}
+    .cf-pad{padding:28px 20px !important;}
+    .cf-h1{font-size:22px !important;}
+    .cf-code{font-size:26px !important;letter-spacing:.18em !important;}
+  }
+  a{color:${BRAND.orange};}
+</style>
 <style>
   /* Platform typefaces for clients that support web fonts; Outlook desktop
      skips @media screen, so it never sees @font-face (falls back via mso rule). */
@@ -229,21 +244,18 @@ export function renderEmailShell({ preheader, heading, bodyHtml, footer = 'custo
       src:url('${SATOSHI_WOFF2_URL}') format('woff2');
     }
   }
-  /* Progressive enhancement only — the layout is fully inline above. */
-  @media only screen and (max-width:600px){
-    .cf-container{width:100% !important;}
-    .cf-pad{padding-left:22px !important;padding-right:22px !important;}
-    .cf-h1{font-size:22px !important;}
-  }
-  a{color:${BRAND.orange};}
 </style>
 </head>
-<body style="margin:0;padding:0;background:${BRAND.pageBg};">
+<body style="margin:0;padding:0;background:${BRAND.pageBg};-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${BRAND.pageBg};">
   <tr>
-    <td align="center" style="padding:32px 12px;">
-      <table role="presentation" class="cf-container" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;">
+    <td align="center" class="cf-outer" style="padding:32px 12px;">
+      <!-- Fluid-hybrid container: 100% wide up to 600px everywhere (fits any
+           phone even when a client ignores style blocks); Outlook desktop, which
+           ignores max-width, gets a fixed 600px ghost table instead. -->
+      <!--[if mso]><table role="presentation" align="center" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+      <table role="presentation" class="cf-container" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;margin:0 auto;">
 
         <!-- Header — the official Choosify horizontal lockup (navy). Public,
              unauthenticated HTTPS asset (the same brand file the storefront
@@ -272,6 +284,7 @@ export function renderEmailShell({ preheader, heading, bodyHtml, footer = 'custo
         </tr>
 
       </table>
+      <!--[if mso]></td></tr></table><![endif]-->
     </td>
   </tr>
 </table>
