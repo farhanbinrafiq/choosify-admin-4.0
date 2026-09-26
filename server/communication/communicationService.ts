@@ -1,5 +1,6 @@
 import { communicationStore } from './communicationStore';
 import { listChannelStatus } from './deliveryChannels';
+import { countUsersWithPreferences } from './preferenceService';
 import type { CommunicationSummary } from './communicationTypes';
 import { BROADCAST_STATUSES } from './communicationTypes';
 
@@ -23,7 +24,7 @@ export async function getCommunicationSummary(): Promise<CommunicationSummary> {
       sent: broadcasts.filter((b) => b.status === BROADCAST_STATUSES.SENT).length,
     },
     preferences: {
-      usersWithPreferences: communicationStore.countPreferencesUsers(),
+      usersWithPreferences: await countUsersWithPreferences(),
     },
     generatedAt: new Date().toISOString(),
   };

@@ -232,6 +232,8 @@ export async function createBookingRequest(
       await notifyUser(base.sellerId, {
         type: 'buyer_update',
         category: 'seller',
+        eventKey: 'booking.update',
+        persona: 'seller',
         title: 'New booking request',
         summary: `${base.buyerName || 'A buyer'} requested "${base.listingTitle}" for ৳${price.toLocaleString()}.`,
         actionUrl: conversationActionUrl(base.buyerId),
@@ -282,6 +284,8 @@ export async function createBookingRequest(
     await notifyUser(accepted.buyerId, {
       type: 'order_update',
       category: 'buyer',
+      eventKey: 'booking.update',
+      persona: 'consumer',
       title: 'Booking accepted instantly',
       summary: `${accepted.sellerName} pre-approved "${accepted.listingTitle}". Pay within ${BOOKING_PAYMENT_WINDOW_HOURS} hours to confirm.`,
       actionUrl: conversationActionUrl(accepted.buyerId),
@@ -345,6 +349,8 @@ export async function acceptBookingRequest(
     await notifyUser(existing.buyerId, {
       type: 'order_update',
       category: 'buyer',
+      eventKey: 'booking.update',
+      persona: 'consumer',
       title: 'Booking request accepted',
       summary: `${actor.sellerName || existing.sellerName} accepted "${existing.listingTitle}". Pay within ${BOOKING_PAYMENT_WINDOW_HOURS} hours.`,
       actionUrl: conversationActionUrl(existing.buyerId),
@@ -405,6 +411,8 @@ export async function declineBookingRequest(
     await notifyUser(existing.buyerId, {
       type: 'order_update',
       category: 'buyer',
+      eventKey: 'booking.update',
+      persona: 'consumer',
       title: 'Booking request declined',
       summary: `${actor.sellerName || existing.sellerName} declined "${existing.listingTitle}": ${reason}`,
       actionUrl: conversationActionUrl(existing.buyerId),
@@ -471,6 +479,8 @@ export async function buyerDeclineBookingRequest(
     await notifyUser(existing.sellerId, {
       type: 'buyer_update',
       category: 'seller',
+      eventKey: 'booking.update',
+      persona: 'seller',
       title: existing.status === 'countered' ? 'Counter-offer rejected' : 'Booking offer declined',
       summary: `${existing.buyerName || 'The buyer'} declined "${existing.listingTitle}"${reason ? `: ${reason}` : '.'}`,
       actionUrl: conversationActionUrl(existing.buyerId),
@@ -541,6 +551,8 @@ export async function counterBookingRequest(
     await notifyUser(existing.buyerId, {
       type: 'order_update',
       category: 'buyer',
+      eventKey: 'booking.update',
+      persona: 'consumer',
       title: 'New counter-offer',
       summary: `${actor.sellerName || existing.sellerName} countered "${existing.listingTitle}" at ৳${price.toLocaleString()}.`,
       actionUrl: conversationActionUrl(existing.buyerId),
@@ -592,6 +604,8 @@ export async function buyerAcceptCounter(
         await notifyUser(existing.sellerId, {
           type: 'buyer_update',
           category: 'seller',
+          eventKey: 'booking.update',
+          persona: 'seller',
           title: 'Buyer accepted your offer',
           summary: `${existing.buyerName || 'The buyer'} accepted "${existing.listingTitle}" at ৳${existing.price.toLocaleString()}.`,
           actionUrl: conversationActionUrl(existing.buyerId),
@@ -638,6 +652,8 @@ export async function buyerAcceptCounter(
     await notifyUser(existing.sellerId, {
       type: 'buyer_update',
       category: 'seller',
+      eventKey: 'booking.update',
+      persona: 'seller',
       title: 'Buyer accepted your counter-offer',
       summary: `${existing.buyerName || 'The buyer'} accepted "${existing.listingTitle}" at ৳${existing.price.toLocaleString()}.`,
       actionUrl: conversationActionUrl(existing.buyerId),
@@ -726,6 +742,8 @@ export async function markBookingPaid(
     await notifyUser(existing.sellerId, {
       type: 'order_update',
       category: 'seller',
+      eventKey: 'payment.confirmed',
+      persona: 'seller',
       title: 'Payment confirmed',
       summary: `${existing.buyerName || 'The buyer'} confirmed payment for "${existing.listingTitle}" (order ${resolvedOrderId}).`,
       actionUrl: '/dashboard?tab=seller-orders',

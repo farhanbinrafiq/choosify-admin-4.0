@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { KeyRound, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { formatRoleLabel, getAvatarUrl, getUserInitials } from '../../../lib/userDisplay';
@@ -58,11 +59,42 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** Security & notification preferences are owned by Settings — this profile page only links there. */
+function SettingsPointer({ section, title, body }: { section: 'security' | 'notifications'; title: string; body: string }) {
+  return (
+    <div className="bg-app-card border border-app-border rounded-xl p-5">
+      <div className="text-[13px] font-extrabold text-app-text-primary mb-1">{title}</div>
+      <p className="text-[12px] text-app-text-secondary mb-3.5">{body}</p>
+      <Link
+        to={`/admin/settings?section=${section}`}
+        className="inline-flex items-center gap-1.5 rounded-lg bg-[#EF3C23] px-3.5 py-2 text-[12px] font-extrabold text-white no-underline"
+      >
+        Open Settings
+      </Link>
+    </div>
+  );
+}
+
+/** Roles whose dashboard includes the Settings page (see cms-mirror/nav allowlists). */
+const SETTINGS_ROLES = new Set([
+  'admin',
+  'super_admin',
+  'moderator',
+  'finance_manager',
+  'support_agent',
+  'marketing_manager',
+]);
+
 export default function MyProfilePage() {
   const { profile } = useAuth();
   const [tab, setTab] = useState<TabKey>('account');
 
   if (!profile) return null; // ProtectedRoute already guards this route
+
+  const canUseSettings = SETTINGS_ROLES.has(String(profile.role || '').toLowerCase());
+  // A role without Settings access (none today) keeps its real password form
+  // here; the Notifications tab only exists where it can point to Settings.
+  const tabs = TABS.filter((t) => t.key !== 'notifications' || canUseSettings);
 
   const displayName = profile.displayName?.trim() || profile.email?.trim() || 'User';
   const email = profile.email?.trim() || '—';
@@ -130,7 +162,7 @@ export default function MyProfilePage() {
 
         <div className="min-w-0">
           <div className="flex gap-1 border-b border-app-border mb-4 flex-wrap">
-            {TABS.map((t) => (
+            {tabs.map((t) => (
               <button
                 key={t.key}
                 type="button"
@@ -171,7 +203,15 @@ export default function MyProfilePage() {
             </div>
           )}
 
-          {tab === 'security' && (
+          {tab === 'security' && canUseSettings && (
+            <SettingsPointer
+              section="security"
+              title="Password & sign-in security"
+              body="Change your password and sign out other devices from Settings → Security."
+            />
+          )}
+
+          {tab === 'security' && !canUseSettings && (
             <div className="bg-app-card border border-app-border rounded-xl p-5 space-y-5">
               <div>
                 <div className="flex items-center gap-2 mb-3.5 pb-2.5 border-b border-app-border">
@@ -219,18 +259,12 @@ export default function MyProfilePage() {
             </div>
           )}
 
-          {tab === 'notifications' && (
-            <div className="bg-app-card border border-app-border rounded-xl p-5 space-y-3.5">
-              <div className="text-[13px] font-extrabold text-app-text-primary mb-1">Notification Preferences</div>
-              <label className="flex items-center gap-2.5 text-[12px] font-semibold text-app-text-primary">
-                <input type="checkbox" className="w-4 h-4" />
-                Email Alerts
-              </label>
-              <label className="flex items-center gap-2.5 text-[12px] font-semibold text-app-text-primary">
-                <input type="checkbox" className="w-4 h-4" />
-                WhatsApp Notifications
-              </label>
-            </div>
+          {tab === 'notifications' && canUseSettings && (
+            <SettingsPointer
+              section="notifications"
+              title="Notification preferences"
+              body="Choose which in-app notifications you receive in Settings → Notifications."
+            />
           )}
         </div>
       </div>

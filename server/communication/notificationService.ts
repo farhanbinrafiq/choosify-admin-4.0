@@ -13,6 +13,7 @@ import type {
   NotificationInput,
 } from './communicationTypes';
 import { DELIVERY_CHANNELS, NOTIFICATION_PRIORITIES } from './communicationTypes';
+import { isInAppNotificationEnabled } from './preferenceService';
 
 export type BulkNotificationResult = {
   succeeded: string[];
@@ -27,11 +28,31 @@ export function getNotification(id: string): Promise<CommunicationNotification |
   return communicationStore.getNotification(id);
 }
 
+/**
+ * Whether the recipient's own preference allows this in-app notification.
+ * Security-category, mandatory and un-keyed notifications always pass. A
+ * lookup failure also passes — a preference outage must never silently drop
+ * a notification.
+ */
+async function preferenceAllows(input: NotificationInput): Promise<boolean> {
+  if (input.category === 'security' || !input.eventKey || !input.persona) return true;
+  try {
+    return await isInAppNotificationEnabled(input.userId, input.persona, input.eventKey);
+  } catch (error) {
+    console.warn('[Notifications] Preference lookup failed; delivering anyway:', error);
+    return true;
+  }
+}
+
+/**
+ * Creates (and dispatches) one notification — or returns null, creating
+ * nothing, when the recipient switched this event off for this persona.
+ */
 export async function createNotification(
   input: NotificationInput,
   req?: Request,
-): Promise<CommunicationNotification> {
-  const preferences = communicationStore.getPreferences(input.userId);
+): Promise<CommunicationNotification | null> {
+  if (!(await preferenceAllows(input))) return null;
   const channels = input.channels?.length ? input.channels : [DELIVERY_CHANNELS.IN_APP];
 
   const notification = await communicationStore.createNotification({
@@ -48,10 +69,9 @@ export async function createNotification(
     expiresAt: input.expiresAt,
   });
 
-  const enabledChannels = channels.filter((channel) => {
-    if (input.category === 'system' || input.category === 'security') return true;
-    return preferences.channels[channel] !== false;
-  });
+  // Only in-app has a real provider; the others are framework no-ops, so the
+  // legacy per-channel JSON flags (which never changed delivery) are gone.
+  const enabledChannels = channels;
 
   await dispatchToChannels(
     {

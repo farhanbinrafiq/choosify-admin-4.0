@@ -831,6 +831,8 @@ async function notifyBuyerDispatched(order: CommerceOrder): Promise<void> {
     await notifyUser(order.consumerId, {
       type: COMMUNICATION_TYPES.ORDER_UPDATE,
       category: 'buyer',
+      eventKey: 'order.update',
+      persona: 'consumer',
       priority: 'normal',
       title: 'Order dispatched',
       summary: `Order ${order.orderNumber} has been dispatched.`,

@@ -220,6 +220,8 @@ entitlementsRouter.post('/entitlements/feature-requests', ...requireAuth, async 
       await notifyRoles(['admin', 'super_admin'], {
         type: 'system_alert',
         category: 'admin',
+        eventKey: 'staff.feature_request',
+        persona: 'staff',
         title: 'Feature Request Awaiting Review',
         summary: `${partnerRole} requested access to "${featureKey}".`,
         actionUrl: '/admin/feature-access',
@@ -271,6 +273,8 @@ entitlementsRouter.patch('/entitlements/admin/feature-requests/:id', ...requireA
     await notifyUser(updated.userId, {
       type: updated.role === 'seller' ? 'seller_update' : 'buyer_update',
       category: updated.role === 'seller' ? 'seller' : 'buyer',
+      eventKey: 'feature_request.update',
+      persona: updated.role === 'creator' ? 'creator' : 'seller',
       title: `Feature Request ${statusLabel}`,
       summary: body.reviewNote || `Your request for "${updated.featureKey}" was ${statusLabel.toLowerCase()}.`,
       actionUrl: '/admin/feature-access',

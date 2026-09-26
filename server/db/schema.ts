@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, uuid, varchar, boolean, timestamp, pgEnum, integer, bigint, jsonb, text, index, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, boolean, timestamp, pgEnum, integer, bigint, jsonb, text, index, uniqueIndex, check } from 'drizzle-orm/pg-core';
 
 export const roleEnum = pgEnum('user_role', [
   'user',
@@ -286,6 +286,31 @@ export const notifications = pgTable('notifications', {
 }, (table) => ({
   userIdIdx: index('notifications_user_id_idx').on(table.userId),
   userReadIdx: index('notifications_user_read_idx').on(table.userId, table.read),
+}));
+
+/**
+ * Per-person, per-persona in-app notification preferences (migration 0010).
+ * `in_app` holds ONLY explicit choices as { "<eventKey>": boolean }; a missing
+ * key — or no row at all — means the event is delivered (today's default).
+ * Event keys + which are mandatory live in shared/notifications/notificationEvents.ts.
+ * `marketing_opt_in` is explicit, optional consent (only ever set on the
+ * `account` row) and defaults to false.
+ */
+export const notificationPreferences = pgTable('notification_preferences', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  persona: varchar('persona', { length: 16 }).notNull(),
+  inApp: jsonb('in_app').$type<Record<string, boolean>>().notNull().default({}),
+  marketingOptIn: boolean('marketing_opt_in').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  userPersonaUnique: uniqueIndex('notification_preferences_user_persona_unique').on(table.userId, table.persona),
+  personaCheck: check(
+    'notification_preferences_persona_check',
+    sql`${table.persona} IN ('account', 'seller', 'creator', 'consumer', 'staff')`,
+  ),
+  inAppObjectCheck: check('notification_preferences_in_app_object_check', sql`jsonb_typeof(${table.inApp}) = 'object'`),
 }));
 
 /**

@@ -38,6 +38,7 @@ const AdminResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'));
 // Profile & Detail Pages
 const AccountSecurityPage = lazy(() => import('./pages/admin/AccountSecurityPage'));
+const SettingsPage = lazy(() => import('./pages/account/SettingsPage'));
 const MyProfilePage = lazy(() => import('./pages/admin/profiles/MyProfilePage'));
 const UnifiedProfileShell = lazy(() => import('./pages/admin/profiles/UnifiedProfileShell'));
 const ConsumerProfileView = lazy(() => import('./pages/admin/profiles/ConsumerProfileView'));
@@ -1895,11 +1896,9 @@ export default function App() {
                 <ProtectedRoute>
                   <RoleGuard>
                     <AdminWorkspaceLayout>
-                      <AdminFeatureNotAvailable
-                        title="Settings"
-                        description="Platform-wide settings management is not yet built. Your own account profile can be edited from the profile menu."
-                        alternatives={[{ label: 'Go to My Profile', to: '/admin/profile' }]}
-                      />
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <SettingsPage />
+                      </Suspense>
                     </AdminWorkspaceLayout>
                   </RoleGuard>
                 </ProtectedRoute>

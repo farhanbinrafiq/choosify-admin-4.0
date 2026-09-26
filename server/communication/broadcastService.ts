@@ -7,6 +7,7 @@ import type { Broadcast, BroadcastInput } from './communicationTypes';
 import { BROADCAST_STATUSES, DELIVERY_CHANNELS } from './communicationTypes';
 import { db } from '../db/client';
 import { users, roleEnum } from '../db/schema';
+import { personaForRole } from '../../shared/notifications/notificationEvents';
 
 const VALID_ROLES = new Set<string>(roleEnum.enumValues);
 
@@ -67,6 +68,12 @@ export async function sendBroadcast(id: string, req?: Request): Promise<Broadcas
   const explicitUserIds = (updated.metadata?.targetUserIds as string[] | undefined) ?? [];
   const roleUserIds = await resolveRoleRecipients(updated.targetRoles);
   const targetUserIds = Array.from(new Set([...explicitUserIds, ...roleUserIds]));
+  // Each recipient is addressed as the persona their own role operates as, so
+  // an announcement honours that persona's "Announcements" preference.
+  const roleRows = targetUserIds.length
+    ? await db.select({ id: users.id, role: users.role }).from(users).where(inArray(users.id, targetUserIds))
+    : [];
+  const roleById = new Map(roleRows.map((r) => [r.id, r.role]));
   for (const userId of targetUserIds) {
     await createNotification(
       {
@@ -77,6 +84,8 @@ export async function sendBroadcast(id: string, req?: Request): Promise<Broadcas
         summary: updated.body,
         channels: updated.channels,
         metadata: { broadcastId: updated.id },
+        eventKey: 'announcement',
+        persona: personaForRole(roleById.get(userId)),
       },
       req,
     );

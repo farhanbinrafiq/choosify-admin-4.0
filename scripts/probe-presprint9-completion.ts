@@ -261,23 +261,21 @@ async function main() {
 
     // Prefs round-trip
     {
+      // Postgres-backed per-persona in-app preferences (migration 0010).
       await req('PUT', '/notifications/preferences', {
         token: sellerAfter.accessToken,
-        body: { channels: { email: false, whatsapp: true } },
+        body: { persona: 'seller', inApp: { 'review.update': false } },
         expect: [200],
         root: 'api',
       });
-      const got = await req('GET', '/notifications/preferences', {
+      const got = await req('GET', '/notifications/preferences?persona=seller', {
         token: sellerAfter.accessToken,
         expect: [200],
         root: 'api',
       });
-      const channels = ((got.body.data as Json)?.channels || got.body.channels) as Json;
-      mark(
-        'prefs-roundtrip',
-        channels?.email === false && channels?.whatsapp === true,
-        JSON.stringify(channels),
-      );
+      const events = (((got.body.data as Json)?.events || []) as Array<{ key: string; enabled: boolean }>);
+      const review = events.find((e) => e.key === 'review.update');
+      mark('prefs-roundtrip', review?.enabled === false, JSON.stringify(review));
     }
 
     // Ads: eligible listings + deal + promote

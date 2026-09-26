@@ -10,6 +10,7 @@ import { publishEvent } from '../../events/eventBus';
 import { Logger } from '../../lib/logger';
 import { notifyUser, notifyRoles } from '../../communication/systemNotify';
 import { COMMUNICATION_TYPES } from '../../communication/communicationTypes';
+import type { NotificationPersona } from '../../../shared/notifications/notificationEvents';
 import {
   getConversationByReconcileKey,
   getConversation,
@@ -75,6 +76,19 @@ import {
 } from './types';
 
 const STAFF_SUPPORT_ROLES = ['admin', 'super_admin', 'support_agent'] as const;
+
+/**
+ * Notification persona of a conversation participant, taken from the role the
+ * conversation itself records for them. An unrecognised role yields no persona,
+ * so that notification is always delivered rather than guessed.
+ */
+function participantPersona(role: SenderRole | string | undefined): NotificationPersona | undefined {
+  if (role === 'consumer') return 'consumer';
+  if (role === 'seller' || role === 'seller_staff') return 'seller';
+  if (role === 'creator') return 'creator';
+  if (role === 'admin') return 'staff';
+  return undefined;
+}
 
 /** Canonical target-user resolution for Admin-initiated support (never trusts client role). */
 export type SupportTargetUser = {
@@ -691,6 +705,8 @@ export async function sendMessage(input: {
       await notifyUser(recipientId, {
         type: COMMUNICATION_TYPES.NOTIFICATION,
         category: isSupport ? 'system' : senderRole === 'seller' ? 'buyer' : 'seller',
+        eventKey: isSupport ? 'support.message' : 'message.new',
+        persona: participantPersona(conv.participants?.find((p) => p.userId === recipientId)?.role),
         title: isSupport ? 'Choosify Support replied' : 'New message',
         summary: body ? body.slice(0, 140) : 'Sent an attachment.',
         actionUrl: isSupport ? '/messages' : '/messages',
@@ -1225,6 +1241,8 @@ export async function openAdminSupportConversation(input: {
       await notifyUser(target.id, {
         type: COMMUNICATION_TYPES.NOTIFICATION,
         category: 'system',
+        eventKey: 'support.message',
+        persona: participantPersona(target.senderRole),
         title: 'Message from Choosify Support',
         summary: body.slice(0, 140),
         actionUrl: '/messages',
@@ -1457,6 +1475,8 @@ async function notifySupportStaffOfActivity(
     await notifyRoles([...STAFF_SUPPORT_ROLES], {
       type: COMMUNICATION_TYPES.NOTIFICATION,
       category: 'system',
+      eventKey: 'staff.support_activity',
+      persona: 'staff',
       title,
       summary: preview ? preview.slice(0, 140) : 'Open the support inbox.',
       actionUrl: `/admin/messages?c=${conv.id}`,
@@ -1747,6 +1767,8 @@ export async function sweepDueFollowups(): Promise<number> {
         await notifyRoles([...STAFF_SUPPORT_ROLES], {
           type: COMMUNICATION_TYPES.REMINDER,
           category: 'system',
+          eventKey: 'staff.support_followup',
+          persona: 'staff',
           title: 'Support follow-up due',
           summary: 'A scheduled support follow-up is now due.',
           actionUrl: `/admin/messages?c=${f.conversationId}`,

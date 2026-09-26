@@ -224,10 +224,10 @@ export const ROLE_ALLOWED_PAGE_KEYS: Record<string, string[] | null> = {
     'settings',
   ],
   consumer: ['dashboard', 'orders', 'consumerProfile', 'settings'],
-  moderator: ['dashboard', 'moderationCenter', 'reviews', 'messages', 'metaInboxAdmin', 'adminProfile'],
-  finance_manager: ['dashboard', 'payouts', 'feeCharges', 'finance', 'adminProfile'],
-  support_agent: ['dashboard', 'messages', 'metaInboxAdmin', 'reviews', 'adminProfile'],
-  marketing_manager: ['dashboard', 'adsDealsStudio', 'promoCodes', 'websiteCmsStudio', 'adminProfile'],
+  moderator: ['dashboard', 'moderationCenter', 'reviews', 'messages', 'metaInboxAdmin', 'adminProfile', 'settings'],
+  finance_manager: ['dashboard', 'payouts', 'feeCharges', 'finance', 'adminProfile', 'settings'],
+  support_agent: ['dashboard', 'messages', 'metaInboxAdmin', 'reviews', 'adminProfile', 'settings'],
+  marketing_manager: ['dashboard', 'adsDealsStudio', 'promoCodes', 'websiteCmsStudio', 'adminProfile', 'settings'],
 };
 
 export function allowedPageKeysForRole(role: string | undefined | null): string[] | null {

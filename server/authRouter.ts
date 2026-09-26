@@ -13,6 +13,7 @@ import {
   isExpiredJwtError,
   readRefreshTokenCookie,
   revokeAllRefreshTokensForUser,
+  revokeOtherRefreshTokensForUser,
   revokeRefreshToken,
   rotateRefreshToken,
   setRefreshTokenCookie,
@@ -1533,6 +1534,46 @@ authRouter.post('/auth/reset-password', async (req, res) => {
  * Change password endpoint (authenticated users).
  * Verifies current password, hashes new password, updates user, clears changeNextLogin flag.
  */
+/**
+ * Settings → Security → "Sign out other devices". Revokes every other refresh
+ * token of the signed-in account and keeps this device's session. Refuses when
+ * this device's session can't be identified (no/invalid refresh cookie) rather
+ * than risk signing the caller out everywhere.
+ */
+authRouter.post('/auth/sessions/revoke-others', ...requireAuth, async (req, res) => {
+  if (req.impersonationSessionId) {
+    res.status(403).json({ success: false, error: 'Unavailable during Admin impersonation' });
+    return;
+  }
+  const userId = req.userId || req.user?.uid || '';
+  const raw = readRefreshTokenCookie(req.headers.cookie);
+  if (!userId || !raw) {
+    res.status(409).json({
+      success: false,
+      error: 'This device’s session could not be identified. Sign out and sign in again, then retry.',
+    });
+    return;
+  }
+  try {
+    const result = await revokeOtherRefreshTokensForUser(userId, raw);
+    if (!result) {
+      res.status(409).json({
+        success: false,
+        error: 'This device’s session could not be identified. Sign out and sign in again, then retry.',
+      });
+      return;
+    }
+    Logger.audit('auth.sessions.revoke_others', { userId, requestId: req.requestId, revoked: result.revoked });
+    res.json({ success: true, revoked: result.revoked });
+  } catch (error) {
+    Logger.warn('revoke other sessions failed', {
+      requestId: req.requestId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    res.status(500).json({ success: false, error: 'Unable to sign out other devices' });
+  }
+});
+
 authRouter.post('/auth/change-password', ...requireAuth, async (req, res) => {
   if (req.impersonationSessionId) {
     res.status(403).json({

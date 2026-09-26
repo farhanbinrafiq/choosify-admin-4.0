@@ -426,6 +426,8 @@ export async function notifyInquiryCreated(lead: OpsLead): Promise<OpsLeadDelive
     await notifyRoles(['admin', 'super_admin'], {
       type: 'system_alert',
       category: 'admin',
+      eventKey: 'staff.inquiry',
+      persona: 'staff',
       title,
       summary: `${lead.referenceId ? `${lead.referenceId} · ` : ''}${lead.brandName} (${lead.email})`,
       actionUrl: adminPath,

@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import argon2 from 'argon2';
 import jwt from 'jsonwebtoken';
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, eq, gt, isNull, ne } from 'drizzle-orm';
 import type { Response } from 'express';
 import { db } from '../db/client';
 import { refreshTokens, users } from '../db/schema';
@@ -179,6 +179,40 @@ export async function revokeAllRefreshTokensForUser(userId: string): Promise<voi
     .update(refreshTokens)
     .set({ revokedAt: new Date() })
     .where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt)));
+}
+
+/**
+ * "Sign out other devices": revokes every active refresh token for the user
+ * EXCEPT the one this device presents. Returns null — revoking nothing — when
+ * the presented token isn't a live session of this same user, so a missing or
+ * foreign cookie can never sign the caller out everywhere by accident.
+ * Other devices' already-issued access tokens stay valid until they expire
+ * (ACCESS_TTL); they can no longer refresh.
+ */
+export async function revokeOtherRefreshTokensForUser(
+  userId: string,
+  keepRawToken: string,
+): Promise<{ revoked: number } | null> {
+  const keepHash = hashRefreshToken(keepRawToken);
+  const [current] = await db
+    .select({ id: refreshTokens.id })
+    .from(refreshTokens)
+    .where(
+      and(
+        eq(refreshTokens.userId, userId),
+        eq(refreshTokens.tokenHash, keepHash),
+        isNull(refreshTokens.revokedAt),
+        gt(refreshTokens.expiresAt, new Date()),
+      ),
+    )
+    .limit(1);
+  if (!current) return null;
+  const revoked = await db
+    .update(refreshTokens)
+    .set({ revokedAt: new Date() })
+    .where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt), ne(refreshTokens.id, current.id)))
+    .returning({ id: refreshTokens.id });
+  return { revoked: revoked.length };
 }
 
 export async function hashPassword(password: string): Promise<string> {

@@ -114,13 +114,13 @@ async function main() {
   const broadcastId = (broadcastBody.data as { id?: string } | undefined)?.id || (broadcastBody as { id?: string }).id;
   assert(broadcastRes.ok && !!broadcastId, 'communicationStore: broadcast created', broadcastBody);
 
-  // --- 3. communicationStore: set a distinctive notification preference ---
+  // --- 3. notification preference (Postgres notification_preferences, migration 0010) ---
   const prefRes = await fetch(`${BASE}/api/notifications/preferences`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${admin}` },
-    body: JSON.stringify({ channels: { sms: true }, marketingOptIn: true }),
+    body: JSON.stringify({ persona: 'staff', inApp: { 'staff.inquiry': false } }),
   });
-  assert(prefRes.ok, 'communicationStore: notification preference set', prefRes.status);
+  assert(prefRes.ok, 'notification preference set', prefRes.status);
 
   // --- 4. bookingStore: create a real booking request ---
   const bookingRes = await fetch(`${V1}/booking/requests`, {
@@ -247,14 +247,20 @@ async function main() {
     { broadcastId, count: broadcastsList.length },
   );
 
-  const prefsAfter = await fetch(`${BASE}/api/notifications/preferences`, { headers: { Authorization: `Bearer ${admin2}` } });
-  const prefsAfterBody = (await prefsAfter.json()) as { data?: { channels?: { sms?: boolean }; marketingOptIn?: boolean } };
+  const prefsAfter = await fetch(`${BASE}/api/notifications/preferences?persona=staff`, { headers: { Authorization: `Bearer ${admin2}` } });
+  const prefsAfterBody = (await prefsAfter.json()) as { data?: { events?: Array<{ key: string; enabled: boolean }> } };
   const prefsData = prefsAfterBody.data;
   assert(
-    prefsData?.channels?.sms === true && prefsData?.marketingOptIn === true,
-    'communicationStore: notification preference survives real server restart',
+    prefsData?.events?.find((e) => e.key === 'staff.inquiry')?.enabled === false,
+    'notification preference survives real server restart',
     prefsData,
   );
+  // Restore the default so the probe admin keeps receiving inquiry notifications.
+  await fetch(`${BASE}/api/notifications/preferences`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${admin2}` },
+    body: JSON.stringify({ persona: 'staff', inApp: { 'staff.inquiry': true } }),
+  });
 
   const bookingAfter = await fetch(`${V1}/booking/requests/${encodeURIComponent(String(bookingId))}`);
   const bookingAfterBody = (await bookingAfter.json()) as { request?: { id: string } };

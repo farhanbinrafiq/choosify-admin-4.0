@@ -1,3 +1,5 @@
+import type { NotificationEventKey, NotificationPersona } from '../../shared/notifications/notificationEvents';
+
 export const COMMUNICATION_TYPES = {
   NOTIFICATION: 'notification',
   ANNOUNCEMENT: 'announcement',
@@ -109,6 +111,14 @@ export type NotificationInput = {
   pinned?: boolean;
   metadata?: Record<string, unknown>;
   expiresAt?: string;
+  /**
+   * Catalog event (shared/notifications/notificationEvents.ts) + the persona
+   * the recipient is addressed as. Together they decide whether the person's
+   * in-app preference for that persona applies. Mandatory or un-keyed events
+   * are always delivered.
+   */
+  eventKey?: NotificationEventKey;
+  persona?: NotificationPersona;
 };
 
 export type NotificationCenterFilter = {

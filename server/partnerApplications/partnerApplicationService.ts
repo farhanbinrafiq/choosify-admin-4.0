@@ -335,6 +335,8 @@ export async function submitPartnerApplication(input: PartnerApplyInput): Promis
     await notifyRoles(['admin', 'super_admin'], {
       type: 'system_alert',
       category: 'admin',
+      eventKey: 'staff.partner_application',
+      persona: 'staff',
       title: input.applicantType === 'seller' ? 'New Seller Application' : 'New Creator Application',
       summary: `${row.displayName} (${row.businessOrChannelName}) submitted a ${input.applicantType} application.`,
       actionUrl: input.applicantType === 'seller' ? '/admin/brand-studio' : '/admin/creator-studio',
@@ -439,6 +441,8 @@ export async function approvePartnerApplication(params: {
     await notifyUser(provisionedUserId, {
       type: app.applicantType === 'seller' ? 'seller_update' : 'buyer_update',
       category: app.applicantType === 'seller' ? 'seller' : 'buyer',
+      eventKey: 'account.access',
+      persona: app.applicantType === 'creator' ? 'creator' : 'seller',
       title: 'Marketplace Access Approved',
       summary: 'Your identity was verified. Marketplace features are now unlocked.',
       actionUrl: app.applicantType === 'seller' ? '/admin/brand-profile' : '/admin/creator-profile',
@@ -486,6 +490,8 @@ export async function rejectPartnerApplication(params: {
       await notifyUser(app.provisionedUserId, {
         type: app.applicantType === 'seller' ? 'seller_update' : 'buyer_update',
         category: app.applicantType === 'seller' ? 'seller' : 'buyer',
+        eventKey: 'account.access',
+        persona: app.applicantType === 'creator' ? 'creator' : 'seller',
         title: 'Application Rejected',
         summary: params.reviewNote || 'Your partner application was not approved.',
         actionUrl: app.applicantType === 'seller' ? '/admin/brand-profile' : '/admin/creator-profile',

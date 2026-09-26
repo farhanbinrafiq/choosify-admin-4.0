@@ -1238,6 +1238,8 @@ operationsRouter.post('/operations/orders', ...requireAuth, async (req, res) => 
           await notifyUser(sellerId, {
             type: COMMUNICATION_TYPES.ORDER_UPDATE,
             category: 'seller',
+            eventKey: 'order.new',
+            persona: 'seller',
             title: 'New order received',
             summary: `Order ${saved.orderId} placed — ৳${Number(saved.overallTotal || 0).toLocaleString()}.`,
             actionUrl: '/dashboard?tab=seller-orders',
@@ -1257,6 +1259,8 @@ operationsRouter.post('/operations/orders', ...requireAuth, async (req, res) => 
           userId: req.userId,
           type: COMMUNICATION_TYPES.ORDER_UPDATE,
           category: 'seller',
+          eventKey: 'order.new',
+          persona: 'seller',
           title: `Order claim link ready — ${saved.orderId}`,
           summary: `Share this link so the customer can confirm order ${saved.orderId} on Choosify.bd.`,
           actionUrl: confirmOrderUrl,
@@ -1497,6 +1501,8 @@ operationsRouter.post('/operations/orders/:id/cancel', ...requireAuth, async (re
       await notifyUser(sellerId, {
         type: COMMUNICATION_TYPES.ORDER_UPDATE,
         category: 'seller',
+        eventKey: 'order.cancelled',
+        persona: 'seller',
         title: 'Order cancelled',
         summary: `Order ${saved.orderId} was cancelled by the buyer: ${reason}`,
         actionUrl: '/dashboard?tab=seller-orders',
@@ -1878,6 +1884,8 @@ operationsRouter.post('/operations/manual-offers', ...requireAuth, async (req, r
         await notifyUser(buyerId, {
           type: COMMUNICATION_TYPES.SELLER_UPDATE,
           category: 'buyer',
+          eventKey: 'order.offer',
+          persona: 'consumer',
           title: 'New order offer',
           summary: `${offer.sellerName || 'A seller'} sent you an offer: ${itemSummary} — ৳${overallTotal.toLocaleString()}.`,
           actionUrl: `/messages/conv_platform_${buyerId}`,
@@ -2115,6 +2123,8 @@ async function finalizeManualOrderOffer(
     await notifyUser(existing.sellerId, {
       type: COMMUNICATION_TYPES.BUYER_UPDATE,
       category: 'seller',
+      eventKey: 'order.offer',
+      persona: 'seller',
       title: 'Order offer accepted',
       summary: `${updated.buyerName || 'The customer'} confirmed your offer — order ${orderId} created.`,
       actionUrl: '/dashboard?tab=seller-orders',
@@ -2320,6 +2330,8 @@ operationsRouter.post(
         await notifyUser(existing.sellerId, {
           type: COMMUNICATION_TYPES.BUYER_UPDATE,
           category: 'seller',
+          eventKey: 'order.offer',
+          persona: 'seller',
           title: 'Order offer declined',
           summary: `${intended.name} declined the prepared order.`,
           actionUrl: '/dashboard?tab=seller-orders',
@@ -2376,6 +2388,8 @@ operationsRouter.post('/operations/manual-offers/:id/reject', ...requireAuth, as
     await notifyUser(existing.sellerId, {
       type: COMMUNICATION_TYPES.BUYER_UPDATE,
       category: 'seller',
+      eventKey: 'order.offer',
+      persona: 'seller',
       title: 'Order offer rejected',
       summary: `${existing.buyerName || 'The buyer'} rejected your offer${reason ? `: ${reason}` : '.'}`,
       actionUrl: `/messages/conv_platform_${existing.buyerId}`,
@@ -2699,6 +2713,8 @@ operationsRouter.post('/operations/returns', ...requireAuth, async (req, res) =>
       await notifyUser(sellerId, {
         type: COMMUNICATION_TYPES.ORDER_UPDATE,
         category: 'seller',
+        eventKey: 'return.update',
+        persona: 'seller',
         title: 'New return request',
         summary: `${String(located.item.productTitle || 'An item')} from order ${orderId} — reason: ${reason}.`,
         actionUrl: `/admin/returns/${encodeURIComponent(savedWithRef.referenceId || savedWithRef.id)}`,
@@ -2774,6 +2790,8 @@ operationsRouter.patch('/operations/returns/:id/approve', ...requireAuth, async 
     await notifyUser(existing.buyerId, {
       type: COMMUNICATION_TYPES.ORDER_UPDATE,
       category: 'buyer',
+      eventKey: 'return.update',
+      persona: 'consumer',
       title: 'Return approved',
       summary: `Your return for order ${existing.orderId} was approved — refund of ৳${refundAmount.toLocaleString()}.`,
       actionUrl: '/dashboard?tab=my-returns',
@@ -2835,6 +2853,8 @@ operationsRouter.patch('/operations/returns/:id/reject', ...requireAuth, async (
     await notifyUser(existing.buyerId, {
       type: COMMUNICATION_TYPES.ORDER_UPDATE,
       category: 'buyer',
+      eventKey: 'return.update',
+      persona: 'consumer',
       title: 'Return rejected',
       summary: `Your return for order ${existing.orderId} was rejected: ${reason}`,
       actionUrl: '/dashboard?tab=my-returns',
@@ -3506,6 +3526,8 @@ operationsRouter.post('/operations/warranty-claims', ...requireAuth, async (req,
       await notifyUser(sellerId, {
         type: COMMUNICATION_TYPES.ORDER_UPDATE,
         category: 'seller',
+        eventKey: 'warranty.update',
+        persona: 'seller',
         title: 'New warranty claim',
         summary: `${String(item.productTitle || 'An item')} from order ${orderId} — ${issueType.replace(/_/g, ' ')}.`,
         actionUrl: `/admin/warranty-claims/${encodeURIComponent(savedWithRef.referenceId || savedWithRef.id)}`,
@@ -3581,6 +3603,8 @@ operationsRouter.patch('/operations/warranty-claims/:id/request-info', ...requir
     await notifyUser(existing.consumerId, {
       type: COMMUNICATION_TYPES.ORDER_UPDATE,
       category: 'buyer',
+      eventKey: 'warranty.update',
+      persona: 'consumer',
       title: 'More information needed for your warranty claim',
       summary: sellerResponse,
       actionUrl: '/dashboard?tab=my-warranty',
@@ -3658,6 +3682,8 @@ operationsRouter.patch('/operations/warranty-claims/:id/approve', ...requireAuth
     await notifyUser(existing.consumerId, {
       type: COMMUNICATION_TYPES.ORDER_UPDATE,
       category: 'buyer',
+      eventKey: 'warranty.update',
+      persona: 'consumer',
       title: 'Warranty claim approved',
       summary: `Your warranty claim for order ${existing.orderId} was approved.`,
       actionUrl: existing.conversationId ? `/messages/${existing.conversationId}` : '/dashboard?tab=my-warranty',
@@ -3702,6 +3728,8 @@ operationsRouter.patch('/operations/warranty-claims/:id/reject', ...requireAuth,
     await notifyUser(existing.consumerId, {
       type: COMMUNICATION_TYPES.ORDER_UPDATE,
       category: 'buyer',
+      eventKey: 'warranty.update',
+      persona: 'consumer',
       title: 'Warranty claim rejected',
       summary: `Your warranty claim for order ${existing.orderId} was rejected: ${sellerResponse}`,
       actionUrl: existing.conversationId ? `/messages/${existing.conversationId}` : '/dashboard?tab=my-warranty',
@@ -3797,6 +3825,8 @@ operationsRouter.patch('/operations/warranty-claims/:id/service-stage', ...requi
     await notifyUser(existing.consumerId, {
       type: COMMUNICATION_TYPES.ORDER_UPDATE,
       category: 'buyer',
+      eventKey: 'warranty.update',
+      persona: 'consumer',
       title: `Warranty claim update: ${nextStage.replace(/_/g, ' ')}`,
       summary: note || `Your warranty claim for order ${existing.orderId} moved to "${nextStage.replace(/_/g, ' ')}".`,
       actionUrl: '/dashboard?tab=my-warranty',
@@ -3901,6 +3931,8 @@ operationsRouter.patch('/operations/warranty-claims/:id/resolve', ...requireAuth
     await notifyUser(existing.consumerId, {
       type: COMMUNICATION_TYPES.ORDER_UPDATE,
       category: 'buyer',
+      eventKey: 'warranty.update',
+      persona: 'consumer',
       title: 'Warranty claim resolved',
       summary: `Your warranty claim for order ${existing.orderId} was resolved (${resolutionType.replace(/_/g, ' ')}): ${resolutionNotes}`,
       actionUrl: existing.conversationId ? `/messages/${existing.conversationId}` : '/dashboard?tab=my-warranty',
@@ -4015,6 +4047,8 @@ operationsRouter.patch('/operations/warranty-claims/:id/note', ...requireAuth, a
       await notifyUser(existing.consumerId, {
         type: COMMUNICATION_TYPES.ORDER_UPDATE,
         category: 'buyer',
+        eventKey: 'warranty.update',
+        persona: 'consumer',
         title: 'Update on your warranty claim',
         summary: note,
         actionUrl: '/dashboard?tab=my-warranty',
@@ -4679,6 +4713,8 @@ operationsRouter.post('/operations/reviews', ...requireAuth, (req, res) => {
     notifyUser(String(located.sub.sellerId), {
       type: COMMUNICATION_TYPES.SELLER_UPDATE,
       category: 'seller',
+      eventKey: 'review.update',
+      persona: 'seller',
       title: 'New product review',
       summary: `${saved.userName} left a ${saved.rating}-star review on ${saved.productTitle}.`,
       actionUrl: '/admin/reviews',
@@ -4717,6 +4753,8 @@ operationsRouter.patch('/operations/reviews/:id', ...requireAuth, (req, res) => 
     notifyUser(saved.userId, {
       type: COMMUNICATION_TYPES.MODERATION_UPDATE,
       category: 'buyer',
+      eventKey: 'review.update',
+      persona: 'consumer',
       title: 'Your review was updated',
       summary: `Your review of ${saved.productTitle} is now "${saved.status}".`,
       actionUrl: '/dashboard?tab=my-reviews',
@@ -5539,6 +5577,8 @@ operationsRouter.post('/operations/platform-messages', ...requireAuth, async (re
       notifyUser(effectiveBuyerId, {
         type: COMMUNICATION_TYPES.BUYER_UPDATE,
         category: 'buyer',
+        eventKey: 'message.new',
+        persona: 'consumer',
         priority: 'normal',
         title: 'New message',
         summary: `${userName?.trim() || 'A seller'} sent you a message.`,
@@ -5558,6 +5598,8 @@ operationsRouter.post('/operations/platform-messages', ...requireAuth, async (re
         notifyUser(sellerId, {
           type: COMMUNICATION_TYPES.SELLER_UPDATE,
           category: 'seller',
+          eventKey: 'message.new',
+          persona: 'seller',
           priority: 'normal',
           title: 'New message',
           summary: `${userName?.trim() || 'A buyer'} sent you a message.`,
@@ -5953,6 +5995,8 @@ operationsRouter.post('/operations/verifications', ...requireAuth, async (req, r
       await notifyRoles(['admin', 'super_admin', 'moderator'], {
         type: 'system_alert',
         category: 'admin',
+        eventKey: 'staff.verification_submitted',
+        persona: 'staff',
         title: entityType === 'brand' ? 'Ownership Claim Submitted' : 'Creator Verification Submitted',
         summary: `${actorName} submitted a ${entityType} verification for "${entityName}".`,
         actionUrl: `/upe/${entityType}/${encodeURIComponent(entityId)}`,
@@ -6255,6 +6299,8 @@ operationsRouter.patch('/operations/verifications/:id/review', ...requireModerat
       notifyUser(existing.submitted_by, {
         type: COMMUNICATION_TYPES.MODERATION_UPDATE,
         category: 'seller',
+        eventKey: 'verification.update',
+        persona: existing.entityType === 'creator' ? 'creator' : 'seller',
         title: 'More information needed for your verification',
         summary: feedback,
         actionUrl: '/admin/brand-verification',
@@ -6339,6 +6385,8 @@ operationsRouter.patch('/operations/verifications/:id/review', ...requireModerat
     notifyUser(existing.submitted_by, {
       type: COMMUNICATION_TYPES.MODERATION_UPDATE,
       category: 'seller',
+      eventKey: 'verification.update',
+      persona: existing.entityType === 'creator' ? 'creator' : 'seller',
       title: decision === 'approved' ? 'Verification approved' : 'Verification rejected',
       summary: feedback,
       actionUrl: '/admin/brand-verification',

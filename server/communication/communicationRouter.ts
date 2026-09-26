@@ -1,4 +1,4 @@
-import { Router, type Request } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { created, success } from '../lib/apiResponse';
 import { authenticateRequest } from '../middleware/auth';
 import { requireRole } from '../middleware/authorization';
@@ -19,7 +19,7 @@ import {
   markUnread,
   updateNotification,
 } from './notificationService';
-import { getPreferences, updatePreferences } from './preferenceService';
+import { PreferenceValidationError, getPreferences, updatePreferences } from './preferenceService';
 import {
   createBroadcast,
   getBroadcast,
@@ -91,16 +91,34 @@ communicationRouter.get('/notifications', ...requireAuth, async (req, res) => {
   });
 });
 
-communicationRouter.get('/notifications/preferences', ...requireAuth, (req, res) => {
+// Preferences always belong to the signed-in account (token identity) — there
+// is no userId parameter, and the strict body schema rejects one.
+function sendPreferenceError(res: Response, error: unknown) {
+  if (error instanceof PreferenceValidationError) {
+    return res.status(400).json({ success: false, error: error.message, details: error.details });
+  }
+  console.error('[Notifications] Preference request failed:', error);
+  return res.status(500).json({ success: false, error: 'Could not load notification preferences' });
+}
+
+communicationRouter.get('/notifications/preferences', ...requireAuth, async (req, res) => {
   const userId = resolveUserId(req);
   if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
-  return success(res, getPreferences(userId));
+  try {
+    return success(res, await getPreferences(userId, req.userRole, req.query.persona));
+  } catch (error) {
+    return sendPreferenceError(res, error);
+  }
 });
 
-communicationRouter.put('/notifications/preferences', ...requireAuth, (req, res) => {
+communicationRouter.put('/notifications/preferences', ...requireAuth, async (req, res) => {
   const userId = resolveUserId(req);
   if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
-  return success(res, updatePreferences(userId, req.body || {}, req));
+  try {
+    return success(res, await updatePreferences(userId, req.userRole, req.body, req));
+  } catch (error) {
+    return sendPreferenceError(res, error);
+  }
 });
 
 communicationRouter.post('/notifications/read', ...requireAuth, async (req, res) => {
@@ -180,7 +198,9 @@ communicationRouter.post('/admin/notifications', ...requireAdmin, async (req, re
   if (!body.userId || !body.title || !body.type || !body.category) {
     return res.status(400).json({ success: false, error: 'userId, title, type, and category are required' });
   }
-  const notification = await createNotification(body, req);
+  // A notice an admin sends to one person is a direct Choosify communication —
+  // mandatory, so the recipient's preferences never drop it.
+  const notification = await createNotification({ ...body, eventKey: 'admin.direct', persona: 'account' }, req);
   return created(res, notification);
 });
 

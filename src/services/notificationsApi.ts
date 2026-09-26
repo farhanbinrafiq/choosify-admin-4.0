@@ -151,6 +151,33 @@ export async function markNotificationRead(id: string): Promise<AppNotification 
   }
 }
 
+// ── Notification preferences (Settings → Notifications) ───────────────────
+// Always the signed-in account; the server derives identity from the token.
+
+export type NotificationPreferencePersona = 'account' | 'seller' | 'creator' | 'consumer' | 'staff';
+
+export type NotificationPreferences = {
+  persona: NotificationPreferencePersona;
+  availablePersonas: NotificationPreferencePersona[];
+  marketingOptIn: boolean;
+  saved: boolean;
+  updatedAt: string | null;
+  events: Array<{ key: string; label: string; description: string; group: string; enabled: boolean }>;
+  mandatoryEvents: Array<{ key: string; label: string; description: string; group: string }>;
+};
+
+export function getNotificationPreferences(persona?: NotificationPreferencePersona): Promise<NotificationPreferences> {
+  const qs = persona ? `?persona=${encodeURIComponent(persona)}` : '';
+  return request<NotificationPreferences>(`/notifications/preferences${qs}`);
+}
+
+export function updateNotificationPreferences(body: {
+  persona: NotificationPreferencePersona;
+  inApp?: Record<string, boolean>;
+}): Promise<NotificationPreferences> {
+  return request<NotificationPreferences>('/notifications/preferences', 'PUT', body);
+}
+
 export async function markNotificationsRead(ids: string[]): Promise<void> {
   if (!authToken() || !ids.length) return;
   try {

@@ -146,6 +146,8 @@ async function notifyBuyerDelivered(
     await notifyUser(order.buyerId, {
       type: COMMUNICATION_TYPES.ORDER_UPDATE,
       category: 'buyer',
+      eventKey: 'order.update',
+      persona: 'consumer',
       priority: 'normal',
       title: isPickup ? 'Order collected' : 'Order delivered',
       summary: isPickup
@@ -218,6 +220,8 @@ export async function settleOrderItemDelivered(
         await notifyUser(order.buyerId, {
           type: COMMUNICATION_TYPES.ORDER_UPDATE,
           category: 'buyer',
+          eventKey: 'order.update',
+          persona: 'consumer',
           title: 'Item delivered',
           summary: `${String(target.productTitle || 'Your item')} from order ${order.orderId} was delivered.`,
           actionUrl: '/profile/orders',
