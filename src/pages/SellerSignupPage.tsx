@@ -87,6 +87,8 @@ export default function SellerSignupPage() {
   const [email, setEmail] = useState(prefillEmail);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [category, setCategory] = useState('');
   const [city, setCity] = useState('');
   const [website, setWebsite] = useState('');
@@ -139,6 +141,14 @@ export default function SellerSignupPage() {
     }
     if (password.length < 8) {
       setError('Password must be at least 8 characters.');
+      return;
+    }
+    if (!confirmPassword) {
+      setError('Please confirm your password.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
       return;
     }
     if (!category.trim()) {
@@ -209,6 +219,11 @@ export default function SellerSignupPage() {
   const selectClass =
     'w-full bg-[#F8F9FC] border border-[#E8EDF2] rounded-lg px-3.5 h-11 mb-[14px] text-[13px] font-semibold text-[#111827] outline-none';
   const col2 = 'grid gap-x-4 lg:grid-cols-2';
+
+  // Inline hint only — never blocks typing, and only appears once the user has
+  // actually started the confirm field, so it doesn't nag while they're still
+  // typing the first password. Submission is separately blocked in handleSubmit.
+  const passwordsMismatch = confirmPassword.length > 0 && password !== confirmPassword;
 
   const isCreator = applicantType === 'creator';
   const accentLine = isCreator ? 'Create, guide and inspire.' : 'Grow your brand on Choosify.';
@@ -379,6 +394,33 @@ export default function SellerSignupPage() {
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
+
+                <label className={fieldLabel}>CONFIRM PASSWORD</label>
+                <div className={fieldWrap}>
+                  <Lock className="h-3.5 w-3.5 shrink-0 text-[#9CA3AF]" />
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="••••••••"
+                    autoComplete="new-password"
+                    className={`${fieldInput} font-bold tracking-[2px] placeholder:tracking-[2px]`}
+                  />
+                  <button
+                    type="button"
+                    aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                    onClick={() => setShowConfirmPassword((v) => !v)}
+                    className="shrink-0 rounded-md p-1 text-[#9CA3AF] hover:bg-black/5 hover:text-[#374151]"
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                {passwordsMismatch && (
+                  <p className="-mt-2.5 mb-[14px] text-[11px] font-semibold text-red-600">
+                    Passwords do not match.
+                  </p>
+                )}
               </FormSection>
 
               <FormSection title={isCreator ? 'Content details' : 'Business details'}>
