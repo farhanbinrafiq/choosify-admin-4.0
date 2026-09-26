@@ -1,8 +1,21 @@
 import React, { useMemo, useState } from 'react';
 import { ChevronDown, ExternalLink, MapPin, Star } from 'lucide-react';
 import type { BrandCMSModel } from '../../pages/admin/brandSeeds';
-import { resolveStoryMedia, type BrandEditSection } from '../../pages/admin/brandEditorModel';
+import { resolveStoryMedia, type BrandEditSection, type StoryMediaKind } from '../../pages/admin/brandEditorModel';
 import { resolveCreatorThumbnail } from '../../lib/productVideo';
+import { extractUrlFromPastedInput } from '../../lib/creatorReviewPlatform';
+import { CreatorReviewThumbnailPreview } from '../admin/product-studio/CreatorReviewThumbnailPreview';
+
+/** Card label for a Brand Story link, from its detected/selected media kind. */
+const STORY_LINK_LABEL: Record<StoryMediaKind, string> = {
+  youtube: 'YouTube',
+  youtube_shorts: 'YouTube Shorts',
+  instagram_reel: 'Instagram Reel',
+  instagram_post: 'Instagram',
+  tiktok: 'TikTok',
+  facebook: 'Facebook',
+  other: 'Link',
+};
 
 /** CSS aspect-ratio for a resolved story-media aspect (inline style — purge-proof). */
 const STORY_ASPECT_RATIO: Record<'landscape' | 'portrait' | 'square', string> = {
@@ -660,16 +673,25 @@ export function BrandProfilePresentation({
               caption?: string;
               href?: string;
               ratio: string;
+              /** Set for a link on a recognised video platform — its media area
+               *  reuses the Creator Review thumbnail preview (custom → YouTube →
+               *  TikTok oEmbed → branded placeholder). */
+              video?: { url: string; thumbnail: string };
             };
             const blockCards: StoryCard[] = cardBlocks.map((b) => {
               const resolved =
                 b.kind === 'content' ? storyContentById[(b.contentId || '').trim()] : undefined;
-              const aspect =
-                b.kind === 'link'
-                  ? resolveStoryMedia({ url: b.url, mediaKind: b.mediaKind }).aspect
-                  : b.mediaKind
-                    ? resolveStoryMedia({ mediaKind: b.mediaKind }).aspect
-                    : resolved?.aspect || 'landscape';
+              // A pasted embed-code snippet (e.g. Instagram's <blockquote>) is
+              // reduced to its real content URL for display only — the stored
+              // block value is left untouched.
+              const linkUrl = b.kind === 'link' ? extractUrlFromPastedInput(b.url) : '';
+              const linkMedia =
+                b.kind === 'link' ? resolveStoryMedia({ url: linkUrl, mediaKind: b.mediaKind }) : null;
+              const aspect = linkMedia
+                ? linkMedia.aspect
+                : b.mediaKind
+                  ? resolveStoryMedia({ mediaKind: b.mediaKind }).aspect
+                  : resolved?.aspect || 'landscape';
               return {
                 key: b.id,
                 title: (b.heading || '').trim() || resolved?.title || 'View',
@@ -678,12 +700,16 @@ export function BrandProfilePresentation({
                 // rectangle).
                 image:
                   b.kind === 'link'
-                    ? resolveCreatorThumbnail(b.url, b.thumbnail) || undefined
+                    ? resolveCreatorThumbnail(linkUrl, b.thumbnail) || undefined
                     : resolved?.image,
-                kindLabel: b.kind === 'link' ? 'Link' : resolved?.kind || 'Content',
+                kindLabel: linkMedia ? STORY_LINK_LABEL[linkMedia.kind] : resolved?.kind || 'Content',
                 caption: b.kind === 'link' ? b.body : '',
-                href: b.kind === 'link' ? b.url : resolved?.href,
+                href: b.kind === 'link' ? linkUrl : resolved?.href,
                 ratio: STORY_ASPECT_RATIO[aspect],
+                video:
+                  linkMedia && linkMedia.kind !== 'other'
+                    ? { url: linkUrl, thumbnail: (b.thumbnail || '').trim() }
+                    : undefined,
               };
             });
             const pinnedCards: StoryCard[] = pinnedStoryIds
@@ -774,7 +800,9 @@ export function BrandProfilePresentation({
                               : {}),
                           }}
                         >
-                          {c.image ? (
+                          {c.video ? (
+                            <CreatorReviewThumbnailPreview videoUrl={c.video.url} thumbnail={c.video.thumbnail} />
+                          ) : c.image ? (
                             <img src={c.image} alt="" className="w-full h-full object-cover" />
                           ) : (
                             /* Neutral Choosify placeholder — never a blank grey block */
