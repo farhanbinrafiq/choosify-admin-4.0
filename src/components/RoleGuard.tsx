@@ -4,8 +4,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { useRbac } from '../contexts/RbacContext';
 import { useEntitlements } from '../contexts/EntitlementsContext';
 import { allowedPageKeysForRole, pathToPageKey } from '../cms-mirror/nav';
-import { isEntitlementControlledPageKey, type PartnerRole } from '../../shared/entitlements/registry';
+import {
+  featuresForPageKey,
+  isEntitlementControlledPageKey,
+  type PartnerRole,
+} from '../../shared/entitlements/registry';
 import { isSuperAdminOnlyPath } from '../lib/rbac';
+import { AdminWorkspaceLayout } from './Layout/AdminWorkspaceLayout';
+import { FeatureUnavailable } from './FeatureUnavailable';
 
 /**
  * Gate /admin/* by RBAC matrix, but never block pages that the CMS-mirror
@@ -18,7 +24,7 @@ export const RoleGuard: React.FC<{ children: React.ReactNode }> = ({ children })
   const location = useLocation();
   const { profile } = useAuth();
   const { canAccessPath } = useRbac();
-  const { filterAllowedPageKeys, status } = useEntitlements();
+  const { filterAllowedPageKeys, status, refresh } = useEntitlements();
 
   if (!location.pathname.startsWith('/admin')) {
     return <>{children}</>;
@@ -36,8 +42,30 @@ export const RoleGuard: React.FC<{ children: React.ReactNode }> = ({ children })
   ) {
     return null;
   }
-  const mirrorKeys = filterAllowedPageKeys(allowedPageKeysForRole(profile?.role));
+  const roleKeys = allowedPageKeysForRole(profile?.role);
+  const mirrorKeys = filterAllowedPageKeys(roleKeys);
   const allowedByMirror = !mirrorKeys || mirrorKeys.includes(pageKey);
+
+  // The role may open this page but a Feature Access entitlement removed it:
+  // explain that instead of silently bouncing to the dashboard. Genuinely
+  // unauthorized roles still redirect below.
+  if (
+    partnerRole &&
+    roleKeys?.includes(pageKey) &&
+    isEntitlementControlledPageKey(partnerRole, pageKey) &&
+    mirrorKeys &&
+    !mirrorKeys.includes(pageKey)
+  ) {
+    return (
+      <AdminWorkspaceLayout pageTitle="Feature unavailable">
+        <FeatureUnavailable
+          features={featuresForPageKey(partnerRole, pageKey)}
+          verificationFailed={status === 'failed'}
+          onRetry={() => void refresh()}
+        />
+      </AdminWorkspaceLayout>
+    );
+  }
 
   // Super-Admin-only routes (Storefront Curation): redirect every other role,
   // including admin, whose mirror allowlist is otherwise "all pages".

@@ -4,6 +4,7 @@
  */
 
 import { getAuthToken } from '../lib/commerceOrderAdapter';
+import { reportFeatureEntitlementDenied } from './authRefresh';
 
 const base = '/api/v1';
 
@@ -24,6 +25,7 @@ async function authJson<T>(path: string, init?: RequestInit): Promise<T> {
     error?: string;
   };
   if (!res.ok || body.success === false) {
+    reportFeatureEntitlementDenied(res.status, JSON.stringify(body));
     throw new Error(body.error || `Messaging request failed (${res.status})`);
   }
   return body.data as T;

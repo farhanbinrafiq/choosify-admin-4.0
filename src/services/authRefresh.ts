@@ -41,3 +41,51 @@ export async function refreshAccessToken(): Promise<string | null> {
     return null;
   }
 }
+
+/**
+ * Window event fired when any API answers 403 FEATURE_ENTITLEMENT_DENIED.
+ * EntitlementsContext listens and refetches /entitlements/me so the UI can show
+ * the FeatureUnavailable state instead of silently redirecting.
+ */
+export const FEATURE_ENTITLEMENT_DENIED_EVENT = 'choosify:feature-entitlement-denied';
+
+export type FeatureEntitlementDeniedDetail = { featureKey?: string };
+
+export function reportFeatureEntitlementDenied(status: number, rawBody: string): void {
+  if (status !== 403 || !rawBody || typeof window === 'undefined') return;
+  try {
+    const parsed = JSON.parse(rawBody) as { code?: string; featureKey?: string };
+    if (parsed.code !== 'FEATURE_ENTITLEMENT_DENIED') return;
+    window.dispatchEvent(
+      new CustomEvent<FeatureEntitlementDeniedDetail>(FEATURE_ENTITLEMENT_DENIED_EVENT, {
+        detail: { featureKey: parsed.featureKey },
+      }),
+    );
+  } catch {
+    // Not JSON — not an entitlement denial.
+  }
+}
+
+/**
+ * fetch() with the stored access token and one silent refresh-and-retry on 401.
+ * For callers that need the raw Response (status + body) rather than a
+ * service-module request<T>() helper.
+ */
+export async function authedFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const withToken = (token: string | null): RequestInit => {
+    const headers = new Headers(init.headers);
+    if (init.body !== undefined && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    return { ...init, headers };
+  };
+  const token = getStoredAccessToken();
+  let response = await fetch(url, withToken(token));
+  if (response.status === 401 && token) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) response = await fetch(url, withToken(refreshed));
+  }
+  if (response.status === 403) {
+    reportFeatureEntitlementDenied(403, await response.clone().text().catch(() => ''));
+  }
+  return response;
+}

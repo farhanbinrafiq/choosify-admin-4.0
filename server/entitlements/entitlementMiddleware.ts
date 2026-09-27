@@ -42,7 +42,28 @@ export async function requirePartnerEntitlement(
       // Fall through to entitlement check.
     }
   }
-  const check = await isApiPathEntitled({ role, userId, path, method: req.method });
+  // Express 4 does not catch rejected promises from async middleware: an
+  // uncaught DB error here used to become an unhandled rejection and terminate
+  // the whole process. Fail closed for this request only.
+  let check: Awaited<ReturnType<typeof isApiPathEntitled>>;
+  try {
+    check = await isApiPathEntitled({ role, userId, path, method: req.method });
+  } catch (error) {
+    console.error('[Entitlements] Entitlement check failed:', {
+      method: req.method,
+      path: pathWithoutQuery,
+      role,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    if (!res.headersSent) {
+      res.status(503).json({
+        success: false,
+        error: 'Feature access could not be verified right now. Please try again shortly.',
+        code: 'ENTITLEMENT_CHECK_UNAVAILABLE',
+      });
+    }
+    return;
+  }
   if (check.ok) {
     next();
     return;

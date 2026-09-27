@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+import { Payouts } from './Payouts';
 import { Loader2, AlertTriangle, ShieldCheck, Wallet, BookOpen, ExternalLink, Info } from 'lucide-react';
 import { AdminWorkspaceLayout } from '../../components/Layout/AdminWorkspaceLayout';
 import { DashShell, ContentCard, EmptyState } from './dashboards/primitives';
@@ -110,7 +112,28 @@ function Pager({ page, pageSize, total, onChange }: { page: number; pageSize: nu
   );
 }
 
+/**
+ * /admin/analytics is the partner sidebar's "Finance & Payouts" target, but this
+ * page reads admin-only /admin/finance/* APIs (partners got 403s). Sellers and
+ * Creators see their own earnings/payout surface (the same Payouts page) rendered
+ * here in place — the URL stays /admin/analytics, so the sidebar highlights
+ * "Finance & Payouts" rather than "Payouts / Withdrawals". Admin behavior is
+ * unchanged and partners never call admin Finance APIs.
+ */
 export default function FinancePage() {
+  const { profile } = useAuth();
+  const role = String(profile?.role || '').toLowerCase();
+  if (role === 'seller' || role === 'verified_seller' || role === 'creator') {
+    return (
+      <AdminWorkspaceLayout pageTitle="Finance & Payouts" pageSubtitle="Your earnings, balances and payout summary">
+        <Payouts />
+      </AdminWorkspaceLayout>
+    );
+  }
+  return <AdminFinancePage />;
+}
+
+function AdminFinancePage() {
   const [tab, setTab] = useState<FinanceTab>('overview');
   const [preset, setPreset] = useState<DatePreset>('30d');
   const [customFrom, setCustomFrom] = useState(toDateInputValue(new Date(Date.now() - 29 * 86_400_000)));

@@ -8,6 +8,7 @@ import { moderationApi, type ReportItem } from '../../services/moderationApi';
 import type { CatalogBrand } from '../../types/catalog';
 import { DataTable, DataTableColumn } from '../../components/ui/DataTable';
 import { Avatar } from '../../components/shared/Avatar';
+import { PartnerApplicationReviewActions, PartnerApprovedNotice } from '../../components/admin/PartnerApplicationReviewActions';
 
 /**
  * Super Admin Seller Management — real React replacement for the legacy
@@ -18,7 +19,8 @@ import { Avatar } from '../../components/shared/Avatar';
  *    grouped by seller. There is no dedicated "list sellers" endpoint.
  *  - Seller identity (CF ID / name / email): `GET /auth/users/directory` (admin-only,
  *    bulk -- avoids one request per seller).
- *  - Requests: `GET /operations/partner-applications?status=pending` (applicantType==='seller').
+ *  - Requests: `GET /operations/partner-applications?status=pending` (applicantType==='seller'),
+ *    reviewed here via POST .../:id/approve|reject (moved out of Feature Access).
  *  - Ownership Claims: `GET /operations/verifications?entityType=brand&status=pending`.
  *  - Verified: `CatalogBrand.verifiedStatus` / `claimStatus==='verified'`.
  *  - Active Sellers: verified && brand.status==='live'-equivalent && marketplaceAccess && !suspended
@@ -78,6 +80,7 @@ export default function SellerManagement() {
   const [brands, setBrands] = useState<CatalogBrand[]>([]);
   const [users, setUsers] = useState<UserDirectoryEntry[]>([]);
   const [requests, setRequests] = useState<OpsPartnerApplication[]>([]);
+  const [justApproved, setJustApproved] = useState<OpsPartnerApplication | null>(null);
   const [claims, setClaims] = useState<OpsVerification[]>([]);
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -255,6 +258,13 @@ export default function SellerManagement() {
   const isRequestsView = filter === 'requests';
   const isClaimsView = filter === 'claims';
 
+  // Reviewed applications leave the pending list; approval shows the separate
+  // Marketplace Access next step.
+  const onApplicationReviewed = (app: OpsPartnerApplication, action: 'approve' | 'reject') => {
+    setRequests((prev) => prev.filter((r) => r.id !== app.id));
+    setJustApproved(action === 'approve' ? app : null);
+  };
+
   const columns: DataTableColumn<SellerRow>[] = [
     {
       key: 'seller',
@@ -423,6 +433,8 @@ export default function SellerManagement() {
         </div>
       )}
 
+      {justApproved && <PartnerApprovedNotice application={justApproved} onDismiss={() => setJustApproved(null)} />}
+
       {isRequestsView ? (
         <div className="aws-page-card overflow-hidden">
           {requests.length === 0 ? (
@@ -442,22 +454,25 @@ export default function SellerManagement() {
                     </span>
                   </>
                 );
-                return targetSellerId ? (
-                  <button
-                    key={r.id}
-                    type="button"
-                    onClick={() => navigate(`/admin/seller-profile?sellerId=${encodeURIComponent(targetSellerId)}`)}
-                    className="w-full p-4 flex items-center justify-between gap-3 text-left hover:bg-app-accent/5 transition-colors"
-                  >
-                    {content}
-                  </button>
-                ) : (
-                  <div
-                    key={r.id}
-                    className="p-4 flex items-center justify-between gap-3"
-                    title="No provisioned seller account yet — not linked to a profile"
-                  >
-                    {content}
+                return (
+                  <div key={r.id} data-testid="partner-application-row" className="p-4 flex items-center justify-between gap-3">
+                    {targetSellerId ? (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/admin/seller-profile?sellerId=${encodeURIComponent(targetSellerId)}`)}
+                        className="flex-1 flex items-center justify-between gap-3 text-left hover:opacity-80 transition-opacity"
+                      >
+                        {content}
+                      </button>
+                    ) : (
+                      <div
+                        className="flex-1 flex items-center justify-between gap-3"
+                        title="No provisioned seller account yet — not linked to a profile"
+                      >
+                        {content}
+                      </div>
+                    )}
+                    <PartnerApplicationReviewActions application={r} onReviewed={onApplicationReviewed} />
                   </div>
                 );
               })}

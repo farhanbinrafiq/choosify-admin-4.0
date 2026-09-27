@@ -6,6 +6,9 @@ import {
   defaultRoleEntitlements,
   featureByKey,
   featureKeysForRole,
+  featuresForApiRequest,
+  isCoreFeature,
+  isSwitchableFeature,
   pageKeysDisabledByFeatures,
   type PartnerFeatureKey,
   type PartnerRole,
@@ -51,7 +54,8 @@ async function ensureRoleDefaultsSeeded(role: PartnerRole): Promise<void> {
 }
 
 /**
- * Precedence: account override -> plan entitlement -> role default.
+ * Precedence: unknown/deprecated -> role eligibility -> core lock -> account override
+ * -> plan entitlement (plan-controlled keys only) -> role default.
  * Known partner features without an explicit role-default record are DENIED (fail-closed).
  * Sprint 10 durability migration: reads directly from PostgreSQL on every call (no
  * per-process cache), so a second backend instance always sees the same state.
@@ -66,7 +70,11 @@ export async function resolveFeatureEnabled(params: {
   if (!partnerRole) return true; // Admin / staff / consumer — not gated by partner entitlements
 
   const feature = featureByKey(params.featureKey);
-  if (!feature || !feature.roles.includes(partnerRole)) return true;
+  // Unknown and deprecated keys gate nothing (deprecated rows are history only).
+  if (!feature || feature.deprecated || !feature.roles.includes(partnerRole)) return true;
+  // Core lock: no role, plan or account state can remove a core capability
+  // (notifications, financial visibility). No DB read needed.
+  if (isCoreFeature(feature)) return true;
 
   await ensureRoleDefaultsSeeded(partnerRole);
 
@@ -85,14 +93,16 @@ export async function resolveFeatureEnabled(params: {
   // grandfathering). feature_entitlements(scope='plan') rows are no longer
   // read here at all; 'plan' remains a valid scope value in the enum for any
   // legacy rows, simply unconsumed by this resolver going forward.
+  // Phase 1: only plan-controlled (premium) keys honor plan rows, so a plan — or
+  // a plan lapsing — can never remove an operational capability.
   let planVersionId: string | null = null;
-  if (params.planId?.trim()) {
+  if (feature.planControlled && params.planId?.trim()) {
     // Explicit override (no current caller passes this) resolves to that
     // Plan's CURRENT PUBLISHED version rather than a specific subscriber's
     // purchased version — used only for "would this Plan grant X" previews.
     const planRows = await db.select().from(plans).where(eq(plans.id, params.planId.trim())).limit(1);
     planVersionId = planRows[0]?.currentPublishedVersionId ?? null;
-  } else if (uid) {
+  } else if (feature.planControlled && uid) {
     const workspace = await workspaceService.resolveWorkspaceForUser(uid, params.role);
     if (workspace) {
       const resolved = await workspaceService.getResolvedOpenSubscription(workspace.id);
@@ -122,18 +132,9 @@ export async function isApiPathEntitled(params: {
   const partnerRole = normalizePartnerRole(params.role);
   if (!partnerRole) return { ok: true };
 
-  const path = params.path.split('?')[0] || '';
-  const method = String(params.method || 'GET').toUpperCase();
-  for (const feature of PARTNER_FEATURES) {
-    if (!feature.roles.includes(partnerRole)) continue;
-    if (!feature.apiPrefixes.length) continue;
-    if (feature.apiMethods?.length && !feature.apiMethods.includes(method as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE')) {
-      continue;
-    }
-    const hit = feature.apiPrefixes.some(
-      (prefix) => path === prefix || path.startsWith(prefix + '/') || path.startsWith(prefix),
-    );
-    if (!hit) continue;
+  // Segment-boundary prefix + ':param' pattern matching (shared/entitlements/registry).
+  for (const feature of featuresForApiRequest(partnerRole, params.path, params.method)) {
+    if (isCoreFeature(feature)) continue;
     const enabled = await resolveFeatureEnabled({
       role: partnerRole,
       featureKey: feature.key,
@@ -195,6 +196,9 @@ export const entitlementStore = {
     if (!featureKeysForRole(role).includes(featureKey)) {
       throw new Error(`Feature ${featureKey} is not available for role ${role}`);
     }
+    if (!isSwitchableFeature(featureByKey(featureKey))) {
+      throw new Error(`Feature ${featureKey} is core or reserved and cannot be switched`);
+    }
     await ensureRoleDefaultsSeeded(role);
     await db
       .insert(featureEntitlements)
@@ -211,6 +215,7 @@ export const entitlementStore = {
     await ensureRoleDefaultsSeeded(role);
     for (const [k, v] of Object.entries(map)) {
       if (!allowed.has(k as PartnerFeatureKey)) continue;
+      if (!isSwitchableFeature(featureByKey(k))) continue;
       await db
         .insert(featureEntitlements)
         .values({ scope: 'role', scopeKey: role, featureKey: k, enabled: Boolean(v) })

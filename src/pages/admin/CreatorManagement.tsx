@@ -8,6 +8,7 @@ import { moderationApi, type ReportItem } from '../../services/moderationApi';
 import type { CatalogCreator } from '../../types/catalog';
 import { DataTable, DataTableColumn } from '../../components/ui/DataTable';
 import { Avatar } from '../../components/shared/Avatar';
+import { PartnerApplicationReviewActions, PartnerApprovedNotice } from '../../components/admin/PartnerApplicationReviewActions';
 
 /**
  * Super Admin Creator Management — real React replacement for the legacy
@@ -16,7 +17,8 @@ import { Avatar } from '../../components/shared/Avatar';
  * Canonical data sources (see audit; no fabricated state):
  *  - Creators: `GET /catalog/creators` (CatalogCreator).
  *  - Identity (CF ID / email): `GET /auth/users/directory`, matched on `CatalogCreator.userId`.
- *  - Requests: `GET /operations/partner-applications?status=pending` (applicantType==='creator').
+ *  - Requests: `GET /operations/partner-applications?status=pending` (applicantType==='creator'),
+ *    reviewed here via POST .../:id/approve|reject (moved out of Feature Access).
  *  - Ownership Claims: `GET /operations/verifications?entityType=creator&status=pending`.
  *  - Pending Review / Active Creators / Inactive: `CatalogCreator.status` --
  *    'draft' -> Pending Review, 'live' -> Active Creators, 'archived' -> Inactive.
@@ -65,6 +67,7 @@ export default function CreatorManagement() {
   const [creators, setCreators] = useState<CatalogCreator[]>([]);
   const [users, setUsers] = useState<UserDirectoryEntry[]>([]);
   const [requests, setRequests] = useState<OpsPartnerApplication[]>([]);
+  const [justApproved, setJustApproved] = useState<OpsPartnerApplication | null>(null);
   const [claims, setClaims] = useState<OpsVerification[]>([]);
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -193,6 +196,13 @@ export default function CreatorManagement() {
 
   const isRequestsView = filter === 'requests';
   const isClaimsView = filter === 'claims';
+
+  // Reviewed applications leave the pending list; approval shows the separate
+  // Marketplace Access next step.
+  const onApplicationReviewed = (app: OpsPartnerApplication, action: 'approve' | 'reject') => {
+    setRequests((prev) => prev.filter((r) => r.id !== app.id));
+    setJustApproved(action === 'approve' ? app : null);
+  };
 
   const statusLabel: Record<CreatorRow['status'], string> = {
     draft: 'Pending Review',
@@ -336,6 +346,8 @@ export default function CreatorManagement() {
         </div>
       )}
 
+      {justApproved && <PartnerApprovedNotice application={justApproved} onDismiss={() => setJustApproved(null)} />}
+
       {isRequestsView ? (
         <div className="aws-page-card overflow-hidden">
           {requests.length === 0 ? (
@@ -355,22 +367,25 @@ export default function CreatorManagement() {
                     </span>
                   </>
                 );
-                return targetCreatorId ? (
-                  <button
-                    key={r.id}
-                    type="button"
-                    onClick={() => navigate(`/admin/creator-review?creatorId=${encodeURIComponent(targetCreatorId)}`)}
-                    className="w-full p-4 flex items-center justify-between gap-3 text-left hover:bg-app-accent/5 transition-colors"
-                  >
-                    {content}
-                  </button>
-                ) : (
-                  <div
-                    key={r.id}
-                    className="p-4 flex items-center justify-between gap-3"
-                    title="No provisioned creator record yet — not linked to a profile"
-                  >
-                    {content}
+                return (
+                  <div key={r.id} data-testid="partner-application-row" className="p-4 flex items-center justify-between gap-3">
+                    {targetCreatorId ? (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/admin/creator-review?creatorId=${encodeURIComponent(targetCreatorId)}`)}
+                        className="flex-1 flex items-center justify-between gap-3 text-left hover:opacity-80 transition-opacity"
+                      >
+                        {content}
+                      </button>
+                    ) : (
+                      <div
+                        className="flex-1 flex items-center justify-between gap-3"
+                        title="No provisioned creator record yet — not linked to a profile"
+                      >
+                        {content}
+                      </div>
+                    )}
+                    <PartnerApplicationReviewActions application={r} onReviewed={onApplicationReviewed} />
                   </div>
                 );
               })}

@@ -2542,8 +2542,10 @@ catalogRouter.patch('/catalog/creators/:id', ...requireCreatorStudioWriteMw, asy
  * see guideStudioAuth). Guide authoring is a creator/editorial capability, not a
  * seller marketplace one, so the seller Marketplace Access gate does not apply
  * here; `requireGuideStudioWrite` is the complete authorization boundary.
+ * `requirePartnerEntitlement` adds the guideManagement entitlement check for
+ * sellers/creators (staff are never entitlement-gated).
  */
-const requireGuideStudioWriteMw = [authenticateRequest, requireGuideStudioWrite];
+const requireGuideStudioWriteMw = [authenticateRequest, requirePartnerEntitlement, requireGuideStudioWrite];
 
 const userIsGuideStaff = (req: Request): boolean =>
   !!req.userRole && hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions);

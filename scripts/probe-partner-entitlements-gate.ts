@@ -85,41 +85,32 @@ async function main() {
   const password = `GatePass-${stamp}!`;
 
   console.log('=== A0 precedence unit ===');
+  // Phase 1: plan precedence is plan_entitlements via subscription (Sprint 12) and only for
+  // planControlled keys — covered by probe-entitlement-phase1-http.ts. feature_entitlements
+  // scope='plan' rows are not read by the resolver, so they are no longer exercised here.
   {
     const uid = `u_${stamp}`;
-    await setEntitlementRow('role', 'seller', 'cashbooks', true);
-    await setEntitlementRow('plan', 'plan_basic', 'cashbooks', false);
-    await setEntitlementRow('plan', 'plan_pro', 'cashbooks', true);
-    await setEntitlementRow('account', uid, 'cashbooks', false);
-    soft(
-      (await resolveFeatureEnabled({ role: 'seller', featureKey: 'cashbooks', planId: 'plan_basic' })) === false,
-      'role=true plan=false → false',
-    );
-
     await setEntitlementRow('role', 'seller', 'cashbooks', false);
-    await clearEntitlementRow('account', uid, 'cashbooks');
-    soft(
-      (await resolveFeatureEnabled({ role: 'seller', featureKey: 'cashbooks', planId: 'plan_pro' })) === true,
-      'role=false plan=true → true',
-    );
+    soft((await resolveFeatureEnabled({ role: 'seller', featureKey: 'cashbooks' })) === false, 'role=false → false');
 
     await setEntitlementRow('role', 'seller', 'cashbooks', true);
     await setEntitlementRow('account', uid, 'cashbooks', false);
     soft(
-      (await resolveFeatureEnabled({
-        role: 'seller',
-        featureKey: 'cashbooks',
-        planId: 'plan_pro',
-        userId: uid,
-      })) === false,
-      'account=false wins',
+      (await resolveFeatureEnabled({ role: 'seller', featureKey: 'cashbooks', userId: uid })) === false,
+      'account=false wins over role=true',
+    );
+
+    // Core lock: an account row cannot remove a core capability.
+    await setEntitlementRow('account', uid, 'notifications', false);
+    soft(
+      (await resolveFeatureEnabled({ role: 'seller', featureKey: 'notifications', userId: uid })) === true,
+      'core notifications ignores account=false',
     );
 
     // Reset back to catalog default (true) so this probe's writes don't linger for other roles/tests.
     await setEntitlementRow('role', 'seller', 'cashbooks', true);
     await clearEntitlementRow('account', uid, 'cashbooks');
-    await clearEntitlementRow('plan', 'plan_basic', 'cashbooks');
-    await clearEntitlementRow('plan', 'plan_pro', 'cashbooks');
+    await clearEntitlementRow('account', uid, 'notifications');
   }
 
   // Auth-strict budget (~12): 1 privilege apply + 1 pwd apply + 1 dup apply + 1 dup2 + 1 seller + 1 creator
@@ -354,14 +345,18 @@ async function main() {
       token: sellerToken,
     },
     { role: 'creator' as const, feature: 'messaging', path: '/conversations', token: creatorToken },
-    {
-      role: 'creator' as const,
-      feature: 'notifications',
-      path: '/notifications',
-      token: creatorToken,
-      base: 'http://127.0.0.1:3001/api',
-    },
-  ];
+  ] as Array<{ role: 'seller' | 'creator'; feature: string; path: string; token: string; method?: string; base?: string }>;
+  {
+    // Phase 1: notifications is CORE — not switchable, always reachable.
+    const patch = await req('/entitlements/admin/role-defaults/creator/notifications', {
+      method: 'PATCH',
+      token: adminToken,
+      body: { enabled: false },
+    });
+    soft(patch.status === 400 && patch.body.code === 'FEATURE_NOT_SWITCHABLE', `notifications PATCH → ${patch.status} ${patch.body.code}`);
+    const notif = await req('/notifications', { token: creatorToken, base: 'http://127.0.0.1:3001/api' });
+    soft(notif.status === 200, `creator notifications reachable → ${notif.status}`);
+  }
   for (const s of samples) {
     await req(`/entitlements/admin/role-defaults/${s.role}/${s.feature}`, {
       method: 'PATCH',
@@ -433,26 +428,28 @@ async function main() {
   }
 
   console.log('\n=== COVERAGE MATRIX ===');
-  // Honest classification: logistics / advancedAnalytics have nav/route prefixes but
-  // lack sufficiently broad partner API surfaces for three-layer FULL enforcement.
-  const PARTIAL_FEATURES = new Set(['logistics', 'advancedAnalytics']);
+  // Phase 1 classification from catalog metadata (see probe-entitlement-phase1.ts for
+  // route-level coverage): core keys never deny; deprecated keys map nothing; reserved
+  // keys gate no API; page-level premium keys have no dedicated API.
   for (const f of PARTNER_FEATURES) {
-    const hasApi = f.apiPrefixes.length > 0;
-    const cls = PARTIAL_FEATURES.has(f.key)
-      ? 'PARTIAL'
-      : !hasApi
-        ? 'UI/ROUTE-ONLY'
-        : f.apiMethods?.length
-          ? 'FULLY_ENFORCED(mut)'
-          : 'FULLY_ENFORCED';
+    const routes = [...f.apiPrefixes, ...(f.apiPatterns || [])];
+    const cls = f.deprecated
+      ? 'DEPRECATED'
+      : f.tier === 'core'
+        ? 'CORE(never denied)'
+        : f.tier === 'reserved'
+          ? 'RESERVED'
+          : !routes.length
+            ? 'PAGE-LEVEL'
+            : f.apiMethods?.length
+              ? 'ENFORCED(mut)'
+              : 'ENFORCED';
     console.log(
-      `${f.key.padEnd(22)} ${cls.padEnd(18)} pages=${f.pageKeys.join('|') || '-'} api=${f.apiPrefixes.join('|') || '-'}`,
+      `${f.key.padEnd(22)} ${cls.padEnd(18)} pages=${f.pageKeys.join('|') || '-'} api=${routes.join('|') || '-'}`,
     );
   }
-  soft(
-    PARTIAL_FEATURES.has('logistics') && PARTIAL_FEATURES.has('advancedAnalytics'),
-    'logistics + advancedAnalytics remain PARTIAL',
-  );
+  soft(PARTNER_FEATURES.find((f) => f.key === 'advancedAnalytics')?.deprecated, 'advancedAnalytics deprecated');
+  soft(PARTNER_FEATURES.find((f) => f.key === 'logistics')?.tier === 'reserved', 'logistics reserved');
 
   console.log('\nNOTES');
   for (const n of notes) console.log('-', n);

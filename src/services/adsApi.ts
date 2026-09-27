@@ -3,6 +3,7 @@
  */
 
 import type { AdFormatDef, AdPlacementDef, AdPageKey } from '@/shared/ads/placementRegistry';
+import { reportFeatureEntitlementDenied } from './authRefresh';
 import type {
   DealFilterKey,
   DealListingType,
@@ -166,6 +167,7 @@ async function request<T>(path: string, method: string = 'GET', body?: unknown):
   }
 
   if (!response.ok) {
+    reportFeatureEntitlementDenied(response.status, raw);
     throw new Error(parsed.error || parseError(raw, response.status));
   }
   return (parsed.data !== undefined ? parsed.data : (parsed as unknown as T)) as T;

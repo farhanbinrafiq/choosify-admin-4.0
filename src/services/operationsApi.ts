@@ -1,4 +1,4 @@
-import { getStoredAccessToken, refreshAccessToken } from './authRefresh';
+import { getStoredAccessToken, refreshAccessToken, reportFeatureEntitlementDenied } from './authRefresh';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || '/api/v1';
 
@@ -49,6 +49,7 @@ async function request<T>(path: string, method: HttpMethod = 'GET', body?: unkno
 
   if (!response.ok) {
     const rawError = await response.text();
+    reportFeatureEntitlementDenied(response.status, rawError);
     throw new Error(parseErrorMessage(rawError, response.status));
   }
   return response.json() as Promise<T>;
@@ -1202,6 +1203,26 @@ export const operationsApi = {
       `/operations/partner-applications${suffix}`,
     );
     return result.applications;
+  },
+
+  /** POST /operations/partner-applications/:id/approve (requireAdmin) — identity approval only; Marketplace Access is granted separately. */
+  approvePartnerApplication: async (id: string, note?: string) => {
+    const result = await request<{ success: boolean; application: OpsPartnerApplication }>(
+      `/operations/partner-applications/${encodeURIComponent(id)}/approve`,
+      'POST',
+      { note },
+    );
+    return result.application;
+  },
+
+  /** POST /operations/partner-applications/:id/reject (requireAdmin). */
+  rejectPartnerApplication: async (id: string, note?: string) => {
+    const result = await request<{ success: boolean; application: OpsPartnerApplication }>(
+      `/operations/partner-applications/${encodeURIComponent(id)}/reject`,
+      'POST',
+      { note },
+    );
+    return result.application;
   },
   getVerification: async (id: string) => {
     const result = await request<{ data: unknown }>(`/operations/verifications/${encodeURIComponent(id)}`);

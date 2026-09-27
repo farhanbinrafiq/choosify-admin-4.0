@@ -16,7 +16,7 @@ import type {
   HomepageConfig,
   SiteConfig,
 } from '../types/catalog';
-import { getStoredAccessToken, refreshAccessToken } from './authRefresh';
+import { getStoredAccessToken, refreshAccessToken, reportFeatureEntitlementDenied } from './authRefresh';
 
 export type DraftEntityType = 'brand' | 'product' | 'creator' | 'guide';
 
@@ -110,6 +110,7 @@ async function request<T>(path: string, method: HttpMethod = 'GET', body?: unkno
 
   if (!response.ok) {
     const rawError = await response.text();
+    reportFeatureEntitlementDenied(response.status, rawError);
     throw new Error(parseErrorMessage(rawError, response.status));
   }
 

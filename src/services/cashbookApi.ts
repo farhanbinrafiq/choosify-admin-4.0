@@ -14,6 +14,8 @@
  *   seller's books) and `getCashbookDetail(bookId, ownerUserId)` — no mutation.
  */
 
+import { reportFeatureEntitlementDenied } from './authRefresh';
+
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || '/api/v1';
 const AUTH_TOKEN_KEY = 'choosify_auth_token';
 
@@ -54,6 +56,7 @@ async function request<T>(
 
   if (!response.ok) {
     const rawError = await response.text();
+    reportFeatureEntitlementDenied(response.status, rawError);
     throw new Error(parseErrorMessage(rawError, response.status));
   }
 

@@ -75,7 +75,8 @@ async function main() {
   const seller = await login(sellerEmail, 'RoleTest!2026');
 
   // A feature genuinely gated for sellers (per shared/entitlements/registry.ts).
-  const FEATURE_KEY = 'advancedAnalytics';
+  // Phase 1: advancedAnalytics is deprecated (re-keyed to logisticsAnalytics).
+  const FEATURE_KEY = 'logisticsAnalytics';
 
   // Confirm role default is OFF to start (fail-closed baseline before any plan).
   const meBefore = await fetch(`${V1}/entitlements/me`, { headers: { Authorization: `Bearer ${seller.token}` } });

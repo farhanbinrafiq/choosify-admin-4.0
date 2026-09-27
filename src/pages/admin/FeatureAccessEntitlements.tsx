@@ -1,15 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { AdminWorkspaceLayout } from '../../components/Layout/AdminWorkspaceLayout';
+import { authedFetch } from '../../services/authRefresh';
 import {
-  PARTNER_FEATURES,
+  PARTNER_FEATURE_GROUPS,
+  isSwitchableFeature,
   type PartnerFeatureDef,
+  type PartnerFeatureGroup,
   type PartnerFeatureKey,
   type PartnerRole,
 } from '../../../shared/entitlements/registry';
 
-const AUTH_TOKEN_KEY = 'choosify_auth_token';
 const API_BASE = '/api/v1';
 
 type RoleScope = 'seller' | 'creator' | 'consumer';
@@ -19,83 +21,20 @@ type RoleDefaults = {
   creator: Record<string, boolean>;
 };
 
-type PartnerApplicationRow = {
-  id: string;
-  applicantType: 'seller' | 'creator';
-  status: 'pending' | 'approved' | 'rejected';
-  email: string;
-  displayName: string;
-  businessOrChannelName: string;
-  category: string;
-  city: string;
-  niche?: string;
-  createdAt: string;
-  provisionedUserId?: string;
-};
-
-type FeatureGroupDef = {
-  title: string;
-  keys: PartnerFeatureKey[];
-};
-
-/**
- * Visual groups from standalone design architecture.
- * Keys are real registry only — never design-file mock keys.
- */
-const SELLER_GROUPS: FeatureGroupDef[] = [
-  {
-    title: 'STOREFRONT & CATALOG',
-    keys: ['products', 'brandStudio', 'reviews'],
-  },
-  {
-    title: 'FINANCE & PAYOUTS',
-    keys: ['cashbooks', 'myEarnings', 'payouts', 'feesAdjustments', 'analytics'],
-  },
-  {
-    title: 'MARKETING & MESSAGING',
-    keys: ['messaging', 'metaMessaging', 'adsDeals', 'guideManagement', 'promoCodes'],
-  },
-  {
-    title: 'OPERATIONS & INSIGHTS',
-    keys: ['returnsRefunds', 'logistics', 'advancedAnalytics', 'customerInsights', 'notifications'],
-  },
-];
-
-const CREATOR_GROUPS: FeatureGroupDef[] = [
-  {
-    title: 'CONTENT & PUBLISHING',
-    keys: ['guideManagement'],
-  },
-  {
-    title: 'MONETIZATION',
-    keys: ['myEarnings', 'payouts', 'feesAdjustments', 'adsDeals'],
-  },
-  {
-    title: 'COMMUNICATION & INSIGHTS',
-    keys: [
-      'messaging',
-      'metaMessaging',
-      'analytics',
-      'customerInsights',
-      'reviews',
-      'notifications',
-      'cashbooks',
-    ],
-  },
-];
+type GroupDef = { key: PartnerFeatureGroup; title: string };
 
 const ROLE_HEADINGS: Record<RoleScope, [string, string]> = {
   seller: [
     'Seller Feature Access',
-    'Enable or disable platform features and entitlements per Seller account tier.',
+    'Switch operational and premium Seller capabilities. Core capabilities are always on.',
   ],
   creator: [
     'Creator Feature Access',
-    'Enable or disable platform features and entitlements per Creator account tier.',
+    'Switch operational and premium Creator capabilities. Core capabilities are always on.',
   ],
   consumer: [
     'Consumer Feature Access',
-    'Enable or disable platform features made available to shopper accounts.',
+    'Consumer (shopper) capabilities are core and are not controlled through partner entitlements.',
   ],
 };
 
@@ -118,10 +57,11 @@ const FEATURE_EMOJI: Partial<Record<PartnerFeatureKey, string>> = {
   payouts: '⚡',
   feesAdjustments: '🧾',
   analytics: '📊',
-  advancedAnalytics: '📈',
+  logisticsAnalytics: '📈',
   messaging: '💬',
   metaMessaging: '💬',
   adsDeals: '📣',
+  promotionRequests: '🚀',
   guideManagement: '🎬',
   promoCodes: '🎟',
   returnsRefunds: '↩',
@@ -130,40 +70,16 @@ const FEATURE_EMOJI: Partial<Record<PartnerFeatureKey, string>> = {
   notifications: '🔔',
 };
 
-function authHeaders(): HeadersInit {
-  const token = localStorage.getItem(AUTH_TOKEN_KEY);
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
-function catalogByKey(catalog: PartnerFeatureDef[]): Map<string, PartnerFeatureDef> {
-  return new Map(catalog.map((f) => [f.key, f]));
-}
-
+/** Groups come from catalog metadata (feature.group), ordered by the catalog group list. */
 function buildGroups(
   role: PartnerRole,
   catalog: PartnerFeatureDef[],
+  groupDefs: GroupDef[],
 ): { title: string; items: PartnerFeatureDef[] }[] {
-  const byKey = catalogByKey(catalog.filter((f) => f.roles.includes(role)));
-  const defs = role === 'seller' ? SELLER_GROUPS : CREATOR_GROUPS;
-  const used = new Set<string>();
-  const groups: { title: string; items: PartnerFeatureDef[] }[] = [];
-
-  for (const g of defs) {
-    const items = g.keys
-      .map((k) => byKey.get(k))
-      .filter((f): f is PartnerFeatureDef => Boolean(f));
-    for (const it of items) used.add(it.key);
-    if (items.length > 0) groups.push({ title: g.title, items });
-  }
-
-  const leftover = [...byKey.values()].filter((f) => !used.has(f.key));
-  if (leftover.length > 0) {
-    groups.push({ title: 'OTHER FEATURES', items: leftover });
-  }
-  return groups;
+  const active = catalog.filter((f) => f.roles.includes(role) && !f.deprecated);
+  return groupDefs
+    .map((g) => ({ title: g.title, items: active.filter((f) => f.group === g.key) }))
+    .filter((g) => g.items.length > 0);
 }
 
 /** Design-file toggle: 38×22 / radius 11 / knobs 16 @ top:3 left|right:3 */
@@ -171,16 +87,19 @@ function DesignToggle({
   checked,
   onChange,
   disabled,
+  label,
 }: {
   checked: boolean;
   onChange: () => void;
   disabled?: boolean;
+  label: string;
 }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      aria-label={label}
       disabled={disabled}
       onClick={onChange}
       style={{
@@ -211,20 +130,21 @@ function DesignToggle({
   );
 }
 
-function PlanRequiredBadge() {
+function TierBadge({ text, color, background }: { text: string; color: string; background: string }) {
   return (
     <div
       style={{
         fontSize: 10,
         fontWeight: 800,
-        color: '#B45309',
-        background: '#FEF3C7',
+        color,
+        background,
         padding: '5px 10px',
         borderRadius: 6,
         flexShrink: 0,
+        whiteSpace: 'nowrap',
       }}
     >
-      PLAN REQUIRED
+      {text}
     </div>
   );
 }
@@ -233,25 +153,25 @@ function FeatureRow({
   feature,
   enabled,
   busy,
-  planRequired,
   onToggle,
 }: {
   feature: PartnerFeatureDef;
   enabled: boolean;
   busy: boolean;
-  planRequired: boolean;
   onToggle: () => void;
 }) {
   const emoji = FEATURE_EMOJI[feature.key] || '⚙';
 
   return (
     <div
+      data-testid={`feature-row-${feature.key}`}
       style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
         padding: '18px 0',
         borderBottom: '1px solid #F1F3F5',
+        gap: 12,
       }}
     >
       <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', minWidth: 0 }}>
@@ -287,39 +207,16 @@ function FeatureRow({
           </div>
         </div>
       </div>
-      {planRequired ? (
-        <PlanRequiredBadge />
-      ) : (
-        <DesignToggle checked={enabled} disabled={busy} onChange={onToggle} />
-      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+        {feature.tier === 'core' && <TierBadge text="CORE · ALWAYS ON" color="#065F46" background="#D1FAE5" />}
+        {feature.tier === 'reserved' && <TierBadge text="NOT YET AVAILABLE" color="#4B5563" background="#F3F4F6" />}
+        {feature.planControlled && <TierBadge text="PLAN-CONTROLLED" color="#B45309" background="#FEF3C7" />}
+        {isSwitchableFeature(feature) && (
+          <DesignToggle checked={enabled} disabled={busy} onChange={onToggle} label={`${feature.label} for role`} />
+        )}
+      </div>
     </div>
   );
-}
-
-function isPlanRequired(feature: PartnerFeatureDef): boolean {
-  // Future-ready: honor real plan/locked metadata when the registry/API provides it.
-  // Do not invent premium locks in the UI.
-  const meta = feature as PartnerFeatureDef & {
-    planRequired?: boolean;
-    locked?: boolean;
-    planGated?: boolean;
-  };
-  return Boolean(meta.planRequired || meta.locked || meta.planGated);
-}
-
-function flattenRoleFeatures(
-  groups: { title: string; items: PartnerFeatureDef[] }[],
-): PartnerFeatureDef[] {
-  const seen = new Set<string>();
-  const out: PartnerFeatureDef[] = [];
-  for (const g of groups) {
-    for (const f of g.items) {
-      if (seen.has(f.key)) continue;
-      seen.add(f.key);
-      out.push(f);
-    }
-  }
-  return out;
 }
 
 type RoleSummary = {
@@ -340,10 +237,13 @@ function computeRoleSummary(
   const turnedOffFeatures: PartnerFeatureDef[] = [];
 
   for (const f of features) {
-    if (isPlanRequired(f)) {
-      planLocked += 1;
+    // Plan Locked = catalog planControlled keys (a Plan may grant/withhold them).
+    if (f.planControlled) planLocked += 1;
+    if (f.tier === 'core') {
+      enabled += 1;
       continue;
     }
+    if (!isSwitchableFeature(f)) continue;
     const on = defaults?.[f.key] !== false;
     if (on) enabled += 1;
     else {
@@ -399,6 +299,7 @@ function SummaryStatCard({
         ■ {label}
       </div>
       <div
+        data-testid={`summary-${label.toLowerCase().replace(/\s+/g, '-')}`}
         style={{
           fontSize: 22,
           fontWeight: 800,
@@ -470,7 +371,7 @@ function RoleAnalyticsSummary({ summary }: { summary: RoleSummary }) {
         <SummaryStatCard
           label="Plan Locked"
           value={planLocked}
-          sub={`of ${total}`}
+          sub={`of ${total} plan-controlled`}
           color="#F59E0B"
           barPct={pct(planLocked)}
         />
@@ -498,7 +399,7 @@ function RoleAnalyticsSummary({ summary }: { summary: RoleSummary }) {
         </div>
         {turnedOffFeatures.length === 0 ? (
           <div style={{ fontSize: 12, fontWeight: 600, color: '#9A3412' }}>
-            All available features are currently enabled.
+            All switchable features are currently enabled.
           </div>
         ) : (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -531,10 +432,39 @@ function RoleAnalyticsSummary({ summary }: { summary: RoleSummary }) {
   );
 }
 
+function describeLoadFailure(status: number, body: { error?: string; code?: string }): string {
+  if (status === 401) return 'Your session has expired. Sign in again to manage Feature Access.';
+  if (status === 403) return 'You do not have permission to manage Feature Access.';
+  if (status === 503 || body.code === 'ENTITLEMENT_CHECK_UNAVAILABLE') {
+    return 'Feature Access is temporarily unavailable. Please retry shortly.';
+  }
+  return body.error || `Failed to load Feature Access (${status}).`;
+}
+
+const cardStyle: React.CSSProperties = {
+  background: '#fff',
+  border: '1px solid #E8EDF2',
+  borderRadius: 10,
+  marginBottom: 16,
+  overflow: 'hidden',
+};
+
+const groupHeaderStyle: React.CSSProperties = {
+  padding: '14px 24px',
+  background: '#F9FAFB',
+  borderBottom: '1px solid #F1F3F5',
+  fontSize: 10.5,
+  fontWeight: 800,
+  color: '#6B7280',
+  letterSpacing: '0.05em',
+  textTransform: 'uppercase',
+};
+
 /**
  * Admin Feature Access & Entitlements —
  * Presentation: standalone design file (Choosify Admin CMS).
- * Data/logic: live entitlement registry + admin API (unchanged).
+ * Data/logic: live entitlement catalog (tier / group / planControlled metadata) + admin API.
+ * Partner application review lives in Seller Management / Creator Management.
  */
 export default function FeatureAccessEntitlementsPage() {
   const { profile } = useAuth();
@@ -542,13 +472,10 @@ export default function FeatureAccessEntitlementsPage() {
 
   const [roleScope, setRoleScope] = useState<RoleScope>('seller');
   const [catalog, setCatalog] = useState<PartnerFeatureDef[]>([]);
+  const [groupDefs, setGroupDefs] = useState<GroupDef[]>(PARTNER_FEATURE_GROUPS);
   const [roleDefaults, setRoleDefaults] = useState<RoleDefaults | null>(null);
-  const [applications, setApplications] = useState<PartnerApplicationRow[]>([]);
-  const [applicationsLoading, setApplicationsLoading] = useState(true);
-  const [applicationsError, setApplicationsError] = useState<string | null>(null);
-  const [rowFeedback, setRowFeedback] = useState<Record<string, { type: 'success' | 'error'; message: string }>>({});
-  const [justApproved, setJustApproved] = useState<{ id: string; name: string; grantHref: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -560,70 +487,34 @@ export default function FeatureAccessEntitlementsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    setApplicationsLoading(true);
+    setLoadError(null);
     setError(null);
     try {
-      const [entRes, appRes] = await Promise.all([
-        fetch(`${API_BASE}/entitlements/admin`, { headers: authHeaders() }),
-        fetch(`${API_BASE}/operations/partner-applications?status=pending`, {
-          headers: authHeaders(),
-        }),
-      ]);
-      const entBody = (await entRes.json().catch(() => ({}))) as {
+      // Refresh-aware: an expired access token is refreshed and the call retried.
+      const res = await authedFetch(`${API_BASE}/entitlements/admin`);
+      const body = (await res.json().catch(() => ({}))) as {
         catalog?: PartnerFeatureDef[];
+        groups?: GroupDef[];
         roleDefaults?: RoleDefaults;
         error?: string;
+        code?: string;
       };
-      const appBody = (await appRes.json().catch(() => ({}))) as {
-        applications?: PartnerApplicationRow[];
-        error?: string;
-      };
-
-      if (entRes.ok && entBody.catalog?.length) {
-        setCatalog(entBody.catalog);
-        setRoleDefaults(entBody.roleDefaults || null);
-      } else if (!entRes.ok) {
-        // Unauthenticated / mock Admin UI: render registry so design layout stays reviewable.
-        // Do not surface auth noise (e.g. "Missing bearer token") as a page error banner.
-        setCatalog(PARTNER_FEATURES);
-        setRoleDefaults({
-          seller: Object.fromEntries(
-            PARTNER_FEATURES.filter((f) => f.roles.includes('seller')).map((f) => [f.key, true]),
-          ),
-          creator: Object.fromEntries(
-            PARTNER_FEATURES.filter((f) => f.roles.includes('creator')).map((f) => [f.key, true]),
-          ),
-        });
-        const authNoise =
-          /bearer|unauthorized|401|403|not authenticated/i.test(String(entBody.error || '')) ||
-          entRes.status === 401 ||
-          entRes.status === 403;
-        if (entBody.error && !authNoise) setError(entBody.error);
+      if (res.ok && body.catalog?.length && body.roleDefaults) {
+        setCatalog(body.catalog);
+        if (body.groups?.length) setGroupDefs(body.groups);
+        setRoleDefaults(body.roleDefaults);
       } else {
-        setCatalog(PARTNER_FEATURES);
-        setRoleDefaults(entBody.roleDefaults || null);
-      }
-      if (appRes.ok) {
-        setApplications(appBody.applications || []);
-        setApplicationsError(null);
-      } else {
-        setApplicationsError(appBody.error || `Failed to load partner applications (${appRes.status}).`);
+        // Never fabricate an "all enabled" state — show what actually happened.
+        setCatalog([]);
+        setRoleDefaults(null);
+        setLoadError(res.ok ? 'Feature Access returned an incomplete catalog.' : describeLoadFailure(res.status, body));
       }
     } catch (e) {
-      setCatalog(PARTNER_FEATURES);
-      setRoleDefaults({
-        seller: Object.fromEntries(
-          PARTNER_FEATURES.filter((f) => f.roles.includes('seller')).map((f) => [f.key, true]),
-        ),
-        creator: Object.fromEntries(
-          PARTNER_FEATURES.filter((f) => f.roles.includes('creator')).map((f) => [f.key, true]),
-        ),
-      });
-      setError(e instanceof Error ? e.message : 'Load failed');
-      setApplicationsError(e instanceof Error ? e.message : 'Failed to load partner applications.');
+      setCatalog([]);
+      setRoleDefaults(null);
+      setLoadError(e instanceof Error ? `Failed to load Feature Access: ${e.message}` : 'Failed to load Feature Access.');
     } finally {
       setLoading(false);
-      setApplicationsLoading(false);
     }
   }, []);
 
@@ -632,92 +523,42 @@ export default function FeatureAccessEntitlementsPage() {
   }, [isAdmin, load]);
 
   const groups = useMemo(() => {
-    if (roleScope === 'consumer') return [];
-    return buildGroups(roleScope, catalog.length ? catalog : PARTNER_FEATURES);
-  }, [catalog, roleScope]);
+    if (roleScope === 'consumer' || !catalog.length) return [];
+    return buildGroups(roleScope, catalog, groupDefs);
+  }, [catalog, groupDefs, roleScope]);
 
   const roleSummary = useMemo(() => {
-    if (roleScope === 'consumer') {
-      return computeRoleSummary([], undefined);
-    }
-    const features = flattenRoleFeatures(groups);
-    const defaults =
-      roleScope === 'seller' || roleScope === 'creator'
-        ? roleDefaults?.[roleScope]
-        : undefined;
-    return computeRoleSummary(features, defaults);
+    if (roleScope === 'consumer') return computeRoleSummary([], undefined);
+    return computeRoleSummary(
+      groups.flatMap((g) => g.items),
+      roleDefaults?.[roleScope],
+    );
   }, [groups, roleDefaults, roleScope]);
 
   const [heading, subheading] = ROLE_HEADINGS[roleScope];
 
-  const toggleFeature = async (role: PartnerRole, featureKey: string, enabled: boolean) => {
-    setBusyKey(`${role}:${featureKey}`);
+  const toggleFeature = async (role: PartnerRole, feature: PartnerFeatureDef, enabled: boolean) => {
+    setBusyKey(`${role}:${feature.key}`);
+    setError(null);
     try {
-      const res = await fetch(
-        `${API_BASE}/entitlements/admin/role-defaults/${role}/${featureKey}`,
-        {
-          method: 'PATCH',
-          headers: authHeaders(),
-          body: JSON.stringify({ enabled }),
-        },
-      );
+      const res = await authedFetch(`${API_BASE}/entitlements/admin/role-defaults/${role}/${feature.key}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ enabled }),
+      });
       const body = (await res.json().catch(() => ({}))) as {
         roleDefaults?: RoleDefaults;
         error?: string;
+        code?: string;
       };
-      if (!res.ok) throw new Error(body.error || 'Update failed');
+      if (!res.ok) throw new Error(describeLoadFailure(res.status, body));
       if (body.roleDefaults) setRoleDefaults(body.roleDefaults);
       showToast(
         enabled
-          ? `${featureKey} enabled for ${role} — prior data remains intact.`
-          : `${featureKey} access disabled for ${role} — data preserved.`,
+          ? `${feature.label} enabled for ${role} — prior data remains intact.`
+          : `${feature.label} access disabled for ${role} — data preserved.`,
       );
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Toggle failed';
-      const authNoise = /bearer|unauthorized|401|403|not authenticated/i.test(msg);
-      if (authNoise) {
-        showToast('Sign in required to persist entitlement changes.');
-      } else {
-        setError(msg);
-      }
-    } finally {
-      setBusyKey(null);
-    }
-  };
-
-  const reviewApplication = async (id: string, action: 'approve' | 'reject') => {
-    const app = applications.find((a) => a.id === id);
-    setBusyKey(`app:${id}:${action}`);
-    setRowFeedback((prev) => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-    try {
-      const res = await fetch(`${API_BASE}/operations/partner-applications/${id}/${action}`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({
-          note: action === 'approve' ? 'Approved via Feature Access module' : 'Rejected',
-        }),
-      });
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) throw new Error(body.error || `${action} failed`);
-      if (action === 'approve' && app) {
-        const grantHref = app.applicantType === 'creator'
-          ? `/admin/creators/${encodeURIComponent(app.provisionedUserId || '')}/marketplace-access`
-          : `/brand/${encodeURIComponent(app.provisionedUserId || '')}`;
-        setJustApproved({ id, name: app.businessOrChannelName, grantHref });
-        showToast('Partner provisioned. Marketplace Access still needs to be granted separately.');
-      } else {
-        setRowFeedback((prev) => ({ ...prev, [id]: { type: 'success', message: 'Application rejected.' } }));
-        showToast('Application rejected.');
-      }
-      await load();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Review failed';
-      setRowFeedback((prev) => ({ ...prev, [id]: { type: 'error', message: msg } }));
-      setError(msg);
+      setError(e instanceof Error ? e.message : 'Toggle failed');
     } finally {
       setBusyKey(null);
     }
@@ -759,6 +600,7 @@ export default function FeatureAccessEntitlementsPage() {
         )}
         {error && (
           <div
+            role="alert"
             style={{
               marginBottom: 16,
               borderRadius: 10,
@@ -774,197 +616,28 @@ export default function FeatureAccessEntitlementsPage() {
           </div>
         )}
 
-        {/*
-          Partner Applications — deliberately placed at the top of the page, always visible.
-          Previously lived inside a collapsed <details> at the bottom of this (unrelated) Feature
-          Access page; a live approval attempt during QA went unnoticed by the operator as a
-          result. Kept on this page (not moved elsewhere) to avoid adding a second review surface.
-        */}
+        {/* Partner application review moved to the owning management studios. */}
         <div
+          data-testid="partner-applications-pointer"
           style={{
-            background: '#fff',
-            border: applications.length > 0 ? '1px solid #FED7AA' : '1px solid #E8EDF2',
-            borderRadius: 10,
-            marginBottom: 16,
-            overflow: 'hidden',
+            ...cardStyle,
+            padding: '12px 20px',
+            fontSize: 12,
+            fontWeight: 600,
+            color: '#4B5563',
+            display: 'flex',
+            gap: 12,
+            flexWrap: 'wrap',
+            alignItems: 'center',
           }}
         >
-          <div
-            style={{
-              padding: '14px 20px',
-              background: applications.length > 0 ? '#FFF7ED' : '#F9FAFB',
-              borderBottom: '1px solid #F1F3F5',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
-              flexWrap: 'wrap',
-            }}
-          >
-            <div style={{ fontSize: 13, fontWeight: 800, color: '#111827', display: 'flex', alignItems: 'center' }}>
-              Partner Applications
-              {applications.length > 0 && (
-                <span
-                  style={{
-                    marginLeft: 8,
-                    minWidth: 20,
-                    padding: '2px 7px',
-                    borderRadius: 999,
-                    background: '#EF3C23',
-                    color: '#fff',
-                    fontSize: 11,
-                    fontWeight: 800,
-                    textAlign: 'center',
-                  }}
-                >
-                  {applications.length} pending
-                </span>
-              )}
-            </div>
-            {applicationsLoading && <span style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF' }}>Loading…</span>}
-          </div>
-
-          {justApproved && (
-            <div
-              style={{
-                margin: 16,
-                padding: 16,
-                borderRadius: 10,
-                border: '1px solid #A7F3D0',
-                background: '#ECFDF5',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-                flexWrap: 'wrap',
-              }}
-            >
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: '#065F46' }}>
-                ✓ {justApproved.name} approved. Identity is verified — Marketplace Access is still off until it's granted
-                separately.
-              </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <a
-                  href={justApproved.grantHref}
-                  style={{
-                    padding: '8px 14px',
-                    borderRadius: 8,
-                    background: '#059669',
-                    color: '#fff',
-                    fontSize: 12,
-                    fontWeight: 800,
-                    textDecoration: 'none',
-                  }}
-                >
-                  Grant Marketplace Access →
-                </a>
-                <button
-                  type="button"
-                  onClick={() => setJustApproved(null)}
-                  style={{ border: 'none', background: 'transparent', color: '#065F46', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-                >
-                  Dismiss
-                </button>
-              </div>
-            </div>
-          )}
-
-          {applicationsError && (
-            <div
-              style={{
-                margin: 16,
-                padding: '10px 14px',
-                borderRadius: 8,
-                border: '1px solid #FECACA',
-                background: '#FEF2F2',
-                fontSize: 12,
-                fontWeight: 700,
-                color: '#B91C1C',
-              }}
-            >
-              {applicationsError}
-            </div>
-          )}
-
-          {!applicationsLoading && !applicationsError && applications.length === 0 ? (
-            <div style={{ padding: 24, fontSize: 13, fontWeight: 600, color: '#6B7280' }}>No pending partner applications.</div>
-          ) : (
-            applications.map((app) => {
-              const feedback = rowFeedback[app.id];
-              const busy = busyKey === `app:${app.id}:approve` || busyKey === `app:${app.id}:reject`;
-              return (
-                <div key={app.id} style={{ padding: '16px 20px', borderBottom: '1px solid #F1F3F5' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 800 }}>
-                        {app.businessOrChannelName}{' '}
-                        <span style={{ fontSize: 11, fontWeight: 800, color: '#EF3C23' }}>{app.applicantType.toUpperCase()}</span>
-                      </div>
-                      <div style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 600, marginTop: 2 }}>
-                        {app.displayName} · {app.email} · {app.category} · {app.city}
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void reviewApplication(app.id, 'approve')}
-                        style={{
-                          height: 36,
-                          padding: '0 14px',
-                          borderRadius: 8,
-                          border: 'none',
-                          background: '#059669',
-                          color: '#fff',
-                          fontSize: 12,
-                          fontWeight: 800,
-                          cursor: 'pointer',
-                          opacity: busy ? 0.6 : 1,
-                        }}
-                      >
-                        {busyKey === `app:${app.id}:approve` ? 'Approving…' : 'Approve'}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void reviewApplication(app.id, 'reject')}
-                        style={{
-                          height: 36,
-                          padding: '0 14px',
-                          borderRadius: 8,
-                          border: '1px solid #FECACA',
-                          background: '#FEF2F2',
-                          color: '#B91C1C',
-                          fontSize: 12,
-                          fontWeight: 800,
-                          cursor: 'pointer',
-                          opacity: busy ? 0.6 : 1,
-                        }}
-                      >
-                        {busyKey === `app:${app.id}:reject` ? 'Rejecting…' : 'Reject'}
-                      </button>
-                    </div>
-                  </div>
-                  {feedback && (
-                    <div
-                      style={{
-                        marginTop: 10,
-                        padding: '8px 12px',
-                        borderRadius: 8,
-                        fontSize: 11.5,
-                        fontWeight: 700,
-                        background: feedback.type === 'success' ? '#ECFDF5' : '#FEF2F2',
-                        color: feedback.type === 'success' ? '#065F46' : '#B91C1C',
-                        border: `1px solid ${feedback.type === 'success' ? '#A7F3D0' : '#FECACA'}`,
-                      }}
-                    >
-                      {feedback.message}
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
+          <span>Partner applications are reviewed in the management studios:</span>
+          <Link to="/admin/seller-management?filter=requests" style={{ color: '#EF3C23', fontWeight: 800 }}>
+            Seller applications →
+          </Link>
+          <Link to="/admin/creator-management?filter=requests" style={{ color: '#EF3C23', fontWeight: 800 }}>
+            Creator applications →
+          </Link>
         </div>
 
         {/* Role intro card — design: pad 24, radius 10, title 16/800, sub 12/#6B7280/600 */}
@@ -984,7 +657,7 @@ export default function FeatureAccessEntitlementsPage() {
         </div>
 
         {/* Active-role analytics — total / enabled / off / plan-locked + turned-off chips */}
-        {!loading && <RoleAnalyticsSummary summary={roleSummary} />}
+        {!loading && !loadError && roleScope !== 'consumer' && <RoleAnalyticsSummary summary={roleSummary} />}
 
         {/* Role switcher — below analytics summary */}
         <div
@@ -1025,37 +698,12 @@ export default function FeatureAccessEntitlementsPage() {
           })}
         </div>
 
-        {loading ? (
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', padding: '24px 0' }}>
-            Loading…
-          </div>
-        ) : roleScope === 'consumer' ? (
-          <div
-            style={{
-              background: '#fff',
-              border: '1px solid #E8EDF2',
-              borderRadius: 10,
-              marginBottom: 16,
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                padding: '14px 24px',
-                background: '#F9FAFB',
-                borderBottom: '1px solid #F1F3F5',
-                fontSize: 10.5,
-                fontWeight: 800,
-                color: '#6B7280',
-                letterSpacing: '0.05em',
-                textTransform: 'uppercase',
-              }}
-            >
-              CONSUMER ENTITLEMENTS
-            </div>
+        {roleScope === 'consumer' ? (
+          <div style={cardStyle} data-testid="consumer-core-explanation">
+            <div style={groupHeaderStyle}>CONSUMER CAPABILITIES</div>
             <div style={{ padding: '18px 24px' }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>
-                No configurable Consumer feature entitlements are available yet.
+                Consumer capabilities are core and are not controlled through Feature Access.
               </div>
               <div
                 style={{
@@ -1063,55 +711,64 @@ export default function FeatureAccessEntitlementsPage() {
                   color: '#9CA3AF',
                   fontWeight: 600,
                   marginTop: 2,
-                  maxWidth: 600,
+                  maxWidth: 640,
                 }}
               >
-                The live entitlement registry currently covers Seller and Creator commercial features
-                only. When consumer keys are added to the registry, they will appear here with the
-                same summary, group, and toggle layout.
+                Shopping, checkout, orders, returns and warranty claims, reviews, Choosify Support,
+                account security and notifications are available to every shopper account. Partner
+                entitlements (plans and role switches) apply to Seller and Creator commercial
+                capabilities only; there are no consumer feature switches.
               </div>
             </div>
           </div>
-        ) : (
-          groups.map((grp) => (
-            <div
-              key={grp.title}
+        ) : loading ? (
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', padding: '24px 0' }}>
+            Loading…
+          </div>
+        ) : loadError ? (
+          <div
+            role="alert"
+            data-testid="feature-access-load-error"
+            style={{ ...cardStyle, border: '1px solid #FECACA', background: '#FEF2F2', padding: '18px 24px' }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#B91C1C' }}>{loadError}</div>
+            <div style={{ fontSize: 11, color: '#991B1B', fontWeight: 600, marginTop: 4 }}>
+              No entitlement state is shown until it can be loaded from the server.
+            </div>
+            <button
+              type="button"
+              onClick={() => void load()}
               style={{
+                marginTop: 12,
+                height: 32,
+                padding: '0 14px',
+                borderRadius: 8,
+                border: '1px solid #FECACA',
                 background: '#fff',
-                border: '1px solid #E8EDF2',
-                borderRadius: 10,
-                marginBottom: 16,
-                overflow: 'hidden',
+                color: '#B91C1C',
+                fontSize: 12,
+                fontWeight: 800,
+                cursor: 'pointer',
               }}
             >
-              <div
-                style={{
-                  padding: '14px 24px',
-                  background: '#F9FAFB',
-                  borderBottom: '1px solid #F1F3F5',
-                  fontSize: 10.5,
-                  fontWeight: 800,
-                  color: '#6B7280',
-                  letterSpacing: '0.05em',
-                  textTransform: 'uppercase',
-                }}
-              >
-                {grp.title}
-              </div>
+              Retry
+            </button>
+          </div>
+        ) : (
+          groups.map((grp) => (
+            <div key={grp.title} style={cardStyle}>
+              <div style={groupHeaderStyle}>{grp.title}</div>
               <div style={{ padding: '0 24px' }}>
                 {grp.items.map((feature) => {
-                  const enabled = roleDefaults?.[roleScope]?.[feature.key] !== false;
+                  const enabled = feature.tier === 'core' || roleDefaults?.[roleScope]?.[feature.key] !== false;
                   const busy = busyKey === `${roleScope}:${feature.key}`;
-                  const planRequired = isPlanRequired(feature);
-
                   return (
                     <FeatureRow
                       key={feature.key}
                       feature={feature}
                       enabled={enabled}
                       busy={busy}
-                      planRequired={planRequired}
-                      onToggle={() => void toggleFeature(roleScope, feature.key, !enabled)}
+                      onToggle={() => void toggleFeature(roleScope, feature, !enabled)}
                     />
                   );
                 })}
@@ -1119,7 +776,6 @@ export default function FeatureAccessEntitlementsPage() {
             </div>
           ))
         )}
-
       </div>
     </AdminWorkspaceLayout>
   );

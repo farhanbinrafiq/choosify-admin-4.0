@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Response } from 'express';
 import { authenticateRequest } from '../middleware/auth';
 import { requireRole } from '../middleware/authorization';
 import { ROLES } from '../permissions/roles';
@@ -11,7 +11,13 @@ import {
 import { planStore } from './planStore';
 import { featureRequestStore, type FeatureRequestStatus } from './featureRequestStore';
 import { notifyRoles, notifyUser } from '../communication/systemNotify';
-import { PARTNER_FEATURES, featureKeysForRole } from '../../shared/entitlements/registry';
+import {
+  PARTNER_FEATURES,
+  PARTNER_FEATURE_GROUPS,
+  featureByKey,
+  featureKeysForRole,
+  isSwitchableFeature,
+} from '../../shared/entitlements/registry';
 
 export const entitlementsRouter = Router();
 
@@ -19,17 +25,36 @@ const requireAuth = [authenticateRequest];
 const requireAdmin = [authenticateRequest, requireRole(ROLES.ADMIN)];
 
 /** Current actor's resolved entitlements (for nav/route gating). */
+function sendEntitlementUnavailable(res: Response, context: string, error: unknown) {
+  console.error(`[Entitlements] ${context} failed:`, error instanceof Error ? error.message : error);
+  if (!res.headersSent) {
+    res.status(503).json({
+      success: false,
+      error: 'Feature access could not be loaded right now. Please try again shortly.',
+      code: 'ENTITLEMENT_CHECK_UNAVAILABLE',
+    });
+  }
+}
+
 entitlementsRouter.get('/entitlements/me', ...requireAuth, async (req, res) => {
   const role = req.userRole || req.user?.role;
   const userId = req.userId || req.user?.uid;
-  const enabled = await getEnabledMapForActor({ role, userId });
-  const plan = userId ? await planStore.getAccountPlan(userId) : null;
+  let enabled: Record<string, boolean>;
+  let plan: Awaited<ReturnType<typeof planStore.getAccountPlan>> | null;
+  try {
+    enabled = await getEnabledMapForActor({ role, userId });
+    plan = userId ? await planStore.getAccountPlan(userId) : null;
+  } catch (error) {
+    sendEntitlementUnavailable(res, 'GET /entitlements/me', error);
+    return;
+  }
   res.json({
     success: true,
     role,
     entitlements: enabled,
     plan,
     catalog: PARTNER_FEATURES.filter((f) => {
+      if (f.deprecated) return false;
       const r = String(role || '').toLowerCase();
       if (r === 'seller' || r === 'verified_seller') return f.roles.includes('seller');
       if (r === 'creator') return f.roles.includes('creator');
@@ -40,14 +65,21 @@ entitlementsRouter.get('/entitlements/me', ...requireAuth, async (req, res) => {
 
 /** Admin: full catalog + role defaults (+ empty plan/account stubs for future UI). */
 entitlementsRouter.get('/entitlements/admin', ...requireAdmin, async (_req, res) => {
-  const snapshot = await entitlementStore.snapshot();
+  let snapshot: Awaited<ReturnType<typeof entitlementStore.snapshot>>;
+  try {
+    snapshot = await entitlementStore.snapshot();
+  } catch (error) {
+    sendEntitlementUnavailable(res, 'GET /entitlements/admin', error);
+    return;
+  }
   res.json({
     success: true,
     catalog: entitlementStore.catalog(),
+    groups: PARTNER_FEATURE_GROUPS,
     roleDefaults: snapshot.roleDefaults,
     planDefaults: snapshot.planDefaults,
     accountOverrides: snapshot.accountOverrides,
-    precedence: ['accountOverride', 'planDefault', 'roleDefault'],
+    precedence: ['deprecated', 'roleEligibility', 'coreLock', 'accountOverride', 'planEntitlement(planControlled)', 'roleDefault'],
     note: 'Disabling a feature blocks access only. Feature-owned business data is never deleted.',
   });
 });
@@ -83,6 +115,14 @@ entitlementsRouter.patch('/entitlements/admin/role-defaults/:role/:featureKey', 
   }
   if (!featureKeysForRole(role).includes(featureKey)) {
     res.status(400).json({ success: false, error: 'Unknown feature for role' });
+    return;
+  }
+  if (!isSwitchableFeature(featureByKey(featureKey))) {
+    res.status(400).json({
+      success: false,
+      error: 'Core and reserved capabilities cannot be switched off',
+      code: 'FEATURE_NOT_SWITCHABLE',
+    });
     return;
   }
   const enabled = Boolean((req.body as { enabled?: boolean })?.enabled);
