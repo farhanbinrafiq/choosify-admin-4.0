@@ -1,64 +1,188 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '../db/client';
-import { featureEntitlements, plans, planEntitlements } from '../db/schema';
-import { workspaceService } from '../subscriptions/workspaceService';
+import {
+  accountEntitlementOverrides,
+  featureEntitlements,
+  planEntitlements,
+  planVersionOffers,
+  plans,
+  platformFeatureStates,
+  subscriptions,
+  workspaces,
+} from '../db/schema';
+import { OPEN_SUBSCRIPTION_STATUSES } from '../subscriptions/types';
 import {
   defaultRoleEntitlements,
   featureByKey,
   featureKeysForRole,
   featuresForApiRequest,
   isCoreFeature,
-  isSwitchableFeature,
   pageKeysDisabledByFeatures,
   type PartnerFeatureKey,
   type PartnerRole,
   PARTNER_FEATURES,
 } from '../../shared/entitlements/registry';
+import {
+  evaluateFeature,
+  type EntitlementContext,
+  type EntitlementDecision,
+  type EntitlementOverride,
+} from './entitlementEvaluator';
 
-export type EntitlementState = {
-  roleDefaults: {
-    seller: Record<string, boolean>;
-    creator: Record<string, boolean>;
-  };
-  planDefaults: Record<string, Partial<Record<string, boolean>>>;
-  accountOverrides: Record<string, Partial<Record<string, boolean>>>;
+export type RoleDefaults = {
+  seller: Record<string, boolean>;
+  creator: Record<string, boolean>;
 };
 
-function normalizePartnerRole(role: string | undefined | null): PartnerRole | null {
+export type AccountOverrideView = {
+  effect: EntitlementOverride['effect'];
+  expiresAt: string | null;
+  reason: string;
+  updatedAt: string;
+};
+
+export type EntitlementState = {
+  roleDefaults: RoleDefaults;
+  accountOverrides: Record<string, Record<string, AccountOverrideView>>;
+  platformStates: Record<string, { enabled: boolean; reason: string | null; updatedAt: string }>;
+};
+
+export function normalizePartnerRole(role: string | undefined | null): PartnerRole | null {
   const r = String(role || '').toLowerCase();
   if (r === 'seller' || r === 'verified_seller') return 'seller';
   if (r === 'creator') return 'creator';
   return null;
 }
 
-/** Row lookup helper — 'role' scope keys are seeded with catalog defaults on first read of a role. */
-async function getScopeRows(scope: 'role' | 'plan' | 'account', scopeKeys: string[]) {
-  if (scopeKeys.length === 0) return [];
-  return db
-    .select()
-    .from(featureEntitlements)
-    .where(and(eq(featureEntitlements.scope, scope), inArray(featureEntitlements.scopeKey, scopeKeys)));
+/**
+ * Role-default rows for the given roles, lazily seeding catalog defaults for any
+ * missing keys (idempotent, conflict-safe). One SELECT in the common case; a
+ * seed INSERT + re-SELECT only the first time a new catalog key is seen.
+ */
+async function loadRoleDefaultRows(roles: PartnerRole[]) {
+  const read = () =>
+    db
+      .select()
+      .from(featureEntitlements)
+      .where(and(eq(featureEntitlements.scope, 'role'), inArray(featureEntitlements.scopeKey, roles)));
+  const rows = await read();
+  const missing: Array<{ scope: 'role'; scopeKey: PartnerRole; featureKey: string; enabled: boolean }> = [];
+  for (const role of roles) {
+    const have = new Set(rows.filter((r) => r.scopeKey === role).map((r) => r.featureKey));
+    for (const [featureKey, enabled] of Object.entries(defaultRoleEntitlements(role))) {
+      if (!have.has(featureKey)) missing.push({ scope: 'role', scopeKey: role, featureKey, enabled: Boolean(enabled) });
+    }
+  }
+  if (missing.length === 0) return rows;
+  await db.insert(featureEntitlements).values(missing).onConflictDoNothing();
+  return read();
 }
 
-/** Ensures a role's catalog defaults exist as rows (idempotent — only inserts missing keys). */
-async function ensureRoleDefaultsSeeded(role: PartnerRole): Promise<void> {
-  const existing = await getScopeRows('role', [role]);
-  const existingKeys = new Set(existing.map((r) => r.featureKey));
-  const defaults = defaultRoleEntitlements(role);
-  const missing = Object.entries(defaults).filter(([key]) => !existingKeys.has(key));
-  if (missing.length === 0) return;
-  await db
-    .insert(featureEntitlements)
-    .values(missing.map(([featureKey, enabled]) => ({ scope: 'role' as const, scopeKey: role, featureKey, enabled: Boolean(enabled) })))
-    .onConflictDoNothing();
+/** Plan-version feature rows for the account's OPEN subscription (one join), or an explicit plan preview. */
+async function loadPlanEntitlements(params: {
+  partnerRole: PartnerRole;
+  userId: string | null;
+  planId: string | null;
+}): Promise<Map<string, boolean> | null> {
+  if (params.planId) {
+    // "Would this Plan grant X" preview: the plan's CURRENT PUBLISHED version.
+    const rows = await db
+      .select({ featureKey: planEntitlements.featureKey, enabled: planEntitlements.enabled })
+      .from(plans)
+      .innerJoin(planEntitlements, eq(planEntitlements.planVersionId, plans.currentPublishedVersionId))
+      .where(eq(plans.id, params.planId));
+    return new Map(rows.map((r) => [r.featureKey, r.enabled]));
+  }
+  if (!params.userId) return null;
+  // workspace (owner + persona) -> open subscription -> offer -> plan version -> plan_entitlements.
+  // No open subscription (or no rows for its version) yields an empty map, which the
+  // evaluator treats exactly like "no plan": the role default applies.
+  const rows = await db
+    .select({ featureKey: planEntitlements.featureKey, enabled: planEntitlements.enabled })
+    .from(workspaces)
+    .innerJoin(
+      subscriptions,
+      and(eq(subscriptions.workspaceId, workspaces.id), inArray(subscriptions.status, OPEN_SUBSCRIPTION_STATUSES)),
+    )
+    .innerJoin(planVersionOffers, eq(planVersionOffers.id, subscriptions.planVersionOfferId))
+    .innerJoin(planEntitlements, eq(planEntitlements.planVersionId, planVersionOffers.planVersionId))
+    .where(and(eq(workspaces.ownerUserId, params.userId), eq(workspaces.type, params.partnerRole)));
+  return new Map(rows.map((r) => [r.featureKey, r.enabled]));
 }
 
 /**
- * Precedence: unknown/deprecated -> role eligibility -> core lock -> account override
- * -> plan entitlement (plan-controlled keys only) -> role default.
- * Known partner features without an explicit role-default record are DENIED (fail-closed).
- * Sprint 10 durability migration: reads directly from PostgreSQL on every call (no
- * per-process cache), so a second backend instance always sees the same state.
+ * Loads everything the evaluator needs for one actor in at most 4 parallel
+ * queries: role defaults, platform switches, the account's overrides and — only
+ * when a plan-controlled feature will be evaluated — the open subscription's plan
+ * rows. No in-memory cache: every request sees current database state, so
+ * multiple backend instances always agree (Sprint 10 durability rule).
+ */
+export async function loadEntitlementContext(params: {
+  role: string | undefined | null;
+  userId?: string | null;
+  planId?: string | null;
+  needPlan: boolean;
+}): Promise<EntitlementContext> {
+  const partnerRole = normalizePartnerRole(params.role);
+  if (!partnerRole) {
+    return { partnerRole: null, roleDefaults: new Map(), platformStates: new Map(), overrides: new Map(), planEntitlements: null };
+  }
+  const uid = params.userId?.trim() || null;
+  const planId = params.planId?.trim() || null;
+  const [roleRows, platformRows, overrideRows, plan] = await Promise.all([
+    loadRoleDefaultRows([partnerRole]),
+    db.select({ featureKey: platformFeatureStates.featureKey, enabled: platformFeatureStates.enabled }).from(platformFeatureStates),
+    uid
+      ? db
+          .select({
+            featureKey: accountEntitlementOverrides.featureKey,
+            effect: accountEntitlementOverrides.effect,
+            expiresAt: accountEntitlementOverrides.expiresAt,
+          })
+          .from(accountEntitlementOverrides)
+          .where(eq(accountEntitlementOverrides.userId, uid))
+      : Promise.resolve([]),
+    params.needPlan ? loadPlanEntitlements({ partnerRole, userId: uid, planId }) : Promise.resolve(null),
+  ]);
+  return {
+    partnerRole,
+    roleDefaults: new Map(roleRows.filter((r) => r.scopeKey === partnerRole).map((r) => [r.featureKey, r.enabled])),
+    platformStates: new Map(platformRows.map((r) => [r.featureKey, r.enabled])),
+    overrides: new Map(overrideRows.map((r) => [r.featureKey, { effect: r.effect, expiresAt: r.expiresAt }])),
+    planEntitlements: plan,
+  };
+}
+
+/** True when evaluating these keys can reach a plan row (plan-controlled, directly or via a dependency). */
+function needsPlan(keys: string[]): boolean {
+  const seen = new Set<string>();
+  const walk = (key: string): boolean => {
+    if (seen.has(key)) return false;
+    seen.add(key);
+    const f = featureByKey(key);
+    if (!f || f.deprecated) return false;
+    return f.planControlled || (f.requires || []).some(walk);
+  };
+  return keys.some(walk);
+}
+
+/** Full decisions ({enabled, source, detail}) for the given keys, one context load. */
+export async function getEntitlementDecisions(params: {
+  role: string | undefined | null;
+  userId?: string | null;
+  planId?: string | null;
+  featureKeys: string[];
+  now?: Date;
+}): Promise<Record<string, EntitlementDecision>> {
+  const ctx = await loadEntitlementContext({ ...params, needPlan: needsPlan(params.featureKeys) });
+  const now = params.now ?? new Date();
+  return Object.fromEntries(params.featureKeys.map((key) => [key, evaluateFeature(key, ctx, now)]));
+}
+
+/**
+ * Single-feature resolution (kept for existing callers). Partner roles are
+ * fail-closed: unknown, deprecated and role-ineligible keys resolve false;
+ * staff/admin/consumer always resolve true.
  */
 export async function resolveFeatureEnabled(params: {
   role: string | undefined | null;
@@ -67,60 +191,20 @@ export async function resolveFeatureEnabled(params: {
   planId?: string | null;
 }): Promise<boolean> {
   const partnerRole = normalizePartnerRole(params.role);
-  if (!partnerRole) return true; // Admin / staff / consumer — not gated by partner entitlements
-
+  if (!partnerRole) return true;
   const feature = featureByKey(params.featureKey);
-  // Unknown and deprecated keys gate nothing (deprecated rows are history only).
-  if (!feature || feature.deprecated || !feature.roles.includes(partnerRole)) return true;
-  // Core lock: no role, plan or account state can remove a core capability
-  // (notifications, financial visibility). No DB read needed.
-  if (isCoreFeature(feature)) return true;
-
-  await ensureRoleDefaultsSeeded(partnerRole);
-
-  const uid = params.userId?.trim();
-  if (uid) {
-    const rows = await getScopeRows('account', [uid]);
-    const hit = rows.find((r) => r.featureKey === params.featureKey);
-    if (hit) return hit.enabled;
+  // Decided without any DB read: unknown/deprecated/ineligible deny, core allows.
+  if (!feature || feature.deprecated || !feature.roles.includes(partnerRole) || (isCoreFeature(feature) && !feature.requires?.length)) {
+    return evaluateFeature(params.featureKey, {
+      partnerRole,
+      roleDefaults: new Map(),
+      platformStates: new Map(),
+      overrides: new Map(),
+      planEntitlements: null,
+    }).enabled;
   }
-
-  // Sprint 12: plan-tier resolution is now version-aware — reads
-  // plan_entitlements via workspace -> open subscription ->
-  // plan_version_offer -> plan_version, NOT feature_entitlements(scope='plan')
-  // (that bare-planId key can't distinguish two Plan Versions that are
-  // simultaneously valid for different subscribers, which would break
-  // grandfathering). feature_entitlements(scope='plan') rows are no longer
-  // read here at all; 'plan' remains a valid scope value in the enum for any
-  // legacy rows, simply unconsumed by this resolver going forward.
-  // Phase 1: only plan-controlled (premium) keys honor plan rows, so a plan — or
-  // a plan lapsing — can never remove an operational capability.
-  let planVersionId: string | null = null;
-  if (feature.planControlled && params.planId?.trim()) {
-    // Explicit override (no current caller passes this) resolves to that
-    // Plan's CURRENT PUBLISHED version rather than a specific subscriber's
-    // purchased version — used only for "would this Plan grant X" previews.
-    const planRows = await db.select().from(plans).where(eq(plans.id, params.planId.trim())).limit(1);
-    planVersionId = planRows[0]?.currentPublishedVersionId ?? null;
-  } else if (feature.planControlled && uid) {
-    const workspace = await workspaceService.resolveWorkspaceForUser(uid, params.role);
-    if (workspace) {
-      const resolved = await workspaceService.getResolvedOpenSubscription(workspace.id);
-      planVersionId = resolved?.version.id ?? null;
-    }
-  }
-  if (planVersionId) {
-    const rows = await db
-      .select()
-      .from(planEntitlements)
-      .where(and(eq(planEntitlements.planVersionId, planVersionId), eq(planEntitlements.featureKey, params.featureKey)))
-      .limit(1);
-    if (rows[0]) return rows[0].enabled;
-  }
-
-  const roleRows = await getScopeRows('role', [partnerRole]);
-  const roleHit = roleRows.find((r) => r.featureKey === params.featureKey);
-  return roleHit ? roleHit.enabled : false;
+  const decisions = await getEntitlementDecisions({ ...params, featureKeys: [params.featureKey] });
+  return decisions[params.featureKey].enabled;
 }
 
 export async function isApiPathEntitled(params: {
@@ -128,19 +212,23 @@ export async function isApiPathEntitled(params: {
   userId?: string | null;
   path: string;
   method?: string;
-}): Promise<{ ok: boolean; featureKey?: string }> {
+}): Promise<{ ok: boolean; featureKey?: string; source?: string }> {
   const partnerRole = normalizePartnerRole(params.role);
   if (!partnerRole) return { ok: true };
 
   // Segment-boundary prefix + ':param' pattern matching (shared/entitlements/registry).
-  for (const feature of featuresForApiRequest(partnerRole, params.path, params.method)) {
-    if (isCoreFeature(feature)) continue;
-    const enabled = await resolveFeatureEnabled({
-      role: partnerRole,
-      featureKey: feature.key,
-      userId: params.userId,
-    });
-    if (!enabled) return { ok: false, featureKey: feature.key };
+  // The matcher only returns features available to this role, so a route that does
+  // not apply to the role is never turned into an entitlement 403 (Phase 1 behavior).
+  const gated = featuresForApiRequest(partnerRole, params.path, params.method).filter((f) => !isCoreFeature(f));
+  if (gated.length === 0) return { ok: true }; // unmapped/core routes never touch the database
+  const decisions = await getEntitlementDecisions({
+    role: partnerRole,
+    userId: params.userId,
+    featureKeys: gated.map((f) => f.key),
+  });
+  for (const feature of gated) {
+    const decision = decisions[feature.key];
+    if (!decision.enabled) return { ok: false, featureKey: feature.key, source: decision.source };
   }
   return { ok: true };
 }
@@ -152,16 +240,8 @@ export async function getEnabledMapForActor(params: {
 }): Promise<Record<string, boolean>> {
   const partnerRole = normalizePartnerRole(params.role);
   if (!partnerRole) return {};
-  const out: Record<string, boolean> = {};
-  for (const key of featureKeysForRole(partnerRole)) {
-    out[key] = await resolveFeatureEnabled({
-      role: partnerRole,
-      featureKey: key,
-      userId: params.userId,
-      planId: params.planId,
-    });
-  }
-  return out;
+  const decisions = await getEntitlementDecisions({ ...params, role: partnerRole, featureKeys: featureKeysForRole(partnerRole) });
+  return Object.fromEntries(Object.entries(decisions).map(([key, d]) => [key, d.enabled]));
 }
 
 export async function filterPageKeysForEntitlements(
@@ -179,11 +259,9 @@ export async function filterPageKeysForEntitlements(
 }
 
 export const entitlementStore = {
-  getRoleDefaults: async (): Promise<EntitlementState['roleDefaults']> => {
-    await ensureRoleDefaultsSeeded('seller');
-    await ensureRoleDefaultsSeeded('creator');
-    const rows = await getScopeRows('role', ['seller', 'creator']);
-    const out: EntitlementState['roleDefaults'] = { seller: {}, creator: {} };
+  getRoleDefaults: async (): Promise<RoleDefaults> => {
+    const rows = await loadRoleDefaultRows(['seller', 'creator']);
+    const out: RoleDefaults = { seller: {}, creator: {} };
     for (const row of rows) {
       if (row.scopeKey === 'seller' || row.scopeKey === 'creator') {
         out[row.scopeKey][row.featureKey] = row.enabled;
@@ -192,65 +270,30 @@ export const entitlementStore = {
     return out;
   },
 
-  setRoleDefault: async (role: PartnerRole, featureKey: PartnerFeatureKey, enabled: boolean): Promise<EntitlementState['roleDefaults']> => {
-    if (!featureKeysForRole(role).includes(featureKey)) {
-      throw new Error(`Feature ${featureKey} is not available for role ${role}`);
-    }
-    if (!isSwitchableFeature(featureByKey(featureKey))) {
-      throw new Error(`Feature ${featureKey} is core or reserved and cannot be switched`);
-    }
-    await ensureRoleDefaultsSeeded(role);
-    await db
-      .insert(featureEntitlements)
-      .values({ scope: 'role', scopeKey: role, featureKey, enabled })
-      .onConflictDoUpdate({
-        target: [featureEntitlements.scope, featureEntitlements.scopeKey, featureEntitlements.featureKey],
-        set: { enabled, updatedAt: new Date() },
-      });
-    return entitlementStore.getRoleDefaults();
-  },
-
-  setRoleDefaultsBulk: async (role: PartnerRole, map: Record<string, boolean>): Promise<EntitlementState['roleDefaults']> => {
-    const allowed = new Set(featureKeysForRole(role));
-    await ensureRoleDefaultsSeeded(role);
-    for (const [k, v] of Object.entries(map)) {
-      if (!allowed.has(k as PartnerFeatureKey)) continue;
-      if (!isSwitchableFeature(featureByKey(k))) continue;
-      await db
-        .insert(featureEntitlements)
-        .values({ scope: 'role', scopeKey: role, featureKey: k, enabled: Boolean(v) })
-        .onConflictDoUpdate({
-          target: [featureEntitlements.scope, featureEntitlements.scopeKey, featureEntitlements.featureKey],
-          set: { enabled: Boolean(v), updatedAt: new Date() },
-        });
-    }
-    return entitlementStore.getRoleDefaults();
-  },
-
-  /** Sprint 11: toggle a feature for a plan — mirrors setRoleDefault exactly. */
-  setPlanFeature: async (planId: string, featureKey: PartnerFeatureKey, enabled: boolean): Promise<void> => {
-    await db
-      .insert(featureEntitlements)
-      .values({ scope: 'plan', scopeKey: planId, featureKey, enabled })
-      .onConflictDoUpdate({
-        target: [featureEntitlements.scope, featureEntitlements.scopeKey, featureEntitlements.featureKey],
-        set: { enabled, updatedAt: new Date() },
-      });
-  },
-
+  /** Admin snapshot. feature_entitlements 'plan'/'account' scopes are legacy and no longer read. */
   snapshot: async (): Promise<EntitlementState> => {
-    const roleDefaults = await entitlementStore.getRoleDefaults();
-    const allRows = await db.select().from(featureEntitlements);
-    const planDefaults: EntitlementState['planDefaults'] = {};
+    const [roleDefaults, overrideRows, platformRows] = await Promise.all([
+      entitlementStore.getRoleDefaults(),
+      db.select().from(accountEntitlementOverrides),
+      db.select().from(platformFeatureStates),
+    ]);
     const accountOverrides: EntitlementState['accountOverrides'] = {};
-    for (const row of allRows) {
-      if (row.scope === 'plan') {
-        planDefaults[row.scopeKey] = { ...planDefaults[row.scopeKey], [row.featureKey]: row.enabled };
-      } else if (row.scope === 'account') {
-        accountOverrides[row.scopeKey] = { ...accountOverrides[row.scopeKey], [row.featureKey]: row.enabled };
-      }
+    for (const row of overrideRows) {
+      accountOverrides[row.userId] = {
+        ...accountOverrides[row.userId],
+        [row.featureKey]: {
+          effect: row.effect,
+          expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
+          reason: row.reason,
+          updatedAt: row.updatedAt.toISOString(),
+        },
+      };
     }
-    return { roleDefaults, planDefaults, accountOverrides };
+    const platformStates: EntitlementState['platformStates'] = {};
+    for (const row of platformRows) {
+      platformStates[row.featureKey] = { enabled: row.enabled, reason: row.reason, updatedAt: row.updatedAt.toISOString() };
+    }
+    return { roleDefaults, accountOverrides, platformStates };
   },
 
   /** Non-destructive: toggles access only — never mutates cashbook/orders/etc. */

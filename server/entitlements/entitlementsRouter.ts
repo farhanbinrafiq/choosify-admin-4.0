@@ -1,4 +1,4 @@
-import { Router, type Response } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { authenticateRequest } from '../middleware/auth';
 import { requireRole } from '../middleware/authorization';
 import { ROLES } from '../permissions/roles';
@@ -8,6 +8,7 @@ import {
   type PartnerFeatureKey,
   type PartnerRole,
 } from './entitlementStore';
+import { EntitlementAdminError, setRoleDefaults, type EntitlementActor } from './entitlementAdminStore';
 import { planStore } from './planStore';
 import { featureRequestStore, type FeatureRequestStatus } from './featureRequestStore';
 import { notifyRoles, notifyUser } from '../communication/systemNotify';
@@ -63,7 +64,7 @@ entitlementsRouter.get('/entitlements/me', ...requireAuth, async (req, res) => {
   });
 });
 
-/** Admin: full catalog + role defaults (+ empty plan/account stubs for future UI). */
+/** Admin: full catalog + role defaults + account overrides + platform switches. */
 entitlementsRouter.get('/entitlements/admin', ...requireAdmin, async (_req, res) => {
   let snapshot: Awaited<ReturnType<typeof entitlementStore.snapshot>>;
   try {
@@ -77,14 +78,41 @@ entitlementsRouter.get('/entitlements/admin', ...requireAdmin, async (_req, res)
     catalog: entitlementStore.catalog(),
     groups: PARTNER_FEATURE_GROUPS,
     roleDefaults: snapshot.roleDefaults,
-    planDefaults: snapshot.planDefaults,
     accountOverrides: snapshot.accountOverrides,
-    precedence: ['deprecated', 'roleEligibility', 'coreLock', 'accountOverride', 'planEntitlement(planControlled)', 'roleDefault'],
+    platformStates: snapshot.platformStates,
+    precedence: [
+      'unknownOrDeprecated',
+      'roleEligibility',
+      'core',
+      'platformSwitch',
+      'overrideRevoke',
+      'overrideRestrict(active)',
+      'overrideGrant',
+      'planEntitlement(planControlled, open subscription)',
+      'roleDefault',
+      'dependencies',
+    ],
     note: 'Disabling a feature blocks access only. Feature-owned business data is never deleted.',
   });
 });
 
-entitlementsRouter.put('/entitlements/admin/role-defaults', ...requireAdmin, async (req, res) => {
+/** Entitlement writes are Super Admin only (Phase 2A); reads stay available to Admin. */
+const requireSuperAdmin = [authenticateRequest, requireRole(ROLES.SUPER_ADMIN)];
+
+function actorFrom(req: Request): EntitlementActor {
+  return { userId: req.userId || req.user?.uid || null, realActorUserId: req.realActorUserId || null, source: 'admin_api' };
+}
+
+function sendAdminError(res: Response, error: unknown, fallback: string) {
+  if (error instanceof EntitlementAdminError) {
+    res.status(error.status).json({ success: false, error: error.message, code: error.code });
+    return;
+  }
+  // Anything else (DB unavailable, audit insert failure -> transaction rolled back).
+  sendEntitlementUnavailable(res, fallback, error);
+}
+
+entitlementsRouter.put('/entitlements/admin/role-defaults', ...requireSuperAdmin, async (req, res) => {
   const role = String((req.body as { role?: string })?.role || '').toLowerCase() as PartnerRole;
   if (role !== 'seller' && role !== 'creator') {
     res.status(400).json({ success: false, error: 'role must be seller or creator' });
@@ -96,24 +124,26 @@ entitlementsRouter.put('/entitlements/admin/role-defaults', ...requireAdmin, asy
     return;
   }
   try {
-    const saved = await entitlementStore.setRoleDefaultsBulk(role, features);
-    res.json({ success: true, roleDefaults: saved });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unable to update entitlements',
+    const result = await setRoleDefaults({
+      role,
+      changes: features,
+      actor: actorFrom(req),
+      reason: (req.body as { reason?: string })?.reason,
     });
+    res.json({ success: true, roleDefaults: result.roleDefaults, changed: result.changed });
+  } catch (error) {
+    sendAdminError(res, error, 'PUT /entitlements/admin/role-defaults');
   }
 });
 
-entitlementsRouter.patch('/entitlements/admin/role-defaults/:role/:featureKey', ...requireAdmin, async (req, res) => {
+entitlementsRouter.patch('/entitlements/admin/role-defaults/:role/:featureKey', ...requireSuperAdmin, async (req, res) => {
   const role = String(req.params.role || '').toLowerCase() as PartnerRole;
-  const featureKey = String(req.params.featureKey || '') as PartnerFeatureKey;
+  const featureKey = String(req.params.featureKey || '');
   if (role !== 'seller' && role !== 'creator') {
     res.status(400).json({ success: false, error: 'role must be seller or creator' });
     return;
   }
-  if (!featureKeysForRole(role).includes(featureKey)) {
+  if (!featureKeysForRole(role).includes(featureKey as PartnerFeatureKey)) {
     res.status(400).json({ success: false, error: 'Unknown feature for role' });
     return;
   }
@@ -127,17 +157,21 @@ entitlementsRouter.patch('/entitlements/admin/role-defaults/:role/:featureKey', 
   }
   const enabled = Boolean((req.body as { enabled?: boolean })?.enabled);
   try {
-    const saved = await entitlementStore.setRoleDefault(role, featureKey, enabled);
+    const result = await setRoleDefaults({
+      role,
+      changes: { [featureKey]: enabled },
+      actor: actorFrom(req),
+      reason: (req.body as { reason?: string })?.reason,
+      strict: true,
+    });
     res.json({
       success: true,
-      roleDefaults: saved,
+      roleDefaults: result.roleDefaults,
+      changed: result.changed,
       note: 'Access toggled only — existing feature data is preserved.',
     });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unable to update entitlement',
-    });
+    sendAdminError(res, error, 'PATCH /entitlements/admin/role-defaults');
   }
 });
 
@@ -178,26 +212,19 @@ entitlementsRouter.patch('/entitlements/admin/plans/:id', ...requireAdmin, async
   res.json({ success: true, plan: updated });
 });
 
-/** Toggle a feature for a plan — mirrors the role-defaults endpoint exactly. */
-entitlementsRouter.patch(
-  '/entitlements/admin/plan-defaults/:planId/:featureKey',
-  ...requireAdmin,
-  async (req, res) => {
-    const { planId, featureKey } = req.params;
-    const plan = await planStore.getPlan(planId);
-    if (!plan) {
-      res.status(404).json({ success: false, error: 'Plan not found' });
-      return;
-    }
-    if (!featureKeysForRole(plan.role).includes(featureKey as PartnerFeatureKey)) {
-      res.status(400).json({ success: false, error: 'Unknown feature for this plan\'s role' });
-      return;
-    }
-    const enabled = Boolean((req.body as { enabled?: boolean })?.enabled);
-    await entitlementStore.setPlanFeature(planId, featureKey as PartnerFeatureKey, enabled);
-    res.json({ success: true, note: 'Access toggled only — existing feature data is preserved.' });
-  },
-);
+/**
+ * Retired (Phase 2A). This wrote feature_entitlements scope='plan' rows that the
+ * resolver has not read since Sprint 12 — a competing, dead source of truth.
+ * Plan access comes only from Plan Versions (plan_entitlements, planControlled
+ * keys) via /admin/subscription-plans/:planId/versions/:versionId/entitlements.
+ */
+entitlementsRouter.patch('/entitlements/admin/plan-defaults/:planId/:featureKey', ...requireAdmin, (_req, res) => {
+  res.status(410).json({
+    success: false,
+    error: 'Plan defaults are retired. Configure plan-controlled features on a Plan Version instead.',
+    code: 'LEGACY_PLAN_DEFAULTS_RETIRED',
+  });
+});
 
 /** Admin-only: assign/change which plan an account is on. Never self-service. */
 entitlementsRouter.post('/entitlements/admin/accounts/:userId/plan', ...requireAdmin, async (req, res) => {
@@ -231,8 +258,8 @@ entitlementsRouter.get('/entitlements/admin/accounts/:userId/plan', ...requireAd
 /**
  * Sprint 11 — Feature Request workflow. Seller/Creator requests access to a
  * feature they don't currently have; Admin reviews. Requesting NEVER
- * self-enables the feature — only entitlementStore.setRoleDefault /
- * setPlanFeature / an account override (all admin-only) actually grant it.
+ * self-enables the feature — only a role default, a Plan Version entitlement or
+ * an account override (all admin-only) actually grant it.
  */
 entitlementsRouter.post('/entitlements/feature-requests', ...requireAuth, async (req, res) => {
   const role = String(req.userRole || req.user?.role || '').toLowerCase();
@@ -326,6 +353,6 @@ entitlementsRouter.patch('/entitlements/admin/feature-requests/:id', ...requireA
   res.json({
     success: true,
     featureRequest: updated,
-    note: 'Decision recorded only — grant the feature explicitly via role-defaults/plan-defaults/account override if approved.',
+    note: 'Decision recorded only — grant the feature explicitly via role defaults, a Plan Version or an account override if approved.',
   });
 });

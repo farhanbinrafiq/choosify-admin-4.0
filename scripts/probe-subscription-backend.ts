@@ -9,7 +9,8 @@
  */
 import { eq } from 'drizzle-orm';
 import { db } from '../server/db/client';
-import { users, workspaces, subscriptions, subscriptionEvents, subscriptionPayments, featureEntitlements, plans, planVersions } from '../server/db/schema';
+import { users, workspaces, subscriptions, subscriptionEvents, subscriptionPayments, featureEntitlements, plans, planVersions, accountEntitlementOverrides } from '../server/db/schema';
+import { removeAccountOverride, setAccountOverride } from '../server/entitlements/entitlementAdminStore';
 import { planService } from '../server/subscriptions/planService';
 import { subscriptionService } from '../server/subscriptions/subscriptionService';
 import { workspaceService } from '../server/subscriptions/workspaceService';
@@ -62,10 +63,8 @@ async function main() {
     await db.delete(subscriptions).where(eq(subscriptions.workspaceId, ws.id));
   }
   for (const ws of [wsA, wsB]) {
-    const overrideRows = await db.select().from(featureEntitlements).where(eq(featureEntitlements.scope, 'account'));
-    for (const r of overrideRows.filter((r) => r.scopeKey === ws.ownerUserId)) {
-      await db.delete(featureEntitlements).where(eq(featureEntitlements.id, r.id));
-    }
+    // Phase 2A: account overrides live in account_entitlement_overrides.
+    await db.delete(accountEntitlementOverrides).where(eq(accountEntitlementOverrides.userId, ws.ownerUserId));
   }
 
   // ── 1/2. Create Seller + Creator plans (draft) ──
@@ -137,15 +136,16 @@ async function main() {
   const notInPlan = await resolveFeatureEnabled({ role: 'seller', featureKey: 'adsDeals', userId: wsA.ownerUserId });
   assert(notInPlan === roleDefaultForAdsDeals, 'a feature NOT in the Plan Version falls through correctly to the real role default', { notInPlan, roleDefaultForAdsDeals });
 
-  await db.insert(featureEntitlements).values({ scope: 'account', scopeKey: wsA.ownerUserId, featureKey: 'customerInsights', enabled: false });
+  await setAccountOverride(
+    { userId: wsA.ownerUserId, featureKey: 'customerInsights', effect: 'revoke', reason: 'probe: override beats plan' },
+    { userId: adminId, source: 'admin_api' },
+  );
   const overridden = await resolveFeatureEnabled({ role: 'seller', featureKey: 'customerInsights', userId: wsA.ownerUserId });
-  assert(overridden === false, 'account-scope override still takes precedence OVER the plan tier (account > plan > role, unchanged)');
-  {
-    const overrideRows = await db.select().from(featureEntitlements).where(eq(featureEntitlements.scope, 'account'));
-    for (const r of overrideRows.filter((r) => r.scopeKey === wsA.ownerUserId && r.featureKey === 'customerInsights')) {
-      await db.delete(featureEntitlements).where(eq(featureEntitlements.id, r.id));
-    }
-  }
+  assert(overridden === false, 'account override still takes precedence OVER the plan tier (override > plan > role, unchanged)');
+  await removeAccountOverride(
+    { userId: wsA.ownerUserId, featureKey: 'customerInsights', reason: 'probe cleanup' },
+    { userId: adminId, source: 'admin_api' },
+  );
 
   // ── 10. Plan-limit resolver ──
   const limitRes = await resolvePlanLimit({ userId: wsA.ownerUserId, role: 'seller', limitKey: 'team_member_limit' });

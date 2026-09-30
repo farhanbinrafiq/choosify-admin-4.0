@@ -18,7 +18,7 @@ import {
   subscriptions,
   workspaces,
 } from '../db/schema';
-import { featureKeysForRole, type PartnerRole } from '../../shared/entitlements/registry';
+import { featureKeysForRole, planControlledFeatureKeysForRole, type PartnerRole } from '../../shared/entitlements/registry';
 import { auditLog, AUDIT_CATEGORIES } from '../logging/auditLogger';
 import type {
   Plan,
@@ -331,10 +331,19 @@ export const planService = {
   ): Promise<PlanEntitlement[]> => {
     const plan = await requirePlan(planId);
     await requireDraftVersion(planId, versionId);
-    const allowed = new Set(featureKeysForRole(plan.role as PartnerRole));
+    const known = new Set(featureKeysForRole(plan.role as PartnerRole));
+    // Phase 2A: a Plan Version may only grant/withhold plan-controlled (premium)
+    // features — the resolver ignores plan rows for every other key, so accepting
+    // them would only create a misleading, inert second source of truth.
+    const allowed = new Set(planControlledFeatureKeysForRole(plan.role as PartnerRole));
     for (const e of entitlements) {
-      if (!allowed.has(e.featureKey as never)) {
+      if (!known.has(e.featureKey as never)) {
         throw new PlanServiceError(`"${e.featureKey}" is not a valid feature for the ${plan.role} persona`);
+      }
+      if (!allowed.has(e.featureKey as never)) {
+        throw new PlanServiceError(
+          `"${e.featureKey}" is not plan-controlled; plans can only include: ${[...allowed].join(', ')}`,
+        );
       }
     }
     await db.delete(planEntitlements).where(eq(planEntitlements.planVersionId, versionId));

@@ -4,8 +4,9 @@
  */
 import { and, eq } from 'drizzle-orm';
 import { db } from '../server/db/client';
-import { featureEntitlements, partnerApplications } from '../server/db/schema';
+import { featureEntitlements, partnerApplications, users } from '../server/db/schema';
 import { resolveFeatureEnabled } from '../server/entitlements/entitlementStore';
+import { removeAccountOverride, setAccountOverride } from '../server/entitlements/entitlementAdminStore';
 import { PARTNER_FEATURES } from '../shared/entitlements/registry';
 
 const API = process.env.API_BASE || 'http://127.0.0.1:3001/api/v1';
@@ -88,29 +89,46 @@ async function main() {
   // Phase 1: plan precedence is plan_entitlements via subscription (Sprint 12) and only for
   // planControlled keys — covered by probe-entitlement-phase1-http.ts. feature_entitlements
   // scope='plan' rows are not read by the resolver, so they are no longer exercised here.
+  // Phase 2A: account overrides live in account_entitlement_overrides (audited, one per
+  // account+feature); account-scoped feature_entitlements rows are no longer read.
   {
-    const uid = `u_${stamp}`;
+    const [devSeller] = await db.select({ id: users.id }).from(users).where(eq(users.email, 'seller@choosify.com.bd')).limit(1);
+    assert(devSeller, 'dev seller account missing');
+    const uid = devSeller.id;
+    const actor = { userId: null, source: 'system' as const };
     await setEntitlementRow('role', 'seller', 'cashbooks', false);
     soft((await resolveFeatureEnabled({ role: 'seller', featureKey: 'cashbooks' })) === false, 'role=false → false');
 
     await setEntitlementRow('role', 'seller', 'cashbooks', true);
-    await setEntitlementRow('account', uid, 'cashbooks', false);
+    await setAccountOverride({ userId: uid, featureKey: 'cashbooks', effect: 'revoke', reason: 'gate probe' }, actor);
     soft(
       (await resolveFeatureEnabled({ role: 'seller', featureKey: 'cashbooks', userId: uid })) === false,
-      'account=false wins over role=true',
+      'account revoke wins over role=true',
     );
+    // A legacy account-scoped row is ignored (not a second source of truth).
+    await removeAccountOverride({ userId: uid, featureKey: 'cashbooks', reason: 'gate probe cleanup' }, actor);
+    await setEntitlementRow('account', uid, 'cashbooks', false);
+    soft(
+      (await resolveFeatureEnabled({ role: 'seller', featureKey: 'cashbooks', userId: uid })) === true,
+      'legacy account-scoped feature_entitlements row is ignored',
+    );
+    await clearEntitlementRow('account', uid, 'cashbooks');
 
-    // Core lock: an account row cannot remove a core capability.
-    await setEntitlementRow('account', uid, 'notifications', false);
+    // Core lock: an override can never even be written for a core capability.
+    let coreRejected = false;
+    try {
+      await setAccountOverride({ userId: uid, featureKey: 'notifications', effect: 'revoke', reason: 'gate probe' }, actor);
+    } catch {
+      coreRejected = true;
+    }
+    soft(coreRejected, 'core notifications override rejected');
     soft(
       (await resolveFeatureEnabled({ role: 'seller', featureKey: 'notifications', userId: uid })) === true,
-      'core notifications ignores account=false',
+      'core notifications stays enabled',
     );
 
     // Reset back to catalog default (true) so this probe's writes don't linger for other roles/tests.
     await setEntitlementRow('role', 'seller', 'cashbooks', true);
-    await clearEntitlementRow('account', uid, 'cashbooks');
-    await clearEntitlementRow('account', uid, 'notifications');
   }
 
   // Auth-strict budget (~12): 1 privilege apply + 1 pwd apply + 1 dup apply + 1 dup2 + 1 seller + 1 creator

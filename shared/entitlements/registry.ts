@@ -93,6 +93,12 @@ export type PartnerFeatureDef = {
   planControlled: boolean;
   group: PartnerFeatureGroup;
   deprecated?: { replacedBy?: PartnerFeatureKey; reason: string };
+  /**
+   * Features that must ALSO resolve as enabled for this one to be usable
+   * (Phase 2A dependency rule, evaluated last). Only add with direct evidence;
+   * the graph must stay acyclic.
+   */
+  requires?: PartnerFeatureKey[];
 };
 
 const WRITE_METHODS: HttpMethod[] = ['POST', 'PUT', 'PATCH', 'DELETE'];
@@ -215,6 +221,8 @@ export const PARTNER_FEATURES: PartnerFeatureDef[] = [
     tier: 'premium',
     planControlled: true,
     group: 'marketing',
+    // Promotion requests attach to Deals (adsDeals).
+    requires: ['adsDeals'],
   },
   {
     key: 'guideManagement',
@@ -390,6 +398,11 @@ export function isSwitchableFeature(feature: PartnerFeatureDef | undefined): boo
 
 export function switchableFeatureKeysForRole(role: PartnerRole): PartnerFeatureKey[] {
   return PARTNER_FEATURES.filter((f) => f.roles.includes(role) && isSwitchableFeature(f)).map((f) => f.key);
+}
+
+/** Keys a Plan Version may grant/withhold for this persona (active premium, planControlled). */
+export function planControlledFeatureKeysForRole(role: PartnerRole): PartnerFeatureKey[] {
+  return PARTNER_FEATURES.filter((f) => f.roles.includes(role) && f.planControlled && !f.deprecated).map((f) => f.key);
 }
 
 function normalizeApiPath(path: string): string {

@@ -97,6 +97,7 @@ async function main() {
   child.stderr?.on('data', (d) => (output += String(d)));
 
   let renamed = false;
+  let offline = '';
   try {
     await waitForHealth(child);
     const login = await req('/api/v1/auth/login', undefined, 'POST', { email: 'seller@choosify.com.bd', password: PASS_ });
@@ -125,13 +126,60 @@ async function main() {
     check(orders.status === 200, 'core endpoint GET /operations/orders reachable', orders.status);
     const notif = await req('/api/notifications', token);
     check(notif.status !== 503, `core notifications reachable without entitlement table (${notif.status})`);
+    check(/\[Entitlements\] Entitlement check failed/.test(output), 'failure logged via [Entitlements] logger');
+
+    await db.query('ALTER TABLE feature_entitlements_probe_offline RENAME TO feature_entitlements');
+    renamed = false;
+
+    // Phase 2A foundation tables (migration 0011): each missing table must give the
+    // same controlled 503, never a crash.
+    const has0011 = (await db.query("select to_regclass('public.account_entitlement_overrides') is not null as ok")).rows[0]?.ok;
+    if (has0011) {
+      for (const table of ['account_entitlement_overrides', 'platform_feature_states']) {
+        await db.query(`ALTER TABLE ${table} RENAME TO ${table}_probe_offline`);
+        offline = table;
+        const g = await req('/api/v1/cashbooks', token);
+        check(g.status === 503 && g.body.code === 'ENTITLEMENT_CHECK_UNAVAILABLE', `${table} missing → gated request 503`, g);
+        const m = await req('/api/v1/entitlements/me', token);
+        check(m.status === 503 && m.body.code === 'ENTITLEMENT_CHECK_UNAVAILABLE', `${table} missing → /entitlements/me 503`, m);
+        const o = await req('/api/v1/operations/orders', token);
+        check(o.status === 200, `${table} missing → core orders route still 200`, o.status);
+        await db.query(`ALTER TABLE ${table}_probe_offline RENAME TO ${table}`);
+        offline = '';
+      }
+
+      // Audit table missing: an admin write must fail in a controlled way and
+      // leave the role default unchanged (state change + audit are one transaction).
+      const adminLogin = await req('/api/v1/auth/login', undefined, 'POST', { email: 'admin@choosify.com.bd', password: PASS_ });
+      const adminToken = String(adminLogin.body.accessToken || '');
+      check(Boolean(adminToken), 'super admin login on disposable DB', adminLogin.status);
+      const beforeRow = await db.query("select enabled from feature_entitlements where scope='role' and scope_key='seller' and feature_key='reviews'");
+      const before = beforeRow.rows[0]?.enabled !== false;
+      await db.query('ALTER TABLE entitlement_audit_events RENAME TO entitlement_audit_events_probe_offline');
+      offline = 'entitlement_audit_events';
+      const w = await req('/api/v1/entitlements/admin/role-defaults/seller/reviews', adminToken, 'PATCH', { enabled: !before });
+      check(w.status === 503 && w.body.code === 'ENTITLEMENT_CHECK_UNAVAILABLE', 'audit table missing → admin write 503 (controlled)', w);
+      const afterRow = await db.query("select enabled from feature_entitlements where scope='role' and scope_key='seller' and feature_key='reviews'");
+      check((afterRow.rows[0]?.enabled !== false) === before, 'audit table missing → role default NOT changed (transaction rolled back)', afterRow.rows[0]);
+      const seller2 = await req('/api/v1/cashbooks', token);
+      check(seller2.status === 200, 'audit table missing → partner reads unaffected', seller2.status);
+      await db.query('ALTER TABLE entitlement_audit_events_probe_offline RENAME TO entitlement_audit_events');
+      offline = '';
+      await new Promise((r) => setTimeout(r, 1000));
+      check(child.exitCode === null && child.signalCode === null, 'API process still alive after 0011 table outages');
+      check((await fetch(`${ROOT}/health`).then((r) => r.status).catch(() => 0)) === 200, '/health 200 after 0011 table outages');
+    } else {
+      console.log('(migration 0011 not applied on this database — Phase 2A table outage checks skipped)');
+    }
     const unhandled = /unhandledrejection|UnhandledPromiseRejection/i.test(output);
     check(!unhandled, 'no unhandled rejection logged');
-    check(/\[Entitlements\] Entitlement check failed/.test(output), 'failure logged via [Entitlements] logger');
   } finally {
     if (renamed) await db.query('ALTER TABLE feature_entitlements_probe_offline RENAME TO feature_entitlements');
-    const t = await db.query("select to_regclass('public.feature_entitlements') is not null as ok");
-    console.log('feature_entitlements restored:', t.rows[0]?.ok);
+    if (offline) await db.query(`ALTER TABLE ${offline}_probe_offline RENAME TO ${offline}`);
+    const t = await db.query(
+      "select to_regclass('public.feature_entitlements') is not null as fe, to_regclass('public.account_entitlement_overrides') is not null as ov, to_regclass('public.platform_feature_states') is not null as pf, to_regclass('public.entitlement_audit_events') is not null as au",
+    );
+    console.log('tables restored:', JSON.stringify(t.rows[0]));
     await db.end();
     child.kill();
   }

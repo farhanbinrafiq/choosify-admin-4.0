@@ -13,7 +13,6 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '../server/db/client';
 import { featureEntitlements } from '../server/db/schema';
 import { resolveFeatureEnabled } from '../server/entitlements/entitlementStore';
-import { workspaceService } from '../server/subscriptions/workspaceService';
 
 const ROOT = process.env.PROBE_BASE_URL_ROOT || 'http://127.0.0.1:3001';
 const API = `${ROOT}/api/v1`;
@@ -180,20 +179,28 @@ async function main() {
     for (const key of ['returnsRefunds', 'messaging', 'products', 'adsDeals', 'cashbooks']) await setRole('seller', key, true);
 
     // ── L: plan rows never consulted for non-plan-controlled keys ──
-    const original_resolve = workspaceService.resolveWorkspaceForUser;
-    let workspaceLookups = 0;
-    (workspaceService as { resolveWorkspaceForUser: typeof original_resolve }).resolveWorkspaceForUser = async (...args) => {
-      workspaceLookups += 1;
-      return original_resolve.apply(workspaceService, args);
+    // Phase 2A loads the plan in one extra join query only when a plan-controlled
+    // key is evaluated: operational keys = 3 context queries, plan-controlled = 4.
+    const pool = (db as unknown as { $client: { query: (...args: unknown[]) => unknown } }).$client;
+    const originalQuery = pool.query.bind(pool);
+    let queries = 0;
+    pool.query = (...args: unknown[]) => {
+      queries += 1;
+      return originalQuery(...args);
     };
     try {
       await resolveFeatureEnabled({ role: 'seller', featureKey: 'returnsRefunds', userId: seller.uid });
+      const operational = queries;
+      queries = 0;
       await resolveFeatureEnabled({ role: 'seller', featureKey: 'products', userId: seller.uid });
-      check(workspaceLookups === 0, 'L operational keys skip plan/subscription resolution', workspaceLookups);
+      const operational2 = queries;
+      queries = 0;
       await resolveFeatureEnabled({ role: 'seller', featureKey: 'customerInsights', userId: seller.uid });
-      check(workspaceLookups === 1, 'L plan-controlled key consults plan/subscription', workspaceLookups);
+      const planControlled = queries;
+      check(operational === 3 && operational2 === 3, 'L operational keys skip plan/subscription resolution (3 queries)', { operational, operational2 });
+      check(planControlled === 4, 'L plan-controlled key consults plan/subscription (+1 join query)', planControlled);
     } finally {
-      (workspaceService as { resolveWorkspaceForUser: typeof original_resolve }).resolveWorkspaceForUser = original_resolve;
+      pool.query = originalQuery;
     }
   } finally {
     for (const restore of dbRowsToRestore.reverse()) await restore();

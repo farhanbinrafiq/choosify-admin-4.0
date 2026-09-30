@@ -78,6 +78,13 @@
       "when": 1788730000000,
       "tag": "0010_notification_preferences",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788740000000,
+      "tag": "0011_entitlement_foundation",
+      "breakpoints": true
     }
   ]
 }

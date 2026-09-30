@@ -307,7 +307,9 @@ async function main() {
   check(aa.deprecated?.replacedBy === 'logisticsAnalytics', 'N advancedAnalytics deprecated → logisticsAnalytics');
   check(!reg.featureKeysForRole('seller').includes('advancedAnalytics' as never), 'N deprecated key not an active role key');
   check(!reg.switchableFeatureKeysForRole('seller').includes('advancedAnalytics' as never), 'N deprecated key not switchable');
-  check((await store.resolveFeatureEnabled({ role: 'seller', featureKey: 'advancedAnalytics' })) === true, 'N deprecated key gates nothing (no DB)');
+  // Phase 2A: deprecated keys resolve DENIED (never reactivated), decided without any DB read.
+  // They still gate no route or page because they map nothing (checked above).
+  check((await store.resolveFeatureEnabled({ role: 'seller', featureKey: 'advancedAnalytics' })) === false, 'N deprecated key resolves denied (no DB)');
   check(reg.featuresForPageKey('seller', 'courierAnalytics').map((f) => f.key).join() === 'logisticsAnalytics', 'N courierAnalytics page → logisticsAnalytics');
   check(featureByKey('logisticsAnalytics')?.planControlled === true, 'N logisticsAnalytics premium/plan-controlled');
 

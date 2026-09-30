@@ -93,12 +93,19 @@ async function main() {
   assert(createPlanRes.ok && createPlanBody.success && createPlanBody.plan?.id, 'admin creates a plan', createPlanBody);
   const planId = createPlanBody.plan!.id;
 
+  // Phase 2A: the legacy plan-defaults path (feature_entitlements scope='plan', never read
+  // by the resolver since Sprint 12) is retired — plan access comes from Plan Versions only.
   const toggleRes = await fetch(`${V1}/entitlements/admin/plan-defaults/${encodeURIComponent(planId)}/${FEATURE_KEY}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${admin.token}` },
     body: JSON.stringify({ enabled: true }),
   });
-  assert(toggleRes.ok, 'admin enables a feature for the plan', toggleRes.status);
+  const toggleBody = (await toggleRes.json().catch(() => ({}))) as { code?: string };
+  assert(
+    toggleRes.status === 410 && toggleBody.code === 'LEGACY_PLAN_DEFAULTS_RETIRED',
+    'legacy plan-defaults write is retired (410, not a competing source of truth)',
+    { status: toggleRes.status, code: toggleBody.code },
+  );
 
   // Seller cannot self-assign a plan (must be admin-gated, 403).
   const selfAssignRes = await fetch(`${V1}/entitlements/admin/accounts/${encodeURIComponent(seller.uid)}/plan`, {
@@ -117,12 +124,13 @@ async function main() {
   const assignBody = (await assignRes.json()) as { success?: boolean; accountPlan?: { planId?: string } };
   assert(assignRes.ok && assignBody.success && assignBody.accountPlan?.planId === planId, 'admin assigns seller to the plan', assignBody);
 
-  // Now the seller's resolved entitlements should reflect the plan-enabled feature —
-  // proving the previously-dead planId resolution path is now live.
+  // The legacy account_plans assignment is reported by /entitlements/me but does not grant
+  // features; with no open subscription the plan-controlled key falls back to its role
+  // default (Phase 2A decision A), which is enabled.
   const meAfter = await fetch(`${V1}/entitlements/me`, { headers: { Authorization: `Bearer ${seller.token}` } });
   const meAfterBody = (await meAfter.json()) as { entitlements?: Record<string, boolean>; plan?: { planId?: string } };
   assert(meAfterBody.plan?.planId === planId, 'seller now sees their assigned plan via /entitlements/me', meAfterBody.plan);
-  assert(meAfterBody.entitlements?.[FEATURE_KEY] === true, 'feature enabled via plan resolves true for the seller', meAfterBody.entitlements);
+  assert(meAfterBody.entitlements?.[FEATURE_KEY] === true, 'plan-controlled feature with no subscription resolves to the role default (true)', meAfterBody.entitlements);
 
   // Seller cannot toggle their own plan's features (admin-only route).
   const selfToggleRes = await fetch(`${V1}/entitlements/admin/plan-defaults/${encodeURIComponent(planId)}/${FEATURE_KEY}`, {

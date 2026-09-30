@@ -19,12 +19,17 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { partnerApplications, featureEntitlements } from '../db/schema';
 import type { PartnerApplication } from '../partnerApplications/partnerApplicationStore';
-import type { EntitlementState } from './entitlementStore';
+/** Shape of the pre-Sprint-10 JSON snapshot's entitlement block. */
+type LegacyEntitlementState = {
+  roleDefaults?: Record<string, Record<string, boolean>>;
+  planDefaults?: Record<string, Record<string, boolean>>;
+  accountOverrides?: Record<string, Record<string, boolean>>;
+};
 
 type LegacySnapshot = {
   version: 1;
   savedAt: string;
-  entitlements: EntitlementState;
+  entitlements: LegacyEntitlementState;
   partnerApplications: PartnerApplication[];
 };
 
@@ -73,23 +78,25 @@ async function backfillPartnerApplications(rows: PartnerApplication[]): Promise<
   return imported;
 }
 
-async function backfillEntitlements(state: EntitlementState): Promise<number> {
+async function backfillEntitlements(state: LegacyEntitlementState): Promise<number> {
   let imported = 0;
-  const rowsToUpsert: Array<{ scope: 'role' | 'plan' | 'account'; scopeKey: string; featureKey: string; enabled: boolean }> = [];
+  const rowsToUpsert: Array<{ scope: 'role'; scopeKey: string; featureKey: string; enabled: boolean }> = [];
   for (const [role, features] of Object.entries(state.roleDefaults || {})) {
     for (const [featureKey, enabled] of Object.entries(features || {})) {
       rowsToUpsert.push({ scope: 'role', scopeKey: role, featureKey, enabled: Boolean(enabled) });
     }
   }
-  for (const [planId, features] of Object.entries(state.planDefaults || {})) {
-    for (const [featureKey, enabled] of Object.entries(features || {})) {
-      rowsToUpsert.push({ scope: 'plan', scopeKey: planId, featureKey, enabled: Boolean(enabled) });
-    }
-  }
-  for (const [userId, features] of Object.entries(state.accountOverrides || {})) {
-    for (const [featureKey, enabled] of Object.entries(features || {})) {
-      rowsToUpsert.push({ scope: 'account', scopeKey: userId, featureKey, enabled: Boolean(enabled) });
-    }
+  // Phase 2A: legacy plan-scoped and account-scoped entitlements are no longer
+  // imported. Neither is read by the resolver (plan access comes from Plan
+  // Versions; account overrides from account_entitlement_overrides, which need an
+  // admin reason and an audit row). Skipped entries are only counted, never written.
+  const skipped =
+    Object.values(state.planDefaults || {}).reduce((n, f) => n + Object.keys(f || {}).length, 0) +
+    Object.values(state.accountOverrides || {}).reduce((n, f) => n + Object.keys(f || {}).length, 0);
+  if (skipped > 0) {
+    console.warn(
+      `[EntitlementsBackfill] Skipped ${skipped} legacy plan/account-scoped entitlement entr${skipped === 1 ? 'y' : 'ies'} (retired in Phase 2A; not a source of truth).`,
+    );
   }
   for (const row of rowsToUpsert) {
     const existing = await db

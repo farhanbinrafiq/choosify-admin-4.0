@@ -261,6 +261,76 @@ export const featureEntitlements = pgTable('feature_entitlements', {
   scopeKeyFeatureUnique: uniqueIndex('feature_entitlements_scope_key_feature_unique').on(table.scope, table.scopeKey, table.featureKey),
 }));
 
+/**
+ * Entitlements Phase 2A (migration 0011). feature_entitlements above remains the
+ * role-default baseline only; its 'plan' and 'account' scopes are no longer read.
+ * One active override per (account, feature): grant (until removed), revoke
+ * (permanent until removed) or restrict (until expires_at). History lives in
+ * entitlement_audit_events.
+ */
+export const accountEntitlementOverrides = pgTable('account_entitlement_overrides', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  featureKey: varchar('feature_key', { length: 80 }).notNull(),
+  effect: varchar('effect', { length: 16 }).$type<'grant' | 'revoke' | 'restrict'>().notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+  reason: text('reason').notNull(),
+  createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  updatedByUserId: uuid('updated_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  userFeatureUnique: uniqueIndex('account_entitlement_overrides_user_feature_unique').on(table.userId, table.featureKey),
+  effectCheck: check('account_entitlement_overrides_effect_check', sql`${table.effect} IN ('grant', 'revoke', 'restrict')`),
+  expiryCheck: check('account_entitlement_overrides_expiry_check', sql`(${table.effect} = 'restrict') = (${table.expiresAt} IS NOT NULL)`),
+  reasonCheck: check('account_entitlement_overrides_reason_check', sql`length(trim(${table.reason})) > 0`),
+}));
+
+/** Platform-wide feature switch (migration 0011). A missing row means ENABLED. */
+export const platformFeatureStates = pgTable('platform_feature_states', {
+  featureKey: varchar('feature_key', { length: 80 }).primaryKey(),
+  enabled: boolean('enabled').notNull(),
+  reason: text('reason'),
+  updatedByUserId: uuid('updated_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  reasonCheck: check('platform_feature_states_reason_check', sql`${table.enabled} OR length(trim(coalesce(${table.reason}, ''))) > 0`),
+}));
+
+/**
+ * Append-only history of administrative entitlement changes (migration 0011).
+ * Deliberately NO foreign keys on the user columns: history must survive user
+ * deletion and never be rewritten by ON DELETE actions.
+ */
+export const entitlementAuditEvents = pgTable('entitlement_audit_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  action: varchar('action', { length: 40 })
+    .$type<'role_default.set' | 'account_override.set' | 'account_override.removed' | 'platform_state.set'>()
+    .notNull(),
+  source: varchar('source', { length: 16 }).$type<'admin_api' | 'system'>().notNull(),
+  actorUserId: uuid('actor_user_id'),
+  realActorUserId: uuid('real_actor_user_id'),
+  targetScope: varchar('target_scope', { length: 16 }).$type<'role' | 'account' | 'platform'>().notNull(),
+  targetUserId: uuid('target_user_id'),
+  targetRole: varchar('target_role', { length: 16 }),
+  featureKey: varchar('feature_key', { length: 80 }).notNull(),
+  previousState: jsonb('previous_state'),
+  newState: jsonb('new_state'),
+  reason: text('reason'),
+}, (table) => ({
+  actionCheck: check(
+    'entitlement_audit_events_action_check',
+    sql`${table.action} IN ('role_default.set', 'account_override.set', 'account_override.removed', 'platform_state.set')`,
+  ),
+  sourceCheck: check('entitlement_audit_events_source_check', sql`${table.source} IN ('admin_api', 'system')`),
+  targetScopeCheck: check('entitlement_audit_events_target_scope_check', sql`${table.targetScope} IN ('role', 'account', 'platform')`),
+  targetUserCreatedIdx: index('entitlement_audit_events_target_user_created_idx').on(table.targetUserId, table.createdAt.desc()),
+  featureCreatedIdx: index('entitlement_audit_events_feature_created_idx').on(table.featureKey, table.createdAt.desc()),
+  createdIdx: index('entitlement_audit_events_created_idx').on(table.createdAt.desc()),
+}));
+
 /** Sprint 10 durability migration — Notifications (was a bare in-memory Map, no disk snapshot at all). */
 export const notifications = pgTable('notifications', {
   id: varchar('id', { length: 64 }).primaryKey(),
