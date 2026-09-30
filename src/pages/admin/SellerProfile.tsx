@@ -12,6 +12,7 @@ import { operationsApi, type OpsVerification, type OpsStorefrontOrder } from '..
 import { cashbookApi, type FinanceSummary } from '../../services/cashbookApi';
 import type { CatalogBrand, CatalogProduct } from '../../types/catalog';
 import { Avatar } from '../../components/shared/Avatar';
+import { AccountEntitlementsPanel } from '../../components/admin/EntitlementAccessPanels';
 
 // ============================================================================
 // Seller Profile — the real /admin/seller-profile?sellerId= destination.
@@ -46,6 +47,7 @@ const TABS: Array<{ key: string; label: string; icon: string }> = [
   { key: 'payment', label: 'Payment Info', icon: '💳' },
   { key: 'reviews', label: 'Reviews & Score', icon: '●' },
   { key: 'ads', label: 'Ads & Deals', icon: '⛿' },
+  { key: 'features', label: 'Feature Access', icon: '⚑' },
 ];
 
 export default function SellerProfile() {
@@ -411,6 +413,16 @@ export default function SellerProfile() {
               <div style={S.panelSub}>Active campaigns and sponsored placements for this seller.</div>
               <div style={S.emptyBox}>Not available here yet — see Ads &amp; Deals Studio for this seller's real campaigns.</div>
             </div>
+          )}
+
+          {/* Read-oriented entry point; changes are made on the central Feature Access page. */}
+          {activeTab === 'features' && (
+            <AccountEntitlementsPanel
+              userId={sellerId}
+              canMutate={false}
+              manageHref={`/admin/feature-access?view=accounts&userId=${encodeURIComponent(sellerId)}`}
+              auditHref={`/admin/feature-access?view=audit&userId=${encodeURIComponent(sellerId)}`}
+            />
           )}
         </div>
       </div>

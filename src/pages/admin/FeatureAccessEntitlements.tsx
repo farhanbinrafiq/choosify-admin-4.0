@@ -1,7 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { AdminWorkspaceLayout } from '../../components/Layout/AdminWorkspaceLayout';
+import { Tabs } from '../../components/ui/Tabs';
+import { AdminEditModeBar, useAdminEditMode } from '../../components/admin/AdminEditMode';
+import {
+  AccountEntitlementsPanel,
+  AccountPicker,
+  EntitlementAuditPanel,
+  PlatformControlsPanel,
+} from '../../components/admin/EntitlementAccessPanels';
 import { authedFetch } from '../../services/authRefresh';
 import {
   PARTNER_FEATURE_GROUPS,
@@ -37,6 +45,16 @@ const ROLE_HEADINGS: Record<RoleScope, [string, string]> = {
     'Consumer (shopper) capabilities are core and are not controlled through partner entitlements.',
   ],
 };
+
+type PageView = 'roles' | 'platform' | 'accounts' | 'audit';
+
+/** Sub-views live on the existing route as ?view= (no new routes). */
+const PAGE_VIEWS: { key: PageView; label: string }[] = [
+  { key: 'roles', label: 'Role Defaults' },
+  { key: 'platform', label: 'Platform Controls' },
+  { key: 'accounts', label: 'Account Access' },
+  { key: 'audit', label: 'Audit History' },
+];
 
 const ROLE_TABS: { key: RoleScope; label: string }[] = [
   { key: 'seller', label: 'SELLER' },
@@ -153,11 +171,14 @@ function FeatureRow({
   feature,
   enabled,
   busy,
+  readOnly,
   onToggle,
 }: {
   feature: PartnerFeatureDef;
   enabled: boolean;
   busy: boolean;
+  /** Ordinary Admin: role defaults are Super Admin writes, so show state only. */
+  readOnly: boolean;
   onToggle: () => void;
 }) {
   const emoji = FEATURE_EMOJI[feature.key] || '⚙';
@@ -211,9 +232,18 @@ function FeatureRow({
         {feature.tier === 'core' && <TierBadge text="CORE · ALWAYS ON" color="#065F46" background="#D1FAE5" />}
         {feature.tier === 'reserved' && <TierBadge text="NOT YET AVAILABLE" color="#4B5563" background="#F3F4F6" />}
         {feature.planControlled && <TierBadge text="PLAN-CONTROLLED" color="#B45309" background="#FEF3C7" />}
-        {isSwitchableFeature(feature) && (
-          <DesignToggle checked={enabled} disabled={busy} onChange={onToggle} label={`${feature.label} for role`} />
-        )}
+        {isSwitchableFeature(feature) &&
+          (readOnly ? (
+            <span data-testid={`role-default-state-${feature.key}`}>
+              <TierBadge
+                text={enabled ? 'ON' : 'OFF'}
+                color={enabled ? '#065F46' : '#991B1B'}
+                background={enabled ? '#D1FAE5' : '#FEE2E2'}
+              />
+            </span>
+          ) : (
+            <DesignToggle checked={enabled} disabled={busy} onChange={onToggle} label={`${feature.label} for role`} />
+          ))}
       </div>
     </div>
   );
@@ -469,6 +499,26 @@ const groupHeaderStyle: React.CSSProperties = {
 export default function FeatureAccessEntitlementsPage() {
   const { profile } = useAuth();
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
+  // Every entitlement write is Super Admin only server-side; Admins get a read-only page.
+  const isSuperAdmin = profile?.role === 'super_admin';
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedView = searchParams.get('view') as PageView | null;
+  const view: PageView = PAGE_VIEWS.some((v) => v.key === requestedView) ? (requestedView as PageView) : 'roles';
+  const selectedUserId = searchParams.get('userId') || '';
+  const editMode = useAdminEditMode(profile?.role);
+  // Platform + account changes require Super Admin AND an intentional Edit Mode.
+  const canMutateControls = isSuperAdmin && editMode.editing;
+  const [accountReloadKey, setAccountReloadKey] = useState(0);
+
+  const setParams = (patch: Record<string, string | null>) => {
+    const next = new URLSearchParams(searchParams);
+    for (const [k, v] of Object.entries(patch)) {
+      if (v) next.set(k, v);
+      else next.delete(k);
+    }
+    setSearchParams(next);
+  };
 
   const [roleScope, setRoleScope] = useState<RoleScope>('seller');
   const [catalog, setCatalog] = useState<PartnerFeatureDef[]>([]);
@@ -538,6 +588,7 @@ export default function FeatureAccessEntitlementsPage() {
   const [heading, subheading] = ROLE_HEADINGS[roleScope];
 
   const toggleFeature = async (role: PartnerRole, feature: PartnerFeatureDef, enabled: boolean) => {
+    if (!isSuperAdmin) return;
     setBusyKey(`${role}:${feature.key}`);
     setError(null);
     try {
@@ -616,6 +667,71 @@ export default function FeatureAccessEntitlementsPage() {
           </div>
         )}
 
+        {/* Sub-view switcher (?view=) + Super Admin Edit Mode for platform/account changes */}
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
+            marginBottom: 16,
+          }}
+        >
+          <Tabs
+            tabs={PAGE_VIEWS.map((v) => ({ key: v.key, label: v.label }))}
+            activeKey={view}
+            onChange={(key) => setParams({ view: key })}
+            className="fa-view-tabs"
+          />
+          {isSuperAdmin && (view === 'platform' || view === 'accounts') && <AdminEditModeBar mode={editMode} />}
+        </div>
+
+        {!isSuperAdmin && (
+          <div
+            data-testid="entitlements-readonly-note"
+            style={{ ...cardStyle, padding: '12px 20px', fontSize: 12, fontWeight: 600, color: '#4B5563' }}
+          >
+            Read-only view — changing Feature Access requires a Super Admin.
+          </div>
+        )}
+
+        {view === 'platform' && (
+          <PlatformControlsPanel canMutate={canMutateControls} onChanged={() => setAccountReloadKey((n) => n + 1)} />
+        )}
+
+        {view === 'accounts' && (
+          <>
+            <div style={{ ...cardStyle, padding: '16px 24px' }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#111827', marginBottom: 4 }}>Account Access</div>
+              <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, marginBottom: 12 }}>
+                Choose a Seller or Creator to see its effective access and why each feature is on or off.
+              </div>
+              <AccountPicker value={selectedUserId} onSelect={(uid) => setParams({ userId: uid || null })} />
+            </div>
+            {selectedUserId ? (
+              <AccountEntitlementsPanel
+                key={selectedUserId}
+                userId={selectedUserId}
+                canMutate={canMutateControls}
+                reloadKey={accountReloadKey}
+                auditHref={`/admin/feature-access?view=audit&userId=${encodeURIComponent(selectedUserId)}`}
+              />
+            ) : (
+              <div
+                data-testid="account-access-empty"
+                style={{ ...cardStyle, padding: '18px 24px', fontSize: 12, fontWeight: 600, color: '#6B7280' }}
+              >
+                No account selected.
+              </div>
+            )}
+          </>
+        )}
+
+        {view === 'audit' && <EntitlementAuditPanel initialUserId={selectedUserId} />}
+
+        {view === 'roles' && (
+        <>
         {/* Partner application review moved to the owning management studios. */}
         <div
           data-testid="partner-applications-pointer"
@@ -768,6 +884,7 @@ export default function FeatureAccessEntitlementsPage() {
                       feature={feature}
                       enabled={enabled}
                       busy={busy}
+                      readOnly={!isSuperAdmin}
                       onToggle={() => void toggleFeature(roleScope, feature, !enabled)}
                     />
                   );
@@ -775,6 +892,8 @@ export default function FeatureAccessEntitlementsPage() {
               </div>
             </div>
           ))
+        )}
+        </>
         )}
       </div>
     </AdminWorkspaceLayout>

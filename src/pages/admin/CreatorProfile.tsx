@@ -12,6 +12,7 @@ import { operationsApi, type OpsVerification } from '../../services/operationsAp
 import { cashbookApi, type FinanceSummary } from '../../services/cashbookApi';
 import type { CatalogCreator } from '../../types/catalog';
 import { Avatar } from '../../components/shared/Avatar';
+import { AccountEntitlementsPanel } from '../../components/admin/EntitlementAccessPanels';
 
 // ============================================================================
 // Creator Profile — the real /admin/creator-review?creatorId= destination.
@@ -45,6 +46,7 @@ const TABS: Array<{ key: string; label: string; icon: string }> = [
   { key: 'payment', label: 'Payment Info', icon: '💳' },
   { key: 'reviews', label: 'Reviews & Score', icon: '●' },
   { key: 'ads', label: 'Ads & Deals', icon: '⛿' },
+  { key: 'features', label: 'Feature Access', icon: '⚑' },
 ];
 
 export default function CreatorProfile() {
@@ -358,6 +360,23 @@ export default function CreatorProfile() {
               <div style={S.emptyBox}>Not available here yet — see Ads &amp; Deals Studio for this creator's real campaigns.</div>
             </div>
           )}
+
+          {/* Read-oriented entry point; changes are made on the central Feature Access page. */}
+          {activeTab === 'features' &&
+            (creator?.userId ? (
+              <AccountEntitlementsPanel
+                userId={creator.userId}
+                canMutate={false}
+                manageHref={`/admin/feature-access?view=accounts&userId=${encodeURIComponent(creator.userId)}`}
+                auditHref={`/admin/feature-access?view=audit&userId=${encodeURIComponent(creator.userId)}`}
+              />
+            ) : (
+              <div style={S.panel} data-testid="creator-feature-access-no-account">
+                <div style={S.panelTitle}>FEATURE ACCESS</div>
+                <div style={S.panelSub}>Partner entitlements apply to the creator's linked login account.</div>
+                <div style={S.emptyBox}>No linked account — this creator profile is not connected to a user account, so there is no feature access to show.</div>
+              </div>
+            ))}
         </div>
       </div>
 
