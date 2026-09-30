@@ -138,6 +138,10 @@ export const PARTNER_FEATURES: PartnerFeatureDef[] = [
     pageKeys: [],
     // '/api/messaging' (staff hub + public status probe) removed — dead mapping.
     apiPrefixes: ['/api/v1/seller/social-inbox'],
+    // Phase 2B downgrade rule: only NEW Meta actions (connect) are gated. Reading
+    // connection status stays available and disconnect (DELETE) stays allowed when
+    // the add-on is off. Thread history is read via /conversations (messaging).
+    apiMethods: ['POST', 'PUT', 'PATCH'],
     roles: ['seller', 'creator'],
     tier: 'premium',
     planControlled: true,

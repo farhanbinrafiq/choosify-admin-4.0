@@ -163,10 +163,57 @@ async function main() {
       check((afterRow.rows[0]?.enabled !== false) === before, 'audit table missing → role default NOT changed (transaction rolled back)', afterRow.rows[0]);
       const seller2 = await req('/api/v1/cashbooks', token);
       check(seller2.status === 200, 'audit table missing → partner reads unaffected', seller2.status);
+      // Phase 2B: an override write whose audit insert fails is rolled back.
+      const sellerIdRow = await db.query("select id from users where email='seller@choosify.com.bd'");
+      const sellerId = sellerIdRow.rows[0]?.id;
+      await db.query('delete from account_entitlement_overrides where user_id = $1 and feature_key = $2', [sellerId, 'reviews']);
+      const ov = await req(`/api/v1/entitlements/admin/accounts/${sellerId}/overrides/reviews`, adminToken, 'PUT', { effect: 'revoke', reason: 'crash probe' });
+      check(ov.status === 503 && ov.body.code === 'ENTITLEMENT_CHECK_UNAVAILABLE', 'audit table missing → override write 503 (controlled)', ov);
+      const leaked = await db.query('select count(*)::int n from account_entitlement_overrides where user_id = $1 and feature_key = $2', [sellerId, 'reviews']);
+      check(leaked.rows[0].n === 0, 'audit table missing → override NOT written (transaction rolled back)', leaked.rows[0]);
+      const pf = await req('/api/v1/entitlements/admin/platform-states/reviews', adminToken, 'PUT', { enabled: false, reason: 'crash probe' });
+      const pfRow = await db.query("select count(*)::int n from platform_feature_states where feature_key='reviews'");
+      check(pf.status === 503 && pfRow.rows[0].n === 0, 'audit table missing → platform write 503 and rolled back', { pf, pfRow: pfRow.rows[0] });
       await db.query('ALTER TABLE entitlement_audit_events_probe_offline RENAME TO entitlement_audit_events');
       offline = '';
+
+      // Phase 2B crash safety: the eight entitlement-router handlers that used to
+      // await the database outside try/catch.
+      const routeOutages: Array<{ table: string; calls: Array<{ label: string; path: string; token: string; method?: string; body?: unknown }> }> = [
+        {
+          table: 'plans',
+          calls: [
+            { label: 'GET /entitlements/admin/plans', path: '/api/v1/entitlements/admin/plans', token: adminToken },
+            { label: 'POST /entitlements/admin/plans', path: '/api/v1/entitlements/admin/plans', token: adminToken, method: 'POST', body: { role: 'seller', name: 'crash probe' } },
+            { label: 'PATCH /entitlements/admin/plans/:id', path: '/api/v1/entitlements/admin/plans/plan_crash_probe', token: adminToken, method: 'PATCH', body: { name: 'x' } },
+          ],
+        },
+        {
+          table: 'account_plans',
+          calls: [{ label: 'GET /entitlements/admin/accounts/:userId/plan', path: `/api/v1/entitlements/admin/accounts/${sellerId}/plan`, token: adminToken }],
+        },
+        {
+          table: 'feature_requests',
+          calls: [
+            { label: 'GET /entitlements/feature-requests/mine', path: '/api/v1/entitlements/feature-requests/mine', token },
+            { label: 'POST /entitlements/feature-requests', path: '/api/v1/entitlements/feature-requests', token, method: 'POST', body: { featureKey: 'cashbooks' } },
+            { label: 'GET /entitlements/admin/feature-requests', path: '/api/v1/entitlements/admin/feature-requests', token: adminToken },
+            { label: 'PATCH /entitlements/admin/feature-requests/:id', path: '/api/v1/entitlements/admin/feature-requests/fr_crash_probe', token: adminToken, method: 'PATCH', body: { status: 'approved' } },
+          ],
+        },
+      ];
+      for (const outage of routeOutages) {
+        await db.query(`ALTER TABLE ${outage.table} RENAME TO ${outage.table}_probe_offline`);
+        offline = outage.table;
+        for (const c of outage.calls) {
+          const x = await req(c.path, c.token, c.method || 'GET', c.body);
+          check(x.status === 503 && x.body.code === 'ENTITLEMENT_CHECK_UNAVAILABLE', `${outage.table} missing → ${c.label} 503`, x);
+        }
+        await db.query(`ALTER TABLE ${outage.table}_probe_offline RENAME TO ${outage.table}`);
+        offline = '';
+      }
       await new Promise((r) => setTimeout(r, 1000));
-      check(child.exitCode === null && child.signalCode === null, 'API process still alive after 0011 table outages');
+      check(child.exitCode === null && child.signalCode === null, 'API process still alive after 0011 + entitlement-router table outages');
       check((await fetch(`${ROOT}/health`).then((r) => r.status).catch(() => 0)) === 200, '/health 200 after 0011 table outages');
     } else {
       console.log('(migration 0011 not applied on this database — Phase 2A table outage checks skipped)');
@@ -177,7 +224,7 @@ async function main() {
     if (renamed) await db.query('ALTER TABLE feature_entitlements_probe_offline RENAME TO feature_entitlements');
     if (offline) await db.query(`ALTER TABLE ${offline}_probe_offline RENAME TO ${offline}`);
     const t = await db.query(
-      "select to_regclass('public.feature_entitlements') is not null as fe, to_regclass('public.account_entitlement_overrides') is not null as ov, to_regclass('public.platform_feature_states') is not null as pf, to_regclass('public.entitlement_audit_events') is not null as au",
+      "select to_regclass('public.feature_entitlements') is not null as fe, to_regclass('public.account_entitlement_overrides') is not null as ov, to_regclass('public.platform_feature_states') is not null as pf, to_regclass('public.entitlement_audit_events') is not null as au, to_regclass('public.plans') is not null as plans, to_regclass('public.account_plans') is not null as ap, to_regclass('public.feature_requests') is not null as fr",
     );
     console.log('tables restored:', JSON.stringify(t.rows[0]));
     await db.end();

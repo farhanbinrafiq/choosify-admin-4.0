@@ -73,5 +73,10 @@ export async function requirePartnerEntitlement(
     error: 'This feature is not enabled for your account',
     code: 'FEATURE_ENTITLEMENT_DENIED',
     featureKey: check.featureKey,
+    // Why (e.g. 'override' + restrict/expiresAt, 'platform', 'plan', 'dependency'),
+    // limited to allow-listed evaluator fields — never admin reasons or DB values.
+    ...(check.source ? { source: check.source } : {}),
+    ...(check.detail ? { detail: check.detail } : {}),
+    ...(typeof check.detail?.expiresAt === 'string' ? { expiresAt: check.detail.expiresAt } : {}),
   });
 }

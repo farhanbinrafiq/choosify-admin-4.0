@@ -8,7 +8,19 @@ import {
   type PartnerFeatureKey,
   type PartnerRole,
 } from './entitlementStore';
-import { EntitlementAdminError, setRoleDefaults, type EntitlementActor } from './entitlementAdminStore';
+import {
+  EntitlementAdminError,
+  getAccountEntitlementSummary,
+  getAccountOverrideWithDecision,
+  getPlatformFeatureState,
+  listEntitlementAuditEvents,
+  listPlatformFeatureStates,
+  removeAccountOverride,
+  setAccountOverride,
+  setPlatformFeatureState,
+  setRoleDefaults,
+  type EntitlementActor,
+} from './entitlementAdminStore';
 import { planStore } from './planStore';
 import { featureRequestStore, type FeatureRequestStatus } from './featureRequestStore';
 import { notifyRoles, notifyUser } from '../communication/systemNotify';
@@ -175,15 +187,120 @@ entitlementsRouter.patch('/entitlements/admin/role-defaults/:role/:featureKey', 
   }
 });
 
+// ─── Phase 2B: account overrides ────────────────────────────────────────────
+
+/** One account: identity, overrides and the effective decision for every feature of its role. */
+entitlementsRouter.get('/entitlements/admin/accounts/:userId', ...requireAdmin, async (req, res) => {
+  try {
+    const summary = await getAccountEntitlementSummary(String(req.params.userId));
+    res.json({ success: true, ...summary });
+  } catch (error) {
+    sendAdminError(res, error, 'GET /entitlements/admin/accounts/:userId');
+  }
+});
+
+entitlementsRouter.put('/entitlements/admin/accounts/:userId/overrides/:featureKey', ...requireSuperAdmin, async (req, res) => {
+  const userId = String(req.params.userId);
+  const featureKey = String(req.params.featureKey);
+  const body = (req.body || {}) as { effect?: string; expiresAt?: string | null; reason?: string };
+  try {
+    const { changed } = await setAccountOverride(
+      {
+        userId,
+        featureKey,
+        effect: body.effect as 'grant' | 'revoke' | 'restrict',
+        expiresAt: body.expiresAt,
+        reason: String(body.reason ?? ''),
+      },
+      actorFrom(req),
+    );
+    const current = await getAccountOverrideWithDecision(userId, featureKey);
+    res.json({ success: true, changed, override: current.override, decision: current.decision });
+  } catch (error) {
+    sendAdminError(res, error, 'PUT /entitlements/admin/accounts/:userId/overrides/:featureKey');
+  }
+});
+
+entitlementsRouter.delete('/entitlements/admin/accounts/:userId/overrides/:featureKey', ...requireSuperAdmin, async (req, res) => {
+  try {
+    const { changed } = await removeAccountOverride(
+      {
+        userId: String(req.params.userId),
+        featureKey: String(req.params.featureKey),
+        reason: String(((req.body || {}) as { reason?: string }).reason ?? ''),
+      },
+      actorFrom(req),
+    );
+    res.json({ success: true, changed });
+  } catch (error) {
+    sendAdminError(res, error, 'DELETE /entitlements/admin/accounts/:userId/overrides/:featureKey');
+  }
+});
+
+// ─── Phase 2B: platform feature switches ────────────────────────────────────
+
+/** Every switchable feature; a missing row is reported as enabled. */
+entitlementsRouter.get('/entitlements/admin/platform-states', ...requireAdmin, async (_req, res) => {
+  try {
+    res.json({ success: true, states: await listPlatformFeatureStates() });
+  } catch (error) {
+    sendAdminError(res, error, 'GET /entitlements/admin/platform-states');
+  }
+});
+
+entitlementsRouter.get('/entitlements/admin/platform-states/:featureKey', ...requireAdmin, async (req, res) => {
+  try {
+    res.json({ success: true, state: await getPlatformFeatureState(String(req.params.featureKey)) });
+  } catch (error) {
+    sendAdminError(res, error, 'GET /entitlements/admin/platform-states/:featureKey');
+  }
+});
+
+entitlementsRouter.put('/entitlements/admin/platform-states/:featureKey', ...requireSuperAdmin, async (req, res) => {
+  const featureKey = String(req.params.featureKey);
+  const body = (req.body || {}) as { enabled?: unknown; reason?: string | null };
+  try {
+    const { changed } = await setPlatformFeatureState(
+      { featureKey, enabled: body.enabled as boolean, reason: body.reason ?? null },
+      actorFrom(req),
+    );
+    res.json({ success: true, changed, state: await getPlatformFeatureState(featureKey) });
+  } catch (error) {
+    sendAdminError(res, error, 'PUT /entitlements/admin/platform-states/:featureKey');
+  }
+});
+
+// ─── Phase 2B: audit history (read-only — there is no mutation route) ──────
+
+entitlementsRouter.get('/entitlements/admin/audit', ...requireAdmin, async (req, res) => {
+  const q = req.query as Record<string, unknown>;
+  try {
+    const page = await listEntitlementAuditEvents({
+      targetUserId: typeof q.userId === 'string' && q.userId ? q.userId : undefined,
+      featureKey: typeof q.featureKey === 'string' && q.featureKey ? q.featureKey : undefined,
+      before: typeof q.before === 'string' && q.before ? q.before : undefined,
+      limit: typeof q.limit === 'string' ? Number(q.limit) : undefined,
+    });
+    res.json({ success: true, ...page });
+  } catch (error) {
+    sendAdminError(res, error, 'GET /entitlements/admin/audit');
+  }
+});
+
 /**
  * Sprint 11 — minimal Plan foundation. Admin-only CRUD for plan catalog entries
  * and per-account plan assignment. No billing/payment fields — see
  * server/db/schema.ts `plans`/`accountPlans` for the scope rationale.
+ * (Legacy: the resolver does not read these; kept as-is, now crash-safe.)
  */
 entitlementsRouter.get('/entitlements/admin/plans', ...requireAdmin, async (req, res) => {
   const role = typeof req.query.role === 'string' ? (req.query.role as PartnerRole) : undefined;
-  const list = await planStore.listPlans(role);
-  res.json({ success: true, plans: list });
+  try {
+    const list = await planStore.listPlans(role);
+    res.json({ success: true, plans: list });
+  } catch (error) {
+    sendEntitlementUnavailable(res, 'GET /entitlements/admin/plans', error);
+  }
 });
 
 entitlementsRouter.post('/entitlements/admin/plans', ...requireAdmin, async (req, res) => {
@@ -198,18 +315,26 @@ entitlementsRouter.post('/entitlements/admin/plans', ...requireAdmin, async (req
     res.status(400).json({ success: false, error: 'name is required' });
     return;
   }
-  const created = await planStore.createPlan({ role, name, priceLabel: body.priceLabel, sortOrder: body.sortOrder });
-  res.status(201).json({ success: true, plan: created });
+  try {
+    const created = await planStore.createPlan({ role, name, priceLabel: body.priceLabel, sortOrder: body.sortOrder });
+    res.status(201).json({ success: true, plan: created });
+  } catch (error) {
+    sendEntitlementUnavailable(res, 'POST /entitlements/admin/plans', error);
+  }
 });
 
 entitlementsRouter.patch('/entitlements/admin/plans/:id', ...requireAdmin, async (req, res) => {
   const body = req.body as { name?: string; priceLabel?: string | null; active?: boolean; sortOrder?: number };
-  const updated = await planStore.updatePlan(req.params.id, body);
-  if (!updated) {
-    res.status(404).json({ success: false, error: 'Plan not found' });
-    return;
+  try {
+    const updated = await planStore.updatePlan(req.params.id, body);
+    if (!updated) {
+      res.status(404).json({ success: false, error: 'Plan not found' });
+      return;
+    }
+    res.json({ success: true, plan: updated });
+  } catch (error) {
+    sendEntitlementUnavailable(res, 'PATCH /entitlements/admin/plans/:id', error);
   }
-  res.json({ success: true, plan: updated });
 });
 
 /**
@@ -251,8 +376,12 @@ entitlementsRouter.post('/entitlements/admin/accounts/:userId/plan', ...requireA
 });
 
 entitlementsRouter.get('/entitlements/admin/accounts/:userId/plan', ...requireAdmin, async (req, res) => {
-  const accountPlan = await planStore.getAccountPlan(req.params.userId);
-  res.json({ success: true, accountPlan });
+  try {
+    const accountPlan = await planStore.getAccountPlan(req.params.userId);
+    res.json({ success: true, accountPlan });
+  } catch (error) {
+    sendEntitlementUnavailable(res, 'GET /entitlements/admin/accounts/:userId/plan', error);
+  }
 });
 
 /**
@@ -281,7 +410,13 @@ entitlementsRouter.post('/entitlements/feature-requests', ...requireAuth, async 
   const message = typeof (req.body as { message?: string })?.message === 'string'
     ? (req.body as { message?: string }).message!.slice(0, 500)
     : undefined;
-  const created = await featureRequestStore.create({ userId, role: partnerRole, featureKey, message });
+  let created: Awaited<ReturnType<typeof featureRequestStore.create>>;
+  try {
+    created = await featureRequestStore.create({ userId, role: partnerRole, featureKey, message });
+  } catch (error) {
+    sendEntitlementUnavailable(res, 'POST /entitlements/feature-requests', error);
+    return;
+  }
   if (created.status === 'pending') {
     try {
       await notifyRoles(['admin', 'super_admin'], {
@@ -308,14 +443,22 @@ entitlementsRouter.get('/entitlements/feature-requests/mine', ...requireAuth, as
     res.status(401).json({ success: false, error: 'Authentication required' });
     return;
   }
-  const list = await featureRequestStore.list({ userId });
-  res.json({ success: true, featureRequests: list });
+  try {
+    const list = await featureRequestStore.list({ userId });
+    res.json({ success: true, featureRequests: list });
+  } catch (error) {
+    sendEntitlementUnavailable(res, 'GET /entitlements/feature-requests/mine', error);
+  }
 });
 
 entitlementsRouter.get('/entitlements/admin/feature-requests', ...requireAdmin, async (req, res) => {
   const status = typeof req.query.status === 'string' ? (req.query.status as FeatureRequestStatus) : undefined;
-  const list = await featureRequestStore.list({ status });
-  res.json({ success: true, featureRequests: list });
+  try {
+    const list = await featureRequestStore.list({ status });
+    res.json({ success: true, featureRequests: list });
+  } catch (error) {
+    sendEntitlementUnavailable(res, 'GET /entitlements/admin/feature-requests', error);
+  }
 });
 
 entitlementsRouter.patch('/entitlements/admin/feature-requests/:id', ...requireAdmin, async (req, res) => {
@@ -325,12 +468,23 @@ entitlementsRouter.patch('/entitlements/admin/feature-requests/:id', ...requireA
     res.status(400).json({ success: false, error: 'status must be approved, declined, or contacted' });
     return;
   }
-  const reviewerId = req.userId || req.user?.uid || 'unknown';
-  const updated = await featureRequestStore.review(req.params.id, {
-    status,
-    reviewedByUserId: reviewerId,
-    reviewNote: body.reviewNote,
-  });
+  // reviewed_by_user_id is a uuid FK: never fall back to a placeholder string.
+  const reviewerId = req.userId || req.user?.uid;
+  if (!reviewerId) {
+    res.status(401).json({ success: false, error: 'Authentication required' });
+    return;
+  }
+  let updated: Awaited<ReturnType<typeof featureRequestStore.review>>;
+  try {
+    updated = await featureRequestStore.review(req.params.id, {
+      status,
+      reviewedByUserId: reviewerId,
+      reviewNote: body.reviewNote,
+    });
+  } catch (error) {
+    sendEntitlementUnavailable(res, 'PATCH /entitlements/admin/feature-requests/:id', error);
+    return;
+  }
   if (!updated) {
     res.status(404).json({ success: false, error: 'Feature request not found' });
     return;

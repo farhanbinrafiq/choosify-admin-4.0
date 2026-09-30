@@ -207,12 +207,26 @@ export async function resolveFeatureEnabled(params: {
   return decisions[params.featureKey].enabled;
 }
 
+/**
+ * Only these evaluator detail fields may be returned to a partner in a 403:
+ * the kind of restriction, when it lifts and which dependency blocked it. No
+ * reasons (admin free text), ids or database values.
+ */
+const SAFE_DENIAL_DETAIL_KEYS = ['effect', 'expiresAt', 'requires', 'dependencySource'] as const;
+
+function safeDenialDetail(detail: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!detail) return undefined;
+  const out: Record<string, unknown> = {};
+  for (const key of SAFE_DENIAL_DETAIL_KEYS) if (detail[key] !== undefined) out[key] = detail[key];
+  return Object.keys(out).length ? out : undefined;
+}
+
 export async function isApiPathEntitled(params: {
   role: string | undefined | null;
   userId?: string | null;
   path: string;
   method?: string;
-}): Promise<{ ok: boolean; featureKey?: string; source?: string }> {
+}): Promise<{ ok: boolean; featureKey?: string; source?: string; detail?: Record<string, unknown> }> {
   const partnerRole = normalizePartnerRole(params.role);
   if (!partnerRole) return { ok: true };
 
@@ -228,7 +242,9 @@ export async function isApiPathEntitled(params: {
   });
   for (const feature of gated) {
     const decision = decisions[feature.key];
-    if (!decision.enabled) return { ok: false, featureKey: feature.key, source: decision.source };
+    if (!decision.enabled) {
+      return { ok: false, featureKey: feature.key, source: decision.source, detail: safeDenialDetail(decision.detail) };
+    }
   }
   return { ok: true };
 }

@@ -12,7 +12,8 @@
  * Authorization (who may call these) is enforced by the HTTP layer; these
  * functions validate the change itself and record the acting user.
  */
-import { and, desc, eq, lt, type SQL } from 'drizzle-orm';
+import { and, desc, eq, lt, sql, type SQL } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { db } from '../db/client';
 import {
   accountEntitlementOverrides,
@@ -22,13 +23,16 @@ import {
   users,
 } from '../db/schema';
 import {
+  PARTNER_FEATURES,
   featureByKey,
   featureKeysForRole,
   isSwitchableFeature,
   type PartnerRole,
 } from '../../shared/entitlements/registry';
-import { entitlementStore, normalizePartnerRole, type RoleDefaults } from './entitlementStore';
+import { entitlementStore, getEntitlementDecisions, normalizePartnerRole, type RoleDefaults } from './entitlementStore';
 import type { OverrideEffect } from './entitlementEvaluator';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export class EntitlementAdminError extends Error {
   constructor(
@@ -66,6 +70,10 @@ async function writeAudit(
   },
 ) {
   await tx.insert(entitlementAuditEvents).values({
+    // Wall-clock time of the write, not the transaction start: with the advisory
+    // lock a transaction may start before the one it waits for, and history must
+    // still read in the order the changes actually happened.
+    createdAt: sql`clock_timestamp()`,
     action: event.action,
     source: actor.source ?? 'admin_api',
     actorUserId: actor.userId ?? null,
@@ -78,6 +86,15 @@ async function writeAudit(
     newState: event.newState ?? null,
     reason: event.reason ?? null,
   });
+}
+
+/**
+ * Serialises concurrent writers of the same logical row for the rest of the
+ * transaction. `SELECT … FOR UPDATE` cannot lock a row that does not exist yet,
+ * so two first-time writers would otherwise both see "no previous state".
+ */
+async function lockRowKey(tx: Tx, key: string) {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${key}))`);
 }
 
 function requireReason(reason: unknown, what: string): string {
@@ -188,6 +205,7 @@ function overrideState(row: { effect: string; expiresAt: Date | null; reason: st
 }
 
 async function requirePartnerTarget(userId: string, featureKey: string) {
+  if (!UUID_RE.test(userId)) throw new EntitlementAdminError('Account not found', 404, 'ENTITLEMENT_ACCOUNT_NOT_FOUND');
   const rows = await db.select({ id: users.id, role: users.role }).from(users).where(eq(users.id, userId)).limit(1);
   if (!rows[0]) throw new EntitlementAdminError('Account not found', 404, 'ENTITLEMENT_ACCOUNT_NOT_FOUND');
   const partnerRole = normalizePartnerRole(rows[0].role);
@@ -227,6 +245,7 @@ export async function setAccountOverride(
 
   let changed = false;
   await db.transaction(async (tx) => {
+    await lockRowKey(tx, input.userId + input.featureKey);
     const existing = await tx
       .select()
       .from(accountEntitlementOverrides)
@@ -276,8 +295,12 @@ export async function removeAccountOverride(
   actor: EntitlementActor,
 ): Promise<{ changed: boolean }> {
   const reason = requireReason(input.reason, 'remove an account override');
+  if (!UUID_RE.test(input.userId)) throw new EntitlementAdminError('Account not found', 404, 'ENTITLEMENT_ACCOUNT_NOT_FOUND');
+  const target = await db.select({ id: users.id }).from(users).where(eq(users.id, input.userId)).limit(1);
+  if (!target[0]) throw new EntitlementAdminError('Account not found', 404, 'ENTITLEMENT_ACCOUNT_NOT_FOUND');
   let changed = false;
   await db.transaction(async (tx) => {
+    await lockRowKey(tx, input.userId + input.featureKey);
     const existing = await tx
       .select()
       .from(accountEntitlementOverrides)
@@ -315,6 +338,7 @@ export async function setPlatformFeatureState(
 
   let changed = false;
   await db.transaction(async (tx) => {
+    await lockRowKey(tx, `platform_feature_state:${input.featureKey}`);
     const existing = await tx
       .select()
       .from(platformFeatureStates)
@@ -344,23 +368,215 @@ export async function setPlatformFeatureState(
   return { changed };
 }
 
+// ─── Read models (Phase 2B admin API) ───────────────────────────────────────
+
+/** Switchable (operational/premium, non-deprecated) features — the only keys a platform switch may target. */
+function switchableFeatures() {
+  return PARTNER_FEATURES.filter((f) => isSwitchableFeature(f));
+}
+
+/**
+ * One account's entitlement picture: identity, its overrides (with whether a
+ * restriction is still active) and the evaluator's decision for every feature
+ * available to its role — produced by the same load-once context the request
+ * gate uses, never a second copy of the precedence rules.
+ */
+export async function getAccountEntitlementSummary(userId: string, now: Date = new Date()) {
+  if (!UUID_RE.test(userId)) throw new EntitlementAdminError('Account not found', 404, 'ENTITLEMENT_ACCOUNT_NOT_FOUND');
+  const rows = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      displayName: users.displayName,
+      choosifyUserId: users.choosifyUserId,
+      role: users.role,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  const account = rows[0];
+  if (!account) throw new EntitlementAdminError('Account not found', 404, 'ENTITLEMENT_ACCOUNT_NOT_FOUND');
+  const partnerRole = normalizePartnerRole(account.role);
+  const overrideRows = await db.select().from(accountEntitlementOverrides).where(eq(accountEntitlementOverrides.userId, userId));
+  const overrides = overrideRows
+    .map((o) => ({
+      featureKey: o.featureKey,
+      effect: o.effect,
+      expiresAt: o.expiresAt ? o.expiresAt.toISOString() : null,
+      active: o.effect !== 'restrict' || (o.expiresAt !== null && o.expiresAt.getTime() > now.getTime()),
+      reason: o.reason,
+      createdAt: o.createdAt.toISOString(),
+      updatedAt: o.updatedAt.toISOString(),
+      createdByUserId: o.createdByUserId,
+      updatedByUserId: o.updatedByUserId,
+    }))
+    .sort((a, b) => a.featureKey.localeCompare(b.featureKey));
+  let entitlements: Array<{
+    featureKey: string;
+    label: string;
+    tier: string;
+    planControlled: boolean;
+    enabled: boolean;
+    source: string;
+    detail?: Record<string, unknown>;
+  }> = [];
+  if (partnerRole) {
+    const keys = featureKeysForRole(partnerRole);
+    const decisions = await getEntitlementDecisions({ role: account.role, userId, featureKeys: keys, now });
+    entitlements = keys.map((key) => {
+      const f = featureByKey(key)!;
+      const d = decisions[key];
+      return { featureKey: key, label: f.label, tier: f.tier, planControlled: f.planControlled, enabled: d.enabled, source: d.source, ...(d.detail ? { detail: d.detail } : {}) };
+    });
+  }
+  return {
+    account: {
+      userId: account.id,
+      email: account.email,
+      displayName: account.displayName,
+      choosifyUserId: account.choosifyUserId,
+      role: account.role,
+      partnerRole,
+    },
+    overrides,
+    entitlements,
+    ...(partnerRole ? {} : { note: 'Not a Seller/Creator account — partner entitlements do not apply.' }),
+  };
+}
+
+/** The account's current override for one feature (or null) plus that feature's effective decision. */
+export async function getAccountOverrideWithDecision(userId: string, featureKey: string, now: Date = new Date()) {
+  const [account] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId)).limit(1);
+  const rows = await db
+    .select()
+    .from(accountEntitlementOverrides)
+    .where(and(eq(accountEntitlementOverrides.userId, userId), eq(accountEntitlementOverrides.featureKey, featureKey)))
+    .limit(1);
+  const o = rows[0];
+  const decisions = await getEntitlementDecisions({ role: account?.role, userId, featureKeys: [featureKey], now });
+  return {
+    override: o
+      ? {
+          featureKey: o.featureKey,
+          effect: o.effect,
+          expiresAt: o.expiresAt ? o.expiresAt.toISOString() : null,
+          reason: o.reason,
+          updatedAt: o.updatedAt.toISOString(),
+        }
+      : null,
+    decision: decisions[featureKey],
+  };
+}
+
+type PlatformStateRow = typeof platformFeatureStates.$inferSelect;
+
+function toPlatformStateView(f: (typeof PARTNER_FEATURES)[number], row: PlatformStateRow | undefined) {
+  return {
+    featureKey: f.key,
+    label: f.label,
+    tier: f.tier,
+    planControlled: f.planControlled,
+    roles: f.roles,
+    // A missing row means enabled.
+    enabled: row ? row.enabled : true,
+    explicit: Boolean(row),
+    reason: row?.reason ?? null,
+    updatedAt: row ? row.updatedAt.toISOString() : null,
+    updatedByUserId: row?.updatedByUserId ?? null,
+  };
+}
+
+export async function listPlatformFeatureStates() {
+  const rows = await db.select().from(platformFeatureStates);
+  const byKey = new Map(rows.map((r) => [r.featureKey, r]));
+  return switchableFeatures().map((f) => toPlatformStateView(f, byKey.get(f.key)));
+}
+
+export async function getPlatformFeatureState(featureKey: string) {
+  const feature = requireSwitchable(featureKey);
+  const rows = await db.select().from(platformFeatureStates).where(eq(platformFeatureStates.featureKey, featureKey)).limit(1);
+  return toPlatformStateView(feature, rows[0]);
+}
+
 // ─── Audit history ──────────────────────────────────────────────────────────
 
+const actorUser = alias(users, 'audit_actor_user');
+const realActorUser = alias(users, 'audit_real_actor_user');
+const targetUser = alias(users, 'audit_target_user');
+
+function displayOf(row: { id: string | null; displayName: string | null; choosifyUserId: string | null; email: string | null } | null) {
+  if (!row || !row.id) return undefined;
+  return { displayName: row.displayName, choosifyUserId: row.choosifyUserId, email: row.email };
+}
+
+/**
+ * Newest-first entitlement audit history. `before` is the id of the last event
+ * of the previous page (the returned `nextBefore`) — ordered by (created_at, id)
+ * so events sharing a timestamp are never skipped or repeated — or an ISO
+ * timestamp. Display data is a LEFT JOIN: rows for deleted users keep their raw
+ * ids and simply have no display fields.
+ */
 export async function listEntitlementAuditEvents(filter: {
   targetUserId?: string;
   featureKey?: string;
-  before?: Date;
+  before?: string;
   limit?: number;
 }) {
   const conditions: SQL[] = [];
-  if (filter.targetUserId) conditions.push(eq(entitlementAuditEvents.targetUserId, filter.targetUserId));
+  if (filter.targetUserId) {
+    if (!UUID_RE.test(filter.targetUserId)) {
+      throw new EntitlementAdminError('userId must be an account id', 400, 'ENTITLEMENT_INVALID_QUERY');
+    }
+    conditions.push(eq(entitlementAuditEvents.targetUserId, filter.targetUserId));
+  }
   if (filter.featureKey) conditions.push(eq(entitlementAuditEvents.featureKey, filter.featureKey));
-  if (filter.before) conditions.push(lt(entitlementAuditEvents.createdAt, filter.before));
-  const limit = Math.min(Math.max(filter.limit ?? 50, 1), 200);
-  return db
-    .select()
+  if (filter.before) {
+    if (UUID_RE.test(filter.before)) {
+      conditions.push(
+        sql`(${entitlementAuditEvents.createdAt}, ${entitlementAuditEvents.id}) < (select e.created_at, e.id from entitlement_audit_events e where e.id = ${filter.before})`,
+      );
+    } else {
+      const at = new Date(filter.before);
+      if (Number.isNaN(at.getTime())) {
+        throw new EntitlementAdminError('before must be an event id or an ISO timestamp', 400, 'ENTITLEMENT_INVALID_QUERY');
+      }
+      conditions.push(lt(entitlementAuditEvents.createdAt, at));
+    }
+  }
+  const limit = Math.min(Math.max(Math.trunc(filter.limit ?? 50) || 50, 1), 200);
+  const rows = await db
+    .select({
+      event: entitlementAuditEvents,
+      actor: { id: actorUser.id, displayName: actorUser.displayName, choosifyUserId: actorUser.choosifyUserId, email: actorUser.email },
+      realActor: {
+        id: realActorUser.id,
+        displayName: realActorUser.displayName,
+        choosifyUserId: realActorUser.choosifyUserId,
+        email: realActorUser.email,
+      },
+      target: { id: targetUser.id, displayName: targetUser.displayName, choosifyUserId: targetUser.choosifyUserId, email: targetUser.email },
+    })
     .from(entitlementAuditEvents)
+    .leftJoin(actorUser, eq(actorUser.id, entitlementAuditEvents.actorUserId))
+    .leftJoin(realActorUser, eq(realActorUser.id, entitlementAuditEvents.realActorUserId))
+    .leftJoin(targetUser, eq(targetUser.id, entitlementAuditEvents.targetUserId))
     .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(desc(entitlementAuditEvents.createdAt))
+    .orderBy(desc(entitlementAuditEvents.createdAt), desc(entitlementAuditEvents.id))
     .limit(limit);
+  const events = rows.map(({ event: e, actor, realActor, target }) => ({
+    id: e.id,
+    createdAt: e.createdAt.toISOString(),
+    action: e.action,
+    source: e.source,
+    targetScope: e.targetScope,
+    targetRole: e.targetRole,
+    featureKey: e.featureKey,
+    previousState: e.previousState,
+    newState: e.newState,
+    reason: e.reason,
+    actor: e.actorUserId ? { userId: e.actorUserId, ...displayOf(actor) } : null,
+    realActor: e.realActorUserId ? { userId: e.realActorUserId, ...displayOf(realActor) } : null,
+    target: e.targetUserId ? { userId: e.targetUserId, ...displayOf(target) } : null,
+  }));
+  return { events, nextBefore: events.length === limit ? events[events.length - 1].id : null };
 }

@@ -227,7 +227,10 @@ async function main() {
     check(keysFor('seller', staffPath).length === 0, `F staff hub ${staffPath} not mapped to a partner key`);
   }
   check(!featureByKey('metaMessaging')!.apiPrefixes.includes('/api/messaging'), 'F metaMessaging dead /api/messaging removed');
-  check(keysFor('seller', '/api/v1/seller/social-inbox/threads').includes('metaMessaging'), 'F social inbox → metaMessaging');
+  // Phase 2B downgrade rule: only new Meta actions are gated; status reads and disconnect stay open.
+  check(keysFor('seller', '/api/v1/seller/social-inbox/connect', 'POST').includes('metaMessaging'), 'F social inbox connect → metaMessaging');
+  check(!keysFor('seller', '/api/v1/seller/social-inbox/status', 'GET').includes('metaMessaging'), 'F social inbox status read not gated by metaMessaging');
+  check(!keysFor('seller', '/api/v1/seller/social-inbox/facebook', 'DELETE').includes('metaMessaging'), 'F social inbox disconnect not gated by metaMessaging');
   check(keysFor('seller', '/api/v1/support/conversations').length === 0, 'F Choosify Support not mapped (core)');
 
   // ── G. drafts / versions by entity type ──────────────────────────────

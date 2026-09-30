@@ -48,10 +48,12 @@ import {
  * connected (assertCanSendMessage has no external_social carve-out for a
  * brand-owning seller yet — a deliberate DEFER pending security review).
  *
- * Entitlement: gated on the canonical `metaMessaging` partner feature.
- * The tab is intended to become a paid add-on; the boundary is already
- * server-authoritative (requirePartnerEntitlement → 403), this only hides
- * the UI when it's switched off.
+ * Entitlement: gated on the canonical `metaMessaging` partner feature (a paid
+ * add-on; the boundary is server-authoritative via requirePartnerEntitlement).
+ * When the add-on is off the inbox is READ-ONLY (downgrade rule): existing
+ * connections and conversation history stay visible, disconnecting stays
+ * allowed, but connecting new channels and the Meta quick-reply macros are
+ * disabled. Create Manual Order is core Order Hub functionality and stays on.
  */
 
 const CHANNELS: { key: SocialChannel; label: string }[] = [
@@ -105,6 +107,7 @@ export function MetaInbox({ currentUserId }: { currentUserId?: string }) {
   const [messages, setMessages] = useState<ApiMessage[]>([]);
   const [threadLoading, setThreadLoading] = useState(false);
   const [connecting, setConnecting] = useState<SocialChannel | null>(null);
+  const [disconnecting, setDisconnecting] = useState<SocialChannel | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
 
   // Product association for macro-generation + product-aware extraction.
@@ -116,7 +119,7 @@ export function MetaInbox({ currentUserId }: { currentUserId?: string }) {
   const [macroPreview, setMacroPreview] = useState<string>('');
 
   useEffect(() => {
-    if (!entitled || catalog.length > 0) return;
+    if (catalog.length > 0) return;
     catalogApi
       .listProducts({ status: 'active' })
       .then((rows) =>
@@ -125,7 +128,7 @@ export function MetaInbox({ currentUserId }: { currentUserId?: string }) {
         ),
       )
       .catch(() => undefined);
-  }, [entitled, catalog.length]);
+  }, [catalog.length]);
 
   useEffect(() => {
     if (!assocProductId) {
@@ -168,11 +171,8 @@ export function MetaInbox({ currentUserId }: { currentUserId?: string }) {
     );
   };
 
+  // History and connections load whether or not the add-on is active (read-only when off).
   const load = useCallback(async () => {
-    if (!entitled) {
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     setError(null);
     try {
@@ -189,7 +189,7 @@ export function MetaInbox({ currentUserId }: { currentUserId?: string }) {
     } finally {
       setLoading(false);
     }
-  }, [entitled]);
+  }, []);
 
   useEffect(() => {
     void load();
@@ -211,6 +211,7 @@ export function MetaInbox({ currentUserId }: { currentUserId?: string }) {
 
   const connectChannel = useCallback(
     async (channel: SocialChannel) => {
+      if (!entitled) return; // connecting is a new Meta action — add-on required
       if (!brandId) {
         setError('Connect a brand before linking a social channel.');
         return;
@@ -225,7 +226,26 @@ export function MetaInbox({ currentUserId }: { currentUserId?: string }) {
         setConnecting(null);
       }
     },
-    [brandId],
+    [brandId, entitled],
+  );
+
+  // Disconnecting is always allowed, including after a downgrade.
+  const disconnectChannel = useCallback(
+    async (channel: SocialChannel) => {
+      const conn = connections.find((c) => c.channel === channel);
+      const targetBrandId = conn?.brandId || brandId;
+      if (!targetBrandId) return;
+      setDisconnecting(channel);
+      try {
+        const row = await messagingApi.disconnectSocialChannel(channel, targetBrandId);
+        setConnections((prev) => [...prev.filter((c) => c.channel !== channel), row]);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : `Could not disconnect ${channel}`);
+      } finally {
+        setDisconnecting(null);
+      }
+    },
+    [brandId, connections],
   );
 
   const filtered = useMemo(() => {
@@ -246,21 +266,22 @@ export function MetaInbox({ currentUserId }: { currentUserId?: string }) {
     connections.filter((c) => c.status === 'connected').map((c) => c.channel),
   );
 
-  if (!entitled) {
-    return (
-      <div className="rounded-2xl border border-app-border bg-app-card p-10 text-center max-w-lg mx-auto mt-6">
-        <div className="w-12 h-12 rounded-xl bg-app-accent/10 border border-app-accent/20 flex items-center justify-center mx-auto mb-3">
-          <Lock className="w-5 h-5 text-app-accent" />
-        </div>
-        <h3 className="text-base font-black text-app-text-primary m-0">Meta Inbox is a paid add-on</h3>
-        <p className="text-xs text-app-text-secondary mt-2 mb-0">
-          Connect WhatsApp, Messenger and Instagram conversations from your brand's linked
-          accounts into one place. This surface is disabled for your account — contact Choosify
-          to enable the Meta Inbox add-on.
+  const readOnlyBanner = !entitled ? (
+    <div
+      data-testid="meta-inbox-readonly-banner"
+      className="mb-3 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5"
+    >
+      <Lock className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+      <div>
+        <p className="text-xs font-black text-amber-800 m-0">Meta Inbox add-on is inactive — read-only</p>
+        <p className="text-[11px] text-amber-700 m-0 mt-0.5">
+          Your existing connections and conversation history stay available and you can still
+          disconnect channels. Connecting new channels and quick-reply tools need the Meta Inbox
+          add-on — contact Choosify to reactivate it.
         </p>
       </div>
-    );
-  }
+    </div>
+  ) : null;
 
   const filterBar = (
     <div className="flex flex-wrap gap-1.5 px-2.5 pt-2.5">
@@ -369,14 +390,25 @@ export function MetaInbox({ currentUserId }: { currentUserId?: string }) {
                 <ChannelBadge channel={key} /> {label}
               </span>
               {isConnected ? (
-                <span className="flex items-center gap-1 text-[10.5px] font-bold text-emerald-600">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Connected
+                <span className="flex items-center gap-2">
+                  <span className="flex items-center gap-1 text-[10.5px] font-bold text-emerald-600">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Connected
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void disconnectChannel(key)}
+                    disabled={disconnecting === key}
+                    className="text-[10px] font-bold text-app-text-secondary hover:text-red-600 disabled:opacity-40"
+                  >
+                    {disconnecting === key ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Disconnect'}
+                  </button>
                 </span>
               ) : (
                 <button
                   type="button"
                   onClick={() => void connectChannel(key)}
-                  disabled={connecting === key || !brandId}
+                  disabled={!entitled || connecting === key || !brandId}
+                  title={!entitled ? 'Connecting channels requires the Meta Inbox add-on' : undefined}
                   className="flex items-center gap-1 text-[10.5px] font-bold text-app-accent disabled:opacity-40"
                 >
                   {connecting === key ? (
@@ -439,7 +471,7 @@ export function MetaInbox({ currentUserId }: { currentUserId?: string }) {
 
       <ContextSection title="Quick replies">
         <p className="text-[9.5px] text-app-text-secondary m-0 mb-1.5">
-          Tap to copy, then paste into the chat.
+          {entitled ? 'Tap to copy, then paste into the chat.' : 'Quick replies need the Meta Inbox add-on.'}
         </p>
         <div className="flex flex-wrap gap-1.5">
           {MACRO_PRESETS.map((m) => (
@@ -447,7 +479,8 @@ export function MetaInbox({ currentUserId }: { currentUserId?: string }) {
               key={m.id}
               type="button"
               onClick={() => copyMacro(m.id)}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-app-border text-[10px] font-bold text-app-text-primary hover:border-app-accent/40 hover:bg-app-accent/[0.04]"
+              disabled={!entitled}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-app-border text-[10px] font-bold text-app-text-primary hover:border-app-accent/40 hover:bg-app-accent/[0.04] disabled:opacity-40 disabled:pointer-events-none"
             >
               {macroCopied === m.id ? (
                 <span className="text-emerald-600">Copied ✓</span>
@@ -492,6 +525,7 @@ export function MetaInbox({ currentUserId }: { currentUserId?: string }) {
 
   return (
     <>
+      {readOnlyBanner}
       <InboxShell
         title="Meta Inbox"
         subtitle="WhatsApp, Messenger and Instagram conversations from your brand's connected accounts."
