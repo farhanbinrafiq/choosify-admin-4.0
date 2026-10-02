@@ -11,12 +11,13 @@
  *    keeps a former owner authorized after an ownership transfer.
  *  - Every handle MUTATION refuses an impersonated session outright with
  *    403 HANDLE_IMPERSONATION_NOT_ALLOWED: Super Admin actions and the owner's
- *    own submit / cancel alike. (Admin and Super Admin accounts cannot be
+ *    own set / submit / cancel alike. (Admin and Super Admin accounts cannot be
  *    impersonated, so requireRole would fail anyway for the former; the guard runs
  *    first so the refusal is explicit and independent of that rule.) Reads stay
  *    available under the normal read policy.
  *  - Pending partner applicants are NOT blocked (requireMarketplaceAccess is not
- *    used): a request only ever takes effect after Super Admin approval.
+ *    used): a handle an owner sets on an unpublished Brand / Creator is not
+ *    resolvable publicly until the profile is (resolve hides non-public entities).
  */
 import type { NextFunction, Request, Response } from 'express';
 import { authenticateRequest } from '../middleware/auth';
@@ -40,7 +41,7 @@ export function rejectImpersonation(req: Request, res: Response, next: NextFunct
 /** Assign / rename / retire / reserve / release / approve / reject. */
 export const requireHandleSuperAdmin = [authenticateRequest, rejectImpersonation, requireRole(ROLES.SUPER_ADMIN)];
 
-/** Owner submit / cancel: signed in, never impersonated; ownership is checked per entity. */
+/** Owner set / submit / cancel: signed in, never impersonated; ownership is checked per entity. */
 export const requireHandleOwnerAction = [authenticateRequest, rejectImpersonation];
 
 /** Read-only queues and history. */

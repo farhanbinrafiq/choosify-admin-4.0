@@ -8,18 +8,19 @@
  *  2  every rejection reason has specific, non-generic wording
  *  3  availability verdicts (incl. the owner-side generic `unavailable`)
  *  4  every lifecycle error code an owner can hit has specific wording
- *  5  latest decided request (rejection reason source)
+ *  5  status labels shown next to the username field
+ *  6  30-day change cooldown: lock rule + wording
  */
 import { readFileSync } from 'node:fs';
 import { validateHandle } from '../shared/publicHandles/rules';
 import {
+  VERDICT_LABEL,
   availabilityVerdict,
+  changeLockedUntil,
   checkUsernameLocally,
   describeOwnerFailure,
   describeUsernameReason,
-  latestDecidedRequest,
-  type OwnerHandleRequest,
-  type OwnerHandleState,
+  formatNextChange,
 } from '../src/lib/publicIdentityOwner';
 
 const FAIL: string[] = [];
@@ -71,7 +72,7 @@ check(availabilityVerdict({ handle: 'x-y', available: false, reason: 'namespace_
 
 // 4 — errors
 const fallback = describeOwnerFailure({ status: 418 });
-const codes = ['HANDLE_PENDING_EXISTS', 'HANDLE_UNAVAILABLE', 'HANDLE_NAMESPACE_CONFLICT', 'HANDLE_NO_CHANGE', 'HANDLE_OWNER_SUSPENDED', 'HANDLE_IMPERSONATION_NOT_ALLOWED', 'HANDLE_FORBIDDEN', 'HANDLE_REQUEST_NOT_PENDING', 'HANDLE_REQUEST_NOT_FOUND', 'HANDLE_CONFLICT', 'HANDLES_UNAVAILABLE'];
+const codes = ['HANDLE_CHANGE_COOLDOWN', 'HANDLE_UNAVAILABLE', 'HANDLE_NAMESPACE_CONFLICT', 'HANDLE_NO_CHANGE', 'HANDLE_OWNER_SUSPENDED', 'HANDLE_IMPERSONATION_NOT_ALLOWED', 'HANDLE_FORBIDDEN', 'HANDLE_CONFLICT', 'HANDLES_UNAVAILABLE'];
 for (const code of codes) check(describeOwnerFailure({ status: 409, code }) !== fallback, `code ${code} has specific wording`);
 check(describeOwnerFailure({ status: 400, code: 'HANDLE_INVALID', reason: 'consecutive_hyphens' }) === describeUsernameReason('consecutive_hyphens'), 'HANDLE_INVALID uses the validator reason');
 check(/session/i.test(describeOwnerFailure({ status: 401 })), '401 → session expired');
@@ -80,20 +81,23 @@ check(/connection/i.test(describeOwnerFailure({ status: 0, code: 'NETWORK_ERROR'
 check(/temporarily/i.test(describeOwnerFailure({ status: 503 })), '5xx → temporarily unavailable');
 check(/impersonat/i.test(describeOwnerFailure({ status: 403, code: 'HANDLE_IMPERSONATION_NOT_ALLOWED' })), 'impersonation refusal is explicit');
 
-// 5 — latest decided request
-const req = (over: Partial<OwnerHandleRequest>): OwnerHandleRequest => ({
-  id: 'r', entityType: 'brand', entityId: 'b', requestedHandle: 'x', status: 'pending', requestedByUserId: 'u',
-  decisionNote: null, createdAt: '2026-10-01T00:00:00Z', decidedAt: null, ...over,
-});
-const state = (requests: OwnerHandleRequest[]): OwnerHandleState => ({ entityType: 'brand', entityId: 'b', activeHandle: null, pendingRequest: null, requests, entityExists: true });
-check(latestDecidedRequest(state([])) === null, 'no requests → nothing decided');
-check(latestDecidedRequest(state([req({ status: 'cancelled', decidedAt: '2026-10-02T00:00:00Z' })])) === null, 'owner-cancelled request is not shown as a decision');
-const pick = latestDecidedRequest(state([
-  req({ id: 'old', status: 'rejected', decisionNote: 'old', decidedAt: '2026-10-01T10:00:00Z' }),
-  req({ id: 'new', status: 'rejected', decisionNote: 'Too generic', decidedAt: '2026-10-02T10:00:00Z' }),
-  req({ id: 'p', status: 'pending' }),
-]));
-check(pick?.id === 'new' && pick.decisionNote === 'Too generic', 'newest decision wins and carries the rejection reason', pick);
+// 5 — status labels (Facebook-style field feedback)
+check(
+  VERDICT_LABEL.available === 'Available' && VERDICT_LABEL.unavailable === 'Not available' && VERDICT_LABEL.invalid === 'Invalid username' && VERDICT_LABEL.reserved === 'Reserved',
+  'labels: Available / Not available / Invalid username / Reserved',
+);
+check(/just taken|no longer available/i.test(describeOwnerFailure({ status: 409, code: 'HANDLE_UNAVAILABLE' })), 'taken-at-save message tells the owner to choose another');
+
+// 6 — 30-day change cooldown presentation (the server decides; this only words it)
+const until = '2026-11-02T10:05:00.000Z';
+check(changeLockedUntil({ activeHandle: { handle: 'abc' }, ownerChangeAvailableAt: until }) === until, 'active username + running cooldown → change locked until the server time');
+check(changeLockedUntil({ activeHandle: null, ownerChangeAvailableAt: until }) === null, 'no active username → never locked (first registration / after an admin retirement)');
+check(changeLockedUntil({ activeHandle: { handle: 'abc' }, ownerChangeAvailableAt: null }) === null, 'no cooldown running → not locked');
+check(changeLockedUntil({ activeHandle: { handle: 'abc' } }) === null, 'older payload without the field → not locked (server still enforces)');
+const msg = describeOwnerFailure({ status: 409, code: 'HANDLE_CHANGE_COOLDOWN', nextChangeAt: until });
+check(/30 days/.test(msg) && msg.includes(formatNextChange(until)) && /2026/.test(formatNextChange(until)), 'cooldown refusal names the 30-day rule and the next allowed date', msg);
+check(/30 days/.test(describeOwnerFailure({ status: 409, code: 'HANDLE_CHANGE_COOLDOWN' })), 'cooldown refusal without a date still explains the rule');
+check(formatNextChange('not-a-date') === 'not-a-date', 'unparseable date is shown as given (never "Invalid Date")');
 
 console.log(`\n${FAIL.length === 0 ? 'PASS' : 'FAIL'} probe-public-identity-owner (${passes} passed, ${FAIL.length} failed)`);
 if (FAIL.length) for (const f of FAIL) console.log(`  - ${f}`);

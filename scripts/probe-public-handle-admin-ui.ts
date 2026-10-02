@@ -163,17 +163,28 @@ async function main() {
     const r = await call(`/catalog/creators/${id}`, SA.token, 'PUT', { name: `C5 Creator ${id.endsWith('owned') ? 'Owned' : 'Free'} ${sfx}`, status: 'live', ...(userId ? { userId } : {}) });
     if (r.status !== 200) throw new Error(`creator ${id}: ${JSON.stringify(r.body)}`);
   }
-  const submit = (token: string, type: string, id: string, handle: string) => call(`/public-handles/${type}/${encodeURIComponent(id)}/requests`, token, 'POST', { handle });
+  // Owner submit is retired (410): legacy pending requests are seeded as the old route wrote them.
+  const seedRequest = async (ownerUserId: string, type: string, id: string, handle: string) => {
+    const [row] = await q<{ id: string }>(
+      `insert into public_handle_requests (entity_type, entity_id, requested_handle, status, requested_by_user_id, created_at) values ($1,$2,$3,'pending',$4,clock_timestamp()) returning id`,
+      [type, id, handle, ownerUserId],
+    );
+    await q(
+      `insert into public_handle_events (action, entity_type, entity_id, to_handle, request_id, actor_user_id, created_at) values ('request_submitted',$1,$2,$3,$4,$5,clock_timestamp())`,
+      [type, id, handle, row.id, ownerUserId],
+    );
+    return { status: 201, body: { success: true, data: { id: row.id, status: 'pending' } } as Record<string, any> };
+  };
   const pendingId = async (entityId: string) => (await q<{ id: string }>(`select id from public_handle_requests where entity_id=$1 and status='pending'`, [entityId]))[0]?.id;
   const requestStatus = async (id: string) => (await q<{ status: string }>(`select status from public_handle_requests where id=$1`, [id]))[0]?.status;
   const activeOf = async (type: string, id: string) =>
     (await q<{ handle: string }>(`select handle from public_handles where entity_type=$1 and entity_id=$2 and status='active'`, [type, id]))[0]?.handle ?? null;
 
   // Requests: B1 (to be rejected, then approved), B3 (suspended), B2 (ownership transfer), creator owned.
-  check((await submit(SELLER.token, 'brand', B1.id, h('rej'))).status === 201, 'setup: request on Brand one');
-  check((await submit(SELLER.token, 'brand', B2.id, h('xfer'))).status === 201, 'setup: request on Brand two');
-  check((await submit(SELLER.token, 'brand', B3.id, h('susp'))).status === 201, 'setup: request on Brand three');
-  check((await submit(CREATOR.token, 'creator', creatorOwned, h('cown'))).status === 201, 'setup: request on the owned Creator');
+  check((await seedRequest(uSeller.id, 'brand', B1.id, h('rej'))).status === 201, 'setup: legacy request on Brand one');
+  check((await seedRequest(uSeller.id, 'brand', B2.id, h('xfer'))).status === 201, 'setup: legacy request on Brand two');
+  check((await seedRequest(uSeller.id, 'brand', B3.id, h('susp'))).status === 201, 'setup: legacy request on Brand three');
+  check((await seedRequest(uCreator.id, 'creator', creatorOwned, h('cown'))).status === 201, 'setup: legacy request on the owned Creator');
 
   const sellerProfile = (brandId?: string) => `${BASE}/admin/seller-profile?sellerId=${uSeller.id}&tab=handle${brandId ? `&brandId=${brandId}` : ''}`;
   const browser = await chromium.launch({ headless: true, channel: 'chrome' }).catch(() => chromium.launch({ headless: true }));
@@ -251,7 +262,7 @@ async function main() {
     check(await waitFor(page, 'handle-panel-brand-no-request', 15000), 'D panel refreshes: no pending request');
     check((await text(page, 'handle-panel-brand-history-events')).includes('Request rejected'), 'D history shows the rejection');
     // Approve a fresh request.
-    check((await submit(SELLER.token, 'brand', B1.id, h('app'))).status === 201, 'D setup: new request on Brand one');
+    check((await seedRequest(uSeller.id, 'brand', B1.id, h('app'))).status === 201, 'D setup: another legacy request on Brand one');
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitFor(page, 'handle-panel-brand-review');
     await page.getByTestId('handle-panel-brand').getByTestId('enter-edit-mode').click();

@@ -4,7 +4,8 @@
  * Spawns its own API process against a DISPOSABLE LOCAL database and drives the
  * real routes: role boundaries, Super Admin vs Admin, impersonation, Brand /
  * Creator ownership (incl. a former owner after transfer), suspension rules,
- * the request lifecycle, direct assignment / rename / retirement / reservation /
+ * legacy request decisions (owner submit / cancel now answer 410; legacy
+ * requests are seeded in the database), owner direct saves, direct assignment / rename / retirement / reservation /
  * release, normalization and reserved rules, namespace conflicts, retired-handle
  * non-reuse, history, concurrency (forced overlap via database locks), rollback
  * after unique conflicts and an injected failure, the public routes, Brand
@@ -282,6 +283,21 @@ async function main() {
     const reject = (token: string | null, requestId: string, note?: string) =>
       call(`/public-handles/admin/requests/${requestId}/reject`, token, 'POST', note === undefined ? {} : { note });
     const cancel = (token: string | null, requestId: string) => call(`/public-handles/requests/${requestId}/cancel`, token, 'POST', {});
+    const put = (token: string | null, type: string, id: string, handle: unknown) =>
+      call(`/public-handles/${type}/${encodeURIComponent(id)}/handle`, token, 'PUT', { handle });
+    // Owner submit / cancel are retired (410). Legacy pending requests are seeded exactly as the
+    // old route wrote them, so the Super Admin decision paths that still serve legacy records stay covered.
+    const seed = async (ownerUserId: string, type: string, id: string, handle: string): Promise<Res> => {
+      const [row] = await q<{ id: string; status: string; requested_handle: string }>(
+        `insert into public_handle_requests (entity_type, entity_id, requested_handle, status, requested_by_user_id, created_at) values ($1,$2,$3,'pending',$4,clock_timestamp()) returning id, status, requested_handle`,
+        [type, id, handle, ownerUserId],
+      );
+      await q(
+        `insert into public_handle_events (action, entity_type, entity_id, to_handle, request_id, actor_user_id, created_at) values ('request_submitted',$1,$2,$3,$4,$5,clock_timestamp())`,
+        [type, id, handle, row.id, ownerUserId],
+      );
+      return { status: 201, body: { success: true, data: { id: row.id, status: row.status, requestedHandle: row.requested_handle } }, headers: new Headers() };
+    };
     const admin = (token: string | null, op: string, body: Record<string, unknown>) => call(`/public-handles/admin/${op}`, token, 'POST', body);
     const activeOf = async (type: string, id: string) =>
       (await q<{ handle: string }>(`select handle from public_handles where entity_type=$1 and entity_id=$2 and status='active'`, [type, id]))[0]?.handle ?? null;
@@ -292,7 +308,7 @@ async function main() {
     const rowsForHandle = async (handle: string) => q(`select status, entity_type, entity_id from public_handles where handle=$1`, [handle]);
 
     // ── 1. Authentication and role boundaries ──
-    check(is(await submit(null, 'brand', B.a.id, h('pa1')), 401), '1 owner request requires sign-in (401)');
+    check(is(await put(null, 'brand', B.a.id, h('pa1')), 401), '1 owner username save requires sign-in (401)');
     check(is(await call('/public-handles/admin/requests', null), 401), '1 admin queue requires sign-in (401)');
     check(is(await call('/public-handles/admin/requests', SELLER_A.token), 403), '1 seller cannot read the admin queue (403)');
     check(is(await call('/public-handles/admin/requests', CREATOR_X.token), 403), '1 creator cannot read the admin queue (403)');
@@ -318,69 +334,62 @@ async function main() {
       ['bad_name', 'invalid_characters'],
       ['', 'empty'],
     ] as const) {
-      const r = await submit(SELLER_A.token, 'brand', B.a.id, input);
+      const r = await put(SELLER_A.token, 'brand', B.a.id, input);
       check(is(r, 400, 'HANDLE_INVALID') && r.body.reason === reason, `2 rejects ${JSON.stringify(input)} (${reason})`, r.body);
     }
-    check(is(await submit(SELLER_A.token, 'seller', B.a.id, h('x')), 400, 'HANDLE_INVALID_ENTITY_TYPE'), '2 entity type seller is refused');
-    check(is(await submit(SELLER_A.token, 'user', u.sellerA.id, h('x')), 400, 'HANDLE_INVALID_ENTITY_TYPE'), '2 entity type user is refused');
-    check(is(await cancel(SELLER_A.token, 'not-a-uuid'), 404, 'HANDLE_REQUEST_NOT_FOUND'), '2 malformed request id → 404');
+    check(is(await put(SELLER_A.token, 'seller', B.a.id, h('x')), 400, 'HANDLE_INVALID_ENTITY_TYPE'), '2 entity type seller is refused');
+    check(is(await put(SELLER_A.token, 'user', u.sellerA.id, h('x')), 400, 'HANDLE_INVALID_ENTITY_TYPE'), '2 entity type user is refused');
+    check(is(await cancel(SELLER_A.token, 'not-a-uuid'), 410, 'HANDLE_REQUESTS_DISABLED'), '2 owner cancellation route is retired (410), whatever the id');
 
     // ── 3. Ownership ──
-    check(is(await submit(SELLER_B.token, 'brand', B.a.id, h('pa1')), 403, 'HANDLE_FORBIDDEN'), '3 another seller cannot request for Brand A');
-    check(is(await submit(CREATOR_X.token, 'brand', B.a.id, h('pa1')), 403, 'HANDLE_FORBIDDEN'), '3 a creator cannot request for a Brand');
-    check(is(await submit(SA.token, 'brand', B.a.id, h('pa1')), 403, 'HANDLE_FORBIDDEN'), '3 Super Admin is not an owner (uses assign instead)');
-    check(is(await submit(SELLER_A.token, 'creator', C.x.id, h('pa1')), 403, 'HANDLE_FORBIDDEN'), '3 a seller cannot request for a Creator');
-    check(is(await submit(SELLER_A.token, 'brand', `brand-c2probe-${sfx}-missing`, h('pa1')), 403, 'HANDLE_FORBIDDEN'), '3 unknown Brand is refused like a foreign one');
+    check(is(await put(SELLER_B.token, 'brand', B.a.id, h('pa1')), 403, 'HANDLE_FORBIDDEN'), '3 another seller cannot set Brand A’s username');
+    check(is(await put(CREATOR_X.token, 'brand', B.a.id, h('pa1')), 403, 'HANDLE_FORBIDDEN'), '3 a creator cannot set a Brand’s username');
+    check(is(await put(SA.token, 'brand', B.a.id, h('pa1')), 403, 'HANDLE_FORBIDDEN'), '3 Super Admin is not an owner (uses assign instead)');
+    check(is(await put(SELLER_A.token, 'creator', C.x.id, h('pa1')), 403, 'HANDLE_FORBIDDEN'), '3 a seller cannot set a Creator’s username');
+    check(is(await put(SELLER_A.token, 'brand', `brand-c2probe-${sfx}-missing`, h('pa1')), 403, 'HANDLE_FORBIDDEN'), '3 unknown Brand is refused like a foreign one');
     check(is(await call(`/public-handles/brand/${B.b.id}`, SELLER_A.token), 403, 'HANDLE_FORBIDDEN'), '3 owner cannot read another Brand’s handle state');
     check(is(await call(`/public-handles/brand/${B.a.id}`, SELLER_A.token), 200), '3 owner reads own Brand handle state');
     check(is(await call(`/public-handles/brand/${B.a.id}`, ADMIN.token), 200), '3 Admin reads any Brand handle state');
-    check((await q(`select count(*)::int n from public_handle_requests where entity_id like $1`, [`%c2probe-${sfx}%`]))[0].n === 0, '3 refused requests wrote nothing');
+    check((await q(`select ((select count(*) from public_handles where entity_id like $1) + (select count(*) from public_handle_events where entity_id like $1) + (select count(*) from public_handle_requests where entity_id like $1))::int n`, [`%c2probe-${sfx}%`]))[0].n === 0, '3 refused saves wrote nothing');
 
     // ── 4. Suspension and applicant rules ──
     for (const [key, status] of [['s', 'suspended'], ['r', 'restricted'], ['v', 'revoked']] as const) {
-      const r = await submit(SELLER_C.token, 'brand', B[key].id, h(`ps${key}`));
-      check(is(r, 403, 'HANDLE_OWNER_SUSPENDED') && r.body.marketplaceStatus === status, `4 Brand with marketplaceStatus ${status} cannot request`, r.body);
+      const r = await put(SELLER_C.token, 'brand', B[key].id, h(`ps${key}`));
+      check(is(r, 403, 'HANDLE_OWNER_SUSPENDED') && r.body.marketplaceStatus === status, `4 Brand with marketplaceStatus ${status} cannot set a username`, r.body);
     }
-    const zReq = await submit(CREATOR_X.token, 'creator', C.z.id, h('cz1'));
-    check(is(zReq, 201) && zReq.body.data?.status === 'pending', '4 voluntarily archived Creator may still request (archived is not a suspension)', zReq.body);
+    const zPut = await put(CREATOR_X.token, 'creator', C.z.id, h('cz1'));
+    check(is(zPut, 200) && (await activeOf('creator', C.z.id)) === h('cz1'), '4 voluntarily archived Creator may still set a username (archived is not a suspension)', zPut.body);
     {
       const gated = await call('/cashbooks', APPLICANT.token);
       check(gated.status === 403, '4 pending seller applicant is blocked by an operational marketplace route', { status: gated.status, code: gated.body.code });
-      const pReq = await submit(APPLICANT.token, 'brand', B.p.id, h('pp0'));
-      check(is(pReq, 201), '4 pending seller applicant may submit a handle request (approval still required)', pReq.body);
-      check((await activeOf('brand', B.p.id)) === null, '4 applicant request does not assign anything by itself');
+      const pPut = await put(APPLICANT.token, 'brand', B.p.id, h('pp0'));
+      check(is(pPut, 200) && (await activeOf('brand', B.p.id)) === h('pp0'), '4 pending seller applicant may set a username for its unpublished Brand', pPut.body);
+      check(is(await call(`/catalog/handles/${h('pp0')}/resolve`, null), 404, 'HANDLE_NOT_FOUND'), '4 …but it stays hidden from public resolution while the Brand is unpublished');
+      check(is(await admin(SA.token, 'retire', { entityType: 'brand', entityId: B.p.id, reason: 'probe: reset for section 9' }), 200), '4 setup: Super Admin retires it again (section 9 assigns this Brand)');
     }
 
-    // ── 5. Request lifecycle ──
-    const r1 = await submit(SELLER_A.token, 'brand', B.a.id, `@${h('PA1').toUpperCase()}`);
-    check(is(r1, 201) && r1.body.data.requestedHandle === h('pa1'), '5 submission normalizes (@, upper case) to the stored form', r1.body);
-    const r1id = String(r1.body.data?.id);
+    // ── 5. Legacy requests: owner submit / cancel retired; Super Admin decisions remain ──
     {
-      const ev = await eventsForRequest(r1id);
-      check(ev.length === 1 && ev[0].action === 'request_submitted', '5 submission writes request_submitted', ev);
+      const sub = await submit(SELLER_A.token, 'brand', B.a.id, h('pa1'));
+      check(is(sub, 410, 'HANDLE_REQUESTS_DISABLED'), '5 owner request submission is retired (410)', sub.body);
+      check((await q(`select count(*)::int n from public_handle_requests where entity_id=$1`, [B.a.id]))[0].n === 0, '5 the retired route wrote nothing');
     }
-    check(is(await submit(SELLER_A.token, 'brand', B.a.id, h('pa9')), 409, 'HANDLE_PENDING_EXISTS'), '5 a second pending request is refused');
-    check(is(await cancel(SELLER_B.token, r1id), 403, 'HANDLE_FORBIDDEN'), '5 only the requester can cancel');
-    const c1 = await cancel(SELLER_A.token, r1id);
-    check(is(c1, 200) && c1.body.data.status === 'cancelled' && c1.body.data.decidedAt, '5 requester cancels own pending request', c1.body);
-    check(is(await cancel(SELLER_A.token, r1id), 409, 'HANDLE_REQUEST_NOT_PENDING'), '5 cancelling twice → not pending');
-    check(is(await approve(SA.token, r1id), 409, 'HANDLE_REQUEST_NOT_PENDING'), '5 a cancelled request cannot be approved');
-    const r2 = await submit(SELLER_A.token, 'brand', B.a.id, h('pa1'));
-    check(is(r2, 201), '5 the same handle can be requested again after cancelling (pending holds nothing)');
-    const r2id = String(r2.body.data?.id);
-    const a2 = await approve(SA.token, r2id, 'Looks right');
-    check(is(a2, 200) && a2.body.data.handle.handle === h('pa1') && a2.body.data.previousHandle === null, '5 Super Admin approves → first active handle', a2.body);
+    const r1 = await seed(u.sellerA.id, 'brand', B.a.id, h('pa1'));
+    const r1id = String(r1.body.data?.id);
+    check(is(await cancel(SELLER_A.token, r1id), 410, 'HANDLE_REQUESTS_DISABLED') && (await requestRow(r1id)).status === 'pending', '5 owner cancellation is retired; the legacy request stays pending');
+    const a2 = await approve(SA.token, r1id, 'Looks right');
+    check(is(a2, 200) && a2.body.data.handle.handle === h('pa1') && a2.body.data.previousHandle === null, '5 Super Admin approves a legacy request → first active handle', a2.body);
     check((await activeOf('brand', B.a.id)) === h('pa1'), '5 Brand A active handle in the database');
     {
-      const rr = await requestRow(r2id);
+      const rr = await requestRow(r1id);
       check(rr.status === 'approved' && rr.decided_by_user_id === SA.uid && rr.decision_note === 'Looks right', '5 request approved with the deciding Super Admin', rr);
-      const ev = await eventsForRequest(r2id);
+      const ev = await eventsForRequest(r1id);
       check(JSON.stringify(ev.map((e) => e.action)) === JSON.stringify(['request_submitted', 'request_approved', 'assigned']), '5 history: submitted → approved → assigned', ev);
     }
-    check(is(await approve(SA.token, r2id), 409, 'HANDLE_REQUEST_NOT_PENDING'), '5 an approved request cannot be approved again');
-    check(is(await reject(SA.token, r2id, 'late'), 409, 'HANDLE_REQUEST_NOT_PENDING'), '5 an approved request cannot be rejected');
-    check(is(await submit(SELLER_A.token, 'brand', B.a.id, h('pa1')), 409, 'HANDLE_NO_CHANGE'), '5 requesting the current handle → no change');
-    const r3 = await submit(SELLER_A.token, 'brand', B.a.id, h('pa2'));
+    check(is(await approve(SA.token, r1id), 409, 'HANDLE_REQUEST_NOT_PENDING'), '5 an approved request cannot be approved again');
+    check(is(await reject(SA.token, r1id, 'late'), 409, 'HANDLE_REQUEST_NOT_PENDING'), '5 an approved request cannot be rejected');
+    check(is(await put(SELLER_A.token, 'brand', B.a.id, `@${h('PA1').toUpperCase()}`), 409, 'HANDLE_NO_CHANGE'), '5 owner save normalizes (@, upper case) and recognises the current handle');
+    const r3 = await seed(u.sellerA.id, 'brand', B.a.id, h('pa2'));
     const r3id = String(r3.body.data?.id);
     check(is(await reject(SA.token, r3id), 400, 'HANDLE_NOTE_REQUIRED'), '5 rejection requires a note');
     check(is(await reject(SA.token, r3id, '   '), 400, 'HANDLE_NOTE_REQUIRED'), '5 a blank note is not a note');
@@ -391,9 +400,9 @@ async function main() {
       const ev = await eventsForRequest(r3id);
       check(ev.map((e) => e.action).join() === 'request_submitted,request_rejected', '5 history: submitted → rejected', ev);
     }
-    const r4 = await submit(SELLER_A.token, 'brand', B.a.id, h('pa3'));
+    const r4 = await seed(u.sellerA.id, 'brand', B.a.id, h('pa3'));
     const a4 = await approve(SA.token, String(r4.body.data?.id));
-    check(is(a4, 200) && a4.body.data.previousHandle === h('pa1'), '5 approving a second request renames', a4.body);
+    check(is(a4, 200) && a4.body.data.previousHandle === h('pa1'), '5 approving a second legacy request renames', a4.body);
     {
       const rows = await rowsForHandle(h('pa1'));
       check(rows.length === 1 && rows[0].status === 'retired' && rows[0].entity_id === B.a.id, '5 the old handle is retired on the SAME row (never re-pointed)', rows);
@@ -401,20 +410,20 @@ async function main() {
     }
 
     // ── 6. Retired-handle non-reuse and the global namespace ──
-    check(is(await submit(SELLER_A.token, 'brand', B.a.id, h('pa1')), 409, 'HANDLE_UNAVAILABLE'), '6 an entity cannot reclaim its own retired handle');
-    check(is(await submit(CREATOR_X.token, 'creator', C.x.id, h('pa1')), 409, 'HANDLE_UNAVAILABLE'), '6 a Creator cannot take a retired Brand handle');
+    check(is(await put(SELLER_A.token, 'brand', B.a.id, h('pa1')), 409, 'HANDLE_UNAVAILABLE'), '6 an entity cannot reclaim its own retired handle');
+    check(is(await put(CREATOR_X.token, 'creator', C.x.id, h('pa1')), 409, 'HANDLE_UNAVAILABLE'), '6 a Creator cannot take a retired Brand handle');
     check(is(await admin(SA.token, 'assign', { entityType: 'brand', entityId: B.n.id, handle: h('pa1'), reason: 'probe' }), 409, 'HANDLE_UNAVAILABLE'), '6 Super Admin cannot assign a retired handle');
     check(is(await admin(SA.token, 'rename', { entityType: 'brand', entityId: B.a.id, handle: h('pa1'), reason: 'probe' }), 409, 'HANDLE_UNAVAILABLE'), '6 Super Admin cannot rename back to a retired handle');
-    const x1 = await submit(CREATOR_X.token, 'creator', C.x.id, h('cx1'));
+    const x1 = await seed(u.creatorX.id, 'creator', C.x.id, h('cx1'));
     check(is(await approve(SA.token, String(x1.body.data?.id)), 200) && (await activeOf('creator', C.x.id)) === h('cx1'), '6 Creator X gets an active handle');
-    check(is(await submit(SELLER_B.token, 'brand', B.b.id, h('cx1')), 409, 'HANDLE_UNAVAILABLE'), '6 a Brand cannot take an active Creator handle (one namespace)');
-    check(is(await submit(SELLER_B.token, 'brand', B.b.id, h('pa3')), 409, 'HANDLE_UNAVAILABLE'), '6 a Brand cannot take another Brand’s active handle');
+    check(is(await put(SELLER_B.token, 'brand', B.b.id, h('cx1')), 409, 'HANDLE_UNAVAILABLE'), '6 a Brand cannot take an active Creator handle (one namespace)');
+    check(is(await put(SELLER_B.token, 'brand', B.b.id, h('pa3')), 409, 'HANDLE_UNAVAILABLE'), '6 a Brand cannot take another Brand’s active handle');
 
     // ── 7. Catalog (namespace) conflicts ──
     {
-      const slugB = await submit(SELLER_A.token, 'brand', B.a.id, B.b.slug);
+      const slugB = await put(SELLER_A.token, 'brand', B.a.id, B.b.slug);
       check(is(slugB, 409, 'HANDLE_NAMESPACE_CONFLICT'), '7 another Brand’s slug is refused', slugB.body);
-      const nova = await submit(SELLER_A.token, 'brand', B.a.id, `c2-nova-${sfx}`);
+      const nova = await put(SELLER_A.token, 'brand', B.a.id, `c2-nova-${sfx}`);
       check(is(nova, 409, 'HANDLE_NAMESPACE_CONFLICT'), '7 another Brand’s name alias is refused', nova.body);
       const avOwn = await call(`/catalog/handles/availability?type=brand&entityId=${B.a.id}&handle=${B.a.slug}`, null);
       check(avOwn.body.data?.available === true, '7 an entity’s own slug is available to it', avOwn.body);
@@ -422,14 +431,14 @@ async function main() {
       check(avOther.body.data?.available === false && avOther.body.data?.reason === 'namespace_conflict', '7 the same slug is a conflict for anyone else', avOther.body);
       const crossType = await call(`/catalog/handles/availability?type=creator&handle=${B.b.slug}`, null);
       check(crossType.body.data?.available === true, '7 a Brand slug does not block a Creator handle (separate URL spaces)', crossType.body);
-      const creatorSlug = await submit(CREATOR_X.token, 'creator', C.x.id, C.y.slug);
+      const creatorSlug = await put(CREATOR_X.token, 'creator', C.x.id, C.y.slug);
       check(is(creatorSlug, 409, 'HANDLE_NAMESPACE_CONFLICT'), '7 another Creator’s slug is refused', creatorSlug.body);
     }
 
     // ── 8. Ownership transfer ──
-    const r5 = await submit(SELLER_A.token, 'brand', B.a.id, h('pa4'));
+    const r5 = await seed(u.sellerA.id, 'brand', B.a.id, h('pa4'));
     const r5id = String(r5.body.data?.id);
-    check(is(r5, 201), '8 former owner submits before the transfer');
+    check(is(r5, 201), '8 a legacy request by the former owner exists before the transfer');
     const transfer = await call(`/catalog/brands/${B.a.id}`, SA.token, 'PATCH', { sellerId: u.sellerB.id });
     check(transfer.status === 200 && transfer.body.data?.sellerId === u.sellerB.id, '8 Brand A transferred to seller B (catalog sellerId)', { status: transfer.status, sellerId: transfer.body.data?.sellerId });
     check((await activeOf('brand', B.a.id)) === h('pa3'), '8 transfer leaves the Brand handle unchanged');
@@ -444,13 +453,14 @@ async function main() {
       const after = (await q(`select count(*)::int n from public_handles where entity_id=$1`, [B.a.id]))[0].n;
       check(before === after && (await activeOf('brand', B.a.id)) === h('pa3'), '8 no handle row was written or retired', { before, after });
     }
-    check(is(await submit(SELLER_A.token, 'brand', B.a.id, h('pa5')), 403, 'HANDLE_FORBIDDEN'), '8 former owner can no longer request');
+    check(is(await put(SELLER_A.token, 'brand', B.a.id, h('pa5')), 403, 'HANDLE_FORBIDDEN'), '8 former owner can no longer set the username');
     check(is(await call(`/public-handles/brand/${B.a.id}`, SELLER_A.token), 403), '8 former owner can no longer read the Brand handle state');
-    const r6 = await submit(SELLER_B.token, 'brand', B.a.id, h('pa5'));
+    const r6 = await seed(u.sellerB.id, 'brand', B.a.id, h('pa5'));
     const a6 = await approve(SA.token, String(r6.body.data?.id));
-    check(is(a6, 200) && (await activeOf('brand', B.a.id)) === h('pa5'), '8 the new owner requests and is approved');
+    check(is(a6, 200) && (await activeOf('brand', B.a.id)) === h('pa5'), '8 a legacy request by the new owner is approved');
 
     // ── 9. Direct Super Admin operations ──
+    await seed(u.applicant.id, 'brand', B.p.id, h('pp0x')); // a legacy pending request, superseded below
     check(is(await admin(SA.token, 'assign', { entityType: 'brand', entityId: B.p.id, handle: h('pp1') }), 400, 'HANDLE_REASON_REQUIRED'), '9 direct actions require a reason');
     check(is(await admin(SA.token, 'assign', { entityType: 'brand', entityId: `brand-c2probe-${sfx}-none`, handle: h('pp1'), reason: 'x' }), 404, 'HANDLE_ENTITY_NOT_FOUND'), '9 assign to an unknown Brand → 404');
     const pPending = (await q(`select id from public_handle_requests where entity_id=$1 and status='pending'`, [B.p.id]))[0]?.id;
@@ -467,8 +477,8 @@ async function main() {
     check(is(await admin(SA.token, 'reserve', { handle: h('rsv'), reason: 'x' }), 409, 'HANDLE_UNAVAILABLE'), '9 reserving twice → unavailable');
     check(is(await admin(SA.token, 'reserve', { handle: h('pa5'), reason: 'x' }), 409, 'HANDLE_UNAVAILABLE'), '9 an active handle cannot be reserved');
     {
-      const ownerTry = await submit(SELLER_B.token, 'brand', B.b.id, h('rsv'));
-      check(is(ownerTry, 409, 'HANDLE_UNAVAILABLE'), '9 owners cannot request a reserved name');
+      const ownerTry = await put(SELLER_B.token, 'brand', B.b.id, h('rsv'));
+      check(is(ownerTry, 409, 'HANDLE_UNAVAILABLE'), '9 owners cannot take a reserved name');
       const noConvert = await admin(SA.token, 'rename', { entityType: 'brand', entityId: B.p.id, handle: h('rsv'), reason: 'x' });
       check(is(noConvert, 409, 'HANDLE_UNAVAILABLE') && noConvert.body.reason === 'reserved', '9 Super Admin needs explicit conversion for a reserved name', noConvert.body);
       const rsvId = rsv.body.data.id;
@@ -487,9 +497,8 @@ async function main() {
     {
       const ev = await q(`select action from public_handle_events where entity_type is null and (to_handle=$1 or from_handle=$1) order by created_at, id`, [h('rs2')]);
       check(ev.map((e) => e.action).join() === 'reserved,released', '9 bare-name history: reserved → released', ev);
-      const free = await submit(SELLER_B.token, 'brand', B.b.id, h('rs2'));
-      check(is(free, 201), '9 a released name can be requested again');
-      await cancel(SELLER_B.token, String(free.body.data?.id));
+      const free = await call(`/catalog/handles/availability?type=brand&entityId=${B.b.id}&handle=${h('rs2')}`, null);
+      check(free.body.data?.available === true, '9 a released name is available again', free.body);
     }
     const rt = await admin(SA.token, 'retire', { entityType: 'brand', entityId: B.p.id, reason: 'Store closed' });
     check(is(rt, 200) && (await activeOf('brand', B.p.id)) === null && (await rowsForHandle(h('rsv')))[0]?.status === 'retired', '9 Super Admin retires; the entity has no handle');
@@ -516,11 +525,11 @@ async function main() {
           )[0],
         );
       const before = await counts();
-      const impReq = await submit(IMP, 'brand', B.a.id, h('pa6'));
-      check(is(impReq, 403, 'HANDLE_IMPERSONATION_NOT_ALLOWED'), '10 owner submission refused while impersonating', impReq.body);
-      check((await counts()) === before, '10 the refused submission wrote no request, event or handle row', { before, after: await counts() });
-      const own = await submit(SELLER_B.token, 'brand', B.a.id, h('pa6'));
-      check(is(own, 201), '10 the real owner (not impersonated) submits normally', own.body);
+      const impReq = await put(IMP, 'brand', B.a.id, h('pa6'));
+      check(is(impReq, 403, 'HANDLE_IMPERSONATION_NOT_ALLOWED'), '10 owner username save refused while impersonating', impReq.body);
+      check((await counts()) === before, '10 the refused save wrote no request, event or handle row', { before, after: await counts() });
+      const own = await seed(u.sellerB.id, 'brand', B.a.id, h('pa6'));
+      check(is(own, 201), '10 setup: a legacy pending request by the real owner', own.body);
       const rid = String(own.body.data?.id);
       const mid = await counts();
       const impCancel = await cancel(IMP, rid);
@@ -533,7 +542,8 @@ async function main() {
       check(is(await admin(IMP, 'release', { handle: h('late'), reason: 'x' }), 403, 'HANDLE_IMPERSONATION_NOT_ALLOWED'), '10 release refused while impersonating');
       check((await requestRow(rid)).status === 'pending' && (await counts()) === mid, '10 the refused Super Admin actions changed nothing');
       check(is(await call(`/public-handles/brand/${B.a.id}`, IMP), 200), '10 read-only owner state stays available while impersonating');
-      check(is(await cancel(SELLER_B.token, rid), 200), '10 the real owner can still cancel normally');
+      check(is(await cancel(SELLER_B.token, rid), 410, 'HANDLE_REQUESTS_DISABLED'), '10 the real owner gets the retired-route answer (410), not a cancellation');
+      check(is(await reject(SA.token, rid, 'Probe: close legacy request'), 200), '10 a Super Admin closes the legacy request');
       const impEvents = await q(`select count(*)::int n from public_handle_events where real_actor_user_id is not null and (entity_id like $1 or to_handle like $2)`, [`%c2probe-${sfx}%`, `%-${sfx}`]);
       check(impEvents[0].n === 0, '10 no handle event of this run came from an impersonated session');
       const impRequests = await q(`select count(*)::int n from public_handle_requests where requested_real_actor_user_id is not null and entity_id like $1`, [`%c2probe-${sfx}%`]);
@@ -550,28 +560,13 @@ async function main() {
       }
       return false;
     };
-    {
-      // 11a. Two simultaneous submissions for the same Brand.
-      const eventsBefore = (await eventsFor('brand', B.b.id)).length;
-      await lockConn.query('begin');
-      await lockConn.query('lock table public_handle_requests in exclusive mode');
-      const both = Promise.all([submit(SELLER_B.token, 'brand', B.b.id, h('cc1')), submit(SELLER_B.token, 'brand', B.b.id, h('cc2'))]);
-      const overlapped = await waiters(2);
-      await lockConn.query('commit');
-      const [s1, s2] = await both;
-      check(overlapped, '11a both submissions were in flight at the same time');
-      const codes = [s1, s2].map((r) => `${r.status}:${r.body.code ?? ''}`).sort();
-      check(codes.join() === '201:,409:HANDLE_PENDING_EXISTS', '11a exactly one submission wins; the other gets HANDLE_PENDING_EXISTS', codes);
-      const pending = await q(`select id from public_handle_requests where entity_id=$1 and status='pending'`, [B.b.id]);
-      check(pending.length === 1, '11a exactly one pending request exists', pending);
-      check((await eventsFor('brand', B.b.id)).length === eventsBefore + 1, '11a exactly one request_submitted event was written');
-      await cancel(SELLER_B.token, pending[0].id);
-    }
+    // 11a (two simultaneous owner submissions) went with the retired request route; concurrent owner
+    // saves are covered by probe-public-handle-owner-username (4a–4c, 10h).
     const lockRequest = async (rid: string) => lockConn.query(`select pg_advisory_lock(hashtext($1))`, [`public_handles:request:${rid}`]);
     const unlockRequest = async (rid: string) => lockConn.query(`select pg_advisory_unlock(hashtext($1))`, [`public_handles:request:${rid}`]);
     {
       // 11b. Two reviewers approve the same request at once.
-      const req = await submit(CREATOR_X.token, 'creator', C.x.id, h('cx2'));
+      const req = await seed(u.creatorX.id, 'creator', C.x.id, h('cx2'));
       const rid = String(req.body.data?.id);
       await lockRequest(rid);
       const both = Promise.all([approve(SA.token, rid), approve(SA.token, rid)]);
@@ -587,7 +582,7 @@ async function main() {
     }
     {
       // 11c. Approve and reject race for the same request.
-      const req = await submit(CREATOR_X.token, 'creator', C.x.id, h('cx3'));
+      const req = await seed(u.creatorX.id, 'creator', C.x.id, h('cx3'));
       const rid = String(req.body.data?.id);
       await lockRequest(rid);
       const both = Promise.all([approve(SA.token, rid), reject(SA.token, rid, 'Declined in race')]);
@@ -609,9 +604,9 @@ async function main() {
       // 11d. Two different requests compete for the same handle (both renames).
       await admin(SA.token, 'assign', { entityType: 'brand', entityId: B.b.id, handle: h('pb1'), reason: 'probe baseline' });
       const xBefore = await activeOf('creator', C.x.id);
-      const qb = await submit(SELLER_B.token, 'brand', B.b.id, h('race'));
-      const qx = await submit(CREATOR_X.token, 'creator', C.x.id, h('race'));
-      check(is(qb, 201) && is(qx, 201), '11d both owners may request the same handle (pending holds nothing)');
+      const qb = await seed(u.sellerB.id, 'brand', B.b.id, h('race'));
+      const qx = await seed(u.creatorX.id, 'creator', C.x.id, h('race'));
+      check(is(qb, 201) && is(qx, 201), '11d two legacy requests for the same handle (pending holds nothing)');
       const [bid, xid] = [String(qb.body.data?.id), String(qx.body.data?.id)];
       await lockConn.query('begin');
       await lockConn.query('lock table public_handles in exclusive mode');
@@ -637,7 +632,7 @@ async function main() {
     {
       // 11e. Injected failure at the last statement of an approval.
       const before = await activeOf('brand', B.a.id);
-      const req = await submit(SELLER_B.token, 'brand', B.a.id, h('inj'));
+      const req = await seed(u.sellerB.id, 'brand', B.a.id, h('inj'));
       const rid = String(req.body.data?.id);
       const handlesBefore = (await q(`select count(*)::int n from public_handles where entity_id=$1`, [B.a.id]))[0].n;
       const constraint = `probe_c2_inject_${sfx}`.replace(/[^a-z0-9_]/g, '_');
@@ -657,8 +652,8 @@ async function main() {
     }
     {
       // 11f. A conflict discovered at approval time leaves the request pending.
-      const req = await submit(CREATOR_X.token, 'creator', C.x.id, h('late'));
-      check(is(req, 201), '11f owner requests a free handle', req.body);
+      const req = await seed(u.creatorX.id, 'creator', C.x.id, h('late'));
+      check(is(req, 201), '11f a legacy request for a free handle', req.body);
       const rid = String(req.body.data?.id);
       await admin(SA.token, 'reserve', { handle: h('late'), reason: 'Taken meanwhile' });
       const ap = await approve(SA.token, rid);
@@ -741,7 +736,7 @@ async function main() {
       for (const [key, status] of [['q1', 'suspended'], ['q2', 'revoked'], ['q3', 'restricted']] as const) {
         const id = B[key].id;
         const base = await admin(SA.token, 'assign', { entityType: 'brand', entityId: id, handle: h(`${key}a`), reason: 'probe baseline' });
-        const req = await submit(SELLER_C.token, 'brand', id, h(`${key}b`));
+        const req = await seed(u.sellerC.id, 'brand', id, h(`${key}b`));
         check(is(base, 200) && is(req, 201), `15 ${status}: Brand active at submission (has a handle; request accepted)`, req.body);
         const rid = String(req.body.data?.id);
         pendingBy[key] = rid;
@@ -766,11 +761,9 @@ async function main() {
       const ap = await approve(SA.token, pendingBy.q1);
       check(is(ap, 200) && (await activeOf('brand', B.q1.id)) === h('q1b'), '15 once restored, the same pending request approves', ap.body);
       check((await eventsForRequest(pendingBy.q1)).map((e) => e.action).join() === 'request_submitted,request_approved,renamed', '15 restored approval history: submitted → approved → renamed');
-      const activeReq = await submit(SELLER_B.token, 'brand', B.b.id, h('pb2'));
+      const activeReq = await seed(u.sellerB.id, 'brand', B.b.id, h('pb2'));
       const activeAp = await approve(SA.token, String(activeReq.body.data?.id));
       check(is(activeAp, 200) && (await activeOf('brand', B.b.id)) === h('pb2'), '15 an active (granted) Brand approves normally', activeAp.body);
-      const zAp = await approve(SA.token, String(zReq.body.data?.id));
-      check(is(zAp, 200) && (await activeOf('creator', C.z.id)) === h('cz1'), '15 a voluntarily archived Creator’s request still approves', zAp.body);
       await reject(SA.token, pendingBy.q2, 'Brand revoked');
       await reject(SA.token, pendingBy.q3, 'Brand restricted');
     }

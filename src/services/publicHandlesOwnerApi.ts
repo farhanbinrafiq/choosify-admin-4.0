@@ -1,10 +1,11 @@
 // Owner client for the Public Identity lifecycle API
 // (server/publicHandles/publicHandlesRouter.ts, owner routes). Used by Brand
 // Studio and Creator Studio. The server decides everything — ownership
-// (brand.sellerId / creator.userId), impersonation refusal and validation; this
-// module only transports. Approve / reject / assign are not reachable from here.
+// (brand.sellerId / creator.userId), impersonation refusal, validation and
+// availability (re-checked inside the save transaction); this module only
+// transports. Super Admin operations are not reachable from here.
 import { authedFetch } from './authRefresh';
-import type { OwnerApiFailure, OwnerAvailability, OwnerEntityType, OwnerHandleRequest, OwnerHandleState } from '../lib/publicIdentityOwner';
+import type { OwnerApiFailure, OwnerAvailability, OwnerEntityType, OwnerHandleState, OwnerSetResult } from '../lib/publicIdentityOwner';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || '/api/v1';
 
@@ -13,24 +14,29 @@ export class PublicIdentityOwnerError extends Error implements OwnerApiFailure {
   readonly status: number;
   readonly code?: string;
   readonly reason?: string;
+  /** HANDLE_CHANGE_COOLDOWN: when the next change is allowed (server time, ISO). */
+  readonly nextChangeAt?: string;
 
-  constructor(message: string, status: number, code?: string, reason?: string) {
+  constructor(message: string, status: number, code?: string, reason?: string, nextChangeAt?: string) {
     super(message);
     this.name = 'PublicIdentityOwnerError';
     this.status = status;
     this.code = code;
     this.reason = reason;
+    this.nextChangeAt = nextChangeAt;
   }
 }
 
-async function request<T>(path: string, method: 'GET' | 'POST' = 'GET', body?: unknown): Promise<T> {
+async function request<T>(path: string, method: 'GET' | 'PUT' = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
   let response: Response;
   try {
     response = await authedFetch(`${API_BASE}${path}`, {
       method,
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal,
     });
   } catch (error) {
+    if (signal?.aborted) throw error;
     throw new PublicIdentityOwnerError(error instanceof Error ? error.message : 'Network error', 0, 'NETWORK_ERROR');
   }
   const raw = await response.text().catch(() => '');
@@ -46,27 +52,24 @@ async function request<T>(path: string, method: 'GET' | 'POST' = 'GET', body?: u
       response.status,
       typeof parsed.code === 'string' ? parsed.code : undefined,
       typeof parsed.reason === 'string' ? parsed.reason : undefined,
+      typeof parsed.nextChangeAt === 'string' ? parsed.nextChangeAt : undefined,
     );
   }
   return (parsed as { data: T }).data;
 }
 
 export const publicHandlesOwnerApi = {
-  /** GET /public-handles/:type/:id — active handle, pending request, request history (owner, or Admin read). */
+  /** GET /public-handles/:type/:id — the active username (owner, or Admin read). */
   getState: (entityType: OwnerEntityType, entityId: string) =>
     request<OwnerHandleState>(`/public-handles/${entityType}/${encodeURIComponent(entityId)}`),
 
-  /** GET /catalog/handles/availability — with entityId so this profile's own handle / slug are recognised. */
-  checkAvailability: (entityType: OwnerEntityType, entityId: string, handle: string) => {
+  /** GET /catalog/handles/availability — with entityId so this profile's own handle / slug are recognised. A hint only. */
+  checkAvailability: (entityType: OwnerEntityType, entityId: string, handle: string, signal?: AbortSignal) => {
     const qs = new URLSearchParams({ handle, type: entityType, entityId });
-    return request<OwnerAvailability>(`/catalog/handles/availability?${qs.toString()}`);
+    return request<OwnerAvailability>(`/catalog/handles/availability?${qs.toString()}`, 'GET', undefined, signal);
   },
 
-  /** POST /public-handles/:type/:id/requests { handle } — creates a PENDING request; the active handle is unchanged. */
-  submitRequest: (entityType: OwnerEntityType, entityId: string, handle: string) =>
-    request<OwnerHandleRequest>(`/public-handles/${entityType}/${encodeURIComponent(entityId)}/requests`, 'POST', { handle }),
-
-  /** POST /public-handles/requests/:id/cancel — the requester withdraws their own pending request. */
-  cancelRequest: (requestId: string) =>
-    request<OwnerHandleRequest>(`/public-handles/requests/${encodeURIComponent(requestId)}/cancel`, 'POST', {}),
+  /** PUT /public-handles/:type/:id/handle { handle } — set or change at once; the old username is retired. */
+  setHandle: (entityType: OwnerEntityType, entityId: string, handle: string) =>
+    request<OwnerSetResult>(`/public-handles/${entityType}/${encodeURIComponent(entityId)}/handle`, 'PUT', { handle }),
 };

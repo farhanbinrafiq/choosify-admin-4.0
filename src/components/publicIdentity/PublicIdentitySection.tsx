@@ -2,12 +2,14 @@
 // Studio. A username (public handle) belongs to the Brand / Creator entity, never
 // to the seller or login account; each entity's section is independent.
 //
-// Every change is a REQUEST: the active username stays unchanged until a Choosify
-// Super Admin approves it, and an approved change permanently retires the old
-// one. The server decides ownership and refuses impersonated sessions; the
-// controls here only mirror that (staff see a read-only view). Feature Access
-// grants nothing here.
-import React, { useCallback, useEffect, useState } from 'react';
+// Facebook-style: type a username → live availability → Save → done. Saving sets
+// or changes it at once (PUT …/handle); a change permanently retires the old
+// username, and changes are limited to one per 30 days (enforced by the server;
+// the next allowed time comes from it). Availability here is only a hint — the server re-checks everything
+// inside the save transaction. The server decides ownership and refuses
+// impersonated sessions; the controls only mirror that (staff see a read-only
+// view). Feature Access grants nothing here.
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useImpersonation } from '../../contexts/ImpersonationContext';
@@ -17,13 +19,13 @@ import {
   USERNAME_RULES_TEXT,
   VERDICT_LABEL,
   availabilityVerdict,
+  changeLockedUntil,
   checkUsernameLocally,
   describeOwnerFailure,
   describeUsernameReason,
-  latestDecidedRequest,
+  formatNextChange,
   type AvailabilityVerdict,
   type OwnerEntityType,
-  type OwnerHandleState,
 } from '../../lib/publicIdentityOwner';
 
 const label = 'block text-[10px] font-extrabold uppercase tracking-wider text-[#6B7280] mb-1';
@@ -32,21 +34,22 @@ const input =
 const ghostBtn =
   'inline-flex items-center gap-1 rounded-md border border-[#E8EDF2] bg-white px-2.5 py-1.5 text-[11px] font-bold text-[#374151] disabled:opacity-50 disabled:cursor-not-allowed';
 const accentBtn =
-  'inline-flex items-center gap-1 rounded-md bg-[#EF3C23] px-3 py-1.5 text-[11px] font-extrabold text-white disabled:opacity-50 disabled:cursor-not-allowed';
+  'inline-flex items-center gap-1 rounded-md bg-[#EF3C23] px-3.5 py-2 text-[11.5px] font-extrabold text-white disabled:opacity-50 disabled:cursor-not-allowed';
 const hint = 'text-[10.5px] leading-snug text-[#9CA3AF]';
 
-const VERDICT_TONE: Record<AvailabilityVerdict, string> = {
-  available: 'bg-[#ECFDF5] text-[#047857] border-[#A7F3D0]',
-  current: 'bg-[#EFF6FF] text-[#1D4ED8] border-[#BFDBFE]',
-  reserved: 'bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]',
-  invalid: 'bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]',
-  unavailable: 'bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]',
-};
+/** How long typing must pause before availability is checked. */
+const CHECK_DEBOUNCE_MS = 400;
 
-const formatDate = (iso: string | null | undefined) => {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+type Status = AvailabilityVerdict | 'checking' | 'idle' | 'error';
+
+const STATUS_TONE: Record<Exclude<Status, 'idle'>, string> = {
+  checking: 'text-[#6B7280]',
+  available: 'text-[#047857]',
+  current: 'text-[#1D4ED8]',
+  reserved: 'text-[#92400E]',
+  invalid: 'text-[#B91C1C]',
+  unavailable: 'text-[#B91C1C]',
+  error: 'text-[#B91C1C]',
 };
 
 const failureOf = (error: unknown) =>
@@ -55,7 +58,7 @@ const failureOf = (error: unknown) =>
 export type PublicIdentitySectionProps = {
   entityType: OwnerEntityType;
   entityId: string;
-  /** Current catalog slug — the public address while no username is active. */
+  /** Current catalog slug — the public address while no username is set. */
   slug?: string | null;
 };
 
@@ -64,31 +67,33 @@ export function PublicIdentitySection({ entityType, entityId, slug }: PublicIden
   const { state: impersonation } = useImpersonation();
   const isStaffReader = profile?.role === 'admin' || profile?.role === 'super_admin';
   const impersonating = Boolean(impersonation?.active);
-  const noun = entityType === 'brand' ? 'Brand' : 'Creator';
 
-  const [state, setState] = useState<OwnerHandleState | null>(null);
+  const [active, setActive] = useState<string | null>(null);
+  /** Server time (ISO) until which a CHANGE is refused; null = no cooldown running. */
+  const [lockedUntil, setLockedUntil] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<PublicIdentityOwnerError | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  const [formOpen, setFormOpen] = useState(false);
   const [value, setValue] = useState('');
-  const [checking, setChecking] = useState(false);
-  const [availability, setAvailability] = useState<{ handle: string; verdict: AvailabilityVerdict; message: string } | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [confirmCancel, setConfirmCancel] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [check, setCheck] = useState<{ handle: string; status: Status; message: string }>({ handle: '', status: 'idle', message: '' });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const checkSeq = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
     try {
-      setState(await publicHandlesOwnerApi.getState(entityType, entityId));
+      const state = await publicHandlesOwnerApi.getState(entityType, entityId);
+      const current = state.activeHandle?.handle ?? null;
+      setActive(current);
+      setLockedUntil(changeLockedUntil(state));
+      setValue(current ?? '');
       setLoadError(null);
     } catch (error) {
       setLoadError(failureOf(error));
     } finally {
-      setLoading(false);
+      setLoaded(true);
     }
   }, [entityType, entityId]);
 
@@ -96,83 +101,93 @@ export function PublicIdentitySection({ entityType, entityId, slug }: PublicIden
     void load();
   }, [load]);
 
+  const canEdit = loaded && !loadError && !isStaffReader && !impersonating;
+  const locked = Boolean(active && lockedUntil);
   const local = checkUsernameLocally(value);
-  // An availability answer only counts for exactly the username now in the field.
-  const currentAvailability = availability && local.handle === availability.handle ? availability : null;
-  const canMutate = Boolean(state) && !isStaffReader && !impersonating;
-  const pending = state?.pendingRequest ?? null;
-  const active = state?.activeHandle?.handle ?? null;
-  const decided = state ? latestDecidedRequest(state) : null;
   const profileUrl = publicProfileUrl(entityType, { handle: active, slug, id: entityId });
 
-  const runCheck = async () => {
-    setActionError(null);
-    setNotice(null);
-    if (!local.ok) {
-      setAvailability({ handle: local.handle, verdict: availabilityVerdict({ handle: local.handle, available: false, reason: local.reason }), message: local.message });
-      return;
-    }
-    setChecking(true);
-    try {
-      const result = await publicHandlesOwnerApi.checkAvailability(entityType, entityId, local.handle);
-      const verdict = availabilityVerdict(result);
-      setAvailability({
-        handle: result.handle,
-        verdict,
-        message: verdict === 'available' ? `@${result.handle} is available to request.` : describeUsernameReason(result.reason),
-      });
-    } catch (error) {
-      setAvailability(null);
-      setActionError(describeOwnerFailure(failureOf(error)));
-    } finally {
-      setChecking(false);
-    }
-  };
-
-  const submit = async () => {
-    if (!local.ok || currentAvailability?.verdict !== 'available') return;
-    setSubmitting(true);
-    setActionError(null);
-    setNotice(null);
-    try {
-      const created = await publicHandlesOwnerApi.submitRequest(entityType, entityId, local.handle);
-      setNotice(
-        `Request for @${created.requestedHandle} submitted and waiting for Choosify review. ${
-          active ? `@${active} stays your username until it is approved.` : 'Nothing changes until it is approved.'
-        }`,
+  /** Availability for the current field value; `immediate` skips the debounce (blur). */
+  const runCheck = useCallback(
+    (immediate: boolean) => {
+      abortRef.current?.abort();
+      const seq = ++checkSeq.current;
+      const v = checkUsernameLocally(value);
+      if (!value.trim()) {
+        setCheck({ handle: '', status: 'idle', message: '' });
+        return () => undefined;
+      }
+      if (!v.ok) {
+        const status: Status = v.reason === 'reserved' || v.reason === 'reserved_prefix' ? 'reserved' : 'invalid';
+        setCheck({ handle: v.handle, status, message: v.message || '' });
+        return () => undefined;
+      }
+      if (v.handle === active) {
+        setCheck({ handle: v.handle, status: 'current', message: describeUsernameReason('current_handle') });
+        return () => undefined;
+      }
+      setCheck({ handle: v.handle, status: 'checking', message: 'Checking availability…' });
+      const timer = window.setTimeout(
+        async () => {
+          const controller = new AbortController();
+          abortRef.current = controller;
+          try {
+            const result = await publicHandlesOwnerApi.checkAvailability(entityType, entityId, v.handle, controller.signal);
+            if (seq !== checkSeq.current) return;
+            const verdict = availabilityVerdict(result);
+            setCheck({
+              handle: result.handle,
+              status: verdict,
+              message: verdict === 'available' ? `@${result.handle} is available.` : describeUsernameReason(result.reason),
+            });
+          } catch (error) {
+            if (controller.signal.aborted || seq !== checkSeq.current) return;
+            setCheck({ handle: v.handle, status: 'error', message: describeOwnerFailure(failureOf(error)) });
+          }
+        },
+        immediate ? 0 : CHECK_DEBOUNCE_MS,
       );
-      setFormOpen(false);
-      setValue('');
-      setAvailability(null);
-      await load();
-    } catch (error) {
-      const failure = failureOf(error);
-      setActionError(describeOwnerFailure(failure)); // the typed username stays in the field
-      if (failure.code === 'HANDLE_PENDING_EXISTS') await load();
-    } finally {
-      setSubmitting(false);
-    }
-  };
+      return () => window.clearTimeout(timer);
+    },
+    [value, active, entityType, entityId],
+  );
 
-  const cancelPending = async () => {
-    if (!pending) return;
-    setCancelling(true);
-    setActionError(null);
+  useEffect(() => {
+    if (!canEdit || locked) return undefined;
+    return runCheck(false);
+  }, [canEdit, locked, runCheck]);
+
+  const ready = !locked && check.status === 'available' && check.handle === local.handle && local.ok;
+
+  const save = async () => {
+    if (!ready || saving) return;
+    setSaving(true);
+    setSaveError(null);
     setNotice(null);
     try {
-      const cancelled = await publicHandlesOwnerApi.cancelRequest(pending.id);
-      setNotice(`Request for @${cancelled.requestedHandle} cancelled. ${active ? `Your username is still @${active}.` : 'Nothing was changed.'}`);
-      setConfirmCancel(false);
-      await load();
+      const result = await publicHandlesOwnerApi.setHandle(entityType, entityId, local.handle);
+      const saved = result.handle.handle;
+      setActive(saved);
+      setValue(saved);
+      setCheck({ handle: saved, status: 'current', message: describeUsernameReason('current_handle') });
+      setNotice(
+        result.previousHandle
+          ? `Saved. Your username is now @${saved}; @${result.previousHandle} has been retired.`
+          : `Saved. Your username is now @${saved}.`,
+      );
+      if (result.previousHandle) {
+        // A change starts the 30-day cooldown; take its end from the server.
+        const fresh = await publicHandlesOwnerApi.getState(entityType, entityId).catch(() => null);
+        if (fresh) setLockedUntil(changeLockedUntil(fresh));
+      }
     } catch (error) {
       const failure = failureOf(error);
-      setActionError(describeOwnerFailure(failure));
-      if (failure.code === 'HANDLE_REQUEST_NOT_PENDING' || failure.code === 'HANDLE_REQUEST_NOT_FOUND') {
-        setConfirmCancel(false);
-        await load();
+      setSaveError(describeOwnerFailure(failure)); // the typed username stays in the field
+      if (failure.code === 'HANDLE_CHANGE_COOLDOWN' && failure.nextChangeAt) setLockedUntil(failure.nextChangeAt);
+      if (failure.code === 'HANDLE_UNAVAILABLE' || failure.code === 'HANDLE_NAMESPACE_CONFLICT') {
+        setCheck({ handle: local.handle, status: 'unavailable', message: describeUsernameReason('unavailable') });
       }
     } finally {
-      setCancelling(false);
+      setSaving(false);
     }
   };
 
@@ -188,12 +203,12 @@ export function PublicIdentitySection({ entityType, entityId, slug }: PublicIden
         <h3 id={`pi-title-${entityType}-${entityId}`} className="m-0 text-[11px] font-extrabold uppercase tracking-widest text-[#1A1A2E]">
           Public Identity
         </h3>
-        <span className={hint}>Sent on its own — the section Save does not submit username requests.</span>
+        <span className={hint}>Saved separately from this section.</span>
       </div>
 
-      {loading && !state && !loadError ? <div className={hint}>Loading username…</div> : null}
+      {!loaded ? <div className={hint}>Loading username…</div> : null}
 
-      {loadError && !state ? (
+      {loadError ? (
         <div data-testid={loadError.code === 'HANDLE_FORBIDDEN' ? 'pi-forbidden' : 'pi-load-error'} role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-[#FECACA] bg-[#FEF2F2] px-3 py-2">
           <span className="text-[11.5px] font-semibold text-[#B91C1C]">{describeOwnerFailure(loadError)}</span>
           {loadError.code !== 'HANDLE_FORBIDDEN' ? (
@@ -204,7 +219,7 @@ export function PublicIdentitySection({ entityType, entityId, slug }: PublicIden
         </div>
       ) : null}
 
-      {state ? (
+      {loaded && !loadError ? (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -227,180 +242,95 @@ export function PublicIdentitySection({ entityType, entityId, slug }: PublicIden
             </div>
           </div>
 
-          {pending ? (
-            <div data-testid="pi-pending" className="rounded-lg border border-[#FDE68A] bg-[#FFFBEB] px-3 py-2.5 space-y-2">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-[#92400E]">Pending review</span>
-                <span className="text-[12px] font-semibold text-[#78350F]">
-                  Requested username <strong data-testid="pi-pending-handle">@{pending.requestedHandle}</strong>
-                  {formatDate(pending.createdAt) ? ` · submitted ${formatDate(pending.createdAt)}` : ''}
-                </span>
-              </div>
-              <p className="m-0 text-[11px] text-[#92400E]">
-                {active ? `Your username stays @${active} until Choosify approves this request.` : 'Nothing changes until Choosify approves this request.'}
-              </p>
-              {canMutate && pending.requestedByUserId === profile?.id ? (
-                confirmCancel ? (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[11px] font-semibold text-[#78350F]">Cancel the request for @{pending.requestedHandle}?</span>
-                    <button type="button" data-testid="pi-cancel-confirm" className={accentBtn} disabled={cancelling} onClick={() => void cancelPending()}>
-                      {cancelling ? 'Cancelling…' : 'Yes, cancel request'}
-                    </button>
-                    <button type="button" className={ghostBtn} disabled={cancelling} onClick={() => setConfirmCancel(false)}>
-                      Keep request
-                    </button>
-                  </div>
-                ) : (
-                  <button type="button" data-testid="pi-cancel" className={ghostBtn} onClick={() => setConfirmCancel(true)}>
-                    Cancel request
-                  </button>
-                )
-              ) : null}
-            </div>
-          ) : null}
-
-          {!pending && decided ? (
-            decided.status === 'rejected' ? (
-              <div data-testid="pi-rejected" className="rounded-lg border border-[#FECACA] bg-[#FEF2F2] px-3 py-2.5">
-                <div className="text-[12px] font-bold text-[#991B1B]">
-                  Your request for @{decided.requestedHandle} was not approved{formatDate(decided.decidedAt) ? ` (${formatDate(decided.decidedAt)})` : ''}.
-                </div>
-                {decided.decisionNote ? (
-                  <div className="mt-1 text-[11.5px] text-[#7F1D1D]">
-                    Reason: <span data-testid="pi-rejected-reason">{decided.decisionNote}</span>
-                  </div>
-                ) : null}
-              </div>
-            ) : decided.status === 'superseded' ? (
-              <div data-testid="pi-superseded" className="rounded-lg border border-[#E8EDF2] bg-white px-3 py-2.5 text-[11.5px] text-[#4B5563]">
-                Your request for @{decided.requestedHandle} was closed without a change{decided.decisionNote ? ` — ${decided.decisionNote}` : ''}.
-              </div>
-            ) : decided.status === 'approved' && decided.requestedHandle === active ? (
-              <div data-testid="pi-approved" className="rounded-lg border border-[#A7F3D0] bg-[#ECFDF5] px-3 py-2.5 text-[11.5px] font-semibold text-[#065F46]">
-                @{decided.requestedHandle} was approved{formatDate(decided.decidedAt) ? ` on ${formatDate(decided.decidedAt)}` : ''}.
-              </div>
-            ) : null
-          ) : null}
-
-          {notice ? (
-            <div data-testid="pi-notice" role="status" className="rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] px-3 py-2 text-[11.5px] font-semibold text-[#1E40AF]">
-              {notice}
-            </div>
-          ) : null}
-          {actionError ? (
-            <div data-testid="pi-error" role="alert" className="rounded-lg border border-[#FECACA] bg-[#FEF2F2] px-3 py-2 text-[11.5px] font-semibold text-[#B91C1C]">
-              {actionError}
-            </div>
-          ) : null}
-
           {isStaffReader ? (
             <p data-testid="pi-readonly" className={`${hint} m-0`}>
-              Read-only for staff. Username requests are reviewed by a Super Admin in Brand Verification → public handle requests.
+              Read-only for staff. Super Admins can correct usernames from the Seller / Creator profile’s Public Handle tab.
             </p>
           ) : impersonating ? (
             <p data-testid="pi-impersonating" className="m-0 rounded-lg border border-[#FDE68A] bg-[#FFFBEB] px-3 py-2 text-[11.5px] font-semibold text-[#92400E]">
               Username changes are not available while impersonating an account.
             </p>
-          ) : null}
-
-          {canMutate && !pending ? (
-            formOpen ? (
-              <div data-testid="pi-form" className="space-y-2 rounded-lg border border-[#E8EDF2] bg-white p-3">
-                <div>
-                  <label htmlFor={`pi-input-${entityType}-${entityId}`} className={label}>
-                    New username
-                  </label>
-                  <div className="flex gap-2 flex-wrap sm:flex-nowrap">
-                    <div className="relative flex-1 min-w-[180px]">
-                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[12.5px] text-[#9CA3AF]">@</span>
-                      <input
-                        id={`pi-input-${entityType}-${entityId}`}
-                        data-testid="pi-input"
-                        className={`${input} pl-7`}
-                        value={value}
-                        maxLength={100}
-                        autoComplete="off"
-                        spellCheck={false}
-                        aria-describedby={`pi-rules-${entityType}-${entityId}`}
-                        placeholder={entityType === 'brand' ? 'yourbrand' : 'your-name'}
-                        onChange={(e) => {
-                          setValue(e.target.value);
-                          setActionError(null);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            void runCheck();
-                          }
-                        }}
-                      />
-                    </div>
-                    <button type="button" data-testid="pi-check" className={ghostBtn} disabled={checking || !value.trim()} onClick={() => void runCheck()}>
-                      {checking ? 'Checking…' : 'Check availability'}
-                    </button>
-                  </div>
-                </div>
-                <p id={`pi-rules-${entityType}-${entityId}`} className={`${hint} m-0`}>
-                  {USERNAME_RULES_TEXT}
-                </p>
-                {value.trim() && !local.ok && !currentAvailability ? (
-                  <p data-testid="pi-local-error" className="m-0 text-[11px] font-semibold text-[#B91C1C]">
-                    {local.message}
-                  </p>
-                ) : null}
-                {currentAvailability ? (
-                  <div data-testid="pi-verdict" data-verdict={currentAvailability.verdict} role="status" className={`rounded-lg border px-3 py-2 text-[11.5px] font-semibold ${VERDICT_TONE[currentAvailability.verdict]}`}>
-                    <span className="font-extrabold">{VERDICT_LABEL[currentAvailability.verdict]}</span> — {currentAvailability.message}
-                  </div>
-                ) : null}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    type="button"
-                    data-testid="pi-submit"
-                    className={accentBtn}
-                    disabled={submitting || !local.ok || currentAvailability?.verdict !== 'available'}
-                    onClick={() => void submit()}
-                  >
-                    {submitting ? 'Submitting…' : 'Submit request'}
-                  </button>
-                  <button
-                    type="button"
-                    className={ghostBtn}
-                    disabled={submitting}
-                    onClick={() => {
-                      setFormOpen(false);
-                      setValue('');
-                      setAvailability(null);
-                      setActionError(null);
+          ) : (
+            <div data-testid="pi-form" className="space-y-2">
+              <label htmlFor={`pi-input-${entityType}-${entityId}`} className={label}>
+                Username
+              </label>
+              <div className="flex gap-2 flex-wrap sm:flex-nowrap">
+                <div className="relative flex-1 min-w-[180px]">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[12.5px] text-[#9CA3AF]">@</span>
+                  <input
+                    id={`pi-input-${entityType}-${entityId}`}
+                    data-testid="pi-input"
+                    className={`${input} pl-7`}
+                    value={value}
+                    disabled={locked}
+                    maxLength={100}
+                    autoComplete="off"
+                    spellCheck={false}
+                    aria-describedby={`pi-status-${entityType}-${entityId} pi-rules-${entityType}-${entityId}`}
+                    aria-invalid={check.status === 'invalid' || check.status === 'reserved' || check.status === 'unavailable'}
+                    placeholder={entityType === 'brand' ? 'yourbrand' : 'your-name'}
+                    onChange={(e) => {
+                      setValue(e.target.value);
+                      setSaveError(null);
+                      setNotice(null);
                     }}
-                  >
-                    Close
-                  </button>
-                  {local.ok && currentAvailability?.verdict !== 'available' ? (
-                    <span className={hint}>Check availability before submitting.</span>
-                  ) : null}
+                    onBlur={() => {
+                      if (check.status === 'checking') runCheck(true);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        void save();
+                      }
+                    }}
+                  />
                 </div>
+                <button type="button" data-testid="pi-save" className={accentBtn} disabled={!ready || saving} onClick={() => void save()}>
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
               </div>
-            ) : (
-              <button
-                type="button"
-                data-testid="pi-change"
-                className={ghostBtn}
-                onClick={() => {
-                  setFormOpen(true);
-                  setNotice(null);
-                }}
+              <div
+                id={`pi-status-${entityType}-${entityId}`}
+                data-testid="pi-status"
+                data-status={check.status}
+                role="status"
+                aria-live="polite"
+                className={`min-h-[16px] text-[11.5px] font-semibold ${check.status === 'idle' ? '' : STATUS_TONE[check.status]}`}
               >
-                {active ? 'Change username' : 'Request a username'}
-              </button>
-            )
-          ) : null}
+                {check.status === 'idle' || check.handle !== local.handle ? null : (
+                  <>
+                    {check.status !== 'checking' && check.status !== 'error' ? <span className="font-extrabold">{VERDICT_LABEL[check.status]} — </span> : null}
+                    {check.message}
+                  </>
+                )}
+              </div>
+              {locked && lockedUntil ? (
+                <p data-testid="pi-cooldown" data-until={lockedUntil} className="m-0 rounded-lg border border-[#E8EDF2] bg-white px-3 py-2 text-[11.5px] font-semibold text-[#374151]">
+                  Usernames can be changed once every 30 days. You can change it again on {formatNextChange(lockedUntil)}.
+                </p>
+              ) : null}
+              {active && ready ? (
+                <p data-testid="pi-retire-note" className={`${hint} m-0`}>
+                  Saving retires @{active} permanently — it can’t be used again — and the next change is possible after 30 days.
+                </p>
+              ) : null}
+              <p id={`pi-rules-${entityType}-${entityId}`} className={`${hint} m-0`}>
+                {USERNAME_RULES_TEXT}
+              </p>
+            </div>
+          )}
 
-          <ul className={`${hint} m-0 list-disc space-y-0.5 pl-4`}>
-            <li>Your username belongs to this {noun} and is its public web address. Display names can still use Bangla or any language.</li>
-            <li>Every username change is reviewed by Choosify. {active ? 'Your current username stays active until the request is approved.' : 'Nothing changes until it is approved.'}</li>
-            <li>After an approved change the old username is permanently retired — it can never be used again, by you or anyone else.</li>
-          </ul>
+          {notice ? (
+            <div data-testid="pi-notice" role="status" className="rounded-lg border border-[#A7F3D0] bg-[#ECFDF5] px-3 py-2 text-[11.5px] font-semibold text-[#065F46]">
+              {notice}
+            </div>
+          ) : null}
+          {saveError ? (
+            <div data-testid="pi-error" role="alert" className="rounded-lg border border-[#FECACA] bg-[#FEF2F2] px-3 py-2 text-[11.5px] font-semibold text-[#B91C1C]">
+              {saveError}
+            </div>
+          ) : null}
         </>
       ) : null}
     </section>

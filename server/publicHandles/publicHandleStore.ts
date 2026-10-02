@@ -26,7 +26,7 @@
  * The unique indexes stay the final arbiter; a violation rolls the whole
  * transaction back and is reported as a controlled conflict.
  */
-import { and, asc, desc, eq, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '../db/client';
 import { publicHandleEvents, publicHandleRequests, publicHandles } from '../db/schema';
 import { catalogStore } from '../../lib/vercel-catalog/catalogStore';
@@ -160,10 +160,24 @@ export function requireValidHandle(input: unknown, status = 400): string {
   return result.handle;
 }
 
+/**
+ * The owner self-service marker (OWNER_SELF_SERVICE_REASON) is written only by
+ * setOwnerHandle; the 30-day cooldown identifies owner changes by it. Every
+ * administrator-typed reason / note passes through requireText / optionalText,
+ * so refusing the marker here keeps it unforgeable (no schema field
+ * distinguishes an owner change from a Super Admin direct rename otherwise).
+ */
+function refuseOwnerMarker(text: string) {
+  if (text.replace(/\s+/g, ' ').toLowerCase() === OWNER_SELF_SERVICE_REASON.toLowerCase()) {
+    throw new PublicHandleError('That text is reserved for owner username changes; describe the administrative reason instead', 400, 'HANDLE_REASON_RESERVED');
+  }
+}
+
 function requireText(value: unknown, code: string, what: string): string {
   const text = typeof value === 'string' ? value.trim() : '';
   if (!text) throw new PublicHandleError(`A ${what} is required`, 400, code);
   if (text.length > MAX_TEXT) throw new PublicHandleError(`The ${what} must be at most ${MAX_TEXT} characters`, 400, code);
+  refuseOwnerMarker(text);
   return text;
 }
 
@@ -171,6 +185,7 @@ function optionalText(value: unknown): string | null {
   const text = typeof value === 'string' ? value.trim() : '';
   if (!text) return null;
   if (text.length > MAX_TEXT) throw new PublicHandleError(`The note must be at most ${MAX_TEXT} characters`, 400, 'HANDLE_NOTE_TOO_LONG');
+  refuseOwnerMarker(text);
   return text;
 }
 
@@ -261,20 +276,6 @@ async function handleRow(ex: Executor, handle: string, forUpdate: boolean): Prom
   return rows[0] ?? null;
 }
 
-async function pendingRequestFor(ex: Executor, entityType: HandleEntityType, entityId: string): Promise<RequestRow | null> {
-  const rows = await ex
-    .select()
-    .from(publicHandleRequests)
-    .where(
-      and(
-        eq(publicHandleRequests.entityType, entityType),
-        eq(publicHandleRequests.entityId, entityId),
-        eq(publicHandleRequests.status, 'pending'),
-      ),
-    );
-  return rows[0] ?? null;
-}
-
 /**
  * Why `handle` cannot become `entityType/entityId`'s active handle, or null when
  * it can. Table checks cover every status (active, retired, reserved), so a
@@ -341,69 +342,143 @@ async function supersedePendingFor(tx: Tx, actor: HandleActor, entityType: Handl
 }
 
 // ─── Owner operations ───────────────────────────────────────────────────────
+//
+// Owners set or change their username directly (setOwnerHandle below). The old
+// owner request flow (submit / cancel) is retired: its routes answer 410
+// HANDLE_REQUESTS_DISABLED, and legacy request records stay for Super Admin
+// inspection and decision.
 
-export async function submitHandleRequest(input: {
-  entity: HandleEntity;
-  handle: unknown;
-  actor: HandleActor;
-}): Promise<RequestRow> {
-  const { entity, actor } = input;
-  const handle = requireValidHandle(input.handle);
-  const problem = await availabilityProblem(db, entity.entityType, entity.entityId, handle);
-  if (problem) throwProblem(problem);
-  if (await pendingRequestFor(db, entity.entityType, entity.entityId)) {
-    throw new PublicHandleError('A handle request is already pending for this profile', 409, 'HANDLE_PENDING_EXISTS');
-  }
-  return inTransaction(async (tx) => {
-    await lockKey(tx, entityLockKey(entity.entityType, entity.entityId));
-    const [created] = await tx
-      .insert(publicHandleRequests)
-      .values({
-        entityType: entity.entityType,
-        entityId: entity.entityId,
-        requestedHandle: handle,
-        status: 'pending',
-        requestedByUserId: actor.userId,
-        requestedRealActorUserId: actor.realActorUserId,
-        createdAt: sql`clock_timestamp()`,
-      })
-      .returning();
-    await writeEvent(tx, actor, {
-      action: 'request_submitted',
-      entityType: entity.entityType,
-      entityId: entity.entityId,
-      toHandle: handle,
-      requestId: created.id,
-    });
-    return created;
-  });
+/**
+ * Owner self-service change cooldown: 720 hours — exactly 30 × 24 h — after the
+ * owner's last successful CHANGE of this entity's username.
+ */
+export const OWNER_CHANGE_COOLDOWN_HOURS = 720;
+
+/**
+ * When the owner may next CHANGE this entity's username, or null when no
+ * cooldown is running. Calculation (database clock only — the event times are
+ * written with clock_timestamp() by the same server):
+ *
+ *   last  = max(created_at) of this entity's events with action 'renamed',
+ *           request_id IS NULL and reason = OWNER_SELF_SERVICE_REASON
+ *           (= successful owner changes; failed saves roll back and leave no
+ *           event; approvals carry a request id; Super Admin direct renames
+ *           carry the admin's reason, which may never equal the marker —
+ *           refuseOwnerMarker — so they never count)
+ *   until = last + 720 hours;  running while until > clock_timestamp()
+ *
+ * Setting a username when the entity has NO active one (first registration, or
+ * after a Super Admin retirement) is never subject to it.
+ */
+export async function ownerChangeCooldownUntil(ex: Executor, entityType: HandleEntityType, entityId: string): Promise<Date | null> {
+  const until = sql`max(${publicHandleEvents.createdAt}) + (${OWNER_CHANGE_COOLDOWN_HOURS} * interval '1 hour')`;
+  const [row] = await ex
+    .select({
+      untilMs: sql<string | null>`floor(extract(epoch from ${until}) * 1000)::bigint`,
+      running: sql<boolean | null>`${until} > clock_timestamp()`,
+    })
+    .from(publicHandleEvents)
+    .where(
+      and(
+        eq(publicHandleEvents.entityType, entityType),
+        eq(publicHandleEvents.entityId, entityId),
+        eq(publicHandleEvents.action, 'renamed'),
+        isNull(publicHandleEvents.requestId),
+        eq(publicHandleEvents.reason, OWNER_SELF_SERVICE_REASON),
+      ),
+    );
+  if (!row || !row.running || row.untilMs === null) return null;
+  return new Date(Number(row.untilMs));
 }
 
-/** The requester withdraws their own pending request. */
-export async function cancelHandleRequest(input: { requestId: string; actor: HandleActor }): Promise<RequestRow> {
-  const { requestId, actor } = input;
-  return inTransaction(async (tx) => {
-    await lockKey(tx, requestLockKey(requestId));
-    const [request] = await tx.select().from(publicHandleRequests).where(eq(publicHandleRequests.id, requestId)).for('update');
-    if (!request) throw new PublicHandleError('Handle request not found', 404, 'HANDLE_REQUEST_NOT_FOUND');
-    if (request.requestedByUserId !== actor.userId) {
-      throw new PublicHandleError('Only the person who submitted this request can cancel it', 403, 'HANDLE_FORBIDDEN');
+/** Audit reason on owner self-service events (actions stay 'assigned' / 'renamed': the 0013 CHECK allows no new action). */
+export const OWNER_SELF_SERVICE_REASON = 'Set by the owner';
+
+export type OwnerHandleResult = {
+  handle: HandleRow;
+  previousHandle: string | null;
+  /** Canonical storefront path, e.g. /brands/<handle>. */
+  publicPath: string;
+  /** Absolute URL when the storefront origin is configured (CHOOSIFY_WEB_URL), else null. */
+  publicUrl: string | null;
+};
+
+/**
+ * The owner sets or changes their Brand / Creator username directly — no
+ * approval (Facebook-style). One transaction, entity lock then handle lock (the
+ * module's lock order):
+ *  - ownership (brand.sellerId / creator.userId) and Brand suspension are
+ *    re-read after the locks, never trusted from the request's start;
+ *  - availability is re-checked with row locks — an earlier availability answer
+ *    is never proof; taken, retired and reserved rows and other profiles'
+ *    catalog URLs are refused; the global unique index and the
+ *    one-active-per-entity index stay the final arbiters, so concurrent saves of
+ *    one handle (or two handles for one entity) can never both succeed;
+ *  - a change RETIRES the previous handle (never reissued) and inserts the new
+ *    one in the same transaction, so a failure leaves the old handle active;
+ *  - history is appended ('assigned' / 'renamed', actor = owner) and any older
+ *    pending request for the entity is closed as superseded.
+ */
+export async function setOwnerHandle(input: {
+  entityType: HandleEntityType;
+  entityId: string;
+  handle: unknown;
+  actor: HandleActor;
+}): Promise<OwnerHandleResult> {
+  const { entityType, entityId, actor } = input;
+  const handle = requireValidHandle(input.handle);
+  const result = await inTransaction(async (tx) => {
+    await lockKey(tx, entityLockKey(entityType, entityId));
+    await lockKey(tx, handleLockKey(handle));
+
+    const entity = await loadHandleEntity(entityType, entityId);
+    if (!entity || !actor.userId || entity.ownerUserId !== actor.userId) {
+      throw new PublicHandleError('Only the owner of this profile can change its username', 403, 'HANDLE_FORBIDDEN');
     }
-    if (request.status !== 'pending') throw new PublicHandleError('This request has already been decided', 409, 'HANDLE_REQUEST_NOT_PENDING');
-    const [updated] = await tx
-      .update(publicHandleRequests)
-      .set({ status: 'cancelled', decidedAt: sql`clock_timestamp()`, decidedByUserId: actor.userId })
-      .where(eq(publicHandleRequests.id, requestId))
+    if (entity.ownerBlocked) {
+      throw new PublicHandleError('Usernames cannot be changed while marketplace access is suspended or restricted', 403, 'HANDLE_OWNER_SUSPENDED', {
+        marketplaceStatus: entity.marketplaceStatus,
+      });
+    }
+
+    const previous = await activeHandleFor(tx, entityType, entityId, true);
+    const problem = await availabilityProblem(tx, entityType, entityId, handle, { lockRow: true });
+    if (problem) throwProblem(problem);
+    if (previous) {
+      // A CHANGE: refused while the 30-day cooldown runs. Read under the entity
+      // lock, so a concurrent change waits and then sees the first one's event.
+      const until = await ownerChangeCooldownUntil(tx, entityType, entityId);
+      if (until) {
+        throw new PublicHandleError('The username was changed recently; it can be changed again later', 409, 'HANDLE_CHANGE_COOLDOWN', {
+          nextChangeAt: until.toISOString(),
+        });
+      }
+    }
+
+    if (previous) {
+      await tx
+        .update(publicHandles)
+        .set({ status: 'retired', retiredAt: sql`clock_timestamp()` })
+        .where(eq(publicHandles.id, previous.id));
+    }
+    const [created] = await tx
+      .insert(publicHandles)
+      .values({ handle, entityType, entityId, status: 'active', createdByUserId: actor.userId, createdAt: sql`clock_timestamp()` })
       .returning();
     await writeEvent(tx, actor, {
-      action: 'request_cancelled',
-      entityType: request.entityType,
-      entityId: request.entityId,
-      toHandle: request.requestedHandle,
-      requestId,
+      action: previous ? 'renamed' : 'assigned',
+      entityType,
+      entityId,
+      fromHandle: previous?.handle ?? null,
+      toHandle: handle,
+      reason: OWNER_SELF_SERVICE_REASON,
     });
-    return updated;
+    await supersedePendingFor(tx, actor, entityType, entityId, 'Superseded: the owner set the username directly');
+    return { handle: created, previousHandle: previous?.handle ?? null };
   });
+  const publicPath = `/${entityType === 'brand' ? 'brands' : 'creators'}/${result.handle.handle}`;
+  const origin = String(process.env.CHOOSIFY_WEB_URL || process.env.VITE_CHOOSIFY_WEB_URL || '').trim().replace(/\/$/, '');
+  return { ...result, publicPath, publicUrl: origin ? `${origin}${publicPath}` : null };
 }
 
 // ─── Super Admin decisions ──────────────────────────────────────────────────
@@ -724,7 +799,7 @@ const clampLimit = (value: unknown, fallback = 50) => {
 };
 
 export async function getEntityHandleState(entityType: HandleEntityType, entityId: string) {
-  const [handles, requests, events] = await Promise.all([
+  const [handles, requests, events, cooldownUntil] = await Promise.all([
     db
       .select()
       .from(publicHandles)
@@ -740,6 +815,7 @@ export async function getEntityHandleState(entityType: HandleEntityType, entityI
       .from(publicHandleEvents)
       .where(and(eq(publicHandleEvents.entityType, entityType), eq(publicHandleEvents.entityId, entityId)))
       .orderBy(asc(publicHandleEvents.createdAt)),
+    ownerChangeCooldownUntil(db, entityType, entityId),
   ]);
   return {
     entityType,
@@ -749,6 +825,8 @@ export async function getEntityHandleState(entityType: HandleEntityType, entityI
     pendingRequest: requests.find((r) => r.status === 'pending') ?? null,
     requests,
     events,
+    /** Server-computed end of the owner change cooldown (ISO), or null when none is running. */
+    ownerChangeAvailableAt: cooldownUntil ? cooldownUntil.toISOString() : null,
   };
 }
 

@@ -7,8 +7,9 @@
  *
  * Owner (signed in; owner of the Brand / Creator; mutations never while impersonating):
  *   GET  /public-handles/:entityType/:entityId              (owner or Admin)
- *   POST /public-handles/:entityType/:entityId/requests     { handle }
- *   POST /public-handles/requests/:requestId/cancel
+ *   PUT  /public-handles/:entityType/:entityId/handle       { handle }   set / change at once (no approval)
+ *   POST /public-handles/:entityType/:entityId/requests     410 HANDLE_REQUESTS_DISABLED (retired request flow)
+ *   POST /public-handles/requests/:requestId/cancel         410 HANDLE_REQUESTS_DISABLED
  *
  * Admin read (admin + super_admin):
  *   GET  /public-handles/admin/requests | /admin/handles | /admin/events
@@ -38,8 +39,8 @@ import {
 import {
   PublicHandleError,
   approveHandleRequest,
-  cancelHandleRequest,
   checkHandleAvailability,
+  setOwnerHandle,
   getEntityHandleState,
   isHandleEntityType,
   isRequestId,
@@ -54,7 +55,6 @@ import {
   resolveHandle,
   retireHandle,
   setHandleDirect,
-  submitHandleRequest,
   type HandleEntityType,
 } from './publicHandleStore';
 
@@ -257,14 +257,20 @@ publicHandlesRouter.post('/public-handles/admin/release', ...requireHandleSuperA
 
 // ─── Owner routes ───────────────────────────────────────────────────────────
 
-publicHandlesRouter.post('/public-handles/requests/:requestId/cancel', ...requireHandleOwnerAction, async (req, res) => {
-  try {
-    const data = await cancelHandleRequest({ requestId: requestIdParam(req.params.requestId), actor: handleActorOf(req) });
-    res.json({ success: true, data });
-  } catch (error) {
-    sendHandleError(res, error, 'cancel');
-  }
-});
+/**
+ * Retired owner request flow: owners save their username directly (PUT …/handle).
+ * Signed-in, non-impersonated callers get 410 — nothing is read or written; legacy
+ * request records stay for Super Admin inspection and decision.
+ */
+function legacyRequestsDisabled(_req: Request, res: Response) {
+  res.status(410).json({
+    success: false,
+    error: 'Username requests are no longer used: owners save their username directly.',
+    code: 'HANDLE_REQUESTS_DISABLED',
+  });
+}
+
+publicHandlesRouter.post('/public-handles/requests/:requestId/cancel', ...requireHandleOwnerAction, legacyRequestsDisabled);
 
 publicHandlesRouter.get('/public-handles/:entityType/:entityId', ...requireHandleSession, async (req, res) => {
   try {
@@ -283,22 +289,19 @@ publicHandlesRouter.get('/public-handles/:entityType/:entityId', ...requireHandl
   }
 });
 
-publicHandlesRouter.post('/public-handles/:entityType/:entityId/requests', ...requireHandleOwnerAction, async (req, res) => {
+publicHandlesRouter.post('/public-handles/:entityType/:entityId/requests', ...requireHandleOwnerAction, legacyRequestsDisabled);
+
+/**
+ * The owner sets or changes the username directly (no approval). Ownership and
+ * suspension are checked inside the transaction (setOwnerHandle), after the locks.
+ */
+publicHandlesRouter.put('/public-handles/:entityType/:entityId/handle', ...requireHandleOwnerAction, async (req, res) => {
   try {
     const entityType = entityTypeParam(req.params.entityType);
     const entityId = entityIdParam(req.params.entityId);
-    const entity = await loadHandleEntity(entityType, entityId);
-    if (!entity || !isEntityOwner(entity, req.userId)) {
-      throw new PublicHandleError('Only the owner of this profile can request a handle', 403, 'HANDLE_FORBIDDEN');
-    }
-    if (entity.ownerBlocked) {
-      throw new PublicHandleError('Handle requests are unavailable while marketplace access is suspended or restricted', 403, 'HANDLE_OWNER_SUSPENDED', {
-        marketplaceStatus: entity.marketplaceStatus,
-      });
-    }
-    const data = await submitHandleRequest({ entity, handle: body(req).handle, actor: handleActorOf(req) });
-    res.status(201).json({ success: true, data });
+    const data = await setOwnerHandle({ entityType, entityId, handle: body(req).handle, actor: handleActorOf(req) });
+    res.json({ success: true, data });
   } catch (error) {
-    sendHandleError(res, error, 'submit request');
+    sendHandleError(res, error, 'set username');
   }
 });

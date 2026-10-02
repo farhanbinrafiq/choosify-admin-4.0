@@ -116,6 +116,18 @@ async function main() {
   const db = new pg.Client({ connectionString: DB_URL, ssl: { rejectUnauthorized: false } });
   await db.connect();
   const q = async <T = Record<string, any>>(text: string, params: unknown[] = []) => (await db.query(text, params)).rows as T[];
+  // Owner submit is retired (410): legacy pending requests are seeded as the old route wrote them.
+  const seedRequest = async (ownerUserId: string, type: string, id: string, handle: string) => {
+    const [row] = await q<{ id: string }>(
+      `insert into public_handle_requests (entity_type, entity_id, requested_handle, status, requested_by_user_id, created_at) values ($1,$2,$3,'pending',$4,clock_timestamp()) returning id`,
+      [type, id, handle, ownerUserId],
+    );
+    await q(
+      `insert into public_handle_events (action, entity_type, entity_id, to_handle, request_id, actor_user_id, created_at) values ('request_submitted',$1,$2,$3,$4,$5,clock_timestamp())`,
+      [type, id, handle, row.id, ownerUserId],
+    );
+    return { status: 201, body: { success: true, data: { id: row.id, status: 'pending' } } as Record<string, any> };
+  };
   const lockConn = new pg.Client({ connectionString: DB_URL, ssl: { rejectUnauthorized: false } });
   await lockConn.connect();
   const applicantEmails: string[] = [];
@@ -517,8 +529,8 @@ async function main() {
       const retiredEvents = (await q(`select count(*)::int n from public_handle_events where entity_id=$1 and action='retired'`, [B.dd.id]))[0].n;
       check(dels.every((d) => d.status === 200) && retiredEvents === 1 && (await rowsForHandle(h('hdd')))[0]?.status === 'retired', '11a concurrent duplicate deletes retire the handle exactly once', { statuses: dels.map((d) => d.status), retiredEvents });
       // 11b. Ownership transfer racing the approval of the former owner's request.
-      const pending = await call(`/public-handles/brand/${B.cc.id}/requests`, SELLER_A.token, 'POST', { handle: h('ccnew') });
-      check(is(pending, 201), '11b former owner has a pending request', pending.body);
+      const pending = await seedRequest(u.sellerA.id, 'brand', B.cc.id, h('ccnew'));
+      check(pending.status === 201, '11b former owner has a legacy pending request', pending.body);
       const rid = String(pending.body.data?.id);
       const [xfer, appr] = await Promise.all([
         call(`/catalog/brands/${B.cc.id}`, SA.token, 'PATCH', { sellerId: u.sellerB.id }),
@@ -565,7 +577,7 @@ async function main() {
       const types = ['seller', 'user', 'product', 'guide', 'deal', 'service', 'reserved'];
       const results = await Promise.all(types.map((t) => call('/public-handles/admin/assign', SA.token, 'POST', { entityType: t, entityId: 'x-1', handle: h(`t${t.slice(0, 3)}`), reason: 'probe' })));
       check(results.every((r) => is(r, 400, 'HANDLE_INVALID_ENTITY_TYPE')), '12 handle assignment refuses every type except brand and creator', results.map((r) => r.body.code));
-      check(is(await call(`/public-handles/product/prod-1/requests`, SELLER_A.token, 'POST', { handle: h('tpr') }), 400, 'HANDLE_INVALID_ENTITY_TYPE'), '12 owners cannot request a Product handle');
+      check(is(await call(`/public-handles/product/prod-1/handle`, SELLER_A.token, 'PUT', { handle: h('tpr') }), 400, 'HANDLE_INVALID_ENTITY_TYPE'), '12 owners cannot set a Product handle');
       check(is(await assign('brand', 'prod-1', h('tpb')), 404, 'HANDLE_ENTITY_NOT_FOUND'), '12 a Product id is not a Brand');
       check(is(await assign('brand', u.sellerA.id, h('tsb')), 404, 'HANDLE_ENTITY_NOT_FOUND'), '12 a Seller (user) id is not a Brand');
       const typesInDb = (await q(`select distinct entity_type from public_handles order by 1`)).map((r) => r.entity_type);
@@ -589,8 +601,8 @@ async function main() {
     {
       // 13a. Transfer wins: the approval is held on the request lock (taken before any
       // catalog read), the transfer completes, then the approval runs and must see the new owner.
-      const req = await call(`/public-handles/brand/${B.r1.id}/requests`, SELLER_A.token, 'POST', { handle: h('r1new') });
-      check(is(req, 201), '13a former owner (seller A) submits a request', req.body);
+      const req = await seedRequest(u.sellerA.id, 'brand', B.r1.id, h('r1new'));
+      check(req.status === 201, '13a a legacy request by the former owner (seller A)', req.body);
       const rid = String(req.body.data?.id);
       const before = await handleRows(B.r1.id);
       await lockConn.query(`select pg_advisory_lock(hashtext($1))`, [`public_handles:request:${rid}`]);
@@ -608,14 +620,14 @@ async function main() {
       const ev = (await q(`select action from public_handle_events where request_id=$1 order by created_at, id`, [rid])).map((e) => e.action);
       check(rr.status === 'superseded' && ev.join() === 'request_submitted,request_superseded', '13a request superseded; no approval or rename events', { status: rr.status, ev });
       check(find(await brandsAs(SELLER_B.token), B.r1.id)?.publicHandle === h('r1a'), '13a the new owner sees the Brand with its unchanged handle');
-      check(is(await call(`/public-handles/brand/${B.r1.id}/requests`, SELLER_A.token, 'POST', { handle: h('r1x') }), 403, 'HANDLE_FORBIDDEN'), '13a the former owner can no longer request');
+      check(is(await call(`/public-handles/brand/${B.r1.id}/handle`, SELLER_A.token, 'PUT', { handle: h('r1x') }), 403, 'HANDLE_FORBIDDEN'), '13a the former owner can no longer set the username');
     }
     {
       // 13b. Approval wins: the approval passes its ownership check, then waits on the
       // Brand's active-handle row (locked by the probe); the transfer completes during
       // that window; the approval then commits with the ownership it verified.
-      const req = await call(`/public-handles/brand/${B.r2.id}/requests`, SELLER_A.token, 'POST', { handle: h('r2new') });
-      check(is(req, 201), '13b seller A submits a request', req.body);
+      const req = await seedRequest(u.sellerA.id, 'brand', B.r2.id, h('r2new'));
+      check(is(req, 201), '13b a legacy request by seller A', req.body);
       const rid = String(req.body.data?.id);
       await lockConn.query('begin');
       await lockConn.query(`select id from public_handles where entity_type='brand' and entity_id=$1 and status='active' for update`, [B.r2.id]);
@@ -637,7 +649,7 @@ async function main() {
       check(rr.status === 'approved' && rr.decided_by_user_id === SA.uid && ev.join() === 'request_submitted,request_approved,renamed', '13b request approved by the Super Admin; complete history', { rr, ev });
       check(find(await brandsAs(SELLER_B.token), B.r2.id)?.publicHandle === h('r2new'), '13b after the transfer the NEW owner sees the Brand with the approved handle');
       check(!find(await brandsAs(SELLER_A.token), B.r2.id), '13b the former owner no longer sees the Brand');
-      check(is(await call(`/public-handles/brand/${B.r2.id}/requests`, SELLER_A.token, 'POST', { handle: h('r2x') }), 403, 'HANDLE_FORBIDDEN'), '13b the former owner can no longer request');
+      check(is(await call(`/public-handles/brand/${B.r2.id}/handle`, SELLER_A.token, 'PUT', { handle: h('r2x') }), 403, 'HANDLE_FORBIDDEN'), '13b the former owner can no longer set the username');
       check(is(await call(`/catalog/brands/${B.r2.id}`, SELLER_B.token, 'PATCH', { slug: h('r2slug') }), 409, 'HANDLE_SLUG_LOCKED'), '13b the new owner is bound by the slug lock');
     }
 
