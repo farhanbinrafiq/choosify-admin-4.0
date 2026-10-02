@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, History, Plus, RotateCw, Trash2, Upload } from 'lucide-react';
 import { catalogApi } from '../../services/catalogApi';
 import { useAuth } from '../../contexts/AuthContext';
+import { PublicIdentitySection } from '../../components/publicIdentity/PublicIdentitySection';
 import { useEntityDraft } from '../../hooks/useEntityDraft';
 import { dataUrlToFile, uploadCreatorImage } from '../../services/mediaUpload';
 import { CreatorProfilePresentation, type CreatorStudioBridge } from '../../components/creator-profile';
@@ -900,6 +901,8 @@ export default function CreatorEditStudio() {
               Bio is edited in the Creator Overview section. Verification, Trust Score and going LIVE are managed by
               Choosify — use the Publish button for lifecycle.
             </p>
+            {/* Username of THIS Creator profile (not the login account); requests go through approval, independent of Save. */}
+            {activeId ? <PublicIdentitySection key={activeId} entityType="creator" entityId={activeId} slug={model?.slug} /> : null}
           </div>
         );
       case 'overview':

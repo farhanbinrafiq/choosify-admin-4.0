@@ -16,6 +16,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, GripVertical, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { PublicIdentitySection } from '../../components/publicIdentity/PublicIdentitySection';
 import { catalogApi } from '../../services/catalogApi';
 import type { CatalogBrand, CatalogGuide } from '../../types/catalog';
 import type { BrandCMSModel, BrandServiceCenterEntry, BrandStoreEntry } from './brandSeeds';
@@ -351,6 +352,10 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                 </button>
               </div>
             </div>
+            {/* Username of THIS Brand (not the seller account); requests go through approval, independent of Save. */}
+            {activeId && activeId !== 'new' ? (
+              <PublicIdentitySection key={activeId} entityType="brand" entityId={activeId} slug={model?.slug} />
+            ) : null}
           </div>
         );
       case 'brandAbout':
