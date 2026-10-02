@@ -3,8 +3,10 @@
  * 0012 migration creates the table empty and never runs this.
  *
  * Gives each APPROVED Brand / Creator its existing catalog slug as its first
- * active handle (approved 2026-10-01). The seven decision-required records stay
- * without a handle. Catalog JSON is only read, never written (verified by hash).
+ * active handle (7 unowned profiles, approved 2026-10-01, revised 2026-10-02).
+ * The 12 LEFT_UNASSIGNED records get no handle and no substitute: 7 whose slug
+ * cannot be a handle, and 5 owned profiles whose owners choose their own username.
+ * Catalog JSON is only read, never written (verified by hash).
  *
  * Safe to run repeatedly: a handle the entity already holds is reported as
  * "already assigned" and not inserted again. Refuses — without writing anything —
@@ -28,23 +30,18 @@ import { validateHandle } from '../shared/publicHandles/rules';
 type EntityType = 'brand' | 'creator';
 type Planned = { entityType: EntityType; entityId: string; slug: string };
 
-/** Approved 2026-10-01: these records receive their current slug as their initial handle. */
+/** Approved 2026-10-01 (revised 2026-10-02): these records receive their current slug as their initial handle. */
 const APPROVED: Planned[] = [
   { entityType: 'brand', entityId: 'brand-walton', slug: 'walton' },
   { entityType: 'brand', entityId: 'brand-samsung', slug: 'samsung' },
   { entityType: 'brand', entityId: 'brand-apple', slug: 'apple' },
   { entityType: 'brand', entityId: 'brand-apex', slug: 'apex' },
-  { entityType: 'brand', entityId: 'brand-cb4ec847-ee87-4184-8659-84959c4c9ef9', slug: 'test' },
-  { entityType: 'brand', entityId: 'brand-3f9bfca3-8b9c-4485-b996-ee299bcfa022', slug: 'abcd' },
-  { entityType: 'brand', entityId: 'brand-b1dbd4bf-57bf-4c6a-b6fe-91067c7046f3', slug: 'fff' },
-  { entityType: 'brand', entityId: 'brand-2eec9bab-9dd1-4d36-8a13-2bd749983ae0', slug: 'artveen' },
   { entityType: 'creator', entityId: 'creator-techtalks', slug: 'tech-talks-bd' },
   { entityType: 'creator', entityId: 'creator-farhan', slug: 'farhan-bin-rafiq' },
   { entityType: 'creator', entityId: 'creator-sarah', slug: 'sarah-jenkins' },
-  { entityType: 'creator', entityId: 'creator-1790540879009', slug: 'adiba-prionty' },
 ];
 
-/** Approved 2026-10-01: these records keep no public handle (no rename, no replacement handle). */
+/** Approved 2026-10-01 + 2026-10-02: these records keep no public handle (no rename, no replacement handle). */
 const LEFT_UNASSIGNED: Array<{ entityType: EntityType; entityId: string; why: string }> = [
   { entityType: 'brand', entityId: 'brand-994a25dc-284e-4163-904a-dcedeb34d870', why: 'synthetic QA brand; slug longer than 30 characters' },
   { entityType: 'brand', entityId: 'brand-dcba022e-09d2-4e63-a59c-acbcae856496', why: 'synthetic QA brand; slug longer than 30 characters' },
@@ -53,6 +50,13 @@ const LEFT_UNASSIGNED: Array<{ entityType: EntityType; entityId: string; why: st
   { entityType: 'brand', entityId: 'brand-3ad26933-23fb-4ae8-84cc-f601b0036cbb', why: 'synthetic QA brand; slug longer than 30 characters' },
   { entityType: 'creator', entityId: 'creator-1787574771519', why: 'synthetic QA creator; slug longer than 30 characters' },
   { entityType: 'creator', entityId: 'creator-1788872945569', why: 'draft creator; slug "creator" is reserved' },
+  // Approved 2026-10-02: owners set their own usernames (Facebook-style Studio, Admin 08c933d) —
+  // these owned profiles get no automatic handle and no substitute.
+  { entityType: 'brand', entityId: 'brand-cb4ec847-ee87-4184-8659-84959c4c9ef9', why: 'owner_choice_reserved: slug "test"; the owner signalled @choosifybd and sets their own username' },
+  { entityType: 'brand', entityId: 'brand-3f9bfca3-8b9c-4485-b996-ee299bcfa022', why: 'owner_choice_reserved: slug "abcd"; owned Brand, the owner chooses its username' },
+  { entityType: 'brand', entityId: 'brand-b1dbd4bf-57bf-4c6a-b6fe-91067c7046f3', why: 'owner_choice_reserved: slug "fff"; owned Brand, the owner chooses its username' },
+  { entityType: 'brand', entityId: 'brand-2eec9bab-9dd1-4d36-8a13-2bd749983ae0', why: 'owner_choice_reserved: slug "artveen"; owned Brand, the owner chooses its username' },
+  { entityType: 'creator', entityId: 'creator-1790540879009', why: 'owner_choice_reserved_draft: slug "adiba-prionty"; owned draft Creator, the owner chooses its username' },
 ];
 
 const args = process.argv.slice(2);
