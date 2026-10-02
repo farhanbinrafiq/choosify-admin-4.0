@@ -331,6 +331,113 @@ export const entitlementAuditEvents = pgTable('entitlement_audit_events', {
   createdIdx: index('entitlement_audit_events_created_idx').on(table.createdAt.desc()),
 }));
 
+/**
+ * Public Identity Phase B (migration 0012). One global public-handle namespace
+ * shared by Brands and Creators only (a Brand is the seller's storefront — no
+ * seller/user/product/guide handles). entity_id is the catalog id string, never
+ * an owner: a Brand keeps its handle across ownership transfers. handle is unique
+ * across ALL rows, so retired and reserved handles are never reissued. At most one
+ * active handle per entity. created_by_user_id has no foreign key so attribution
+ * survives user deletion. Format mirrors shared/publicHandles/rules.ts.
+ */
+export const publicHandles = pgTable('public_handles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  handle: varchar('handle', { length: 30 }).notNull(),
+  entityType: varchar('entity_type', { length: 16 }).$type<'brand' | 'creator' | 'reserved'>().notNull(),
+  entityId: varchar('entity_id', { length: 128 }),
+  status: varchar('status', { length: 16 }).$type<'active' | 'retired' | 'reserved'>().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  retiredAt: timestamp('retired_at', { withTimezone: true }),
+  createdByUserId: uuid('created_by_user_id'),
+}, (table) => ({
+  handleFormatCheck: check(
+    'public_handles_handle_format_check',
+    sql`char_length(${table.handle}) BETWEEN 3 AND 30 AND octet_length(${table.handle}) = char_length(${table.handle}) AND ${table.handle} ~ '^[a-z][a-z0-9]*(-[a-z0-9]+)*$'`,
+  ),
+  entityTypeCheck: check('public_handles_entity_type_check', sql`${table.entityType} IN ('brand', 'creator', 'reserved')`),
+  statusCheck: check('public_handles_status_check', sql`${table.status} IN ('active', 'retired', 'reserved')`),
+  reservedCheck: check('public_handles_reserved_check', sql`(${table.entityType} = 'reserved') = (${table.status} = 'reserved')`),
+  entityIdCheck: check(
+    'public_handles_entity_id_check',
+    sql`CASE WHEN ${table.entityType} = 'reserved' THEN ${table.entityId} IS NULL ELSE ${table.entityId} IS NOT NULL AND length(trim(${table.entityId})) > 0 END`,
+  ),
+  retiredAtCheck: check('public_handles_retired_at_check', sql`(${table.status} = 'retired') = (${table.retiredAt} IS NOT NULL)`),
+  handleUnique: uniqueIndex('public_handles_handle_unique').on(table.handle),
+  entityActiveUnique: uniqueIndex('public_handles_entity_active_unique').on(table.entityType, table.entityId).where(sql`status = 'active'`),
+  entityIdx: index('public_handles_entity_idx').on(table.entityType, table.entityId),
+}));
+
+/**
+ * Public Identity Phase C (migration 0013). An owner's request for a Brand /
+ * Creator handle, decided by a Super Admin. A pending request does not hold the
+ * handle (availability is re-checked on approval); at most one pending request
+ * per entity; every decision is final. No foreign keys, as publicHandles.
+ */
+export const publicHandleRequests = pgTable('public_handle_requests', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  entityType: varchar('entity_type', { length: 16 }).$type<'brand' | 'creator'>().notNull(),
+  entityId: varchar('entity_id', { length: 128 }).notNull(),
+  requestedHandle: varchar('requested_handle', { length: 30 }).notNull(),
+  status: varchar('status', { length: 16 }).$type<'pending' | 'approved' | 'rejected' | 'cancelled' | 'superseded'>().notNull(),
+  requestedByUserId: uuid('requested_by_user_id').notNull(),
+  requestedRealActorUserId: uuid('requested_real_actor_user_id'),
+  decidedByUserId: uuid('decided_by_user_id'),
+  decisionNote: text('decision_note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  decidedAt: timestamp('decided_at', { withTimezone: true }),
+}, (table) => ({
+  entityTypeCheck: check('public_handle_requests_entity_type_check', sql`${table.entityType} IN ('brand', 'creator')`),
+  entityIdCheck: check('public_handle_requests_entity_id_check', sql`length(trim(${table.entityId})) > 0`),
+  handleFormatCheck: check(
+    'public_handle_requests_handle_format_check',
+    sql`char_length(${table.requestedHandle}) BETWEEN 3 AND 30 AND octet_length(${table.requestedHandle}) = char_length(${table.requestedHandle}) AND ${table.requestedHandle} ~ '^[a-z][a-z0-9]*(-[a-z0-9]+)*$'`,
+  ),
+  statusCheck: check('public_handle_requests_status_check', sql`${table.status} IN ('pending', 'approved', 'rejected', 'cancelled', 'superseded')`),
+  decidedAtCheck: check('public_handle_requests_decided_at_check', sql`(${table.status} = 'pending') = (${table.decidedAt} IS NULL)`),
+  rejectionNoteCheck: check(
+    'public_handle_requests_rejection_note_check',
+    sql`${table.status} <> 'rejected' OR length(trim(coalesce(${table.decisionNote}, ''))) > 0`,
+  ),
+  onePending: uniqueIndex('public_handle_requests_one_pending').on(table.entityType, table.entityId).where(sql`status = 'pending'`),
+  statusCreatedIdx: index('public_handle_requests_status_created_idx').on(table.status, table.createdAt),
+  entityIdx: index('public_handle_requests_entity_idx').on(table.entityType, table.entityId, table.createdAt),
+}));
+
+/**
+ * Public Identity Phase C (migration 0013). Attributable history of every handle
+ * and request change. APPEND-ONLY BY CODE CONTRACT: insert only — never add an
+ * update or delete path for this table. No foreign keys, so history survives user
+ * deletion. entity_type/entity_id are both null only for bare reserved names.
+ */
+export const publicHandleEvents = pgTable('public_handle_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  action: varchar('action', { length: 32 })
+    .$type<
+      | 'assigned' | 'renamed' | 'retired' | 'reserved' | 'reserved_assigned' | 'released'
+      | 'request_submitted' | 'request_approved' | 'request_rejected' | 'request_cancelled' | 'request_superseded'
+    >()
+    .notNull(),
+  entityType: varchar('entity_type', { length: 16 }).$type<'brand' | 'creator'>(),
+  entityId: varchar('entity_id', { length: 128 }),
+  fromHandle: varchar('from_handle', { length: 30 }),
+  toHandle: varchar('to_handle', { length: 30 }),
+  requestId: uuid('request_id'),
+  actorUserId: uuid('actor_user_id'),
+  realActorUserId: uuid('real_actor_user_id'),
+  reason: text('reason'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  actionCheck: check(
+    'public_handle_events_action_check',
+    sql`${table.action} IN ('assigned', 'renamed', 'retired', 'reserved', 'reserved_assigned', 'released', 'request_submitted', 'request_approved', 'request_rejected', 'request_cancelled', 'request_superseded')`,
+  ),
+  entityTypeCheck: check('public_handle_events_entity_type_check', sql`${table.entityType} IS NULL OR ${table.entityType} IN ('brand', 'creator')`),
+  entityPairCheck: check('public_handle_events_entity_pair_check', sql`(${table.entityType} IS NULL) = (${table.entityId} IS NULL)`),
+  entityCreatedIdx: index('public_handle_events_entity_created_idx').on(table.entityType, table.entityId, table.createdAt),
+  toHandleIdx: index('public_handle_events_to_handle_idx').on(table.toHandle),
+  fromHandleIdx: index('public_handle_events_from_handle_idx').on(table.fromHandle),
+}));
+
 /** Sprint 10 durability migration — Notifications (was a bare in-memory Map, no disk snapshot at all). */
 export const notifications = pgTable('notifications', {
   id: varchar('id', { length: 64 }).primaryKey(),

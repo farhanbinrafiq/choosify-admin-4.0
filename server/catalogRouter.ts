@@ -50,6 +50,14 @@ import {
 import { hasPermission, hasRole } from './permissions/authorization';
 import { PERMISSIONS } from './permissions/permissions';
 import { ROLES } from './permissions/roles';
+import {
+  CatalogHandleError,
+  assertSlugChangeAllowed,
+  handlesHeldByOthers,
+  slugAvoidingHandles,
+  withPublicHandles,
+} from './publicHandles/publicHandleCatalog';
+import { retireHandlesForDeletedEntity } from './publicHandles/publicHandleStore';
 import { draftStore, type DraftEntityType } from '../lib/vercel-catalog/draftStore';
 import type { CatalogProduct } from '../src/types/catalog';
 import type { CatalogProductDetail } from '../lib/vercel-catalog/catalogEditorialTypes';
@@ -675,11 +683,25 @@ async function buildProductNormalizeContext(excludeProductId?: string) {
 async function buildBrandNormalizeContext(excludeBrandId?: string) {
   const brands = await catalogStore.listBrands();
   return {
-    existingBrandSlugs: brands
-      .filter((brand) => brand.id !== excludeBrandId)
-      .map((brand) => brand.slug),
+    existingBrandSlugs: [
+      ...brands.filter((brand) => brand.id !== excludeBrandId).map((brand) => brand.slug),
+      // Public Identity C3: a Brand slug may never equal another Brand's public
+      // handle (active or retired), or one URL key would name two Brands.
+      ...(await handlesHeldByOthers('brand', excludeBrandId ?? null)),
+    ],
   };
 }
+
+/** Public Identity C3: handle-rule refusals keep their status/code; anything else keeps the route's 400. */
+function sendCatalogWriteError(res: Response, error: unknown, fallback: string) {
+  if (error instanceof CatalogHandleError) {
+    res.status(error.status).json({ success: false, error: error.message, code: error.code });
+    return;
+  }
+  res.status(400).json({ error: validationErrorMessage(error, fallback) });
+}
+
+const isSuperAdminRequest = (req: Request) => Boolean(req.userRole && hasRole(req.userRole, ROLES.SUPER_ADMIN));
 
 function validationErrorMessage(error: unknown, fallback: string): string {
   if (error && typeof error === 'object' && 'issues' in error) {
@@ -706,7 +728,7 @@ catalogRouter.get('/catalog/snapshot', softAuthenticateRequest, async (req, res)
       scopeBrandsForRequest(req, brandsRaw),
     ]);
 
-    res.json({ products, categories, brands, deals, homepage });
+    res.json({ products, categories, brands: await withPublicHandles('brand', brands), deals, homepage });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to load snapshot' });
   }
@@ -731,9 +753,9 @@ catalogRouter.get('/catalog/home', softAuthenticateRequest, async (req, res) => 
     res.json({
       homepage,
       featuredProducts: products.filter((item) => homepage.featuredProductIds.includes(item.id)),
-      featuredBrands: brands.filter((item) => homepage.featuredBrandIds.includes(item.id)),
+      featuredBrands: await withPublicHandles('brand', brands.filter((item) => homepage.featuredBrandIds.includes(item.id))),
       featuredDeals: deals.filter((item) => homepage.featuredDealIds.includes(item.id)),
-      featuredCreators: creators.filter((item) => homepage.featuredCreatorIds.includes(item.id)),
+      featuredCreators: await withPublicHandles('creator', creators.filter((item) => homepage.featuredCreatorIds.includes(item.id))),
       featuredGuides: guides.filter((item) => homepage.featuredGuideIds.includes(item.id)),
     });
   } catch (error) {
@@ -1745,7 +1767,7 @@ catalogRouter.get('/catalog/brands', softAuthenticateRequest, async (req, res) =
         return hay.includes(q);
       });
     }
-    res.json({ data: brands });
+    res.json({ data: await withPublicHandles('brand', brands) });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list brands' });
   }
@@ -2040,7 +2062,7 @@ catalogRouter.post('/catalog/brands', ...requireBrandStudioBrandWrite, async (re
     });
     res.status(201).json({ success: true, data: saved });
   } catch (error) {
-    res.status(400).json({ error: validationErrorMessage(error, 'Invalid brand payload') });
+    sendCatalogWriteError(res, error, 'Invalid brand payload');
   }
 });
 
@@ -2060,6 +2082,13 @@ catalogRouter.put('/catalog/brands/:id', ...requireBrandStudioBrandWrite, async 
       existing,
       normalizeBrandInput({ ...req.body, id: req.params.id }, existing, context),
     );
+    await assertSlugChangeAllowed({
+      entityType: 'brand',
+      entityId: existing.id,
+      previousSlug: existing.slug,
+      nextSlug: normalized.slug,
+      isSuperAdmin: isSuperAdminRequest(req),
+    });
     const withRef = {
       ...normalized,
       brandReferenceId:
@@ -2078,7 +2107,7 @@ catalogRouter.put('/catalog/brands/:id', ...requireBrandStudioBrandWrite, async 
     });
     res.json({ success: true, data: saved });
   } catch (error) {
-    res.status(400).json({ error: validationErrorMessage(error, 'Invalid brand payload') });
+    sendCatalogWriteError(res, error, 'Invalid brand payload');
   }
 });
 
@@ -2098,6 +2127,13 @@ catalogRouter.patch('/catalog/brands/:id', ...requireBrandStudioBrandWrite, asyn
       existing,
       normalizeBrandInput({ ...existing, ...req.body, id: req.params.id }, existing, context),
     );
+    await assertSlugChangeAllowed({
+      entityType: 'brand',
+      entityId: existing.id,
+      previousSlug: existing.slug,
+      nextSlug: normalized.slug,
+      isSuperAdmin: isSuperAdminRequest(req),
+    });
     const withRef = {
       ...normalized,
       brandReferenceId:
@@ -2116,7 +2152,7 @@ catalogRouter.patch('/catalog/brands/:id', ...requireBrandStudioBrandWrite, asyn
     });
     res.json({ success: true, data: saved });
   } catch (error) {
-    res.status(400).json({ error: validationErrorMessage(error, 'Invalid brand patch payload') });
+    sendCatalogWriteError(res, error, 'Invalid brand patch payload');
   }
 });
 
@@ -2201,7 +2237,7 @@ catalogRouter.patch(
 
       res.json({ success: true, data: saved, warning: activeOrderWarning });
     } catch (error) {
-      res.status(400).json({ error: validationErrorMessage(error, 'Invalid marketplace access transition') });
+      sendCatalogWriteError(res, error, 'Invalid marketplace access transition');
     }
   },
 );
@@ -2209,7 +2245,26 @@ catalogRouter.patch(
 catalogRouter.delete('/catalog/brands/:id', ...requireCmsWrite, async (req, res) => {
   try {
     await catalogStore.deleteBrand(req.params.id);
-    res.json({ success: true });
+    // Public Identity C3: the deleted Brand's handle is retired (never reissued)
+    // and its pending handle requests superseded. The catalog (JSON snapshot) and
+    // Postgres cannot share a transaction, so this runs after the delete; if it
+    // fails the handle stays attached to a Brand id that no longer exists, which
+    // public resolution already treats as not found.
+    let handleWarning: string | undefined;
+    try {
+      await retireHandlesForDeletedEntity({
+        entityType: 'brand',
+        entityId: req.params.id,
+        actor: { userId: String(req.userId || ''), realActorUserId: req.realActorUserId || null },
+      });
+    } catch (handleError) {
+      console.error(
+        '[PublicHandles] retire after brand delete failed:',
+        handleError instanceof Error ? handleError.message : handleError,
+      );
+      handleWarning = 'The Brand was deleted, but its public handle could not be retired right now.';
+    }
+    res.json({ success: true, ...(handleWarning ? { warning: handleWarning } : {}) });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to delete brand' });
   }
@@ -2499,7 +2554,7 @@ catalogRouter.get('/catalog/creators', softAuthenticateRequest, async (req, res)
     const creators = await scopeCreatorsForRequest(req, await catalogStore.listCreators());
     const status = typeof req.query.status === 'string' ? req.query.status : '';
     const filtered = status ? creators.filter((c) => c.status === status) : creators;
-    res.json({ data: filtered });
+    res.json({ data: await withPublicHandles('creator', filtered) });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list creators' });
   }
@@ -2513,10 +2568,22 @@ catalogRouter.put('/catalog/creators/:id', ...requireCreatorStudioWriteMw, async
     const scoped = scopeCreatorSelfWrite(req, existing, req.body as Record<string, unknown>);
     const payload = stripPendingCreatorPublish(req, existing, scoped);
     const normalized = normalizeCreatorInput({ ...payload, id: req.params.id }, existing || undefined);
+    if (!existing || normalized.slug !== existing.slug) {
+      if (existing) {
+        await assertSlugChangeAllowed({
+          entityType: 'creator',
+          entityId: existing.id,
+          previousSlug: existing.slug,
+          nextSlug: normalized.slug,
+          isSuperAdmin: isSuperAdminRequest(req),
+        });
+      }
+      normalized.slug = await slugAvoidingHandles('creator', normalized.slug, normalized.id);
+    }
     const saved = await catalogStore.upsertCreator(normalized);
     res.json({ success: true, data: saved });
   } catch (error) {
-    res.status(400).json({ error: validationErrorMessage(error, 'Invalid creator payload') });
+    sendCatalogWriteError(res, error, 'Invalid creator payload');
   }
 });
 
@@ -2530,10 +2597,20 @@ catalogRouter.patch('/catalog/creators/:id', ...requireCreatorStudioWriteMw, asy
     const scoped = scopeCreatorSelfWrite(req, existing, req.body as Record<string, unknown>);
     const payload = stripPendingCreatorPublish(req, existing, scoped);
     const normalized = normalizeCreatorInput({ ...existing, ...payload, id: req.params.id }, existing);
+    if (normalized.slug !== existing.slug) {
+      await assertSlugChangeAllowed({
+        entityType: 'creator',
+        entityId: existing.id,
+        previousSlug: existing.slug,
+        nextSlug: normalized.slug,
+        isSuperAdmin: isSuperAdminRequest(req),
+      });
+      normalized.slug = await slugAvoidingHandles('creator', normalized.slug, normalized.id);
+    }
     const saved = await catalogStore.upsertCreator(normalized);
     res.json({ success: true, data: saved });
   } catch (error) {
-    res.status(400).json({ error: validationErrorMessage(error, 'Invalid creator patch payload') });
+    sendCatalogWriteError(res, error, 'Invalid creator patch payload');
   }
 });
 

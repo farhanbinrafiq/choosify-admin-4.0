@@ -13,6 +13,7 @@ import { cashbookApi, type FinanceSummary } from '../../services/cashbookApi';
 import type { CatalogCreator } from '../../types/catalog';
 import { Avatar } from '../../components/shared/Avatar';
 import { AccountEntitlementsPanel } from '../../components/admin/EntitlementAccessPanels';
+import { EntityHandlePanel, canViewPublicHandles } from '../../components/admin/PublicHandlePanels';
 
 // ============================================================================
 // Creator Profile — the real /admin/creator-review?creatorId= destination.
@@ -47,6 +48,7 @@ const TABS: Array<{ key: string; label: string; icon: string }> = [
   { key: 'reviews', label: 'Reviews & Score', icon: '●' },
   { key: 'ads', label: 'Ads & Deals', icon: '⛿' },
   { key: 'features', label: 'Feature Access', icon: '⚑' },
+  { key: 'handle', label: 'Public Handle', icon: '@' },
 ];
 
 export default function CreatorProfile() {
@@ -57,7 +59,10 @@ export default function CreatorProfile() {
   const { can } = useRbac();
   const { state: impersonation, openLoginAsConfirm } = useImpersonation();
   const [showMessagePopup, setShowMessagePopup] = useState(false);
-  const [activeTab, setActiveTab] = useState('account');
+  // ?tab=handle opens the public handle directly (handle request queue links).
+  const [activeTab, setActiveTab] = useState(() => (searchParams.get('tab') === 'handle' ? 'handle' : 'account'));
+  const showHandles = canViewPublicHandles(profile?.role);
+  const visibleTabs = useMemo(() => TABS.filter((t) => t.key !== 'handle' || showHandles), [showHandles]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -248,7 +253,7 @@ export default function CreatorProfile() {
           </div>
 
           <div style={S.tabBar}>
-            {TABS.map((t) => (
+            {visibleTabs.map((t) => (
               <div key={t.key} onClick={() => setActiveTab(t.key)} style={{ ...S.tab, ...(activeTab === t.key ? S.tabActive : {}) }}>
                 {t.icon} {t.label}
               </div>
@@ -359,6 +364,20 @@ export default function CreatorProfile() {
               <div style={S.panelSub}>Active sponsored placements for this creator.</div>
               <div style={S.emptyBox}>Not available here yet — see Ads &amp; Deals Studio for this creator's real campaigns.</div>
             </div>
+          )}
+
+          {activeTab === 'handle' && showHandles && creator && (
+            <EntityHandlePanel
+              key={creator.id}
+              entity={{
+                entityType: 'creator',
+                entityId: creator.id,
+                name: creator.name,
+                slug: creator.slug,
+                status: creator.status,
+                ownerUserId: creator.userId ?? null,
+              }}
+            />
           )}
 
           {/* Read-oriented entry point; changes are made on the central Feature Access page. */}

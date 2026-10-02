@@ -13,6 +13,7 @@ import { cashbookApi, type FinanceSummary } from '../../services/cashbookApi';
 import type { CatalogBrand, CatalogProduct } from '../../types/catalog';
 import { Avatar } from '../../components/shared/Avatar';
 import { AccountEntitlementsPanel } from '../../components/admin/EntitlementAccessPanels';
+import { SellerBrandHandles, canViewPublicHandles } from '../../components/admin/PublicHandlePanels';
 
 // ============================================================================
 // Seller Profile — the real /admin/seller-profile?sellerId= destination.
@@ -48,6 +49,7 @@ const TABS: Array<{ key: string; label: string; icon: string }> = [
   { key: 'reviews', label: 'Reviews & Score', icon: '●' },
   { key: 'ads', label: 'Ads & Deals', icon: '⛿' },
   { key: 'features', label: 'Feature Access', icon: '⚑' },
+  { key: 'handle', label: 'Public Handle', icon: '@' },
 ];
 
 export default function SellerProfile() {
@@ -58,7 +60,10 @@ export default function SellerProfile() {
   const { can } = useRbac();
   const { state: impersonation, openLoginAsConfirm } = useImpersonation();
   const [showMessagePopup, setShowMessagePopup] = useState(false);
-  const [activeTab, setActiveTab] = useState('account');
+  // ?tab=handle&brandId= opens a Brand's public handle directly (handle request queue links).
+  const [activeTab, setActiveTab] = useState(() => (searchParams.get('tab') === 'handle' ? 'handle' : 'account'));
+  const showHandles = canViewPublicHandles(profile?.role);
+  const visibleTabs = useMemo(() => TABS.filter((t) => t.key !== 'handle' || showHandles), [showHandles]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -261,7 +266,7 @@ export default function SellerProfile() {
           </div>
 
           <div style={S.tabBar}>
-            {TABS.map((t) => (
+            {visibleTabs.map((t) => (
               <div key={t.key} onClick={() => setActiveTab(t.key)} style={{ ...S.tab, ...(activeTab === t.key ? S.tabActive : {}) }}>
                 {t.icon} {t.label}
               </div>
@@ -413,6 +418,11 @@ export default function SellerProfile() {
               <div style={S.panelSub}>Active campaigns and sponsored placements for this seller.</div>
               <div style={S.emptyBox}>Not available here yet — see Ads &amp; Deals Studio for this seller's real campaigns.</div>
             </div>
+          )}
+
+          {/* Public handles belong to the seller's Brands (one handle per Brand). */}
+          {activeTab === 'handle' && showHandles && (
+            <SellerBrandHandles brands={brands} initialBrandId={searchParams.get('brandId')} />
           )}
 
           {/* Read-oriented entry point; changes are made on the central Feature Access page. */}

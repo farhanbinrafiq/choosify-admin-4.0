@@ -3,6 +3,7 @@ import { catalogStore } from '../../lib/vercel-catalog/catalogStore';
 import { normalizeCreatorInput } from '../../lib/vercel-catalog/catalogEditorialContract';
 import { db } from '../db/client';
 import { sellerProfiles, users } from '../db/schema';
+import { slugForAutomatedCreation } from '../publicHandles/publicHandleCatalog';
 import { operationsStore } from '../operations/operationsStore';
 import { listBookingRequests } from '../booking/bookingStore';
 import type { CatalogBrand } from '../../src/types/catalog';
@@ -98,6 +99,8 @@ export async function ensureCreatorWorkspace(
     blogs: [],
     status: 'draft',
   });
+  // Public Identity C3: never another Creator's public handle.
+  created.slug = await slugForAutomatedCreation('creator', created.slug, created.id);
   const saved = await catalogStore.upsertCreator(created);
   return { creators: [saved], created: true };
 }

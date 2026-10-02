@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { HandleRequestQueue } from '../../components/admin/PublicHandlePanels';
 import { operationsApi } from '../../services/operationsApi';
 import {
   ShieldCheck,
@@ -363,6 +364,9 @@ export default function BrandVerification() {
           </button>
         </div>
       )}
+
+      {/* Public Identity: pending Brand / Creator handle requests (Admin read, Super Admin review). */}
+      <HandleRequestQueue />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 

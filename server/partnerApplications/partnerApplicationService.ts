@@ -11,6 +11,7 @@ import { loadAdminUserByEmail } from '../operations/operationsDb';
 import { notifyRoles, notifyUser } from '../communication/systemNotify';
 import { ROLES, toUserRole } from '../permissions/roles';
 import { stampReferenceId } from '../referenceIds/stampReferenceId';
+import { slugForAutomatedCreation } from '../publicHandles/publicHandleCatalog';
 import {
   partnerApplicationStore,
   type PartnerApplicantType,
@@ -70,6 +71,8 @@ async function createSellerIdentityBrand(params: {
       address: params.city,
     },
   });
+  // Public Identity C3: never another Brand's public handle.
+  normalized.slug = await slugForAutomatedCreation('brand', normalized.slug, id);
   const withRef = {
     ...normalized,
     brandReferenceId:
@@ -107,6 +110,8 @@ async function createCreatorDraft(params: {
     blogs: [],
     status: 'draft',
   });
+  // Public Identity C3: never another Creator's public handle.
+  created.slug = await slugForAutomatedCreation('creator', created.slug, created.id);
   const saved = await catalogStore.upsertCreator(created);
   return saved.id;
 }

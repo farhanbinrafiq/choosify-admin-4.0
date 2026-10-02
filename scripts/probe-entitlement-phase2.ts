@@ -165,9 +165,9 @@ async function partTwoDatabase() {
 
   // ── schema / constraints ──
   const tables = await rows(sql`select count(*)::int n from information_schema.tables where table_schema='public' and table_type='BASE TABLE'`);
-  check(tables[0].n === 28, 'schema: 28 public tables', tables[0]);
+  check(tables[0].n === 31, 'schema: 31 public tables', tables[0]);
   const migrations = await rows(sql`select count(*)::int n from drizzle.__drizzle_migrations`);
-  check(migrations[0].n === 12, 'schema: 12 migrations', migrations[0]);
+  check(migrations[0].n === 14, 'schema: 14 migrations', migrations[0]);
   const idx = (await rows(sql`select indexname from pg_indexes where schemaname='public' and tablename in ('account_entitlement_overrides','platform_feature_states','entitlement_audit_events') order by 1`)).map((r) => r.indexname);
   for (const name of [
     'account_entitlement_overrides_user_feature_unique',
