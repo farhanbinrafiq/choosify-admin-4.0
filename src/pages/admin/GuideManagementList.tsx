@@ -11,6 +11,7 @@ import {
 import { catalogApi, type GuideManageRow } from '../../services/catalogApi';
 import { useAuth } from '../../contexts/AuthContext';
 import { AdminEditModeBar, useAdminEditMode } from '../../components/admin/AdminEditMode';
+import { getPublishedStorefrontUrl } from '../../lib/storefrontUrls';
 
 /**
  * Guide Management — real canonical list backed by the authenticated,
@@ -277,7 +278,7 @@ export default function GuideManagementList() {
                     <div className="flex justify-end gap-2">
                       {r.status === 'live' && r.slug ? (
                         <a
-                          href={`http://localhost:5173/spotlight/${r.slug}`}
+                          href={`${getPublishedStorefrontUrl()}/spotlight/${r.slug}`}
                           target="_blank"
                           rel="noreferrer"
                           className="p-1.5 bg-slate-100 hover:bg-[#1A1A2E] text-[#1A1A2E] hover:text-white rounded-lg border border-[#E5E7EB] transition-colors"

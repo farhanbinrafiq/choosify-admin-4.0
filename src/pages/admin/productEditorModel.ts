@@ -5,7 +5,34 @@ import type {
   RelatedStoreEntry,
 } from '../../types/catalog';
 
-export type ProductEditorStatus = 'DRAFT' | 'LIVE' | 'ARCHIVED';
+/** The five server lifecycle states (server/catalog/productLifecycle.ts), as the Studio names them. */
+export type ProductEditorStatus = 'DRAFT' | 'LIVE' | 'OUT_OF_STOCK' | 'SUSPENDED' | 'ARCHIVED';
+
+export const PRODUCT_STATUS_LABEL: Record<ProductEditorStatus, string> = {
+  DRAFT: 'Draft',
+  LIVE: 'Live',
+  OUT_OF_STOCK: 'Out of stock',
+  SUSPENDED: 'Suspended',
+  ARCHIVED: 'Archived',
+};
+
+/** Server wire status → Studio status. Mirrors normalizeProductLifecycle (unknown → draft). */
+export function productStatusFromServer(status: string | null | undefined): ProductEditorStatus {
+  const raw = String(status || 'draft').trim().toLowerCase();
+  if (raw === 'live' || raw === 'active' || raw === 'published' || raw === 'available') return 'LIVE';
+  if (raw === 'out_of_stock' || raw === 'outofstock' || raw === 'out-of-stock') return 'OUT_OF_STOCK';
+  if (raw === 'suspended') return 'SUSPENDED';
+  if (raw === 'archived') return 'ARCHIVED';
+  return 'DRAFT';
+}
+
+const SERVER_STATUS: Record<ProductEditorStatus, CatalogProduct['status']> = {
+  DRAFT: 'draft',
+  LIVE: 'live',
+  OUT_OF_STOCK: 'out_of_stock',
+  SUSPENDED: 'suspended',
+  ARCHIVED: 'archived',
+};
 
 export type ProductEditSection =
   | 'header'
@@ -300,8 +327,7 @@ export function mapCatalogProductToEditor(
       ? [product.image]
       : [];
 
-  const status: ProductEditorStatus =
-    product.status === 'live' ? 'LIVE' : product.status === 'archived' ? 'ARCHIVED' : 'DRAFT';
+  const status = productStatusFromServer(product.status);
 
   const fromDetailSpecs = Array.isArray(detail?.specs)
     ? detail!.specs.map((s) => ({ key: s.key, value: s.value }))
@@ -548,12 +574,61 @@ export function editorModelToProductPatch(model: ProductEditorModel): Partial<Ca
     price: model.price,
     originalPrice: model.originalPrice || undefined,
     stock: model.stock,
-    status: model.status === 'LIVE' ? 'live' : model.status === 'ARCHIVED' ? 'archived' : 'draft',
+    status: SERVER_STATUS[model.status] ?? 'draft',
     warrantyMonths: model.warrantyMonths > 0 ? Math.floor(model.warrantyMonths) : undefined,
     warrantyType: model.warrantyType.trim() || undefined,
     warrantyProvider: model.warrantyProvider.trim() || undefined,
     warrantyTerms: model.warrantyTerms.trim() || undefined,
   };
+}
+
+/** Create always starts a Draft — publishing is a separate, explicit action. */
+export function editorModelToCreatePatch(model: ProductEditorModel): Partial<CatalogProduct> {
+  return { ...editorModelToProductPatch(model), status: 'draft' };
+}
+
+/**
+ * PATCH body for saving ONE Studio section of an existing product.
+ *  - never carries `status`: an ordinary content save keeps the server's lifecycle
+ *    state (Publish / Unpublish / Archive are separate explicit actions);
+ *  - carries `stock` only from the Inventory section, and only when the seller
+ *    changed it — the server rewrites the inventory record whenever `stock` is
+ *    present, so any other save must leave it out (PATCH keeps the stored stock).
+ */
+export function editorModelToSectionPatch(
+  model: ProductEditorModel,
+  section: string,
+  persisted: Pick<ProductEditorModel, 'stock'>,
+): Partial<CatalogProduct> {
+  const { status: _status, stock, ...rest } = editorModelToProductPatch(model);
+  return section === 'inventory' && model.stock !== persisted.stock ? { ...rest, stock } : rest;
+}
+
+/**
+ * Whether a save changes anything stored on the Product Detail record. The detail
+ * PUT re-asserts every variant's inventory quantity, so a section that did not
+ * touch detail data must skip it.
+ */
+export function detailPayloadChanged(next: ProductEditorModel, persisted: ProductEditorModel): boolean {
+  const comparable = (m: ProductEditorModel) => {
+    const { updatedAt: _updatedAt, ...rest } = editorModelToDetailPayload(m) as Partial<CatalogProductDetail> & { updatedAt?: unknown };
+    return JSON.stringify(rest);
+  };
+  return comparable(next) !== comparable(persisted);
+}
+
+/**
+ * Whether a save must send the Product Detail PUT: when detail data changed, or
+ * when the category changed (vs the server-loaded record) on a product with option
+ * groups / variants. `categoryId` lives on the product, not the detail payload, but
+ * the detail PUT is where the server validates options and variants against the
+ * product's category schema — so a category change must still go through it.
+ */
+export function detailSaveRequired(next: ProductEditorModel, persisted: ProductEditorModel): boolean {
+  if (detailPayloadChanged(next, persisted)) return true;
+  const categoryChanged = (next.categoryId || '') !== (persisted.categoryId || '');
+  const hasVariantData = (next.optionGroups?.length ?? 0) > 0 || (next.productVariants?.length ?? 0) > 0;
+  return categoryChanged && hasVariantData;
 }
 
 export function editorModelToDetailPayload(model: ProductEditorModel): Partial<CatalogProductDetail> {
@@ -921,8 +996,6 @@ export interface ProductLoadDeps {
    */
   getProduct: (id: string) => Promise<CatalogProductWithVariants>;
   getProductDetail: (id: string) => Promise<CatalogProductDetail | null>;
-  /** This product's own locally cached in-progress draft, if any. */
-  readCache?: () => ProductEditorModel | null;
 }
 
 const NOT_FOUND_RE = /\b(not found|404|no such|does not exist|doesn.?t exist)\b/i;
@@ -953,41 +1026,11 @@ export async function resolveExistingProductLoad(
     detail = null;
   }
 
-  const fromCatalog = mapCatalogProductToEditor(product, detail);
-
-  let cached: ProductEditorModel | null = null;
-  try {
-    cached = deps.readCache?.() ?? null;
-  } catch {
-    cached = null;
-  }
-
-  // The local cache may only OVERLAY the authoritative record for this exact id,
-  // never substitute for it.
-  const model: ProductEditorModel =
-    cached && cached.id === activeId
-      ? {
-          ...fromCatalog,
-          ...cached,
-          id: activeId,
-          // Identity fields keep the authoritative value whenever the cached
-          // copy is blank/corrupt — the cache may overlay edits, never erase.
-          title: cached.title || fromCatalog.title,
-          slug: cached.slug || fromCatalog.slug,
-          brandId: cached.brandId || fromCatalog.brandId,
-          brandName: cached.brandName || fromCatalog.brandName,
-          categoryId: cached.categoryId || fromCatalog.categoryId,
-          categoryName: cached.categoryName || fromCatalog.categoryName,
-          image: cached.image || fromCatalog.image,
-          gallery: cached.gallery?.length ? cached.gallery : fromCatalog.gallery,
-          specs: cached.specs?.length ? cached.specs : fromCatalog.specs,
-          // Server-owned, never seller-edited in the Studio.
-          publicReviews: fromCatalog.publicReviews,
-          creatorVideos: fromCatalog.creatorVideos,
-        }
-      : fromCatalog;
-
-  return { status: 'ok', model };
+  // The server record is the only source. A browser cache or stored editor
+  // snapshot is never laid over it: an older copy would otherwise carry a stale
+  // status / price / stock back into the next save (re-publishing an archived
+  // product, reverting an admin's price change, resetting inventory).
+  return { status: 'ok', model: mapCatalogProductToEditor(product, detail) };
 }
 
 /**

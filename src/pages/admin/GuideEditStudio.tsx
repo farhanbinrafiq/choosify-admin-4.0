@@ -23,6 +23,7 @@ import type {
   GuideSocialLink,
 } from '../../types/catalog';
 import { uploadProductImages, uploadProductVideoFile } from '../../services/mediaUpload';
+import { getPublishedStorefrontUrl } from '../../lib/storefrontUrls';
 import { toYoutubeEmbed } from '../../components/guide-studio/GuideStudioPresentation';
 import {
   GuideStudioPresentation,
@@ -2079,7 +2080,7 @@ export default function GuideEditStudio() {
           </div>
           {model.slug && model.status === 'live' ? (
             <a
-              href={`http://localhost:5173/spotlight/${model.slug}`}
+              href={`${getPublishedStorefrontUrl()}/spotlight/${model.slug}`}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1 rounded-lg border border-[#E8EDF2] px-3 py-1.5 text-[11px] font-bold text-[#374151]"

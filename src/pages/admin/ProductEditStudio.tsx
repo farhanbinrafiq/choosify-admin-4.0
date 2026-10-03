@@ -11,14 +11,19 @@ import { useEntityDraft } from '../../hooks/useEntityDraft';
 import { ProductDetailPresentation, type StudioBridge } from '../../components/product-detail';
 import type { CatalogCategoryAttribute } from '../../types/catalog';
 import {
+  PRODUCT_STATUS_LABEL,
   checkCategorySchemaCompatibility,
   createBlankProductModel,
+  detailSaveRequired,
+  editorModelToCreatePatch,
   editorModelToDetailPayload,
-  editorModelToProductPatch,
+  editorModelToSectionPatch,
   isSafeToPersist,
+  productStatusFromServer,
   resolveExistingProductLoad,
   type CategorySchemaCompatibility,
   type ProductEditorModel,
+  type ProductEditorStatus,
   type SchemaVariantDimension,
 } from './productEditorModel';
 import {
@@ -67,11 +72,18 @@ const mapSchemaDim = (a: CatalogCategoryAttribute): SchemaVariantDimension => ({
  * ownership/RBAC/inventory/Marketplace-Access rules and unsaved-change
  * protection are all preserved unchanged.
  *
- * FUNCTIONAL CONTRACT — unchanged:
- *  - Each section's Save persists through the canonical catalog API
- *    (`updateProduct` + `upsertProductDetail`), reusing `editorModelToProductPatch`
- *    / `editorModelToDetailPayload` verbatim, on the section-merged model. It
- *    keeps the product's current lifecycle status — it never force-publishes.
+ * FUNCTIONAL CONTRACT:
+ *  - Each section's Save persists through the canonical catalog API on the
+ *    section-merged model: `updateProduct` with `editorModelToSectionPatch` (never
+ *    `status`; `stock` only from a changed Inventory section) and
+ *    `upsertProductDetail` only when detail data changed or the category changed on
+ *    a product with options/variants (that PUT re-asserts variant inventory and is
+ *    where the server validates variants against the category). A save never
+ *    changes the lifecycle state; Create always
+ *    makes a Draft; Publish / Unpublish / Archive / Move to Draft are explicit
+ *    actions that read the server's resulting state back.
+ *  - The server record is authoritative on load: no browser cache or stored
+ *    editor snapshot is laid over it (snapshots stay available as history).
  *  - Cancel restores that section's persisted values only.
  *  - Media uses the real `uploadProductImages` service. Canonical image model:
  *    `product.image` = primary, `product.gallery` = ordered list; the app's rule
@@ -104,6 +116,56 @@ const isUnsaved = (u: string) => /^(blob:|data:)/i.test(u || '');
 const photosOf = (m: Pick<ProductEditorModel, 'image' | 'gallery'>): string[] =>
   m.image ? [m.image, ...(m.gallery || []).filter((u) => u && u !== m.image)] : (m.gallery || []).filter(Boolean);
 
+type LifecycleAction = 'publish' | 'unpublish' | 'archive' | 'toDraft';
+
+/**
+ * Explicit lifecycle actions offered per state — the server's own transition
+ * table (server/catalog/productLifecycle.ts). Suspended is set by Choosify, so no
+ * seller action is offered for it here.
+ */
+const LIFECYCLE_ACTIONS: Record<ProductEditorStatus, LifecycleAction[]> = {
+  DRAFT: ['publish', 'archive'],
+  LIVE: ['unpublish', 'archive'],
+  OUT_OF_STOCK: ['archive'],
+  SUSPENDED: [],
+  ARCHIVED: ['publish', 'toDraft'],
+};
+
+const LIFECYCLE: Record<LifecycleAction, { status: 'live' | 'draft' | 'archived'; button: string; title: string; body: string }> = {
+  publish: {
+    status: 'live',
+    button: 'Publish',
+    title: 'Publish this product?',
+    body: 'Customers will be able to find and buy it. If its stock is 0 it is listed as Out of stock until you add stock.',
+  },
+  unpublish: {
+    status: 'draft',
+    button: 'Unpublish',
+    title: 'Unpublish this product?',
+    body: 'It is removed from the storefront and becomes a draft. You can publish it again later.',
+  },
+  archive: {
+    status: 'archived',
+    button: 'Archive',
+    title: 'Archive this product?',
+    body: 'It is removed from the storefront and moved to Archived. You can publish it again later.',
+  },
+  toDraft: {
+    status: 'draft',
+    button: 'Move to draft',
+    title: 'Move this product to draft?',
+    body: 'It stays hidden from customers and becomes a draft you can keep editing.',
+  },
+};
+
+const STATUS_BADGE: Record<ProductEditorStatus, CSSProperties> = {
+  DRAFT: { background: 'color-mix(in srgb, var(--cms-accent) 12%, transparent)', color: '#C2410C' },
+  LIVE: { background: 'rgba(34,197,94,0.14)', color: '#15803D' },
+  OUT_OF_STOCK: { background: 'rgba(239,68,68,0.12)', color: '#B91C1C' },
+  SUSPENDED: { background: 'rgba(220,38,38,0.14)', color: '#991B1B' },
+  ARCHIVED: { background: '#F1F3F5', color: '#6B7280' },
+};
+
 const ACCENT = 'var(--cms-accent)';
 const ACCENT_WASH = 'color-mix(in srgb, var(--cms-accent) 12%, transparent)';
 
@@ -112,8 +174,7 @@ const S: Record<string, CSSProperties> = {
   headerCard: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 10, padding: '14px 20px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 },
   backBtn: { width: 32, height: 32, borderRadius: 8, border: '1px solid #E8EDF2', background: '#fff', cursor: 'pointer', color: '#374151', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   kicker: { fontSize: 10, fontWeight: 800, color: '#9CA3AF', letterSpacing: '0.05em' },
-  badgeDraft: { background: ACCENT_WASH, color: '#C2410C', fontSize: 9, fontWeight: 800, padding: '3px 9px', borderRadius: 20 },
-  badgeLive: { background: 'rgba(34,197,94,0.14)', color: '#15803D', fontSize: 9, fontWeight: 800, padding: '3px 9px', borderRadius: 20 },
+  badge: { fontSize: 9, fontWeight: 800, padding: '3px 9px', borderRadius: 20 },
   h1: { fontSize: 15, fontWeight: 800, marginTop: 2 },
   ghostBtn: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: '9px 14px', fontSize: '11.5px', fontWeight: 700, color: '#374151', cursor: 'pointer' },
   accentBtn: { background: ACCENT, border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: '11.5px', fontWeight: 800, color: '#fff', cursor: 'pointer' },
@@ -422,7 +483,6 @@ export default function ProductEditStudio() {
   const activeId = isNew ? 'new' : id;
 
   const draftKey = `choosify_product_draft_${activeId}`;
-  const pubKey = `choosify_product_published_${activeId}`;
   const versionsKey = `choosify_product_versions_${activeId}`;
 
   // `model` = last persisted state (all sections read from it).
@@ -438,12 +498,11 @@ export default function ProductEditStudio() {
   // Studio shows a load-error state and every Save/Publish path is disabled —
   // it must NEVER PATCH a blank model over a real listing.
   const [loadError, setLoadError] = useState<{ kind: 'notfound' | 'error'; message: string } | null>(null);
-  const loadErrorRef = useRef(false);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showVersions, setShowVersions] = useState(false);
-  const [showPublishModal, setShowPublishModal] = useState(false);
-  const [isPublishing, setIsPublishing] = useState(false);
+  const [pendingLifecycle, setPendingLifecycle] = useState<LifecycleAction | null>(null);
+  const [isChangingLifecycle, setIsChangingLifecycle] = useState(false);
 
   // Category variant schema for the category currently in the draft.
   const [categorySchema, setCategorySchema] = useState<{ forId: string; dims: SchemaVariantDimension[] } | null>(null);
@@ -457,15 +516,14 @@ export default function ProductEditStudio() {
   const { allBrands, activeBrandId } = useAuth();
   const [categoryOptions, setCategoryOptions] = useState<Array<{ id: string; name: string }>>([]);
 
-  const { versions, saveDraft: persistDraft, saveVersion } = useEntityDraft<ProductEditorModel>(
+  // Snapshots (versions) stay available as history. A stored editor snapshot is
+  // never applied over the loaded product: it is an older copy of the editor
+  // state, and the server record is authoritative.
+  const { versions, saveVersion } = useEntityDraft<ProductEditorModel>(
     'product',
     isNew ? '' : activeId,
     { draftKey, versionsKey },
-    (backendDraft) => {
-      // Never resurrect an editable model while the authoritative load failed —
-      // a backend draft is a partial editor snapshot, not the server product.
-      if (backendDraft && !loadErrorRef.current) setModel(backendDraft);
-    },
+    () => {},
   );
 
   useEffect(() => {
@@ -473,7 +531,6 @@ export default function ProductEditStudio() {
     async function load() {
       setLoading(true);
       setLoadError(null);
-      loadErrorRef.current = false;
 
       if (isNew) {
         if (!cancelled) {
@@ -486,19 +543,9 @@ export default function ProductEditStudio() {
         return;
       }
 
-      const readCache = (): ProductEditorModel | null => {
-        try {
-          const raw = localStorage.getItem(draftKey) || localStorage.getItem(pubKey);
-          return raw ? (JSON.parse(raw) as ProductEditorModel) : null;
-        } catch {
-          return null;
-        }
-      };
-
       const result = await resolveExistingProductLoad(activeId, {
         getProduct: (pid) => catalogApi.getProduct(pid),
         getProductDetail: (pid) => catalogApi.getProductDetail(pid),
-        readCache,
       });
       if (cancelled) return;
 
@@ -513,7 +560,6 @@ export default function ProductEditStudio() {
       // failed, or the id is not in this account's catalog). Do NOT fall back to
       // a blank model — a later Save/Publish would PATCH empty data over the
       // real listing. Enter the explicit load-error state instead.
-      loadErrorRef.current = true;
       setModel(null);
       setSectionDraft(null);
       setEditingId(null);
@@ -566,6 +612,18 @@ export default function ProductEditStudio() {
     setSectionDraft((prev) => (prev && !prev.brandId ? { ...prev, brandId: brand.id, brandName: brand.name } : prev));
   }, [isNew, sectionDraft, allBrands, activeBrandId]);
 
+  // Warn before leaving the page while a section has unsaved changes. `dirty`
+  // clears on a successful save or Cancel, which removes the warning.
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [dirty]);
+
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
     window.setTimeout(() => setToastMessage(null), 4000);
@@ -610,11 +668,16 @@ export default function ProductEditStudio() {
     setDirty(true);
   };
 
-  const persistCache = (saved: ProductEditorModel) => {
+  // The server's lifecycle state and stock after a write. Saves and lifecycle
+  // actions can move a product between Live and Out of stock (stock coupling), and
+  // the PATCH response is built before that sync, so the state is read back.
+  const readServerState = async (productId: string): Promise<Pick<ProductEditorModel, 'status' | 'stock'> | null> => {
     try {
-      localStorage.setItem(`choosify_product_published_${saved.id}`, JSON.stringify(saved));
-      localStorage.setItem(`choosify_product_draft_${saved.id}`, JSON.stringify(saved));
-    } catch (_) {}
+      const p = await catalogApi.getProduct(productId);
+      return { status: productStatusFromServer(p.status), stock: typeof p.stock === 'number' ? p.stock : Number(p.stock) || 0 };
+    } catch {
+      return null;
+    }
   };
 
   // Persist the active section — canonical API, section-merged model, status kept.
@@ -655,22 +718,28 @@ export default function ProductEditStudio() {
     try {
       const merged: ProductEditorModel = { ...model, ...sectionDraft } as ProductEditorModel;
       let productId = merged.id;
-      const productPatch = editorModelToProductPatch(merged); // status from merged.status, never forced LIVE
-      if (isNew || productId === 'new') {
-        const created = await catalogApi.createProduct(productPatch);
+      const creatingProduct = isNew || productId === 'new';
+      if (creatingProduct) {
+        const created = await catalogApi.createProduct(editorModelToCreatePatch(merged)); // always a Draft
         productId = created.id;
       } else {
-        await catalogApi.updateProduct(productId, productPatch);
+        // No `status` (the lifecycle state is kept); `stock` only from a changed Inventory section.
+        await catalogApi.updateProduct(productId, editorModelToSectionPatch(merged, editingId, model));
       }
       // Options & Variants, the size guide and every other rich Product Detail
       // field are persisted here. A failure (category-schema rejection, invalid
       // variant pricing, auth) MUST surface — swallowing it told the seller the
       // save succeeded while the storefront kept the old (or empty) variants.
-      await catalogApi.upsertProductDetail(productId, editorModelToDetailPayload({ ...merged, id: productId }));
-      const saved: ProductEditorModel = { ...merged, id: productId };
-      persistCache(saved);
+      // Skipped when this save changed no detail data (the detail PUT re-asserts
+      // every variant's inventory quantity from the stored variant stock) — but
+      // always sent after a category change on a product with options/variants,
+      // so the server validates them against the new category schema.
+      if (creatingProduct || detailSaveRequired(merged, model)) {
+        await catalogApi.upsertProductDetail(productId, editorModelToDetailPayload({ ...merged, id: productId }));
+      }
+      const serverState = creatingProduct ? null : await readServerState(productId);
+      const saved: ProductEditorModel = { ...merged, id: productId, ...(serverState ?? {}) };
       if (!isNew) {
-        persistDraft(saved);
         try { await saveVersion(`Saved ${SECTION_LABELS[editingId] || editingId} · ${new Date().toLocaleString()}`, saved); } catch (_) {}
       }
       setModel(saved);
@@ -686,37 +755,48 @@ export default function ProductEditStudio() {
     }
   };
 
-  const handlePublish = async () => {
-    const base = model;
-    if (!base) return;
-    if (!isSafeToPersist(base, { isNew, activeId, hasLoadError: !!loadError })) {
-      triggerToast('This product hasn’t loaded — reload before publishing.');
+  const requestLifecycle = (action: LifecycleAction) => {
+    if (editingId && dirty) {
+      triggerToast(`Save or cancel “${SECTION_LABELS[editingId] || editingId}” first.`);
       return;
     }
-    setIsPublishing(true);
+    setPendingLifecycle(action);
+  };
+
+  // Explicit lifecycle change: only `status` is written (the server enforces the
+  // transition and Marketplace Access), then the resulting state is read back.
+  const handleLifecycle = async (action: LifecycleAction) => {
+    const base = model;
+    if (!base || isNew || base.id === 'new') return;
+    if (!isSafeToPersist(base, { isNew, activeId, hasLoadError: !!loadError })) {
+      triggerToast('This product hasn’t loaded — reload before changing its status.');
+      return;
+    }
+    setIsChangingLifecycle(true);
     try {
-      let productId = base.id;
-      const productPatch = editorModelToProductPatch({ ...base, status: 'LIVE' });
-      if (isNew || productId === 'new') {
-        const created = await catalogApi.createProduct(productPatch);
-        productId = created.id;
-      } else {
-        await catalogApi.updateProduct(productId, productPatch);
+      await catalogApi.updateProduct(base.id, { status: LIFECYCLE[action].status });
+      if (LIFECYCLE[action].status === 'live' && base.productType !== 'service') {
+        // A status-only PATCH does not run the server's stock coupling (Live at 0
+        // stock → Out of stock). A zero-delta inventory adjustment runs that
+        // canonical sync without changing any quantity. Services carry no
+        // physical stock, so they are left out. Best effort: the state is read back either way.
+        await catalogApi.adjustProductInventory(base.id, { delta: 0 }).catch(() => undefined);
       }
-      // See saveSection: a Product Detail write failure must fail the publish
-      // rather than report a false success while the storefront stays stale.
-      await catalogApi.upsertProductDetail(productId, editorModelToDetailPayload({ ...base, id: productId }));
-      const published: ProductEditorModel = { ...base, id: productId, status: 'LIVE' };
-      persistCache(published);
-      setModel(published);
-      setSectionDraft(published);
-      setShowPublishModal(false);
-      triggerToast('Product published');
-      if (isNew) navigate(`/admin/products/${productId}/edit`, { replace: true });
+      const serverState = await readServerState(base.id);
+      const next: ProductEditorModel = {
+        ...base,
+        ...(serverState ?? { status: productStatusFromServer(LIFECYCLE[action].status) }),
+      };
+      setModel(next);
+      setSectionDraft(next);
+      setPendingLifecycle(null);
+      triggerToast(
+        serverState ? `Status is now ${PRODUCT_STATUS_LABEL[next.status]}.` : 'Status changed — reload to confirm the current state.',
+      );
     } catch (err) {
-      triggerToast(err instanceof Error ? err.message : 'Publish failed');
+      triggerToast(err instanceof Error ? err.message : 'Status change failed');
     } finally {
-      setIsPublishing(false);
+      setIsChangingLifecycle(false);
     }
   };
 
@@ -767,7 +847,7 @@ export default function ProductEditStudio() {
   }
 
   const creating = editingId === '*';
-  const isLive = model.status === 'LIVE';
+  const shownStatus: ProductEditorStatus = isNew ? 'DRAFT' : model.status;
   const kindLabel = isNew ? 'NEW PRODUCT' : 'PRODUCT STUDIO';
   const heading = (creating ? sectionDraft.title : model.title) || (isNew ? 'New Product' : 'Untitled Product');
 
@@ -951,11 +1031,14 @@ export default function ProductEditStudio() {
             </div>
             <div>
               <div style={S.label}>LISTING STATUS</div>
-              <select value={d.status} onChange={(e) => patch({ status: e.target.value as ProductEditorModel['status'] })} style={S.input}>
-                <option value="DRAFT">DRAFT</option>
-                <option value="LIVE">LIVE</option>
-                <option value="ARCHIVED">ARCHIVED</option>
-              </select>
+              <div style={{ ...S.readValue, height: 40, display: 'flex', alignItems: 'center' }} data-testid="inventory-listing-status">
+                {creating ? 'Draft' : PRODUCT_STATUS_LABEL[d.status]}
+              </div>
+              <div style={S.hint}>
+                {creating
+                  ? 'New products are saved as a draft. Publish from the top of the page when it is ready.'
+                  : 'Change it with the buttons at the top of the page. Saving this section never changes it.'}
+              </div>
             </div>
           </div>
         );
@@ -1158,7 +1241,9 @@ export default function ProductEditStudio() {
           <div style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span style={S.kicker}>{kindLabel}</span>
-              <span style={isLive ? S.badgeLive : S.badgeDraft}>{isLive ? '● LIVE' : '● DRAFT'}</span>
+              <span style={{ ...S.badge, ...STATUS_BADGE[shownStatus] }} data-testid="product-status-badge" data-status={shownStatus}>
+                ● {PRODUCT_STATUS_LABEL[shownStatus].toUpperCase()}
+              </span>
               {editingId && !creating ? <span style={{ ...S.kicker, color: ACCENT }}>● EDITING: {SECTION_LABELS[editingId]}</span> : null}
             </div>
             <div style={{ ...S.h1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 460 }}>{heading}</div>
@@ -1197,9 +1282,25 @@ export default function ProductEditStudio() {
                 {saving ? 'Creating…' : 'Create Product'}
               </button>
             </>
-          ) : !isLive ? (
-            <button type="button" onClick={() => setShowPublishModal(true)} style={S.accentBtn}>Publish Product</button>
-          ) : null}
+          ) : (
+            <>
+              {LIFECYCLE_ACTIONS[model.status].map((action) => (
+                <button
+                  key={action}
+                  type="button"
+                  data-testid={`product-lifecycle-${action}`}
+                  onClick={() => requestLifecycle(action)}
+                  style={action === 'publish' ? S.accentBtn : S.ghostBtn}
+                  disabled={isChangingLifecycle}
+                >
+                  {LIFECYCLE[action].button}
+                </button>
+              ))}
+              {model.status === 'SUSPENDED' ? (
+                <span style={{ fontSize: 11, color: '#991B1B', fontWeight: 700 }}>Suspended by Choosify — contact support to restore it.</span>
+              ) : null}
+            </>
+          )}
         </div>
       </div>
 
@@ -1222,18 +1323,22 @@ export default function ProductEditStudio() {
         <ProductDetailPresentation model={model} mode="studio" studio={studio} />
       </div>
 
-      {/* ── Publish confirmation (allowed dialog: deliberate go-live gate) ── */}
-      {showPublishModal ? (
+      {/* ── Lifecycle confirmation (allowed dialog: deliberate status change) ── */}
+      {pendingLifecycle ? (
         <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 420, width: '100%', boxShadow: '0 24px 60px rgba(0,0,0,0.3)' }}>
-            <h3 style={{ fontSize: 16, fontWeight: 800, margin: '0 0 8px' }}>Publish live product?</h3>
-            <p style={{ fontSize: 12, color: '#4B5563', margin: '0 0 20px' }}>
-              This writes the product to the catalog API and marks it LIVE where supported. Save any in-progress section first.
-            </p>
+          <div role="dialog" aria-modal="true" aria-labelledby="product-lifecycle-title" style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 420, width: '100%', boxShadow: '0 24px 60px rgba(0,0,0,0.3)' }}>
+            <h3 id="product-lifecycle-title" style={{ fontSize: 16, fontWeight: 800, margin: '0 0 8px' }}>{LIFECYCLE[pendingLifecycle].title}</h3>
+            <p style={{ fontSize: 12, color: '#4B5563', margin: '0 0 20px' }}>{LIFECYCLE[pendingLifecycle].body}</p>
             <div style={{ display: 'flex', gap: 12 }}>
-              <button type="button" onClick={() => setShowPublishModal(false)} style={{ ...S.ghostBtn, flex: 1 }}>Cancel</button>
-              <button type="button" disabled={isPublishing} onClick={() => void handlePublish()} style={{ ...S.accentBtn, flex: 1, opacity: isPublishing ? 0.6 : 1 }}>
-                {isPublishing ? 'Publishing…' : 'Publish'}
+              <button type="button" onClick={() => setPendingLifecycle(null)} style={{ ...S.ghostBtn, flex: 1 }} disabled={isChangingLifecycle}>Cancel</button>
+              <button
+                type="button"
+                data-testid="product-lifecycle-confirm"
+                disabled={isChangingLifecycle}
+                onClick={() => void handleLifecycle(pendingLifecycle)}
+                style={{ ...S.accentBtn, flex: 1, opacity: isChangingLifecycle ? 0.6 : 1 }}
+              >
+                {isChangingLifecycle ? 'Working…' : LIFECYCLE[pendingLifecycle].button}
               </button>
             </div>
           </div>

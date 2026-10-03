@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Heart, MapPin, MessageCircleMore, Pencil, ShieldCheck, Star } from 'lucide-react';
-import type { ProductEditSection, ProductEditorModel } from '../../pages/admin/productEditorModel';
+import { PRODUCT_STATUS_LABEL, type ProductEditSection, type ProductEditorModel } from '../../pages/admin/productEditorModel';
 import { classifyProductVideo } from '../../lib/productVideo';
 import { AddonItemsView, ThingsToKnowView, ProductGuideView, RelatedInfoView, VariantSummaryView, WarrantyInfoView } from '../../pages/admin/productStudioSections';
 import { mergeRelatedStores } from '../../../lib/vercel-catalog/relatedInfoMerge';
@@ -422,7 +422,7 @@ export function ProductDetailPresentation({
                     {model.status === 'LIVE' ? (
                       <span className="bg-[#07DD05]/15 text-[#15803D] text-[10px] font-extrabold px-2.5 py-1 rounded-full">LIVE</span>
                     ) : (
-                      <span className="bg-[#F3F4F6] text-[#6B7280] text-[10px] font-extrabold px-2.5 py-1 rounded-full">{model.status}</span>
+                      <span className="bg-[#F3F4F6] text-[#6B7280] text-[10px] font-extrabold px-2.5 py-1 rounded-full">{(PRODUCT_STATUS_LABEL[model.status] ?? model.status).toUpperCase()}</span>
                     )}
                   </div>
                 }

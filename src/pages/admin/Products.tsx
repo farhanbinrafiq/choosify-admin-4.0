@@ -6,6 +6,17 @@ import { useAuth } from '../../contexts/AuthContext';
 import { catalogApi } from '../../services/catalogApi';
 import type { CatalogProduct, CatalogInventory } from '../../types/catalog';
 import { AdminEditModeBar, useAdminEditMode } from '../../components/admin/AdminEditMode';
+import { productStatusFromServer, type ProductEditorStatus } from './productEditorModel';
+
+/** List label for each server lifecycle state (all five — none folded into another). */
+const LIST_STATUS: Record<ProductEditorStatus, string> = {
+  DRAFT: 'Draft',
+  LIVE: 'Active',
+  OUT_OF_STOCK: 'Out of Stock',
+  SUSPENDED: 'Suspended',
+  ARCHIVED: 'Archived',
+};
+const listStatusOf = (status: string | null | undefined): string => LIST_STATUS[productStatusFromServer(status)];
 
 /**
  * Products & Inventory (Sprint 13 UI restoration).
@@ -116,7 +127,7 @@ const mapCatalogProduct = (product: CatalogProduct): ProductRow => ({
   category: product.categoryName,
   priceValue: Number(product.price || 0),
   price: `৳ ${Number(product.price || 0).toLocaleString()}`,
-  status: product.status === 'live' ? 'Active' : product.status === 'draft' ? 'Draft' : 'Archived',
+  status: listStatusOf(product.status),
   productReferenceId: product.productReferenceId,
   sku: product.sku,
   stock: Math.max(0, typeof product.stock === 'number' ? product.stock : 0),
@@ -151,6 +162,7 @@ const statusPill = (status: string): CSSProperties => {
     Draft: { bg: 'rgba(245,158,11,0.14)', fg: '#B45309' },
     Archived: { bg: '#F1F3F5', fg: '#6B7280' },
     'Out of Stock': { bg: 'rgba(239,68,68,0.1)', fg: '#DC2626' },
+    Suspended: { bg: 'rgba(220,38,38,0.14)', fg: '#991B1B' },
   };
   const c = map[status] || { bg: '#F1F3F5', fg: '#6B7280' };
   return { background: c.bg, color: c.fg, fontSize: 9, fontWeight: 800, letterSpacing: '0.03em', textTransform: 'uppercase', padding: '4px 9px', borderRadius: 999, whiteSpace: 'nowrap' };
@@ -426,7 +438,9 @@ export default function ProductsPage() {
     setTogglingId(p.id);
     try {
       await catalogApi.updateProduct(p.id, { status: next });
-      setProducts((prev) => prev.map((x) => (x.id === p.id ? { ...x, status: next === 'live' ? 'Active' : 'Draft' } : x)));
+      // Read the state back rather than assuming the requested one.
+      const current = await catalogApi.getProduct(p.id).then((x) => listStatusOf(x.status)).catch(() => (next === 'live' ? 'Active' : 'Draft'));
+      setProducts((prev) => prev.map((x) => (x.id === p.id ? { ...x, status: current } : x)));
       showToast(next === 'live' ? 'Listing published' : 'Listing unpublished');
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Could not update listing status', 'error');
@@ -576,14 +590,18 @@ export default function ProductsPage() {
   const publishToggle = (p: ProductRow) => {
     const on = p.status === 'Active';
     const busy = togglingId === p.id;
+    // Suspended is set by Choosify — the switch is not a way to lift it.
+    const locked = p.status === 'Suspended';
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5 }}>
         <span
           role="switch"
           aria-checked={on}
-          aria-label={`${on ? 'Unpublish' : 'Publish'} ${p.name}`}
-          onClick={() => !busy && handleTogglePublish(p)}
-          style={{ width: 30, height: 16, borderRadius: 999, position: 'relative', cursor: busy ? 'wait' : 'pointer', background: on ? '#16A34A' : '#E5E7EB', opacity: busy ? 0.6 : 1, transition: 'background 0.15s', flexShrink: 0, display: 'inline-block' }}
+          aria-disabled={locked || undefined}
+          aria-label={locked ? `${p.name} is suspended by Choosify` : `${on ? 'Unpublish' : 'Publish'} ${p.name}`}
+          title={locked ? 'Suspended by Choosify — contact support to restore it.' : undefined}
+          onClick={() => !busy && !locked && handleTogglePublish(p)}
+          style={{ width: 30, height: 16, borderRadius: 999, position: 'relative', cursor: locked ? 'not-allowed' : busy ? 'wait' : 'pointer', background: on ? '#16A34A' : '#E5E7EB', opacity: busy || locked ? 0.6 : 1, transition: 'background 0.15s', flexShrink: 0, display: 'inline-block' }}
         >
           <span style={{ position: 'absolute', top: 2, left: on ? 16 : 2, width: 12, height: 12, borderRadius: '50%', background: '#fff', transition: 'left 0.15s', boxShadow: '0 1px 2px rgba(0,0,0,0.2)' }} />
         </span>
@@ -663,7 +681,7 @@ export default function ProductsPage() {
               {categoryOptions.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={S.select}>
-              {['All', 'Active', 'Draft', 'Archived'].map((s) => <option key={s} value={s}>{s === 'All' ? 'Status: Any' : s}</option>)}
+              {['All', 'Active', 'Draft', 'Out of Stock', 'Suspended', 'Archived'].map((s) => <option key={s} value={s}>{s === 'All' ? 'Status: Any' : s}</option>)}
             </select>
             <select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)} style={S.select}>
               {SORT_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
@@ -732,7 +750,8 @@ export default function ProductsPage() {
                     const att = attentionByProduct[p.id];
                     const vsum = variantStock[p.id];
                     const stockColor = p.stock === 0 ? '#DC2626' : att?.state === 'low_stock' ? '#B45309' : '#111827';
-                    const displayStatus = p.stock === 0 ? 'Out of Stock' : p.status;
+                    // A live listing with no stock reads as Out of Stock; every other state is shown as it is.
+                    const displayStatus = p.status === 'Active' && p.stock === 0 ? 'Out of Stock' : p.status;
                     return (
                       <React.Fragment key={p.id}>
                       <tr style={S.row}>
