@@ -7,6 +7,7 @@ import { catalogApi } from '../../services/catalogApi';
 import type { CatalogProduct, CatalogInventory } from '../../types/catalog';
 import { AdminEditModeBar, useAdminEditMode } from '../../components/admin/AdminEditMode';
 import { productStatusFromServer, type ProductEditorStatus } from './productEditorModel';
+import { isLocalPreviewUrl } from '../../lib/localPreview';
 
 /** List label for each server lifecycle state (all five — none folded into another). */
 const LIST_STATUS: Record<ProductEditorStatus, string> = {
@@ -74,6 +75,8 @@ type ProductRow = {
   sku?: string;
   stock: number;
   sellerId?: string;
+  /** Main photo (or first real gallery photo) for the list thumbnail. */
+  image?: string;
 };
 
 type AttentionState = 'low_stock' | 'out_of_stock';
@@ -132,7 +135,27 @@ const mapCatalogProduct = (product: CatalogProduct): ProductRow => ({
   sku: product.sku,
   stock: Math.max(0, typeof product.stock === 'number' ? product.stock : 0),
   sellerId: product.sellerId,
+  image: [product.image, ...(product.gallery ?? [])].find(
+    (url): url is string => typeof url === 'string' && url.trim() !== '' && !isLocalPreviewUrl(url),
+  ),
 });
+
+/** List thumbnail: the product photo, or its initial when there is none / it fails to load. */
+function ProductThumb({ name, image, style }: { name: string; image?: string; style: CSSProperties }) {
+  const [failed, setFailed] = useState(false);
+  if (image && !failed) {
+    return (
+      <img
+        src={image}
+        alt=""
+        loading="lazy"
+        onError={() => setFailed(true)}
+        style={{ ...style, objectFit: 'cover', display: 'block' }}
+      />
+    );
+  }
+  return <span style={style}>{(name || '?').charAt(0).toUpperCase()}</span>;
+}
 
 /** Small inline chip for the variant stock roll-up in the Stock cell. */
 const vChip = (fg: string, bg: string): CSSProperties => ({
@@ -761,7 +784,7 @@ export default function ProductsPage() {
                         <td style={S.tdMuted}>{idx + 1}</td>
                         <td style={S.td}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                            <span style={S.thumb}>{(p.name || '?').charAt(0).toUpperCase()}</span>
+                            <ProductThumb key={p.image || p.id} name={p.name} image={p.image} style={S.thumb} />
                             <div style={{ minWidth: 0 }}>
                               <Link to={viewHref(p.id)} style={{ fontWeight: 700, color: '#111827', textDecoration: 'none' }}>{p.name}</Link>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
