@@ -5,7 +5,7 @@ import { catalogApi } from '../../services/catalogApi';
 import { useAuth } from '../../contexts/AuthContext';
 import { PublicIdentitySection } from '../../components/publicIdentity/PublicIdentitySection';
 import { useEntityDraft } from '../../hooks/useEntityDraft';
-import { dataUrlToFile, uploadCreatorImage } from '../../services/mediaUpload';
+import { dataUrlToFile, describeUploadFailures, uploadCreatorImage } from '../../services/mediaUpload';
 import { CreatorProfilePresentation, type CreatorStudioBridge } from '../../components/creator-profile';
 import { ProfileImageAdjustModal, type ProfileImageAdjustResult } from '../../components/media/ProfileImageAdjustModal';
 import type { ProfileImageCropParams } from '../../../shared/media/profileImageCrop';
@@ -126,9 +126,8 @@ function ImageField({
     try {
       onChange(await uploadCreatorImage(f));
     } catch (e) {
-      const blob = URL.createObjectURL(f);
-      onChange(blob);
-      onToast(e instanceof Error ? `${e.message} — UNSAVED local preview.` : 'Upload failed — UNSAVED local preview.');
+      // Nothing is set on failure: a local preview would look saved but never reach visitors.
+      onToast(describeUploadFailures([{ name: f.name, message: e instanceof Error ? e.message : 'Upload failed' }]));
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -280,8 +279,8 @@ function ThumbField({
     try {
       onChange(await uploadCreatorImage(f));
     } catch (e) {
-      onChange(URL.createObjectURL(f));
-      onToast(e instanceof Error ? `${e.message} — UNSAVED local preview.` : 'Upload failed — UNSAVED preview.');
+      // Nothing is set on failure: a local preview would look saved but never reach visitors.
+      onToast(describeUploadFailures([{ name: f.name, message: e instanceof Error ? e.message : 'Upload failed' }]));
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = '';

@@ -802,6 +802,29 @@ export const normalizeProductInput = (
   return productSchema.parse(normalized);
 };
 
+/** A blob:/data: URL is a browser-local preview of a file that never uploaded. */
+export function isLocalPreviewUrl(url: unknown): boolean {
+  return typeof url === 'string' && /^(blob:|data:)/i.test(url.trim());
+}
+
+/**
+ * Photos sent in a product write: browser-local previews (photos that never
+ * uploaded) are dropped — buyers can never load them. When the main photo was
+ * one, the first real gallery photo takes its place; with no real photo left the
+ * write is refused with a clear message. Only applied when the request itself
+ * sends photos, so a status-only change never trips over older stored data.
+ */
+export function withoutLocalPreviewPhotos(product: CatalogProduct): CatalogProduct {
+  const gallery = (product.gallery || []).filter((u) => u && !isLocalPreviewUrl(u));
+  const image = product.image && !isLocalPreviewUrl(product.image) ? product.image : gallery[0] || '';
+  if (!image) {
+    throw new Error(
+      'This product has no uploaded main photo. Upload a photo (JPG, PNG or WebP) in Core Product Profile, then save again.',
+    );
+  }
+  return { ...product, image, gallery: gallery.length ? gallery : [image] };
+}
+
 /**
  * Canonical pricing rule (variants sprint): a supplied MRP / strike price
  * (`originalPrice`) must be >= the selling `price`. Absent / null / 0 means "no

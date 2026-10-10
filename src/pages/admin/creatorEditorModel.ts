@@ -4,6 +4,11 @@ import type {
   CatalogMediaItem,
 } from '../../types/catalog';
 import type { ProfileImageCropParams } from '../../../shared/media/profileImageCrop';
+import { isLocalPreviewUrl } from '../../lib/localPreview';
+
+/** A stored image URL, or undefined (left unchanged by PATCH) for empty / never-uploaded local previews. */
+const storableImage = (url: string | undefined): string | undefined =>
+  url && !isLocalPreviewUrl(url) ? url : undefined;
 
 export type CreatorEditorStatus = 'DRAFT' | 'LIVE' | 'ARCHIVED';
 
@@ -193,10 +198,10 @@ export function editorModelToCreatorPayload(model: CreatorEditorModel): Partial<
   return {
     name: model.name,
     handle: model.handle,
-    avatar: model.avatar || undefined,
-    avatarOriginal: model.avatarOriginal || undefined,
+    avatar: storableImage(model.avatar),
+    avatarOriginal: storableImage(model.avatarOriginal),
     avatarCrop: model.avatarCrop,
-    coverImage: model.coverImage || undefined,
+    coverImage: storableImage(model.coverImage),
     role: model.title || undefined,
     location: model.location || undefined,
     bio: model.bio || undefined,

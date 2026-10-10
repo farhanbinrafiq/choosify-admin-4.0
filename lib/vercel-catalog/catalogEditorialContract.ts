@@ -779,7 +779,8 @@ const normalizeVariant = (raw: unknown, idx: number): NormalizedVariant | null =
     );
   }
   const stock = has(r.stock) ? Math.max(0, Math.floor(toNumber(r.stock))) : undefined;
-  const images = toStringArray(r.images);
+  // blob:/data: URLs are browser-local previews of photos that never uploaded — never stored.
+  const images = toStringArray(r.images).filter((u) => !/^(blob:|data:)/i.test(u.trim()));
 
   const enabledRaw = typeof r.enabled === 'boolean' ? r.enabled : undefined;
   const statusRaw = toString(r.status).toLowerCase();

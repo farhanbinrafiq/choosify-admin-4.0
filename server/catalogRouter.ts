@@ -11,6 +11,7 @@ import {
   normalizeDealsBannerInput,
   normalizeHomepageInput,
   normalizeProductInput,
+  withoutLocalPreviewPhotos,
 } from './catalogContract';
 import {
   normalizeCreatorInput,
@@ -417,6 +418,23 @@ function stampSellerOwnershipOnCreate(
     return { ...product, sellerId: req.userId };
   }
   return product;
+}
+
+/**
+ * A product belongs to its brand's seller. One created or edited by staff without
+ * an explicit owner takes the brand's seller, so that seller can see and manage it
+ * (seller listing and edit rights are keyed on product.sellerId).
+ */
+async function withBrandSellerOwnership(product: CatalogProduct): Promise<CatalogProduct> {
+  if (product.sellerId) return product;
+  const brand = (await catalogStore.listBrands()).find((b) => b.id === product.brandId);
+  return brand?.sellerId ? { ...product, sellerId: brand.sellerId } : product;
+}
+
+/** Drop never-uploaded local previews — only when this request itself sends photos. */
+function withRequestPhotosChecked(body: unknown, product: CatalogProduct): CatalogProduct {
+  const b = (body ?? {}) as Record<string, unknown>;
+  return b.image !== undefined || b.gallery !== undefined ? withoutLocalPreviewPhotos(product) : product;
 }
 
 /** Sellers cannot reassign sellerId; admins may. */
@@ -890,9 +908,11 @@ catalogRouter.get(
 catalogRouter.post('/catalog/products', ...requireProductCreate, async (req, res) => {
   try {
     const context = await buildProductNormalizeContext();
-    let normalized = stampSellerOwnershipOnCreate(
-      req,
-      normalizeProductInput(req.body, undefined, context),
+    let normalized = await withBrandSellerOwnership(
+      stampSellerOwnershipOnCreate(
+        req,
+        withRequestPhotosChecked(req.body, normalizeProductInput(req.body, undefined, context)),
+      ),
     );
     if (!(await assertSellerOwnsTargetBrand(req, res, normalized.brandId))) return;
     normalized = await enforceProductLifecycleAndPublish(req, undefined, normalized);
@@ -949,10 +969,12 @@ catalogRouter.put('/catalog/products/:id', ...requireProductEdit, async (req, re
     const existing = await catalogStore.getProduct(req.params.id);
     if (!forbidUnlessOwnsProduct(req, res, existing)) return;
     const context = await buildProductNormalizeContext(req.params.id);
-    let normalized = preserveProductOwnershipOnUpdate(
-      req,
-      existing,
-      normalizeProductInput({ ...req.body, id: req.params.id }, existing, context),
+    let normalized = await withBrandSellerOwnership(
+      preserveProductOwnershipOnUpdate(
+        req,
+        existing,
+        withRequestPhotosChecked(req.body, normalizeProductInput({ ...req.body, id: req.params.id }, existing, context)),
+      ),
     );
     if (normalized.brandId !== existing.brandId) {
       if (!(await assertSellerOwnsTargetBrand(req, res, normalized.brandId))) return;
@@ -1008,10 +1030,15 @@ catalogRouter.patch('/catalog/products/:id', ...requireProductEdit, async (req, 
     const existing = await catalogStore.getProduct(req.params.id);
     if (!forbidUnlessOwnsProduct(req, res, existing)) return;
     const context = await buildProductNormalizeContext(req.params.id);
-    let normalized = preserveProductOwnershipOnUpdate(
-      req,
-      existing,
-      normalizeProductInput({ ...existing, ...req.body, id: req.params.id }, existing, context),
+    let normalized = await withBrandSellerOwnership(
+      preserveProductOwnershipOnUpdate(
+        req,
+        existing,
+        withRequestPhotosChecked(
+          req.body,
+          normalizeProductInput({ ...existing, ...req.body, id: req.params.id }, existing, context),
+        ),
+      ),
     );
     if (normalized.brandId !== existing.brandId) {
       if (!(await assertSellerOwnsTargetBrand(req, res, normalized.brandId))) return;

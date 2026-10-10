@@ -142,19 +142,27 @@ function SectionShell({
   );
 }
 
-/** Platform fallback when the seller hasn't filled the Delivery Information section. */
-const DEFAULT_DELIVERY_BULLETS = ['Cash on Delivery available', 'Standard delivery across Bangladesh'];
-
-function DeliveryInfoView({ region, bullets }: { region?: string; bullets?: string[] }) {
-  const clean = (bullets || []).filter(Boolean);
-  const facts = clean.length ? clean : DEFAULT_DELIVERY_BULLETS;
+/** Seller-entered delivery facts only — the section is hidden on the storefront when empty. */
+function DeliveryInfoView({ region, bullets, isStudio }: { region?: string; bullets?: string[]; isStudio: boolean }) {
+  const facts = (bullets || []).map((b) => (b || '').trim()).filter(Boolean);
+  const place = (region || '').trim();
+  if (!facts.length && !place) {
+    return isStudio ? (
+      <div className="text-[12.5px] text-[#9AA0AC] leading-relaxed">
+        <div className="text-[11px] font-extrabold uppercase mb-2">Delivery Information</div>
+        No delivery information yet - edit to add it. Buyers don't see this section until you do.
+      </div>
+    ) : null;
+  }
   return (
     <div className="text-[12.5px] text-[#4B5563] leading-relaxed">
       <div className="text-[11px] font-extrabold text-[#9AA0AC] uppercase mb-2">Delivery Information</div>
-      <div className="flex items-center gap-1.5 mb-1.5 text-[#1A1A2E] font-semibold">
-        <MapPin size={13} className="text-[#FF5B00]" />
-        {region || 'Bangladesh'}
-      </div>
+      {place ? (
+        <div className="flex items-center gap-1.5 mb-1.5 text-[#1A1A2E] font-semibold">
+          <MapPin size={13} className="text-[#FF5B00]" />
+          {place}
+        </div>
+      ) : null}
       <ul className="m-0 p-0 list-none space-y-1">
         {facts.map((f) => (
           <li key={f} className="flex items-start gap-1.5">
@@ -511,7 +519,7 @@ export function ProductDetailPresentation({
                 k="delivery"
                 className="pt-2 border-t border-[#F1F1F3]"
                 view={
-                  <DeliveryInfoView region={model.deliveryRegion} bullets={model.deliveryBullets} />
+                  <DeliveryInfoView region={model.deliveryRegion} bullets={model.deliveryBullets} isStudio={isStudio} />
                 }
               />
 

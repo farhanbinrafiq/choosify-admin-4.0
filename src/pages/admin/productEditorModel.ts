@@ -4,6 +4,7 @@ import type {
   CatalogProductWithVariants,
   RelatedStoreEntry,
 } from '../../types/catalog';
+import { isLocalPreviewUrl } from '../../lib/localPreview';
 
 /** The five server lifecycle states (server/catalog/productLifecycle.ts), as the Studio names them. */
 export type ProductEditorStatus = 'DRAFT' | 'LIVE' | 'OUT_OF_STOCK' | 'SUSPENDED' | 'ARCHIVED';
@@ -553,12 +554,53 @@ export function mapCatalogProductToEditor(
   };
 }
 
+export { isLocalPreviewUrl };
+
+/**
+ * The photos that can actually be saved: local previews are dropped, and when the
+ * main photo was one, the first real gallery photo becomes the main photo.
+ */
+export function persistablePhotos(model: Pick<ProductEditorModel, 'image' | 'gallery'>): { image: string; gallery: string[] } {
+  const gallery = (model.gallery || []).filter((u) => u && !isLocalPreviewUrl(u));
+  const image = model.image && !isLocalPreviewUrl(model.image) ? model.image : gallery[0] || '';
+  return { image, gallery: gallery.length ? gallery : image ? [image] : [] };
+}
+
+/** The model as it is actually stored after a save: every local preview removed. */
+export function withoutLocalPreviews(model: ProductEditorModel): ProductEditorModel {
+  const photos = persistablePhotos(model);
+  const sizeGuide =
+    model.sizeGuide && isLocalPreviewUrl(model.sizeGuide.imageUrl)
+      ? (({ imageUrl: _drop, ...rest }) => rest)(model.sizeGuide)
+      : model.sizeGuide;
+  return {
+    ...model,
+    image: photos.image,
+    gallery: photos.gallery,
+    productVariants: (model.productVariants ?? []).map((v) => {
+      const images = (v as { images?: string[] }).images;
+      return Array.isArray(images) && images.some(isLocalPreviewUrl) ? { ...v, images: images.filter((u) => !isLocalPreviewUrl(u)) } : v;
+    }),
+    sizeGuide,
+  };
+}
+
+/** How many photos in the model are local previews (never uploaded) and would be dropped on save. */
+export function countLocalPreviews(model: ProductEditorModel): number {
+  const urls = new Set<string>([model.image, ...(model.gallery || [])].filter(isLocalPreviewUrl));
+  let n = urls.size;
+  for (const v of model.productVariants ?? []) n += ((v as { images?: string[] }).images ?? []).filter(isLocalPreviewUrl).length;
+  if (isLocalPreviewUrl(model.sizeGuide?.imageUrl)) n += 1;
+  return n;
+}
+
 export function editorModelToProductPatch(model: ProductEditorModel): Partial<CatalogProduct> {
   // NOTE: `product.attributes` (canonical, category-schema-validated) is
   // deliberately NOT written from here. The Studio's "Specifications" section is
   // free-form product-detail data (`detail.specs`); it must never become a
   // category facet or be schema-validated. Category attributes are managed on
   // their own path and are preserved untouched by omitting the key.
+  const photos = persistablePhotos(model);
   return {
     title: model.title,
     description: model.description,
@@ -567,8 +609,8 @@ export function editorModelToProductPatch(model: ProductEditorModel): Partial<Ca
     categoryId: model.categoryId || undefined,
     categoryName: model.categoryName || undefined,
     sku: model.sku.trim() || undefined,
-    image: model.image || undefined,
-    gallery: model.gallery.length ? model.gallery : model.image ? [model.image] : [],
+    image: photos.image || undefined,
+    gallery: photos.gallery,
     videoUrl: model.videoUrl ? model.videoUrl : '',
     productType: model.productType,
     price: model.price,
@@ -709,11 +751,24 @@ export function editorModelToDetailPayload(model: ProductEditorModel): Partial<C
     // category schema. No Color/Size/Storage special-casing. Empty groups
     // (a dimension toggled on but given no values) are not persisted.
     optionGroups: (model.optionGroups ?? []).filter((g) => (g.values?.length ?? 0) > 0),
-    productVariants: model.productVariants ?? [],
+    // Variant photos that never uploaded (local previews) are not saved.
+    productVariants: (model.productVariants ?? []).map((v) => {
+      const images = (v as { images?: string[] }).images;
+      return Array.isArray(images) && images.some(isLocalPreviewUrl)
+        ? { ...v, images: images.filter((u) => !isLocalPreviewUrl(u)) }
+        : v;
+    }),
     // Only sent when the seller has actually configured a guide — otherwise the
     // key is omitted so the server preserves any existing value. Informational
-    // only; never affects variants / price / SKU / stock / checkout.
-    ...(model.sizeGuide !== undefined ? { sizeGuide: model.sizeGuide } : {}),
+    // only; never affects variants / price / SKU / stock / checkout. A guide image
+    // that never uploaded is left out.
+    ...(model.sizeGuide !== undefined
+      ? {
+          sizeGuide: isLocalPreviewUrl(model.sizeGuide?.imageUrl)
+            ? (({ imageUrl: _drop, ...rest }) => rest)(model.sizeGuide as NonNullable<ProductEditorModel['sizeGuide']>)
+            : model.sizeGuide,
+        }
+      : {}),
     creatorContent: model.creatorVideos
       .filter((c) => (c.videoUrl || '').trim() || (c.title || '').trim() || (c.thumbnail || '').trim())
       .map((c, i) => ({

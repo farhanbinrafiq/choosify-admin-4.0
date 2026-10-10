@@ -2,7 +2,12 @@ import React, { useEffect, useMemo, useRef, useState, CSSProperties } from 'reac
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, History, Image as ImageIcon, RotateCw, Trash2, Upload } from 'lucide-react';
 import { catalogApi } from '../../services/catalogApi';
-import { uploadProductImages, uploadProductVideoFile } from '../../services/mediaUpload';
+import {
+  describeUploadFailures,
+  uploadProductImages,
+  uploadProductImagesSettled,
+  uploadProductVideoFile,
+} from '../../services/mediaUpload';
 import { classifyProductVideo } from '../../lib/productVideo';
 import { detectBrandablePlatform, extractUrlFromPastedInput } from '../../lib/creatorReviewPlatform';
 import { CreatorReviewThumbnailPreview } from '../../components/admin/product-studio/CreatorReviewThumbnailPreview';
@@ -13,6 +18,8 @@ import type { CatalogCategoryAttribute } from '../../types/catalog';
 import {
   PRODUCT_STATUS_LABEL,
   checkCategorySchemaCompatibility,
+  countLocalPreviews,
+  withoutLocalPreviews,
   createBlankProductModel,
   detailSaveRequired,
   editorModelToCreatePatch,
@@ -354,14 +361,13 @@ function MediaComposition({
     const imgs = Array.from(files).filter((f) => f.type.startsWith('image/'));
     if (!imgs.length) { onToast('Please choose a JPG or PNG image.'); return; }
     setBusy(true);
+    // A failed upload adds nothing: a local preview would look saved but never reach buyers.
     try {
       const [url] = await uploadProductImages([imgs[0]]);
       onChange([url, ...photos.filter((p) => p !== url)]);
       onToast('Main photo uploaded.');
     } catch (err) {
-      const blob = URL.createObjectURL(imgs[0]);
-      onChange([blob, ...photos]);
-      onToast(err instanceof Error ? `${err.message} — shown as an UNSAVED local preview; it will not persist.` : 'Upload failed — shown as an UNSAVED local preview.');
+      onToast(describeUploadFailures([{ name: imgs[0].name, message: err instanceof Error ? err.message : 'Upload failed' }]));
     } finally { setBusy(false); if (mainRef.current) mainRef.current.value = ''; }
   };
   const uploadAdd = async (files: File[]) => {
@@ -369,13 +375,13 @@ function MediaComposition({
     if (!imgs.length) { onToast('Please choose JPG or PNG image files.'); return; }
     setBusy(true);
     try {
-      const urls = await uploadProductImages(imgs);
-      onChange([...photos, ...urls]);
-      onToast(`Uploaded ${urls.length} image${urls.length === 1 ? '' : 's'}.`);
-    } catch (err) {
-      const blobs = imgs.map((f) => URL.createObjectURL(f));
-      onChange([...photos, ...blobs]);
-      onToast(err instanceof Error ? `${err.message} — shown as UNSAVED local previews; they will not persist.` : 'Upload failed — shown as UNSAVED local previews.');
+      const { urls, failures } = await uploadProductImagesSettled(imgs);
+      if (urls.length) onChange([...photos, ...urls]);
+      onToast(
+        failures.length
+          ? `${urls.length ? `Uploaded ${urls.length} image${urls.length === 1 ? '' : 's'}. ` : ''}${describeUploadFailures(failures)}`
+          : `Uploaded ${urls.length} image${urls.length === 1 ? '' : 's'}.`,
+      );
     } finally { setBusy(false); if (addRef.current) addRef.current.value = ''; }
   };
 
@@ -738,7 +744,9 @@ export default function ProductEditStudio() {
         await catalogApi.upsertProductDetail(productId, editorModelToDetailPayload({ ...merged, id: productId }));
       }
       const serverState = creatingProduct ? null : await readServerState(productId);
-      const saved: ProductEditorModel = { ...merged, id: productId, ...(serverState ?? {}) };
+      // Photos that never uploaded were left out of the save; keep the editor in step with what was stored.
+      const dropped = countLocalPreviews(merged);
+      const saved: ProductEditorModel = { ...withoutLocalPreviews(merged), id: productId, ...(serverState ?? {}) };
       if (!isNew) {
         try { await saveVersion(`Saved ${SECTION_LABELS[editingId] || editingId} · ${new Date().toLocaleString()}`, saved); } catch (_) {}
       }
@@ -746,7 +754,13 @@ export default function ProductEditStudio() {
       setSectionDraft(saved);
       setEditingId(null);
       setDirty(false);
-      triggerToast(isNew ? 'Product created' : `${SECTION_LABELS[editingId] || 'Section'} saved`);
+      triggerToast(
+        `${isNew ? 'Product created' : `${SECTION_LABELS[editingId] || 'Section'} saved`}${
+          dropped
+            ? `. ${dropped} photo${dropped === 1 ? '' : 's'} that never finished uploading ${dropped === 1 ? 'was' : 'were'} removed — please upload ${dropped === 1 ? 'it' : 'them'} again.`
+            : ''
+        }`,
+      );
       if (isNew) navigate(`/admin/products/${productId}/edit`, { replace: true });
     } catch (err) {
       triggerToast(err instanceof Error ? err.message : 'Save failed');
@@ -1132,7 +1146,7 @@ export default function ProductEditStudio() {
               />
               <div style={S.hint}>
                 Quick-service delivery info buyers see on the Product Detail page. Leave everything
-                blank to fall back to the platform default.
+                blank to hide the section on the storefront.
               </div>
             </div>
           </div>

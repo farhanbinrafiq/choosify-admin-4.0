@@ -1,4 +1,5 @@
 import { getStoredAccessToken, refreshAccessToken } from './authRefresh';
+import { prepareImageForUpload } from '../lib/imageCompression';
 
 const API_BASE =
   ((import.meta as ImportMeta & { env?: Record<string, string> }).env?.VITE_API_BASE_URL as string | undefined) ||
@@ -108,12 +109,14 @@ async function uploadViaCatalogApi(file: File, folder: string): Promise<string> 
   return payload.url;
 }
 
-async function uploadImage(file: File, folder = 'choosify/products'): Promise<string> {
+async function uploadImage(original: File, folder = 'choosify/products'): Promise<string> {
   const allowed = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']);
-  const mime = (file.type || '').toLowerCase();
+  const mime = (original.type || '').toLowerCase();
   if (!allowed.has(mime)) {
     throw new Error('Unsupported image type. Use JPG, PNG, WEBP, or GIF.');
   }
+  // Large photos are shrunk in the browser first so they fit the server's upload limit.
+  const file = await prepareImageForUpload(original);
 
   if (UPLOAD_PRESET?.trim()) {
     try {
@@ -170,6 +173,32 @@ export function dataUrlToFile(dataUrl: string, fileName: string): File {
 export async function uploadProductImages(files: File[]): Promise<string[]> {
   const uploads = files.map((file) => uploadProductImage(file));
   return Promise.all(uploads);
+}
+
+/**
+ * Uploads several photos independently: the ones that succeed are returned in
+ * order, and each failure is reported by file name — one rejected photo must not
+ * discard the others (nor be replaced by a local preview that never persists).
+ */
+export async function uploadProductImagesSettled(
+  files: File[],
+): Promise<{ urls: string[]; failures: Array<{ name: string; message: string }> }> {
+  const results = await Promise.allSettled(files.map((file) => uploadProductImage(file)));
+  const urls: string[] = [];
+  const failures: Array<{ name: string; message: string }> = [];
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') urls.push(r.value);
+    else failures.push({ name: files[i].name, message: r.reason instanceof Error ? r.reason.message : 'Upload failed' });
+  });
+  return { urls, failures };
+}
+
+/** One readable message for the photos that could not be uploaded. */
+export function describeUploadFailures(failures: Array<{ name: string; message: string }>): string {
+  if (!failures.length) return '';
+  const first = failures[0];
+  const more = failures.length > 1 ? ` (and ${failures.length - 1} more)` : '';
+  return `“${first.name}”${more} could not be uploaded: ${first.message}. Nothing was added for ${failures.length === 1 ? 'it' : 'them'} — please try again.`;
 }
 
 const ALLOWED_VIDEO_MIME = new Set(['video/mp4', 'video/webm']);

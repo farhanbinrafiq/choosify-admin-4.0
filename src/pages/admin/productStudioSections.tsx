@@ -8,7 +8,12 @@ import {
   extractUrlFromPastedInput,
   detectBrandablePlatform,
 } from '../../lib/creatorReviewPlatform';
-import { uploadCreatorImage, uploadProductImages } from '../../services/mediaUpload';
+import {
+  describeUploadFailures,
+  uploadCreatorImage,
+  uploadProductImages,
+  uploadProductImagesSettled,
+} from '../../services/mediaUpload';
 import { catalogApi } from '../../services/catalogApi';
 import {
   checkCategorySchemaCompatibility,
@@ -944,6 +949,7 @@ function VariantEditModal({
   );
   const [dirty, setDirty] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
   const [imgUrlInput, setImgUrlInput] = useState('');
 
   const duplicateOfExisting = existingKeys.has(variantKey(draft.options || {}));
@@ -971,12 +977,12 @@ function VariantEditModal({
   const addFiles = async (files: File[]) => {
     if (!files.length) return;
     setUploading(true);
+    setUploadError('');
     try {
-      const urls = await uploadProductImages(files);
-      patch({ images: [...images, ...urls] });
-    } catch {
-      const locals = files.map((f) => URL.createObjectURL(f));
-      patch({ images: [...images, ...locals] });
+      // Failed photos add nothing: a local preview would look saved but never reach buyers.
+      const { urls, failures } = await uploadProductImagesSettled(files);
+      if (urls.length) patch({ images: [...images, ...urls] });
+      setUploadError(describeUploadFailures(failures));
     } finally {
       setUploading(false);
     }
@@ -1173,6 +1179,9 @@ function VariantEditModal({
                 />
               </label>
             </div>
+            {uploadError ? (
+              <div role="alert" className="text-[11px] font-semibold text-[#DC2626] mt-1.5">{uploadError}</div>
+            ) : null}
             <input
               value={imgUrlInput}
               onChange={(e) => setImgUrlInput(e.target.value)}
@@ -1379,9 +1388,8 @@ export function ProductGuideEditor({
       patch({ imageUrl: url, type: 'image', enabled: true });
       onToast('Guide image uploaded.');
     } catch (err) {
-      const blob = URL.createObjectURL(file);
-      patch({ imageUrl: blob, type: 'image', enabled: true });
-      onToast(err instanceof Error ? `${err.message} — shown as an UNSAVED local preview.` : 'Upload failed — UNSAVED local preview.');
+      // Nothing is attached on failure: a local preview would look saved but never reach buyers.
+      onToast(describeUploadFailures([{ name: file.name, message: err instanceof Error ? err.message : 'Upload failed' }]));
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = '';
