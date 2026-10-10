@@ -635,7 +635,17 @@ export default function ProductEditStudio() {
     window.setTimeout(() => setToastMessage(null), 4000);
   };
 
-  const brandFieldOptions = useMemo(() => allBrands.map((b) => ({ id: b.id, name: b.name })), [allBrands]);
+  // Always list the product's current brand, even before (or if) the account's
+  // brand list loads, so the field never shows "Select a brand…" for a branded product.
+  const currentBrandId = model?.brandId || '';
+  const currentBrandName = model?.brandName || '';
+  const brandFieldOptions = useMemo(() => {
+    const opts = allBrands.map((b) => ({ id: b.id, name: b.name }));
+    if (currentBrandId && !opts.some((b) => b.id === currentBrandId)) {
+      opts.unshift({ id: currentBrandId, name: currentBrandName || currentBrandId });
+    }
+    return opts;
+  }, [allBrands, currentBrandId, currentBrandName]);
 
   const SECTION_LABELS: Record<string, string> = {
     core: 'Core Product Profile', basic: 'Basic Information',

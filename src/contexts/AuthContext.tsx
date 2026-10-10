@@ -359,8 +359,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // no fallback to a first/seeded brand (BP-004 §7).
   useEffect(() => {
     let cancelled = false;
+    let retryTimer = 0;
+    let failures = 0;
 
     async function loadOwnedBrands() {
+      window.clearTimeout(retryTimer);
       const token = localStorage.getItem(AUTH_TOKEN_KEY);
       if (!profile || !token) {
         setAllBrands([]);
@@ -374,12 +377,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const response = await fetch(`${API_BASE}/catalog/brands`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!response.ok) throw new Error('Failed to load brands');
+        if (!response.ok) throw new Error(`Failed to load brands (HTTP ${response.status})`);
         const payload = (await response.json().catch(() => ({}))) as {
           data?: Array<{ id: string; name: string; category: string }>;
         };
         const brands = Array.isArray(payload.data) ? payload.data : [];
         if (cancelled) return;
+        failures = 0;
 
         setAllBrands(brands.map((b) => ({ id: b.id, name: b.name, category: b.category })));
         setSellerBrands(
@@ -401,11 +405,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setActiveBrandIdState(null);
         }
       } catch (error) {
-        console.warn('[Auth] Failed to load owned brands', error);
+        // A failed request (e.g. a 429 rate limit) is not "this account has no
+        // brands": keep what is loaded and try again shortly, so Brand Studio and
+        // the product Brand field don't go empty for the rest of the session.
+        console.warn('[Auth] Failed to load owned brands, retrying', error);
         if (!cancelled) {
-          setAllBrands([]);
-          setSellerBrands([]);
-          setActiveBrandIdState(null);
+          failures += 1;
+          retryTimer = window.setTimeout(loadOwnedBrands, Math.min(30_000, 2_000 * 2 ** (failures - 1)));
         }
       } finally {
         if (!cancelled) setBrandsLoading(false);
@@ -415,6 +421,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadOwnedBrands();
     return () => {
       cancelled = true;
+      window.clearTimeout(retryTimer);
     };
   }, [profile]);
 
