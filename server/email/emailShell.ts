@@ -68,8 +68,8 @@ const emailAssetBase = (): string =>
 const SOCIAL_LINKS = [
   { name: 'Facebook', url: 'https://www.facebook.com/choosify.bd', icon: 'facebook.png' },
   { name: 'Instagram', url: 'https://www.instagram.com/choosify.bd/', icon: 'instagram.png' },
-  { name: 'TikTok', url: 'https://www.tiktok.com/@choosify5', icon: 'tiktok.png' },
-  { name: 'YouTube', url: 'https://www.youtube.com/@choosify5', icon: 'youtube.png' },
+  { name: 'TikTok', url: 'https://www.tiktok.com/@choosify.bd', icon: 'tiktok.png' },
+  { name: 'YouTube', url: 'https://www.youtube.com/@choosifybd', icon: 'youtube.png' },
 ] as const;
 
 export const CONTACT = {
