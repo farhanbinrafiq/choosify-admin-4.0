@@ -2,6 +2,7 @@ import React from 'react';
 import { Check, Globe, Share2, ShieldCheck, Pencil } from 'lucide-react';
 import type { BrandCMSModel } from '../../pages/admin/brandSeeds';
 import type { BrandEditSection } from '../../pages/admin/brandEditorModel';
+import { ViewersPanel } from '../admin/ViewersPanel';
 
 export type BrandProfileEditSection =
   | 'header'
@@ -249,6 +250,7 @@ export function BrandProfileHero({
 
   // Same facts the storefront brand page shows, so the seller sees what shoppers see.
   const brandViews = useBrandViewCount(model.id);
+  const [viewersOpen, setViewersOpen] = React.useState(false);
   const liveCategories = new Set(
     (model.products || []).filter((p) => p.status === 'Live').map((p) => p.category).filter(Boolean),
   ).size;
@@ -493,18 +495,34 @@ export function BrandProfileHero({
             <div className="text-[11px] font-extrabold text-[#9AA0AC] tracking-wide mb-4">BRAND FACTS</div>
             {facts.length > 0 ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-5">
-                {facts.map((f) => (
-                  <div key={f.label}>
-                    <div className="text-base font-extrabold text-[#1A1A2E] mb-0.5">{f.value}</div>
-                    <div className="text-[11px] text-[#9AA0AC]">{f.label}</div>
-                  </div>
-                ))}
+                {facts.map((f) =>
+                  f.label === 'Views' && mode !== 'public' && model.id ? (
+                    <button
+                      key={f.label}
+                      type="button"
+                      onClick={() => setViewersOpen(true)}
+                      className="text-left bg-transparent border-0 p-0 cursor-pointer"
+                      title="See who viewed this brand"
+                    >
+                      <div className="text-base font-extrabold text-[#1A1A2E] mb-0.5">{f.value}</div>
+                      <div className="text-[11px] text-[#2323FF] font-semibold">Views · Who viewed ›</div>
+                    </button>
+                  ) : (
+                    <div key={f.label}>
+                      <div className="text-base font-extrabold text-[#1A1A2E] mb-0.5">{f.value}</div>
+                      <div className="text-[11px] text-[#9AA0AC]">{f.label}</div>
+                    </div>
+                  ),
+                )}
               </div>
             ) : (
               <p className="text-[12px] text-[#9AA0AC]">
                 {mode === 'editor' ? 'Facts will populate from products, deals, and followers.' : 'No brand facts available.'}
               </p>
             )}
+            {viewersOpen ? (
+              <ViewersPanel kind="brand" id={model.id} title={model.brandName || 'This brand'} onClose={() => setViewersOpen(false)} />
+            ) : null}
           </div>
         </div>
 

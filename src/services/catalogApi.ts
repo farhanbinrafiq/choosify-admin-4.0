@@ -63,6 +63,16 @@ export interface EntityVersion {
 
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || '/api/v1';
 
+/** GET /views/:kind/:id/viewers — signed-in viewers by name, guests counted. */
+export interface ViewersReport {
+  totalViews: number;
+  loggedVisits: number;
+  guestVisits: number;
+  bySource: Record<string, number>;
+  byDevice: Record<string, number>;
+  viewers: Array<{ name: string; choosifyUserId: string | null; visits: number; lastViewedAt: string }>;
+}
+
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 function parseErrorMessage(rawError: string, status: number): string {
@@ -332,6 +342,9 @@ export const catalogApi = {
     const result = await request<{ data: CatalogCategory }>('/catalog/categories', 'POST', payload);
     return result.data;
   },
+  /** Who viewed a product / brand — the item's seller or a Super Admin only. */
+  getViewers: async (kind: 'product' | 'brand', id: string): Promise<ViewersReport> =>
+    request<ViewersReport>(`/views/${kind}/${encodeURIComponent(id)}/viewers`),
   /** Add (or reuse, by name) a subcategory under a main category — shared with every seller. */
   addSubcategory: async (parentId: string, name: string): Promise<CatalogCategory> => {
     const result = await request<{ data: CatalogCategory }>(

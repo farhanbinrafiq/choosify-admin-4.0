@@ -5,6 +5,7 @@ import { classifyProductVideo } from '../../lib/productVideo';
 import { AddonItemsView, ThingsToKnowView, ProductGuideView, RelatedInfoView, VariantSummaryView, WarrantyInfoView } from '../../pages/admin/productStudioSections';
 import { mergeRelatedStores } from '../../../lib/vercel-catalog/relatedInfoMerge';
 import { CreatorReviewThumbnailPreview } from '../admin/product-studio/CreatorReviewThumbnailPreview';
+import { ViewersPanel } from '../admin/ViewersPanel';
 
 /**
  * Shared storefront-parity Product Detail presentation.
@@ -214,6 +215,7 @@ export function ProductDetailPresentation({
 }) {
   const [activeNav, setActiveNav] = useState('product-specs-section');
   const [qty, setQty] = useState(1);
+  const [viewersOpen, setViewersOpen] = useState(false);
 
   const isStudio = mode === 'studio' && !!studio;
   const creating = isStudio && studio!.editingSection === '*';
@@ -405,15 +407,32 @@ export function ProductDetailPresentation({
               ['Reviews', model.reviewCount > 0 ? model.reviewCount.toLocaleString() : '—'],
               ['Orders', model.orderCount > 0 ? model.orderCount.toLocaleString() : '—'],
               ['Views', model.viewCount > 0 ? model.viewCount.toLocaleString() : '—'],
-            ] as const).map(([label, val]) => (
-              <div key={label} className="text-center">
-                <div className="text-lg font-extrabold text-[#1A1A2E]">{val}</div>
-                <div className="text-[11px] text-[#9AA0AC]">{label}</div>
-              </div>
-            ))}
+            ] as const).map(([label, val]) =>
+              // In the Studio, Views opens "who viewed" (seller / Super Admin only).
+              label === 'Views' && isStudio && model.id && model.id !== 'new' ? (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => setViewersOpen(true)}
+                  className="text-center bg-transparent border-0 cursor-pointer rounded-lg hover:bg-[#F4F7F9] py-1"
+                  title="See who viewed this product"
+                >
+                  <div className="text-lg font-extrabold text-[#1A1A2E]">{val}</div>
+                  <div className="text-[11px] text-[#2323FF] font-semibold">Views · Who viewed ›</div>
+                </button>
+              ) : (
+                <div key={label} className="text-center">
+                  <div className="text-lg font-extrabold text-[#1A1A2E]">{val}</div>
+                  <div className="text-[11px] text-[#9AA0AC]">{label}</div>
+                </div>
+              ),
+            )}
           </div>
           {isStudio ? (
             <div className="text-[10px] text-[#9AA0AC] italic mt-1">Live storefront metrics - not editable here.</div>
+          ) : null}
+          {viewersOpen ? (
+            <ViewersPanel kind="product" id={model.id} title={model.title || 'This product'} onClose={() => setViewersOpen(false)} />
           ) : null}
         </div>
 
