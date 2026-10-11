@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState, CSSProperties } from 'react';
 import { X, Loader2 } from 'lucide-react';
+import { LinesTextarea } from '../../components/admin/ListInputs';
 import { resolveCreatorThumbnail } from '../../lib/productVideo';
 import { CreatorReviewThumbnailPreview } from '../../components/admin/product-studio/CreatorReviewThumbnailPreview';
 import {
@@ -2129,10 +2130,10 @@ export function OverviewBlocksEditor({
             </span>
             <button type="button" onClick={() => remove(b.id)} style={{ ...x.ghostBtn, color: '#DC2626', flexShrink: 0 }}>Remove</button>
           </div>
-          <textarea
+          <LinesTextarea
             rows={3}
             value={b.bullets.join('\n')}
-            onChange={(e) => patch(b.id, { bullets: linesToArr(e.target.value) })}
+            onChange={(raw) => patch(b.id, { bullets: linesToArr(raw) })}
             placeholder="One bullet per line"
             style={{ width: '100%', boxSizing: 'border-box', borderRadius: 8, border: '1px solid #E8EDF2', padding: '8px 10px', fontSize: 12, resize: 'vertical', outline: 'none', fontFamily: 'inherit' }}
           />
@@ -2497,7 +2498,7 @@ export function WarrantyEditor({
       </div>
       <div>
         <div style={{ ...x.label, marginBottom: 6 }}>After-sales services — one per line</div>
-        <textarea rows={4} value={afterSales.join('\n')} onChange={(e) => onChange({ afterSales: linesToArr(e.target.value) })} placeholder={'Free servicing for 6 months\n7-day replacement on defects\nAuthorized service centres nationwide\nDedicated after-sales hotline'} style={{ width: '100%', boxSizing: 'border-box', borderRadius: 8, border: '1px solid #E8EDF2', padding: '8px 10px', fontSize: 12, resize: 'vertical', outline: 'none', fontFamily: 'inherit' }} />
+        <LinesTextarea rows={4} value={afterSales.join('\n')} onChange={(raw) => onChange({ afterSales: linesToArr(raw) })} placeholder={'Free servicing for 6 months\n7-day replacement on defects\nAuthorized service centres nationwide\nDedicated after-sales hotline'} style={{ width: '100%', boxSizing: 'border-box', borderRadius: 8, border: '1px solid #E8EDF2', padding: '8px 10px', fontSize: 12, resize: 'vertical', outline: 'none', fontFamily: 'inherit' }} />
         <div style={x.note}>Leave everything blank to hide the storefront section.</div>
       </div>
     </div>
@@ -2820,10 +2821,10 @@ export function RelatedInfoEditor({
           {NEARBY_BUCKETS.map((b) => (
             <div key={b.key}>
               <div style={{ ...x.label, marginBottom: 6 }}>{b.label} — one per line</div>
-              <textarea
+              <LinesTextarea
                 rows={3}
                 value={(whatsNearby[b.key] || []).join('\n')}
-                onChange={(e) => onChange({ whatsNearby: { ...whatsNearby, [b.key]: linesToArr(e.target.value) } })}
+                onChange={(raw) => onChange({ whatsNearby: { ...whatsNearby, [b.key]: linesToArr(raw) } })}
                 style={{ width: '100%', boxSizing: 'border-box', borderRadius: 8, border: '1px solid #E8EDF2', padding: '8px 10px', fontSize: 12, resize: 'vertical', outline: 'none', fontFamily: 'inherit' }}
               />
             </div>
@@ -2939,10 +2940,10 @@ export function RelatedInfoEditor({
                   </span>
                   <button type="button" onClick={() => removeBlock(b.id)} style={{ ...x.ghostBtn, color: '#DC2626', flexShrink: 0 }}>Remove</button>
                 </div>
-                <textarea
+                <LinesTextarea
                   rows={3}
                   value={b.items.join('\n')}
-                  onChange={(e) => patchBlock(b.id, { items: linesToArr(e.target.value) })}
+                  onChange={(raw) => patchBlock(b.id, { items: linesToArr(raw) })}
                   placeholder="One bullet per line"
                   style={{ width: '100%', boxSizing: 'border-box', borderRadius: 8, border: '1px solid #E8EDF2', padding: '8px 10px', fontSize: 12, resize: 'vertical', outline: 'none', fontFamily: 'inherit' }}
                 />

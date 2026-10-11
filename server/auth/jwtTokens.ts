@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import argon2 from 'argon2';
 import jwt from 'jsonwebtoken';
-import { and, eq, gt, isNull, ne } from 'drizzle-orm';
+import { and, eq, gt, isNotNull, isNull, ne } from 'drizzle-orm';
 import type { Response } from 'express';
 import { db } from '../db/client';
 import { refreshTokens, users } from '../db/schema';
@@ -9,6 +9,8 @@ import { refreshTokens, users } from '../db/schema';
 const ACCESS_TTL = '15m';
 const REFRESH_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 const REFRESH_COOKIE = 'choosify_refresh';
+/** A refresh token rotated this recently may still be presented once by a concurrent request. */
+const ROTATION_GRACE_MS = 30_000;
 
 export type AccessTokenClaims = {
   uid: string;
@@ -144,13 +146,32 @@ export async function rotateRefreshToken(rawToken: string): Promise<{
     )
     .limit(1);
 
-  const row = rows[0];
-  if (!row) return null;
-
-  await db
-    .update(refreshTokens)
-    .set({ revokedAt: new Date() })
-    .where(eq(refreshTokens.id, row.id));
+  let row = rows[0];
+  if (row) {
+    await db
+      .update(refreshTokens)
+      .set({ revokedAt: new Date() })
+      .where(eq(refreshTokens.id, row.id));
+  } else {
+    // Two requests (or two tabs) that hit a 401 together refresh with the same
+    // cookie; the first rotates it. Accept that just-rotated token for a short
+    // grace window and give the late caller its own fresh pair, instead of
+    // failing and wiping the session ("expired token" on every later save).
+    const recent = await db
+      .select()
+      .from(refreshTokens)
+      .where(
+        and(
+          eq(refreshTokens.tokenHash, tokenHash),
+          isNotNull(refreshTokens.revokedAt),
+          gt(refreshTokens.revokedAt, new Date(Date.now() - ROTATION_GRACE_MS)),
+          gt(refreshTokens.expiresAt, new Date()),
+        ),
+      )
+      .limit(1);
+    row = recent[0];
+    if (!row) return null;
+  }
 
   const userRows = await db.select().from(users).where(eq(users.id, row.userId)).limit(1);
   const user = userRows[0];

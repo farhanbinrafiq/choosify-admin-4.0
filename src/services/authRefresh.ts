@@ -16,8 +16,22 @@ export function persistAccessToken(token: string): void {
   localStorage.setItem(AUTH_TOKEN_KEY, token);
 }
 
+// One refresh at a time: the server rotates the refresh cookie on every call,
+// so parallel 401s (e.g. a save firing several requests) must share a single
+// refresh instead of racing each other with the same cookie.
+let inFlightRefresh: Promise<string | null> | null = null;
+
 // Refresh is reactive only: call after a 401, never proactively/on a timer.
-export async function refreshAccessToken(): Promise<string | null> {
+export function refreshAccessToken(): Promise<string | null> {
+  if (!inFlightRefresh) {
+    inFlightRefresh = doRefreshAccessToken().finally(() => {
+      inFlightRefresh = null;
+    });
+  }
+  return inFlightRefresh;
+}
+
+async function doRefreshAccessToken(): Promise<string | null> {
   console.info('[Auth] 401 received — attempting token refresh');
   try {
     const response = await fetch(`${API_BASE}/auth/refresh`, {

@@ -100,6 +100,9 @@ export interface ProductEditorModel {
   brandName: string;
   categoryId: string;
   categoryName: string;
+  /** Branch category under categoryId ('' = none). */
+  subcategoryId: string;
+  subcategoryName: string;
   /** Optional seller-facing product code / article number (canonical `CatalogProduct.sku`). */
   sku: string;
   description: string;
@@ -269,6 +272,8 @@ export function createBlankProductModel(id = 'new'): ProductEditorModel {
     brandName: '',
     categoryId: '',
     categoryName: '',
+    subcategoryId: '',
+    subcategoryName: '',
     sku: '',
     description: '',
     image: '',
@@ -477,6 +482,8 @@ export function mapCatalogProductToEditor(
     brandName: product.brandName || '',
     categoryId: product.categoryId || '',
     categoryName: product.categoryName || '',
+    subcategoryId: product.subcategoryId || '',
+    subcategoryName: product.subcategoryName || '',
     sku: product.sku || '',
     description: product.description || detail?.about || '',
     image: product.image || gallery[0] || '',
@@ -608,6 +615,8 @@ export function editorModelToProductPatch(model: ProductEditorModel): Partial<Ca
     brandName: model.brandName || undefined,
     categoryId: model.categoryId || undefined,
     categoryName: model.categoryName || undefined,
+    // Always sent: '' clears a subcategory the seller removed.
+    subcategoryId: model.subcategoryId || '',
     sku: model.sku.trim() || undefined,
     image: photos.image || undefined,
     gallery: photos.gallery,

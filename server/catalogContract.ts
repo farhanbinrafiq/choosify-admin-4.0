@@ -285,6 +285,9 @@ const productSchema = z.object({
   brandName: z.string(),
   categoryId: nonEmpty,
   categoryName: z.string(),
+  /** Branch category under `categoryId` (a category whose parentId is categoryId). */
+  subcategoryId: z.string().optional(),
+  subcategoryName: z.string().optional(),
   image: nonEmpty,
   gallery: z.array(z.string()),
   videoUrl: z.string().optional(),
@@ -643,7 +646,19 @@ export const normalizeProductInput = (
   const status = parseProductStatusInput(raw.status, existing?.status);
 
   const brandId = toString(raw.brandId, existing?.brandId ?? '');
-  const categoryId = toString(raw.categoryId, existing?.categoryId ?? '');
+  let categoryId = toString(raw.categoryId, existing?.categoryId ?? '');
+  // A newly sent subcategoryId (even '') wins; otherwise keep the stored one only
+  // while the product stays in the same category. PATCH merges the stored record
+  // into the payload, so the stored value carried along with a category change
+  // is not a request to keep it.
+  const sentSubcategory =
+    raw.subcategoryId !== undefined &&
+    !(existing && raw.subcategoryId === existing.subcategoryId && categoryId !== existing.categoryId);
+  let subcategoryId = sentSubcategory
+    ? toString(raw.subcategoryId, '')
+    : categoryId === existing?.categoryId
+      ? existing?.subcategoryId ?? ''
+      : '';
 
   if (!brandId) {
     throw new Error('brandId is required and must reference an existing brand.');
@@ -655,7 +670,7 @@ export const normalizeProductInput = (
   const brands = context?.brands ?? [];
   const categories = context?.categories ?? [];
   const matchedBrand = brands.find((brand) => brand.id === brandId);
-  const matchedCategory = categories.find((category) => category.id === categoryId);
+  let matchedCategory = categories.find((category) => category.id === categoryId);
 
   if (context && !matchedBrand) {
     throw new Error(`brandId "${brandId}" does not match an existing brand.`);
@@ -663,6 +678,25 @@ export const normalizeProductInput = (
   if (context && !matchedCategory) {
     throw new Error(`categoryId "${categoryId}" does not match an existing category.`);
   }
+  // A branch category given as the main category files the product under its
+  // parent, with the branch as the subcategory.
+  if (matchedCategory?.parentId) {
+    const parent = categories.find((category) => category.id === matchedCategory!.parentId);
+    if (parent) {
+      if (!subcategoryId) subcategoryId = matchedCategory.id;
+      categoryId = parent.id;
+      matchedCategory = parent;
+    }
+  }
+  const matchedSubcategory = subcategoryId
+    ? categories.find((category) => category.id === subcategoryId)
+    : undefined;
+  if (context && subcategoryId && (!matchedSubcategory || matchedSubcategory.parentId !== categoryId)) {
+    throw new Error(`subcategoryId "${subcategoryId}" is not a subcategory of "${matchedCategory?.name ?? categoryId}".`);
+  }
+  const subcategoryName = subcategoryId
+    ? matchedSubcategory?.name ?? toString(raw.subcategoryName, existing?.subcategoryName ?? '')
+    : '';
 
   const brandName = matchedBrand
     ? matchedBrand.name
@@ -707,6 +741,7 @@ export const normalizeProductInput = (
     brandName,
     categoryId,
     categoryName,
+    ...(subcategoryId ? { subcategoryId, subcategoryName } : {}),
     image: toString(raw.image, existing?.image ?? ''),
     gallery: toStringArray(raw.gallery).length > 0 ? toStringArray(raw.gallery) : existing?.gallery ?? [],
     videoUrl: normalizeProductVideoUrl(raw.videoUrl, existing?.videoUrl),

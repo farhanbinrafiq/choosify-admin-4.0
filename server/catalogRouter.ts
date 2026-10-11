@@ -11,6 +11,7 @@ import {
   normalizeDealsBannerInput,
   normalizeHomepageInput,
   normalizeProductInput,
+  slugify,
   withoutLocalPreviewPhotos,
 } from './catalogContract';
 import {
@@ -1683,6 +1684,76 @@ catalogRouter.post('/catalog/categories', ...requireCategoryManage, async (req, 
       return;
     }
     res.status(400).json({ error: validationErrorMessage(error, 'Invalid category payload') });
+  }
+});
+
+/** Same subcategory name regardless of case, spacing or "&" vs "and". */
+const subcategoryNameKey = (name: string) =>
+  name.toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim();
+
+/**
+ * Add (or reuse) a branch category under a main category. Open to anyone who
+ * can create products, so a seller whose item fits no listed subcategory can
+ * add one; it is shared with every seller's dropdown from then on.
+ */
+catalogRouter.post('/catalog/categories/:id/subcategories', ...requireProductCreate, async (req, res) => {
+  try {
+    const parent = await catalogStore.getCategory(req.params.id);
+    if (!parent || parent.enabled === false) {
+      res.status(404).json({ error: 'Category not found' });
+      return;
+    }
+    if (parent.parentId) {
+      res.status(400).json({ error: 'Subcategories can only be added under a main category.' });
+      return;
+    }
+    const name = String((req.body as { name?: unknown })?.name ?? '').replace(/\s+/g, ' ').trim();
+    if (name.length < 2 || name.length > 60) {
+      res.status(400).json({ error: 'Enter a subcategory name between 2 and 60 characters.' });
+      return;
+    }
+    const key = subcategoryNameKey(name);
+    const all = await catalogStore.listCategories();
+    const siblings = all.filter((c) => c.parentId === parent.id);
+    const existing = siblings.find((c) => subcategoryNameKey(c.name) === key);
+    if (existing) {
+      if (existing.enabled === false) {
+        res.status(409).json({ error: `"${existing.name}" is not available under ${parent.name}.` });
+        return;
+      }
+      res.json({ success: true, data: existing, created: false });
+      return;
+    }
+    const base = `sub-${parent.slug}-${slugify(name)}`.slice(0, 80);
+    let id = base;
+    for (let n = 2; all.some((c) => c.id === id); n += 1) id = `${base}-${n}`;
+    const normalized = normalizeCategoryInput({
+      id,
+      slug: id.replace(/^sub-/, ''),
+      name,
+      parentId: parent.id,
+      icon: parent.icon,
+      description: '',
+      enabled: true,
+      displayOrder: siblings.reduce((max, c) => Math.max(max, c.displayOrder ?? 0), 0) + 1,
+    });
+    await assertCategoryHierarchy(normalized, all);
+    const saved = await catalogStore.upsertCategory(normalized);
+    publishEvent({
+      eventName: 'CategoryCreated',
+      domain: 'Catalog',
+      producer: 'catalogRouter',
+      aggregateId: saved.id,
+      actor: req.userId || 'anonymous',
+      payload: { categoryId: saved.id, parentId: saved.parentId, slug: saved.slug, source: 'seller_subcategory' },
+    });
+    res.status(201).json({ success: true, data: saved, created: true });
+  } catch (error) {
+    if (error instanceof CategorySchemaError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    res.status(400).json({ error: validationErrorMessage(error, 'Could not add the subcategory') });
   }
 });
 

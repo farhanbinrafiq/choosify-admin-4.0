@@ -332,6 +332,15 @@ export const catalogApi = {
     const result = await request<{ data: CatalogCategory }>('/catalog/categories', 'POST', payload);
     return result.data;
   },
+  /** Add (or reuse, by name) a subcategory under a main category — shared with every seller. */
+  addSubcategory: async (parentId: string, name: string): Promise<CatalogCategory> => {
+    const result = await request<{ data: CatalogCategory }>(
+      `/catalog/categories/${encodeURIComponent(parentId)}/subcategories`,
+      'POST',
+      { name },
+    );
+    return result.data;
+  },
   updateCategory: async (id: string, payload: Partial<CatalogCategory>): Promise<CatalogCategory> => {
     const result = await request<{ data: CatalogCategory }>(`/catalog/categories/${id}`, 'PATCH', payload);
     return result.data;

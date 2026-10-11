@@ -40,6 +40,7 @@ const MEDIA_KIND_LABEL: Record<StoryMediaKind, string> = {
   other: 'Other / link (16:9)',
 };
 import { BrandImageUploadField } from './BrandImageUploadField';
+import { TagPillInput } from '../../components/admin/ListInputs';
 import { BrandProfilePresentation } from '../../components/brand-profile';
 import type { BrandStudioBridge } from '../../components/brand-profile/BrandProfileHero';
 
@@ -245,7 +246,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
               </div>
               <div>
                 <div className={label}>Category</div>
-                <input className={input} value={d.category} onChange={(e) => patch({ category: e.target.value })} placeholder="e.g. Electronics & Appliances" />
+                <BrandCategorySelect className={input} value={d.category} onChange={(category) => patch({ category })} />
               </div>
             </div>
             <div>
@@ -438,37 +439,31 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
       case 'brandServices':
         return (
           <div>
-            <div className={label}>Services / specialties — one per line</div>
-            <textarea
+            <div className={label}>Services / specialties</div>
+            <TagPillInput
               className={textarea}
-              rows={6}
-              value={(d.services || []).join('\n')}
-              onChange={(e) => patch({ services: linesToArr(e.target.value) })}
-              placeholder={
-                'Free home delivery across Bangladesh\n' +
-                'Up to 2-year official warranty\n' +
-                'EMI up to 12 months\n' +
-                'Nationwide authorised service centres\n' +
-                '7-day easy replacement'
-              }
+              values={d.services || []}
+              onChange={(services) => patch({ services })}
+              maxLength={120}
+              placeholder="e.g. Free home delivery across Bangladesh — press Enter to add"
             />
-            <div className={hint}>Short benefit phrases — one per line. Each becomes a bullet in the storefront card.</div>
+            <div className={hint}>Type a service and press Enter (or comma) to add it. Click one to edit it, × to remove. Each becomes a bullet on the storefront.</div>
           </div>
         );
       case 'brandTags':
         return (
           <div>
-            <div className={label}>Best-for tags — one per line (# optional)</div>
-            <textarea
+            <div className={label}>Best-for tags</div>
+            <TagPillInput
               className={textarea}
-              rows={6}
-              value={(d.bestForTags || []).join('\n')}
-              onChange={(e) =>
-                patch({ bestForTags: linesToArr(e.target.value).map((t) => t.replace(/^#+/, '')) })
-              }
-              placeholder={'MadeInBD\nAppliances\nTrusted\nBudgetFriendly\nWarrantyBacked'}
+              values={d.bestForTags || []}
+              onChange={(bestForTags) => patch({ bestForTags })}
+              prefix="#"
+              stripHash
+              maxLength={40}
+              placeholder="e.g. Mixed Media — press Enter to add"
             />
-            <div className={hint}>Single words / short phrases. Shown as “#tag” pills — no spaces work best.</div>
+            <div className={hint}>Type a tag and press Enter (or comma) to add it. Click one to edit it, × to remove. Shown as “#tag” pills.</div>
           </div>
         );
       case 'credentials':
@@ -1331,5 +1326,41 @@ function StoresEditor({
         );
       })}
     </div>
+  );
+}
+
+/**
+ * Brand category: one of the platform's main categories. A brand whose stored
+ * label isn't one of them keeps showing it until the owner picks a category.
+ */
+function BrandCategorySelect({
+  value,
+  onChange,
+  className,
+}: {
+  value: string;
+  onChange: (category: string) => void;
+  className: string;
+}) {
+  const { categories } = useAuth();
+  const mains = useMemo(
+    () =>
+      categories
+        .filter((c) => !c.parentId && c.enabled !== false)
+        .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0) || a.name.localeCompare(b.name)),
+    [categories],
+  );
+  const current = (value || '').trim();
+  const known = mains.some((c) => c.name === current);
+  return (
+    <select className={className} value={current} onChange={(e) => onChange(e.target.value)}>
+      <option value="">Select a category…</option>
+      {current && !known ? <option value={current}>{current} (current)</option> : null}
+      {mains.map((c) => (
+        <option key={c.id} value={c.name}>
+          {c.name}
+        </option>
+      ))}
+    </select>
   );
 }

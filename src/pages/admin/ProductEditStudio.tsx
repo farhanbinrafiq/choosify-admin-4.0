@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState, CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { LinesTextarea } from '../../components/admin/ListInputs';
 import { ArrowLeft, History, Image as ImageIcon, RotateCw, Trash2, Upload } from 'lucide-react';
 import { catalogApi } from '../../services/catalogApi';
 import {
@@ -521,6 +522,7 @@ export default function ProductEditStudio() {
 
   const { allBrands, activeBrandId } = useAuth();
   const [categoryOptions, setCategoryOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [subcategoryOptions, setSubcategoryOptions] = useState<SubcategoryOption[]>([]);
 
   // Snapshots (versions) stay available as history. A stored editor snapshot is
   // never applied over the loaded product: it is an older copy of the editor
@@ -588,7 +590,17 @@ export default function ProductEditStudio() {
   useEffect(() => {
     let cancelled = false;
     catalogApi.listCategories()
-      .then((c) => { if (!cancelled) setCategoryOptions(c.map((x) => ({ id: x.id, name: x.name }))); })
+      .then((c) => {
+        if (cancelled) return;
+        const live = c
+          .filter((x) => x.enabled !== false)
+          .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0) || a.name.localeCompare(b.name));
+        // Main categories in the Category pickers; branches go to the Subcategory field.
+        setCategoryOptions(live.filter((x) => !x.parentId).map((x) => ({ id: x.id, name: x.name })));
+        setSubcategoryOptions(
+          live.filter((x) => x.parentId).map((x) => ({ id: x.id, name: x.name, parentId: x.parentId as string })),
+        );
+      })
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);
@@ -889,7 +901,7 @@ export default function ProductEditStudio() {
     const hasVariantData = (d.optionGroups?.length ?? 0) > 0 || (d.productVariants?.length ?? 0) > 0;
     if (!newId || newId === d.categoryId || !hasVariantData) {
       setPendingCategory(null);
-      patch({ categoryId: newId, categoryName: name });
+      patch({ categoryId: newId, categoryName: name, ...clearedSubcategory(d, newId) });
       return;
     }
     let dims: SchemaVariantDimension[] = [];
@@ -899,17 +911,28 @@ export default function ProductEditStudio() {
     } catch {
       // Schema unreachable — apply the change; the server re-validates on Save.
       setPendingCategory(null);
-      patch({ categoryId: newId, categoryName: name });
+      patch({ categoryId: newId, categoryName: name, ...clearedSubcategory(d, newId) });
       triggerToast('Could not load the new category schema — it will be validated on Save.');
       return;
     }
     const compat = checkCategorySchemaCompatibility(d.optionGroups, d.productVariants, dims);
     if (compat.compatible) {
       setPendingCategory(null);
-      patch({ categoryId: newId, categoryName: name });
+      patch({ categoryId: newId, categoryName: name, ...clearedSubcategory(d, newId) });
     } else {
       setPendingCategory({ id: newId, name, dims, compat });
     }
+  };
+
+  const addSubcategory = async (parentId: string, name: string) => {
+    const saved = await catalogApi.addSubcategory(parentId, name);
+    setSubcategoryOptions((prev) =>
+      prev.some((s) => s.id === saved.id)
+        ? prev
+        : [...prev, { id: saved.id, name: saved.name, parentId: saved.parentId as string }],
+    );
+    patch({ subcategoryId: saved.id, subcategoryName: saved.name });
+    return saved;
   };
 
   const applyCategoryClear = () => {
@@ -923,6 +946,7 @@ export default function ProductEditStudio() {
     const keepVariants = (sectionDraft.productVariants || []).filter((v) => !badVarIds.has(v.id));
     patch({
       categoryId: pendingCategory.id,
+      ...clearedSubcategory(sectionDraft, pendingCategory.id),
       categoryName: pendingCategory.name,
       optionGroups: keepGroups,
       productVariants: keepVariants,
@@ -939,6 +963,7 @@ export default function ProductEditStudio() {
     if (!pendingCategory) return;
     patch({
       categoryId: pendingCategory.id,
+      ...clearedSubcategory(sectionDraft, pendingCategory.id),
       categoryName: pendingCategory.name,
       optionGroups: next.optionGroups,
       productVariants: next.productVariants,
@@ -987,6 +1012,19 @@ export default function ProductEditStudio() {
                   <option value="">Select a category…</option>
                   {categoryOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
+              </div>
+              <div>
+                <div style={S.label}>SUBCATEGORY</div>
+                <SubcategoryField
+                  parentId={d.categoryId}
+                  valueId={d.subcategoryId}
+                  valueName={d.subcategoryName}
+                  options={subcategoryOptions}
+                  inputStyle={S.input}
+                  hintStyle={S.hint}
+                  onChange={(id, name) => patch({ subcategoryId: id, subcategoryName: name })}
+                  onAdd={addSubcategory}
+                />
               </div>
               <div>
                 <div style={S.label}>PRODUCT CODE (OPTIONAL)</div>
@@ -1078,6 +1116,17 @@ export default function ProductEditStudio() {
                 onSelect={(id) => void onPickCategory(id)}
                 placeholder="Search a category that best fits this product…"
               />
+              <div style={{ ...S.label, marginTop: 12 }}>SUBCATEGORY</div>
+              <SubcategoryField
+                parentId={d.categoryId}
+                valueId={d.subcategoryId}
+                valueName={d.subcategoryName}
+                options={subcategoryOptions}
+                inputStyle={S.input}
+                hintStyle={S.hint}
+                onChange={(id, name) => patch({ subcategoryId: id, subcategoryName: name })}
+                onAdd={addSubcategory}
+              />
               <div style={S.hint}>
                 The category decides which product options are recommended below. Search and pick the
                 closest match.
@@ -1147,10 +1196,10 @@ export default function ProductEditStudio() {
             </div>
             <div>
               <div style={{ ...S.label, marginBottom: 6 }}>DELIVERY FACTS — one per line</div>
-              <textarea
+              <LinesTextarea
                 rows={5}
                 value={(d.deliveryBullets || []).join('\n')}
-                onChange={(e) => patch({ deliveryBullets: linesFromTextarea(e.target.value) })}
+                onChange={(raw) => patch({ deliveryBullets: linesFromTextarea(raw) })}
                 placeholder={'Cash on Delivery available\nSame-day delivery inside Dhaka\nInstant order confirmation\nNationwide courier 2–4 days'}
                 style={S.textarea}
               />
@@ -1174,7 +1223,7 @@ export default function ProductEditStudio() {
         return (
           <>
             <div style={{ ...S.label, marginBottom: 6 }}>Physical specifications — one per line: <code>Label: Value</code></div>
-            <textarea rows={4} value={specsToTextarea(d.additionalSpecs)} onChange={(e) => patch({ additionalSpecs: specsFromTextarea(e.target.value) })} placeholder={'Dimensions: 160 × 74 × 8 mm\nBox weight: 420 g\nMaterial: Aluminium frame\nColour: Midnight Black'} style={{ ...S.textarea, fontFamily: 'ui-monospace, monospace', fontSize: 12 }} />
+            <LinesTextarea rows={4} value={specsToTextarea(d.additionalSpecs)} onChange={(raw) => patch({ additionalSpecs: specsFromTextarea(raw) })} placeholder={'Dimensions: 160 × 74 × 8 mm\nBox weight: 420 g\nMaterial: Aluminium frame\nColour: Midnight Black'} style={{ ...S.textarea, fontFamily: 'ui-monospace, monospace', fontSize: 12 }} />
             <div style={S.hint}>Dimensions, weight and material — shown beside Complimentary Features on the storefront.</div>
           </>
         );
@@ -1182,7 +1231,7 @@ export default function ProductEditStudio() {
         return (
           <>
             <div style={{ ...S.label, marginBottom: 6 }}>Complimentary features — one item per line</div>
-            <textarea rows={4} value={d.boxContents.join('\n')} onChange={(e) => patch({ boxContents: linesFromTextarea(e.target.value) })} placeholder={'1 × Handset\n1 × 33W charger\n1 × USB-C cable\nFree screen protector\nWarranty card'} style={S.textarea} />
+            <LinesTextarea rows={4} value={d.boxContents.join('\n')} onChange={(raw) => patch({ boxContents: linesFromTextarea(raw) })} placeholder={'1 × Handset\n1 × 33W charger\n1 × USB-C cable\nFree screen protector\nWarranty card'} style={S.textarea} />
             <div style={S.hint}>Free extras and everything included with this product.</div>
           </>
         );
@@ -1375,5 +1424,122 @@ export default function ProductEditStudio() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+type SubcategoryOption = { id: string; name: string; parentId: string };
+
+/** Patch fields that drop the subcategory when the product moves to another category. */
+function clearedSubcategory(
+  current: { categoryId?: string; subcategoryId?: string },
+  nextCategoryId: string,
+): { subcategoryId?: string; subcategoryName?: string } {
+  return nextCategoryId !== (current.categoryId || '') ? { subcategoryId: '', subcategoryName: '' } : {};
+}
+
+const ADD_NEW_SUBCATEGORY = '__add_new__';
+
+/**
+ * Subcategory under the chosen main category: pick a shared one, or add a new
+ * one (it becomes available in every seller's dropdown straight away).
+ */
+function SubcategoryField({
+  parentId,
+  valueId,
+  valueName,
+  options,
+  inputStyle,
+  hintStyle,
+  onChange,
+  onAdd,
+}: {
+  parentId: string;
+  valueId: string;
+  valueName: string;
+  options: SubcategoryOption[];
+  inputStyle: React.CSSProperties;
+  hintStyle: React.CSSProperties;
+  onChange: (id: string, name: string) => void;
+  onAdd: (parentId: string, name: string) => Promise<unknown>;
+}) {
+  const [adding, setAdding] = React.useState(false);
+  const [draft, setDraft] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState('');
+  const list = options
+    .filter((o) => o.parentId === parentId)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  // Keep a stored value visible even before the shared list has loaded.
+  const shown = valueId && !list.some((o) => o.id === valueId)
+    ? [{ id: valueId, name: valueName || valueId, parentId }, ...list]
+    : list;
+
+  if (!parentId) {
+    return <div style={{ ...hintStyle, marginTop: 10 }}>Choose a category first.</div>;
+  }
+
+  const submit = async () => {
+    const name = draft.replace(/\s+/g, ' ').trim();
+    if (name.length < 2) {
+      setError('Enter at least 2 characters.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      await onAdd(parentId, name);
+      setAdding(false);
+      setDraft('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not add the subcategory.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (adding) {
+    return (
+      <div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            autoFocus
+            value={draft}
+            maxLength={60}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); void submit(); }
+              if (e.key === 'Escape') setAdding(false);
+            }}
+            placeholder="e.g. Paintings & Wall Art"
+            style={{ ...inputStyle, flex: 1 }}
+          />
+          <button type="button" onClick={() => void submit()} disabled={busy} style={{ ...inputStyle, width: 'auto', cursor: 'pointer', fontWeight: 700 }}>
+            {busy ? 'Adding…' : 'Add'}
+          </button>
+          <button type="button" onClick={() => { setAdding(false); setError(''); }} disabled={busy} style={{ ...inputStyle, width: 'auto', cursor: 'pointer' }}>
+            Cancel
+          </button>
+        </div>
+        {error ? <div role="alert" style={{ ...hintStyle, color: '#DC2626' }}>{error}</div> : (
+          <div style={hintStyle}>New subcategories are shared — other sellers can pick them too.</div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <select
+      value={valueId}
+      onChange={(e) => {
+        if (e.target.value === ADD_NEW_SUBCATEGORY) { setAdding(true); return; }
+        const picked = shown.find((o) => o.id === e.target.value);
+        onChange(picked?.id || '', picked?.name || '');
+      }}
+      style={inputStyle}
+    >
+      <option value="">No subcategory</option>
+      {shown.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+      <option value={ADD_NEW_SUBCATEGORY}>+ Add a new subcategory…</option>
+    </select>
   );
 }

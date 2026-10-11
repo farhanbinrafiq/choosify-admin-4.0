@@ -202,6 +202,9 @@ export interface CatalogProduct {
   brandName: string;
   categoryId: string;
   categoryName: string;
+  /** Branch category under categoryId (its parentId is categoryId). */
+  subcategoryId?: string;
+  subcategoryName?: string;
   image: string;
   gallery: string[];
   /**
