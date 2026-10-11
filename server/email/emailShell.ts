@@ -74,8 +74,8 @@ const SOCIAL_LINKS = [
 
 export const CONTACT = {
   email: 'support@choosify.bd',
-  phoneDisplay: '+880 01410 423014',
-  phoneHref: 'tel:+88001410423014',
+  phoneDisplay: '+88 0141 0474014',
+  phoneHref: 'tel:+8801410474014',
 } as const;
 
 const escapeHtml = (s: string): string =>
