@@ -408,6 +408,10 @@ export function BrandProfilePresentation({
           )}
         </SectionShell>
 
+        {/* Storefront-only sections (customer reviews, brand comparison, trust
+            strip) are filled by buyers and the platform, not the seller — they
+            are not shown in the Brand Studio editor. */}
+        {mode === 'public' ? (
         <SectionShell
           id="public-reviews-section"
           title="WHAT CUSTOMERS SAY"
@@ -438,6 +442,7 @@ export function BrandProfilePresentation({
             </div>
           )}
         </SectionShell>
+        ) : null}
 
         <section id="brand-overview-section" className="scroll-mt-36 w-full space-y-3.5">
           <div className="text-left">
@@ -836,6 +841,7 @@ export function BrandProfilePresentation({
           })()}
         </SectionShell>
 
+        {mode === 'public' ? (
         <section id="compare-section" className="scroll-mt-36 w-full">
           <h3 className="text-[15px] font-extrabold text-[#1A1A2E] mb-3.5">
             COMPARE {brandNameUpper} WITH OTHER BRANDS
@@ -873,8 +879,10 @@ export function BrandProfilePresentation({
             </div>
           )}
         </section>
+        ) : null}
 
         {/* Trust strip — Choosify-Web structure; stats only when real */}
+        {mode === 'public' ? (
         <div className="w-full bg-white border border-[#E5E7EB] rounded-xl px-7 py-5 text-center text-app-text-primary">
           <div className="text-[13px] font-extrabold mb-1">CHOSEN BY MILLIONS. TRUSTED WORLDWIDE.</div>
           <div className="text-[11.5px] text-app-text-secondary mb-5">
@@ -889,12 +897,9 @@ export function BrandProfilePresentation({
                 </div>
               ))}
             </div>
-          ) : mode === 'editor' ? (
-            <p className="text-[11px] text-app-text-secondary m-0">
-              Trust metrics appear here once followers, reviews, and scores exist for this Brand.
-            </p>
           ) : null}
         </div>
+        ) : null}
       </div>
     </div>
   );

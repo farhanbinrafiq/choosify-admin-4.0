@@ -247,13 +247,16 @@ export function BrandProfileHero({
   const dealCount = model.deals?.filter((d) => d.status === 'Active').length ?? 0;
   const creatorCount = model.creators?.filter((c) => c.status === 'Approved').length ?? 0;
 
+  // Same facts the storefront brand page shows, so the seller sees what shoppers see.
+  const liveCategories = new Set(
+    (model.products || []).filter((p) => p.status === 'Live').map((p) => p.category).filter(Boolean),
+  ).size;
   const facts = [
-    productCount > 0 ? { label: 'Products', value: String(productCount) } : null,
-    followers ? { label: 'Followers', value: followers } : null,
-    dealCount > 0 ? { label: 'Deals', value: String(dealCount) } : null,
-    creatorCount > 0 ? { label: 'Creators', value: String(creatorCount) } : null,
-    model.category ? { label: 'Category', value: model.category } : null,
-  ].filter(Boolean) as Array<{ label: string; value: string }>;
+    { label: 'Products', value: String(productCount) },
+    { label: 'Deals', value: String(dealCount) },
+    { label: 'Followers', value: (model.followersCount || 0).toLocaleString() },
+    { label: 'Categories', value: String(liveCategories) },
+  ];
 
   const infoBar = [
     followers ? { icon: '♥', value: followers, label: 'FOLLOWERS' } : null,
@@ -405,18 +408,20 @@ export function BrandProfileHero({
           </div>
 
           <div className="flex gap-2.5 flex-wrap justify-center lg:justify-end lg:mt-[52px] shrink-0 w-full lg:w-auto">
-            {mode === 'public' ? (
+            {mode !== 'public' ? (
+              // Brand Studio: the owner sees their real follower count; Follow /
+              // Explore / Visit Website / Share are shopper actions on the storefront.
+              <span className="inline-flex items-center gap-1.5 bg-[#EEF0FF] text-[#2323FF] border border-[#D9DCFF] px-[18px] py-2.5 rounded-lg text-xs font-bold">
+                ♥ {(model.followersCount || 0).toLocaleString()} Follower{model.followersCount === 1 ? '' : 's'}
+              </span>
+            ) : (
+            <>
               <button
                 type="button"
                 className="!bg-[#2323FF] !text-white !border-[#2323FF] px-[18px] py-2.5 rounded-lg text-xs font-bold hover:!brightness-110"
               >
                 Follow
               </button>
-            ) : (
-              <span className="bg-[#2323FF] text-white border border-[#2323FF] px-[18px] py-2.5 rounded-lg text-xs font-bold opacity-90">
-                Follow
-              </span>
-            )}
             <button
               type="button"
               onClick={onExploreProducts}
@@ -441,6 +446,8 @@ export function BrandProfileHero({
             >
               <Share2 size={13} /> Share
             </button>
+            </>
+            )}
           </div>
         </div>
 
@@ -449,11 +456,12 @@ export function BrandProfileHero({
             <div className="text-[11px] font-extrabold text-[#9AA0AC] tracking-wide mb-2.5">BRAND SCORE</div>
             {score != null ? (
               <>
-                <div className="flex items-baseline gap-2 mb-4">
-                  <div className="text-[30px] font-extrabold text-[#1A1A2E]">{score}</div>
-                  <div className="text-[11.5px] text-[#9AA0AC]">
-                    /5{reviewCount > 0 ? ` · ${reviewCount.toLocaleString()} reviews` : ''}
-                  </div>
+                <div className="flex items-baseline gap-2 mb-1">
+                  <div className="text-[30px] font-extrabold text-[#07A828]">{Math.min(100, Math.round(score * 20))}%</div>
+                  <div className="text-[11.5px] text-[#9AA0AC]">Success</div>
+                </div>
+                <div className="text-[11.5px] text-[#9AA0AC] mb-4">
+                  {score}/5{reviewCount > 0 ? ` · ${reviewCount.toLocaleString()} reviews` : ''}
                 </div>
                 {scoreRows.length > 0 ? (
                   scoreRows.map((r) => (
@@ -470,9 +478,12 @@ export function BrandProfileHero({
                 )}
               </>
             ) : (
-              <p className="text-[12px] text-[#9AA0AC] py-4">
-                {mode === 'editor' ? 'No Brand Score yet — scores appear once reviews and trust signals exist.' : 'No Brand Score yet.'}
-              </p>
+              // Same rule as the storefront: a brand starts at 100% and only real
+              // ratings move it.
+              <div className="flex items-baseline gap-2 mb-1">
+                <div className="text-[30px] font-extrabold text-[#07A828]">100%</div>
+                <div className="text-[11.5px] text-[#9AA0AC]">Success · new brand, no reviews yet</div>
+              </div>
             )}
           </div>
 
