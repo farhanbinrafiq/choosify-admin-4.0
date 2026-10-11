@@ -248,6 +248,7 @@ export function BrandProfileHero({
   const creatorCount = model.creators?.filter((c) => c.status === 'Approved').length ?? 0;
 
   // Same facts the storefront brand page shows, so the seller sees what shoppers see.
+  const brandViews = useBrandViewCount(model.id);
   const liveCategories = new Set(
     (model.products || []).filter((p) => p.status === 'Live').map((p) => p.category).filter(Boolean),
   ).size;
@@ -255,6 +256,7 @@ export function BrandProfileHero({
     { label: 'Products', value: String(productCount) },
     { label: 'Deals', value: String(dealCount) },
     { label: 'Followers', value: (model.followersCount || 0).toLocaleString() },
+    { label: 'Views', value: brandViews.toLocaleString() },
     { label: 'Categories', value: String(liveCategories) },
   ];
 
@@ -521,4 +523,24 @@ export function BrandProfileHero({
       </div>
     </div>
   );
+}
+
+/** Real brand-page views (server/views) — the same count the storefront shows. */
+function useBrandViewCount(brandId: string): number {
+  const [count, setCount] = React.useState(0);
+  React.useEffect(() => {
+    if (!brandId) return;
+    let cancelled = false;
+    const base = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || '/api/v1';
+    fetch(`${base}/views/brand/${encodeURIComponent(brandId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d && typeof d.count === 'number') setCount(d.count);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [brandId]);
+  return count;
 }

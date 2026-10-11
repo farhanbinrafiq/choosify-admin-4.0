@@ -36,6 +36,7 @@ import {
 } from './validation/catalog/draftSchemas';
 import { authenticateRequest, softAuthenticateRequest } from './middleware/auth';
 import { brandFollowerCount } from './follows/brandFollowStore';
+import { viewCount } from './views/viewStore';
 import { requirePartnerEntitlement } from './entitlements/entitlementMiddleware';
 import { requireMarketplaceAccess } from './entitlements/marketplaceAccessMiddleware';
 import { requireAnyPermission } from './middleware/authorization';
@@ -809,7 +810,8 @@ catalogRouter.get('/catalog/products', softAuthenticateRequest, async (req, res)
     }
     const limit = parseLimit(req.query.limit, 100);
     const offset = parseOffset(req.query.offset);
-    const data = filtered.slice(offset, offset + limit);
+    // Real page-view totals (server/views) ride along for the storefront and Studio.
+    const data = filtered.slice(offset, offset + limit).map((p) => ({ ...p, viewCount: viewCount('product', p.id) }));
     res.json({
       data,
       meta: { total: filtered.length, limit, offset },
@@ -876,6 +878,7 @@ catalogRouter.get(
     }
     res.json({
       ...product,
+      viewCount: viewCount('product', product.id),
       optionGroups: Array.isArray(detail?.optionGroups) ? detail!.optionGroups : [],
       productVariants: responseVariants,
       ...(detail?.sizeGuide ? { sizeGuide: detail.sizeGuide } : {}),
@@ -1867,7 +1870,7 @@ catalogRouter.get('/catalog/brands', softAuthenticateRequest, async (req, res) =
       });
     }
     // Follower counts come from real follows only (server/follows), never a stored figure.
-    brands = brands.map((b) => ({ ...b, followers: brandFollowerCount(b.id) }));
+    brands = brands.map((b) => ({ ...b, followers: brandFollowerCount(b.id), viewCount: viewCount('brand', b.id) }));
     res.json({ data: await withPublicHandles('brand', brands) });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list brands' });

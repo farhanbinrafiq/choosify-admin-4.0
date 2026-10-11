@@ -502,7 +502,7 @@ export function mapCatalogProductToEditor(
       : 0,
     reviewCount: publicReviews.length,
     orderCount: 0,
-    viewCount: 0,
+    viewCount: Number((product as unknown as { viewCount?: number }).viewCount) || 0,
     // Free-form product-detail specifications ONLY. Category / Brand are NOT
     // fabricated here — they are canonical category-schema data, not seller
     // specification rows, and folding them in used to pollute product.attributes
