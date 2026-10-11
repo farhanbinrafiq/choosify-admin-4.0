@@ -51,6 +51,7 @@ import { diagnosticsRouter } from "./routes/diagnostics";
 import { dashboardSearchRouter } from "./dashboardSearch/dashboardSearchRouter";
 import { entitlementsRouter } from "./entitlements/entitlementsRouter";
 import { publicHandlesRouter } from "./publicHandles/publicHandlesRouter";
+import { followRouter } from "./follows/followRouter";
 import { subscriptionsRouter } from "./subscriptions/subscriptionsRouter";
 import { monetizationRouter } from "./monetization/monetizationRouter";
 import { financeRouter } from "./finance/financeRouter";
@@ -221,6 +222,7 @@ export function createApp(): Express {
   app.use("/api/v1", navAttentionRouter);
   app.use("/api/v1", entitlementsRouter);
   app.use("/api/v1", publicHandlesRouter);
+  app.use("/api/v1", followRouter);
   app.use("/api/v1", subscriptionsRouter);
   app.use("/api/v1", monetizationRouter);
   app.use("/api/v1", financeRouter);

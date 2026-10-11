@@ -35,6 +35,7 @@ import {
   EntityVersionBodySchema,
 } from './validation/catalog/draftSchemas';
 import { authenticateRequest, softAuthenticateRequest } from './middleware/auth';
+import { brandFollowerCount } from './follows/brandFollowStore';
 import { requirePartnerEntitlement } from './entitlements/entitlementMiddleware';
 import { requireMarketplaceAccess } from './entitlements/marketplaceAccessMiddleware';
 import { requireAnyPermission } from './middleware/authorization';
@@ -1865,6 +1866,8 @@ catalogRouter.get('/catalog/brands', softAuthenticateRequest, async (req, res) =
         return hay.includes(q);
       });
     }
+    // Follower counts come from real follows only (server/follows), never a stored figure.
+    brands = brands.map((b) => ({ ...b, followers: brandFollowerCount(b.id) }));
     res.json({ data: await withPublicHandles('brand', brands) });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list brands' });
