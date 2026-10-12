@@ -27,11 +27,11 @@ import {
   BrandInlineEditFrame,
   BrandProfileEditChip,
   BrandProfileHero,
-  BrandStudioEditPill,
   type BrandProfileEditSection,
   type BrandProfilePresentationMode,
   type BrandStudioBridge,
 } from './BrandProfileHero';
+import { StudioEditPill } from '../studio';
 
 const SECTION_TITLES: Record<BrandEditSection, string> = {
   identity: 'Brand Identity',
@@ -127,7 +127,7 @@ function SectionShell({
   return (
     <section id={id} className="scroll-mt-36 w-full relative">
       {isStudio && sectionKey != null ? (
-        <BrandStudioEditPill onClick={() => studio!.onEdit(sectionKey!)} />
+        <StudioEditPill section={SECTION_TITLES[sectionKey!]} onClick={() => studio!.onEdit(sectionKey!)} />
       ) : mode === 'editor' && onEdit ? (
         <BrandProfileEditChip label={editLabel || 'Edit'} onClick={onEdit} />
       ) : null}

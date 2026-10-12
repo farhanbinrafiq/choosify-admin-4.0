@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, History, Plus, RotateCw, Trash2, Upload } from 'lucide-react';
 import { catalogApi } from '../../services/catalogApi';
+import { StudioConfirmDialog, useUnsavedChangesGuard } from '../../components/studio';
 import { useAuth } from '../../contexts/AuthContext';
 import { PublicIdentitySection } from '../../components/publicIdentity/PublicIdentitySection';
 import { useEntityDraft } from '../../hooks/useEntityDraft';
@@ -742,6 +743,7 @@ export default function CreatorEditStudio() {
     () => !!draft && !!model && JSON.stringify(draft) !== JSON.stringify(model),
     [draft, model],
   );
+  const { confirmLeave, dialog: leaveDialog } = useUnsavedChangesGuard(dirty);
 
   const requestEdit = (k: CreatorEditSection) => {
     if (!model) return;
@@ -1051,7 +1053,7 @@ export default function CreatorEditStudio() {
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
-            onClick={() => navigate(isCreatorRole ? '/admin/creator-profile' : '/admin/creator-studio')}
+            onClick={() => confirmLeave(() => navigate(isCreatorRole ? '/admin/creator-profile' : '/admin/creator-studio'))}
             className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#E8EDF2] text-[#374151]"
             aria-label="Back"
           >
@@ -1078,10 +1080,12 @@ export default function CreatorEditStudio() {
           <div className="inline-flex rounded-lg border border-[#E8EDF2] overflow-hidden">
             <button
               type="button"
-              onClick={() => {
-                if (editingId) cancelEdit();
-                setEditMode(false);
-              }}
+              onClick={() =>
+                confirmLeave(() => {
+                  if (editingId) cancelEdit();
+                  setEditMode(false);
+                })
+              }
               className={`px-3 py-1.5 text-[11px] font-bold ${!editMode ? 'bg-[#1A1A2E] text-white' : 'bg-white text-[#374151]'}`}
             >
               View
@@ -1149,7 +1153,10 @@ export default function CreatorEditStudio() {
             <button
               type="button"
               disabled={busy}
-              onClick={() => void runLifecycle('unpublish')}
+              onClick={() => {
+                setPendingLifecycle('unpublish');
+                setShowPublishModal(true);
+              }}
               className="rounded-lg border border-[#E8EDF2] px-3.5 py-2 text-[11px] font-extrabold bg-white disabled:opacity-60"
             >
               Unpublish
@@ -1159,7 +1166,10 @@ export default function CreatorEditStudio() {
             <button
               type="button"
               disabled={busy}
-              onClick={() => void runLifecycle('archive')}
+              onClick={() => {
+                setPendingLifecycle('archive');
+                setShowPublishModal(true);
+              }}
               className="rounded-lg border border-[#E8EDF2] px-3.5 py-2 text-[11px] font-extrabold bg-white disabled:opacity-60"
             >
               Archive
@@ -1181,37 +1191,38 @@ export default function CreatorEditStudio() {
 
       <CreatorProfilePresentation model={showModel} mode={editMode ? 'studio' : 'view'} studio={bridge} />
 
-      {showPublishModal ? (
-        <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-[420px] w-full shadow-2xl">
-            <h3 className="text-[16px] font-extrabold m-0 mb-2">Publish this creator profile?</h3>
-            <p className="text-[12px] text-[#4B5563] m-0 mb-5">
-              This makes your profile publicly visible on Choosify. Save any in-progress section first.
-              {isCreatorRole ? ' If Marketplace Access is still pending, going live may be held until Choosify enables it.' : ''}
-            </p>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowPublishModal(false);
-                  setPendingLifecycle(null);
-                }}
-                className="flex-1 py-2.5 rounded-xl border border-[#E8EDF2] text-[12px] font-bold bg-white"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void runLifecycle(pendingLifecycle ?? 'publish')}
-                className="flex-1 py-2.5 rounded-xl bg-[#EF3C23] text-white text-[12px] font-extrabold disabled:opacity-60"
-              >
-                {busy ? 'Publishing…' : 'Publish'}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {/* Lifecycle confirmation (Publish / Unpublish / Archive) — shared Studio dialog. */}
+      <StudioConfirmDialog
+        open={showPublishModal}
+        title={
+          (pendingLifecycle ?? 'publish') === 'publish'
+            ? 'Publish this creator profile?'
+            : pendingLifecycle === 'unpublish'
+              ? 'Unpublish this creator profile?'
+              : 'Archive this creator profile?'
+        }
+        description={
+          (pendingLifecycle ?? 'publish') === 'publish'
+            ? `This makes your profile publicly visible on Choosify. Save any in-progress section first.${
+                isCreatorRole ? ' If Marketplace Access is still pending, going live may be held until Choosify enables it.' : ''
+              }`
+            : pendingLifecycle === 'unpublish'
+              ? 'Your profile is removed from the storefront and moved to draft. You can publish it again later.'
+              : 'Your profile is removed from the storefront and moved to Archived. You can publish it again later.'
+        }
+        confirmLabel={
+          (pendingLifecycle ?? 'publish') === 'publish' ? 'Publish' : pendingLifecycle === 'unpublish' ? 'Unpublish' : 'Archive'
+        }
+        busyLabel={(pendingLifecycle ?? 'publish') === 'publish' ? 'Publishing…' : 'Working…'}
+        tone={pendingLifecycle === 'archive' ? 'danger' : 'primary'}
+        busy={busy}
+        onCancel={() => {
+          setShowPublishModal(false);
+          setPendingLifecycle(null);
+        }}
+        onConfirm={() => void runLifecycle(pendingLifecycle ?? 'publish')}
+      />
+      {leaveDialog}
 
       {toast ? (
         <div className="fixed bottom-5 right-5 z-[70] rounded-xl bg-[#1A1A2E] px-4 py-3 text-[12px] font-semibold text-white shadow-2xl">

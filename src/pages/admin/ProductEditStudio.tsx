@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { LinesTextarea } from '../../components/admin/ListInputs';
 import { ArrowLeft, History, Image as ImageIcon, RotateCw, Trash2, Upload } from 'lucide-react';
 import { catalogApi } from '../../services/catalogApi';
+import { StudioConfirmDialog, draftDiffers, useUnsavedChangesGuard } from '../../components/studio';
 import {
   describeUploadFailures,
   uploadProductImages,
@@ -498,7 +499,9 @@ export default function ProductEditStudio() {
   const [model, setModel] = useState<ProductEditorModel | null>(null);
   const [sectionDraft, setSectionDraft] = useState<ProductEditorModel | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [dirty, setDirty] = useState(false);
+  // `dirtyFlag` = the seller touched the section; `dirty` (below) also requires
+  // the draft to really differ from the saved product, so edit-then-revert is clean.
+  const [dirtyFlag, setDirty] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   // Existing product that could not be authoritatively loaded. While set, the
@@ -510,6 +513,12 @@ export default function ProductEditStudio() {
   const [showVersions, setShowVersions] = useState(false);
   const [pendingLifecycle, setPendingLifecycle] = useState<LifecycleAction | null>(null);
   const [isChangingLifecycle, setIsChangingLifecycle] = useState(false);
+  // Create mode keeps the touched flag (there is no saved product to compare with).
+  const dirty = useMemo(
+    () => (isNew ? dirtyFlag : dirtyFlag && draftDiffers(sectionDraft, model)),
+    [isNew, dirtyFlag, sectionDraft, model],
+  );
+  const { confirmLeave, dialog: leaveDialog } = useUnsavedChangesGuard(dirty);
 
   // Category variant schema for the category currently in the draft.
   const [categorySchema, setCategorySchema] = useState<{ forId: string; dims: SchemaVariantDimension[] } | null>(null);
@@ -630,17 +639,8 @@ export default function ProductEditStudio() {
     setSectionDraft((prev) => (prev && !prev.brandId ? { ...prev, brandId: brand.id, brandName: brand.name } : prev));
   }, [isNew, sectionDraft, allBrands, activeBrandId]);
 
-  // Warn before leaving the page while a section has unsaved changes. `dirty`
-  // clears on a successful save or Cancel, which removes the warning.
-  useEffect(() => {
-    if (!dirty) return;
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [dirty]);
+  // Leaving while a section has unsaved changes is guarded by useUnsavedChangesGuard
+  // (above): browser unload, in-app links, and the Studio's own Back / create-Cancel.
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -683,12 +683,17 @@ export default function ProductEditStudio() {
   };
 
   const cancelSection = () => {
-    setSectionDraft(model);
-    setEditingId(null);
-    setDirty(false);
-    setPendingCategory(null);
-    setRemapOpen(false);
-    if (isNew) navigate('/admin/products');
+    const discard = () => {
+      setSectionDraft(model);
+      setEditingId(null);
+      setDirty(false);
+      setPendingCategory(null);
+      setRemapOpen(false);
+      if (isNew) navigate('/admin/products');
+    };
+    // Cancelling a new product leaves the page — confirm when something was entered.
+    if (isNew) confirmLeave(discard);
+    else discard();
   };
 
   const patch = (p: Partial<ProductEditorModel>) => {
@@ -1308,7 +1313,7 @@ export default function ProductEditStudio() {
       {/* ── Header ── */}
       <div style={S.headerCard}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
-          <button type="button" onClick={() => navigate('/admin/products')} style={S.backBtn} aria-label="Back to products">
+          <button type="button" onClick={() => confirmLeave(() => navigate('/admin/products'))} style={S.backBtn} aria-label="Back to products">
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div style={{ minWidth: 0 }}>
@@ -1396,27 +1401,22 @@ export default function ProductEditStudio() {
         <ProductDetailPresentation model={model} mode="studio" studio={studio} />
       </div>
 
-      {/* ── Lifecycle confirmation (allowed dialog: deliberate status change) ── */}
-      {pendingLifecycle ? (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div role="dialog" aria-modal="true" aria-labelledby="product-lifecycle-title" style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 420, width: '100%', boxShadow: '0 24px 60px rgba(0,0,0,0.3)' }}>
-            <h3 id="product-lifecycle-title" style={{ fontSize: 16, fontWeight: 800, margin: '0 0 8px' }}>{LIFECYCLE[pendingLifecycle].title}</h3>
-            <p style={{ fontSize: 12, color: '#4B5563', margin: '0 0 20px' }}>{LIFECYCLE[pendingLifecycle].body}</p>
-            <div style={{ display: 'flex', gap: 12 }}>
-              <button type="button" onClick={() => setPendingLifecycle(null)} style={{ ...S.ghostBtn, flex: 1 }} disabled={isChangingLifecycle}>Cancel</button>
-              <button
-                type="button"
-                data-testid="product-lifecycle-confirm"
-                disabled={isChangingLifecycle}
-                onClick={() => void handleLifecycle(pendingLifecycle)}
-                style={{ ...S.accentBtn, flex: 1, opacity: isChangingLifecycle ? 0.6 : 1 }}
-              >
-                {isChangingLifecycle ? 'Working…' : LIFECYCLE[pendingLifecycle].button}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {/* ── Lifecycle confirmation (deliberate status change) — shared Studio dialog ── */}
+      <StudioConfirmDialog
+        open={pendingLifecycle !== null}
+        title={pendingLifecycle ? LIFECYCLE[pendingLifecycle].title : ''}
+        description={pendingLifecycle ? LIFECYCLE[pendingLifecycle].body : undefined}
+        confirmLabel={pendingLifecycle ? LIFECYCLE[pendingLifecycle].button : ''}
+        tone={pendingLifecycle === 'archive' ? 'danger' : 'primary'}
+        busy={isChangingLifecycle}
+        busyLabel="Working…"
+        confirmTestId="product-lifecycle-confirm"
+        onCancel={() => setPendingLifecycle(null)}
+        onConfirm={() => {
+          if (pendingLifecycle) void handleLifecycle(pendingLifecycle);
+        }}
+      />
+      {leaveDialog}
 
       {toastMessage ? (
         <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 70, background: '#0A0A1F', color: '#fff', fontSize: 12, fontWeight: 700, padding: '11px 18px', borderRadius: 12, boxShadow: '0 12px 32px rgba(0,0,0,0.25)', maxWidth: 420 }}>

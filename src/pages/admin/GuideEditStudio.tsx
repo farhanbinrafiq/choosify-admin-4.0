@@ -12,6 +12,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { catalogApi } from '../../services/catalogApi';
+import { StudioConfirmDialog, useUnsavedChangesGuard } from '../../components/studio';
 import { useAuth } from '../../contexts/AuthContext';
 import type {
   CatalogBrand,
@@ -1347,6 +1348,10 @@ export default function GuideEditStudio() {
     () => !!draft && !!model && JSON.stringify(draft) !== JSON.stringify(model),
     [draft, model],
   );
+  const { confirmLeave, dialog: leaveDialog } = useUnsavedChangesGuard(dirty);
+  // Lifecycle actions and section removal are confirmed first (shared Studio dialog).
+  const [pendingLifecycle, setPendingLifecycle] = useState<'publish' | 'unpublish' | 'archive' | null>(null);
+  const [pendingRemove, setPendingRemove] = useState<GuideStudioSection | null>(null);
 
   const requestEdit = (k: GuideStudioSection) => {
     if (dirty && editingId && editingId !== k) {
@@ -1458,7 +1463,7 @@ export default function GuideEditStudio() {
       void applyLayout([...layout, { id: k, enabled: true }]);
       flash(`Added "${GUIDE_SECTION_TITLE[k]}"`);
     },
-    onRemoveSection: (k) => void applyLayout(layout.filter((e) => e.id !== k)),
+    onRemoveSection: (k) => setPendingRemove(k),
     onToggleSection: (k, enabled) =>
       void applyLayout(layout.map((e) => (e.id === k ? { ...e, enabled } : e))),
     onMoveSection: (k, dir) => {
@@ -2030,7 +2035,7 @@ export default function GuideEditStudio() {
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
-            onClick={() => navigate('/admin/guides')}
+            onClick={() => confirmLeave(() => navigate('/admin/guides'))}
             className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#E8EDF2] text-[#374151]"
             aria-label="Back"
           >
@@ -2058,10 +2063,12 @@ export default function GuideEditStudio() {
           <div className="inline-flex rounded-lg border border-[#E8EDF2] overflow-hidden">
             <button
               type="button"
-              onClick={() => {
-                if (editMode && editingId) cancelEdit();
-                setEditMode(false);
-              }}
+              onClick={() =>
+                confirmLeave(() => {
+                  if (editMode && editingId) cancelEdit();
+                  setEditMode(false);
+                })
+              }
               className={`px-3 py-1.5 text-[11px] font-bold ${
                 !editMode ? 'bg-[#1A1A2E] text-white' : 'bg-white text-[#374151]'
               }`}
@@ -2092,7 +2099,7 @@ export default function GuideEditStudio() {
             <button
               type="button"
               disabled={busy}
-              onClick={() => void lifecycle('publish')}
+              onClick={() => setPendingLifecycle('publish')}
               className="rounded-lg bg-[#EF3C23] px-3.5 py-2 text-[11px] font-extrabold text-white disabled:opacity-60"
             >
               Publish
@@ -2102,7 +2109,7 @@ export default function GuideEditStudio() {
             <button
               type="button"
               disabled={busy}
-              onClick={() => void lifecycle('unpublish')}
+              onClick={() => setPendingLifecycle('unpublish')}
               className="rounded-lg border border-[#E8EDF2] px-3.5 py-2 text-[11px] font-extrabold bg-white disabled:opacity-60"
             >
               Unpublish
@@ -2112,7 +2119,7 @@ export default function GuideEditStudio() {
             <button
               type="button"
               disabled={busy}
-              onClick={() => void lifecycle('archive')}
+              onClick={() => setPendingLifecycle('archive')}
               className="rounded-lg border border-[#E8EDF2] px-3.5 py-2 text-[11px] font-extrabold bg-white disabled:opacity-60"
             >
               Archive
@@ -2194,6 +2201,48 @@ export default function GuideEditStudio() {
         brandsById={brandsById}
         publisher={publisher}
       />
+
+      <StudioConfirmDialog
+        open={pendingLifecycle !== null}
+        title={
+          pendingLifecycle === 'publish'
+            ? 'Publish this guide?'
+            : pendingLifecycle === 'unpublish'
+              ? 'Unpublish this guide?'
+              : 'Archive this guide?'
+        }
+        description={
+          pendingLifecycle === 'publish'
+            ? 'It becomes visible on the Choosify storefront. Save any section you are editing first.'
+            : pendingLifecycle === 'unpublish'
+              ? 'It is removed from the storefront and becomes a draft. You can publish it again later.'
+              : 'It is removed from the storefront and moved to Archived. You can publish it again later.'
+        }
+        confirmLabel={pendingLifecycle === 'publish' ? 'Publish' : pendingLifecycle === 'unpublish' ? 'Unpublish' : 'Archive'}
+        tone={pendingLifecycle === 'archive' ? 'danger' : 'primary'}
+        busy={busy}
+        busyLabel="Working…"
+        onCancel={() => setPendingLifecycle(null)}
+        onConfirm={() => {
+          const action = pendingLifecycle;
+          if (!action) return;
+          void lifecycle(action).finally(() => setPendingLifecycle(null));
+        }}
+      />
+      <StudioConfirmDialog
+        open={pendingRemove !== null}
+        title={pendingRemove ? `Remove the “${GUIDE_SECTION_TITLE[pendingRemove as keyof typeof GUIDE_SECTION_TITLE] ?? 'this'}” section?` : ''}
+        description="It will no longer appear on this guide. You can add it back later from Add section."
+        confirmLabel="Remove section"
+        tone="danger"
+        onCancel={() => setPendingRemove(null)}
+        onConfirm={() => {
+          const k = pendingRemove;
+          setPendingRemove(null);
+          if (k) void applyLayout(layout.filter((e) => e.id !== k));
+        }}
+      />
+      {leaveDialog}
 
       {toast ? (
         <div className="fixed bottom-5 right-5 z-[60] rounded-xl bg-[#1A1A2E] px-4 py-3 text-[12px] font-semibold text-white shadow-2xl">

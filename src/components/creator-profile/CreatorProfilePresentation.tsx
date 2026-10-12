@@ -5,7 +5,6 @@ import {
   ExternalLink,
   Heart,
   MessageCircleMore,
-  Pencil,
   Share2,
   ShieldCheck,
   Sparkles,
@@ -15,6 +14,7 @@ import {
   type CreatorEditSection,
   type CreatorEditorModel,
 } from '../../pages/admin/creatorEditorModel';
+import { StudioEditPill } from '../studio';
 
 /**
  * Storefront-parity Creator profile. VIEW ≈ the public Creator Profile page;
@@ -45,16 +45,9 @@ const SECTION_TITLE: Record<CreatorEditSection, string> = {
   featured: 'Featured Content',
 };
 
-function EditPill({ onClick, label }: { onClick: () => void; label?: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="absolute top-3 right-3 z-20 inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-[#E8EDF2] bg-white/95 text-[#EF3C23] text-[10px] font-extrabold uppercase shadow-sm hover:bg-[#EF3C23] hover:text-white hover:border-[#EF3C23] transition-colors"
-    >
-      <Pencil className="w-3 h-3" /> {label || 'Edit'}
-    </button>
-  );
+/** Section "Edit" pill — the shared Studio pill (Creator keeps its own offset). */
+function EditPill({ section, onClick, label }: { section: string; onClick: () => void; label?: string }) {
+  return <StudioEditPill section={section} onClick={onClick} label={label} className="absolute top-3 right-3 gap-1.5" />;
 }
 
 function CreatorInlineEditFrame({
@@ -192,7 +185,7 @@ export function CreatorProfilePresentation({
   const editingId = isStudio ? studio!.editingSection : null;
   const editingHere = (k: CreatorEditSection) => editingId === k;
   const pill = (k: CreatorEditSection, label?: string) =>
-    isStudio && !editingHere(k) ? <EditPill onClick={() => studio!.onEdit(k)} label={label} /> : null;
+    isStudio && !editingHere(k) ? <EditPill section={SECTION_TITLE[k]} onClick={() => studio!.onEdit(k)} label={label} /> : null;
   const frame = (k: CreatorEditSection) => (
     <CreatorInlineEditFrame title={SECTION_TITLE[k]} studio={studio!}>
       {studio!.renderEditor(k)}

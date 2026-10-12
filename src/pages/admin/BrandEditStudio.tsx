@@ -18,6 +18,7 @@ import { ArrowLeft, ExternalLink, GripVertical, Plus, Trash2, ArrowUp, ArrowDown
 import { useAuth } from '../../contexts/AuthContext';
 import { PublicIdentitySection } from '../../components/publicIdentity/PublicIdentitySection';
 import { catalogApi } from '../../services/catalogApi';
+import { useUnsavedChangesGuard } from '../../components/studio';
 import type { CatalogBrand, CatalogGuide } from '../../types/catalog';
 import type { BrandCMSModel, BrandServiceCenterEntry, BrandStoreEntry } from './brandSeeds';
 import {
@@ -167,6 +168,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
     () => !!draft && !!model && JSON.stringify(draft) !== JSON.stringify(model),
     [draft, model],
   );
+  const { confirmLeave, dialog: leaveDialog } = useUnsavedChangesGuard(dirty);
 
   const requestEdit = (section: BrandEditSection) => {
     if (!model) return;
@@ -594,7 +596,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
           <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
-              onClick={() => navigate('/admin/brand-studio')}
+              onClick={() => confirmLeave(() => navigate('/admin/brand-studio'))}
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#E8EDF2] text-[#374151]"
               aria-label="Back"
             >
@@ -636,6 +638,8 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
           verification: `/admin/brands/${activeId}`,
         }}
       />
+
+      {leaveDialog}
 
       {toast ? (
         <div className="fixed bottom-5 right-5 z-[60] rounded-xl bg-[#1A1A2E] px-4 py-3 text-[12px] font-semibold text-white shadow-2xl">

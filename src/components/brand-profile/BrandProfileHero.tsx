@@ -3,6 +3,7 @@ import { Check, Globe, Share2, ShieldCheck, Pencil } from 'lucide-react';
 import type { BrandCMSModel } from '../../pages/admin/brandSeeds';
 import type { BrandEditSection } from '../../pages/admin/brandEditorModel';
 import { ViewersPanel } from '../admin/ViewersPanel';
+import { StudioEditPill } from '../studio';
 
 export type BrandProfileEditSection =
   | 'header'
@@ -329,7 +330,7 @@ export function BrandProfileHero({
       <div className="w-full px-5 sm:px-8 lg:px-10 pt-4">
         <div className="max-w-[1440px] mx-auto relative">
           <div className="relative h-[220px] sm:h-[280px] md:h-[320px] overflow-hidden bg-[#F1F3F5] border border-dashed border-[#D9DEE7] rounded-none">
-            {isStudio ? <BrandStudioEditPill onClick={() => studio!.onEdit('cover')} /> : null}
+            {isStudio ? <StudioEditPill section="Cover Image" onClick={() => studio!.onEdit('cover')} /> : null}
             {cover ? (
               <img src={cover} alt="" className="w-full h-full object-cover" />
             ) : (
@@ -368,7 +369,7 @@ export function BrandProfileHero({
       <div className="max-w-[1440px] mx-auto px-5 sm:px-8 lg:px-10 pb-6">
         <div className="flex flex-col lg:flex-row justify-between items-start gap-6 mt-[74px] mb-5">
           <div className="flex-1 min-w-0 text-center lg:text-left w-full relative">
-            {isStudio ? <BrandStudioEditPill onClick={() => studio!.onEdit('identity')} /> : null}
+            {isStudio ? <StudioEditPill section="Brand Identity" onClick={() => studio!.onEdit('identity')} /> : null}
             <div className="text-[22px] font-extrabold text-[#1A1A2E] flex items-center justify-center lg:justify-start gap-2 flex-wrap">
               {model.brandName || 'Untitled Brand'}
               {claimStatus === 'verified' && (

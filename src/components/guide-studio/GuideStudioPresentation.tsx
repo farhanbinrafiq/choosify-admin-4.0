@@ -1,5 +1,6 @@
 import React from 'react';
-import { CheckCircle2, ExternalLink, Heart, Pencil, Plus, ShoppingBag, ThumbsUp } from 'lucide-react';
+import { CheckCircle2, ExternalLink, Heart, Plus, ShoppingBag, ThumbsUp } from 'lucide-react';
+import { StudioEditPill } from '../studio';
 import type { CatalogBrand, CatalogProduct, GuideEntityRef } from '../../types/catalog';
 import {
   GUIDE_FORMAT_LABEL,
@@ -80,16 +81,9 @@ export function GuideInlineEditFrame({
   );
 }
 
-function EditPill({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="absolute top-2 right-2 z-20 inline-flex items-center gap-1 px-2 py-1 rounded-md border border-[#E8EDF2] bg-white/95 text-[#EF3C23] text-[10px] font-extrabold uppercase shadow-sm hover:bg-[#EF3C23] hover:text-white hover:border-[#EF3C23] transition-colors"
-    >
-      <Pencil className="w-3 h-3" /> Edit
-    </button>
-  );
+/** Section "Edit" pill — the shared Studio pill with this section's name. */
+function EditPill({ section, onClick }: { section: string; onClick: () => void }) {
+  return <StudioEditPill section={section} onClick={onClick} />;
 }
 
 function Empty({ text }: { text: string }) {
@@ -471,16 +465,17 @@ export function GuideStudioPresentation({
           </h3>
           {isStudio && !editingThis ? (
             <div className="flex items-center gap-1">
-              <button type="button" className="text-[10px] font-bold text-[#6B7280] px-1.5 py-0.5 rounded border border-[#E8EDF2]" onClick={() => studio!.onMoveSection(id, -1)} disabled={idx <= 0}>↑</button>
-              <button type="button" className="text-[10px] font-bold text-[#6B7280] px-1.5 py-0.5 rounded border border-[#E8EDF2]" onClick={() => studio!.onMoveSection(id, 1)} disabled={idx === model.sectionLayout.length - 1}>↓</button>
+              <button type="button" className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#E8EDF2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2323FF] focus-visible:ring-offset-1 text-[#6B7280]" aria-label={`Move ${GUIDE_SECTION_TITLE[id]} up`} title={`Move ${GUIDE_SECTION_TITLE[id]} up`} onClick={() => studio!.onMoveSection(id, -1)} disabled={idx <= 0}>↑</button>
+              <button type="button" className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#E8EDF2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2323FF] focus-visible:ring-offset-1 text-[#6B7280]" aria-label={`Move ${GUIDE_SECTION_TITLE[id]} down`} title={`Move ${GUIDE_SECTION_TITLE[id]} down`} onClick={() => studio!.onMoveSection(id, 1)} disabled={idx === model.sectionLayout.length - 1}>↓</button>
               <button
                 type="button"
-                className="text-[10px] font-bold text-[#6B7280] px-1.5 py-0.5 rounded border border-[#E8EDF2]"
+                className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#E8EDF2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2323FF] focus-visible:ring-offset-1 text-[#6B7280]"
+                aria-label={`${entry?.enabled ?? true ? 'Hide' : 'Show'} ${GUIDE_SECTION_TITLE[id]}`}
                 onClick={() => studio!.onToggleSection(id, !(entry?.enabled ?? true))}
               >
                 {entry?.enabled ?? true ? 'Hide' : 'Show'}
               </button>
-              <button type="button" className="text-[10px] font-bold text-[#DC2626] px-1.5 py-0.5 rounded border border-[#E8EDF2]" onClick={() => studio!.onRemoveSection(id)}>Remove</button>
+              <button type="button" className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#E8EDF2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2323FF] focus-visible:ring-offset-1 text-[#DC2626]" aria-label={`Remove ${GUIDE_SECTION_TITLE[id]}`} onClick={() => studio!.onRemoveSection(id)}>Remove</button>
             </div>
           ) : null}
         </div>
@@ -490,7 +485,7 @@ export function GuideStudioPresentation({
           </GuideInlineEditFrame>
         ) : (
           <div className="relative">
-            {isStudio ? <EditPill onClick={() => studio!.onEdit(id)} /> : null}
+            {isStudio ? <EditPill section={GUIDE_SECTION_TITLE[id]} onClick={() => studio!.onEdit(id)} /> : null}
             {renderView(id)}
           </div>
         )}
@@ -509,7 +504,7 @@ export function GuideStudioPresentation({
             </GuideInlineEditFrame>
           ) : (
             <div className="relative">
-              {isStudio ? <EditPill onClick={() => studio!.onEdit('media')} /> : null}
+              {isStudio ? <EditPill section="Media" onClick={() => studio!.onEdit('media')} /> : null}
               {(() => {
                 const primary = model.photos[0] || '';
                 const extras = model.photos.slice(1);
@@ -590,7 +585,7 @@ export function GuideStudioPresentation({
           </GuideInlineEditFrame>
         ) : (
           <div className="relative bg-white rounded-xl border border-[#E8EDF2] p-6 text-left">
-            {isStudio ? <EditPill onClick={() => studio!.onEdit('identity')} /> : null}
+            {isStudio ? <EditPill section="Guide Identity" onClick={() => studio!.onEdit('identity')} /> : null}
             <span className="inline-block bg-[#EF3C23] text-white text-[9px] font-extrabold px-2.5 py-1 rounded-[5px] mb-3 uppercase tracking-wide">
               {formatLabel}
             </span>

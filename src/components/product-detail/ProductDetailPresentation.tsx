@@ -6,6 +6,7 @@ import { AddonItemsView, ThingsToKnowView, ProductGuideView, RelatedInfoView, Va
 import { mergeRelatedStores } from '../../../lib/vercel-catalog/relatedInfoMerge';
 import { CreatorReviewThumbnailPreview } from '../admin/product-studio/CreatorReviewThumbnailPreview';
 import { ViewersPanel } from '../admin/ViewersPanel';
+import { StudioEditPill } from '../studio';
 
 /**
  * Shared storefront-parity Product Detail presentation.
@@ -64,17 +65,12 @@ const SECTION_TITLES: Record<string, string> = {
   warranty: 'Warranty & After-Sales Services',
   relatedinfo: 'Related Information',
 };
+/** Accessible names for sections whose edit frame has no visible title. */
+const PILL_ONLY_NAMES: Record<string, string> = { thingsToKnow: 'Things to Know' };
 
-function EditPill({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="absolute top-2 right-2 z-20 inline-flex items-center gap-1 px-2 py-1 rounded-md border border-[#E8EDF2] bg-white/95 text-[#EF3C23] text-[10px] font-extrabold uppercase shadow-sm hover:bg-[#EF3C23] hover:text-white hover:border-[#EF3C23] transition-colors"
-    >
-      <Pencil className="w-3 h-3" /> Edit
-    </button>
-  );
+/** Section "Edit" pill — the shared Studio pill with this section's name. */
+function EditPill({ k, onClick }: { k: string; onClick: () => void }) {
+  return <StudioEditPill section={SECTION_TITLES[k] || PILL_ONLY_NAMES[k] || 'this section'} onClick={onClick} />;
 }
 
 type SectionCtx = {
@@ -102,7 +98,7 @@ function SectionShell({
       <div className={`relative ${className}`}>
         {view}
         {mode === 'editor' && onEditSection ? (
-          <EditPill onClick={() => onEditSection(k as ProductEditSection)} />
+          <EditPill k={k} onClick={() => onEditSection(k as ProductEditSection)} />
         ) : null}
       </div>
     );
@@ -138,7 +134,7 @@ function SectionShell({
   return (
     <div className={`relative ${className}`}>
       {view}
-      <EditPill onClick={() => studio!.onEdit(k)} />
+      <EditPill k={k} onClick={() => studio!.onEdit(k)} />
     </div>
   );
 }
