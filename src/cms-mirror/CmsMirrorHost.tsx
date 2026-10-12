@@ -392,9 +392,12 @@ export const CmsMirrorHost: React.FC = () => {
         // host's live PAGE_KEY_TO_PATH so a nav click always lands on the current
         // route — this is what makes seller/creator "Guide Management" reach the
         // canonical /admin/guides React surface instead of a legacy path.
+        // Deep links under the canonical route (…/new, …/:id/edit) are kept as-is —
+        // collapsing them to the list page made Create / Open Studio do nothing.
         const navKey = pathToPageKey(data.path);
         const canonical = navKey ? PAGE_KEY_TO_PATH[navKey] : undefined;
-        const dest = canonical && canonical !== data.path ? canonical : data.path;
+        const deepLink = !!canonical && data.path.startsWith(`${canonical}/`);
+        const dest = canonical && canonical !== data.path && !deepLink ? canonical : data.path;
         if (dest !== location.pathname) {
           navigate(dest, { replace: Boolean(data.replace) });
         }

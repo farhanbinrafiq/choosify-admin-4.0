@@ -13,7 +13,7 @@
 // dropped. Platform-owned fields (verification / claim / marketplace access /
 // followers / ratings / featured / sponsored) are never written from here.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useMatch, useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, GripVertical, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { PublicIdentitySection } from '../../components/publicIdentity/PublicIdentitySection';
@@ -65,8 +65,10 @@ const linesToArr = (v: string) => v.split('\n').map((s) => s.trim()).filter(Bool
 export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudioProps = {}) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { activeBrandId, allBrands, setActiveBrandId } = useAuth();
-  const activeId = overrideId || id || activeBrandId || '';
+  const { activeBrandId, allBrands, setActiveBrandId, requestNewBrand } = useAuth();
+  // /admin/brand-studio/new always starts a blank brand, never the last-opened one.
+  const isCreateRoute = !!useMatch('/admin/brand-studio/new') && !overrideId;
+  const activeId = isCreateRoute ? '' : overrideId || id || activeBrandId || '';
 
   useEffect(() => {
     if (activeId) setActiveBrandId(activeId);
@@ -191,6 +193,31 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
     if (!draft || !model || saving) return;
     setSaving(true);
     try {
+      if (!activeId) {
+        // New brand: the first section save creates it (the server sets the owner),
+        // then the Studio continues on the new brand's own URL.
+        const name = (draft.brandName || '').trim();
+        if (!name) {
+          triggerToast('Add your brand name in Brand Identity first.');
+          return;
+        }
+        const created = await requestNewBrand(name, (draft.category || '').trim());
+        // The brand exists now: always continue on its own URL, even if this section's
+        // details fail to save — staying on /new would make a retry create a duplicate.
+        let detailsSaved = true;
+        try {
+          await catalogApi.updateBrand(created.id, brandModelToCanonicalPatch(draft));
+        } catch {
+          detailsSaved = false;
+        }
+        setEditingId(null);
+        setDraft(null);
+        triggerToast(
+          detailsSaved ? 'Brand created.' : 'Brand created, but this section did not save — open it and save again.',
+        );
+        navigate(`/admin/brand-studio/${encodeURIComponent(created.id)}/edit`, { replace: true });
+        return;
+      }
       const saved = await catalogApi.updateBrand(activeId, brandModelToCanonicalPatch(draft));
       const next = mapCatalogBrandToModel(saved);
       // keep the preview-only lists we already attached
