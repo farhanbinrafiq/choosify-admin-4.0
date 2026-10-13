@@ -248,7 +248,12 @@ async function main() {
     assert(!/readCache|choosify_product_published_|setModel\(backendDraft\)/.test(studio), 'Studio never reads a cached / snapshot model into the editor');
     assert(/editorModelToSectionPatch\(merged, editingId, model\)/.test(studio) && /editorModelToCreatePatch\(merged\)/.test(studio), 'Studio saves through the section / create payload builders');
     assert(/creatingProduct \|\| detailSaveRequired\(merged, model\)/.test(studio), 'Studio decides the detail PUT with detailSaveRequired against the server-loaded model');
-    assert(/addEventListener\('beforeunload'/.test(studio) && /if \(!dirty\) return;/.test(studio), 'Studio registers beforeunload only while dirty');
+    // Since the Phase A shared guard, the Studio delegates beforeunload to useUnsavedChangesGuard.
+    const guard = readFileSync('src/components/studio/useUnsavedChangesGuard.tsx', 'utf8');
+    assert(
+      /useUnsavedChangesGuard\(dirty\)/.test(studio) && /addEventListener\('beforeunload'/.test(guard) && /if \(!dirty\) return;/.test(guard),
+      'Studio registers beforeunload only while dirty (shared useUnsavedChangesGuard)',
+    );
     assert(!/<option value="LIVE">/.test(studio), 'no Listing Status dropdown (create mode or sections)');
     for (const f of ['src/pages/admin/GuideEditStudio.tsx', 'src/pages/admin/GuideManagementList.tsx']) {
       const src = readFileSync(f, 'utf8');

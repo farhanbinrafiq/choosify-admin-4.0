@@ -3,7 +3,7 @@ import { Check, Globe, Share2, ShieldCheck, Pencil } from 'lucide-react';
 import type { BrandCMSModel } from '../../pages/admin/brandSeeds';
 import type { BrandEditSection } from '../../pages/admin/brandEditorModel';
 import { ViewersPanel } from '../admin/ViewersPanel';
-import { StudioEditPill } from '../studio';
+import { StudioEditPill, isBrandMarketplaceVisible } from '../studio';
 
 export type BrandProfileEditSection =
   | 'header'
@@ -105,7 +105,8 @@ const MARKETPLACE_RESTRICTED = new Set(['restricted', 'suspended', 'revoked']);
  * rendered on the public storefront (`mode === 'public'`).
  */
 export function BrandStudioStatusStrip({ model }: { model: BrandCMSModel }) {
-  const accessOn = model.marketplaceAccess !== false;
+  // Same rule the server uses for storefront visibility (marketplaceStatus decides when present).
+  const accessOn = isBrandMarketplaceVisible({ marketplaceStatus: model.marketplaceStatus, marketplaceAccess: model.marketplaceAccess });
   const mkStatus = model.marketplaceStatus;
   const restricted = !!mkStatus && MARKETPLACE_RESTRICTED.has(mkStatus);
   const ownership =

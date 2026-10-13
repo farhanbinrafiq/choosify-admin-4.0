@@ -62,6 +62,8 @@ import {
   withPublicHandles,
 } from './publicHandles/publicHandleCatalog';
 import { retireHandlesForDeletedEntity } from './publicHandles/publicHandleStore';
+import { EXPECTED_DETAIL_UPDATED_AT_HEADER, rejectStaleWrite } from './catalog/staleWrite';
+import { lockedHandler, recordKey, withRecordLocks } from './catalog/recordLock';
 import { draftStore, type DraftEntityType } from '../lib/vercel-catalog/draftStore';
 import type { CatalogProduct } from '../src/types/catalog';
 import type { CatalogProductDetail } from '../lib/vercel-catalog/catalogEditorialTypes';
@@ -1030,71 +1032,184 @@ catalogRouter.put('/catalog/products/:id', ...requireProductEdit, async (req, re
   }
 });
 
-catalogRouter.patch('/catalog/products/:id', ...requireProductEdit, async (req, res) => {
-  try {
-    const existing = await catalogStore.getProduct(req.params.id);
-    if (!forbidUnlessOwnsProduct(req, res, existing)) return;
-    const context = await buildProductNormalizeContext(req.params.id);
-    let normalized = await withBrandSellerOwnership(
-      preserveProductOwnershipOnUpdate(
-        req,
-        existing,
-        withRequestPhotosChecked(
-          req.body,
-          normalizeProductInput({ ...existing, ...req.body, id: req.params.id }, existing, context),
-        ),
-      ),
-    );
-    if (normalized.brandId !== existing.brandId) {
-      if (!(await assertSellerOwnsTargetBrand(req, res, normalized.brandId))) return;
-    }
-    normalized = await enforceProductLifecycleAndPublish(req, existing, normalized);
-    try {
-      await validateListingAgainstCategorySchema({
-        categoryId: normalized.categoryId,
-        status: normalized.status,
-        attributes: normalized.attributes,
-      });
-    } catch (error) {
-      if (error instanceof CategorySchemaError) {
-        res.status(error.statusCode).json({ error: error.message });
-        return;
-      }
-      throw error;
-    }
-    const saved = await catalogStore.upsertProduct(normalized);
-    if (typeof (req.body as { stock?: number })?.stock === 'number') {
-      await ensureInventoryRecord({ productId: saved.id, quantity: Math.max(0, saved.stock) });
-      await syncProductStockFromInventory(saved.id);
-    }
-    emitProductEvent('ProductUpdated', req, saved);
-    if (
-      normalizeProductLifecycle(existing.status) !== 'active' &&
-      normalizeProductLifecycle(saved.status) === 'active'
-    ) {
-      emitProductEvent('ProductPublished', req, saved);
-    }
-    if (
-      normalizeProductLifecycle(existing.status) === 'archived' &&
-      normalizeProductLifecycle(saved.status) === 'active'
-    ) {
-      emitProductEvent('ProductRestored', req, saved);
-    }
-    if (normalizeProductLifecycle(saved.status) === 'archived') {
-      emitProductEvent('ProductArchived', req, saved);
-    }
-    if (normalizeProductLifecycle(saved.status) === 'suspended') {
-      emitProductEvent('ProductSuspended', req, saved);
-    }
-    res.json({ success: true, data: saved });
-  } catch (error) {
-    if (error instanceof ProductLifecycleError) {
-      res.status(error.statusCode).json({ error: error.message });
-      return;
-    }
-    res.status(400).json({ error: validationErrorMessage(error, 'Invalid product patch payload') });
+type ProductPatchPrepared = {
+  normalized: CatalogProduct;
+  /** Writes the product record only. */
+  write: () => Promise<CatalogProduct>;
+  /** Side effects of the write: inventory sync for a sent `stock`, events. */
+  effects: (saved: CatalogProduct) => Promise<void>;
+};
+
+/**
+ * Phase C.1 — everything a product PATCH checks, with NO writes: normalization,
+ * ownership preservation, target-brand ownership (403), lifecycle/publish rules
+ * and category-schema validation. Returns null after replying with a refusal;
+ * throws exactly what the PATCH handler always caught.
+ */
+async function prepareProductPatch(
+  req: Request,
+  res: Response,
+  existing: CatalogProduct,
+  body: Record<string, unknown>,
+): Promise<ProductPatchPrepared | null> {
+  const context = await buildProductNormalizeContext(existing.id);
+  let normalized = await withBrandSellerOwnership(
+    preserveProductOwnershipOnUpdate(
+      req,
+      existing,
+      withRequestPhotosChecked(body, normalizeProductInput({ ...existing, ...body, id: existing.id }, existing, context)),
+    ),
+  );
+  if (normalized.brandId !== existing.brandId) {
+    if (!(await assertSellerOwnsTargetBrand(req, res, normalized.brandId))) return null;
   }
-});
+  normalized = await enforceProductLifecycleAndPublish(req, existing, normalized);
+  try {
+    await validateListingAgainstCategorySchema({
+      categoryId: normalized.categoryId,
+      status: normalized.status,
+      attributes: normalized.attributes,
+    });
+  } catch (error) {
+    if (error instanceof CategorySchemaError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return null;
+    }
+    throw error;
+  }
+  const finalProduct = normalized;
+  return {
+    normalized: finalProduct,
+    write: () => catalogStore.upsertProduct(finalProduct),
+    effects: async (saved) => {
+      if (typeof body.stock === 'number') {
+        await ensureInventoryRecord({ productId: saved.id, quantity: Math.max(0, saved.stock) });
+        await syncProductStockFromInventory(saved.id);
+      }
+      emitProductEvent('ProductUpdated', req, saved);
+      if (
+        normalizeProductLifecycle(existing.status) !== 'active' &&
+        normalizeProductLifecycle(saved.status) === 'active'
+      ) {
+        emitProductEvent('ProductPublished', req, saved);
+      }
+      if (
+        normalizeProductLifecycle(existing.status) === 'archived' &&
+        normalizeProductLifecycle(saved.status) === 'active'
+      ) {
+        emitProductEvent('ProductRestored', req, saved);
+      }
+      if (normalizeProductLifecycle(saved.status) === 'archived') {
+        emitProductEvent('ProductArchived', req, saved);
+      }
+      if (normalizeProductLifecycle(saved.status) === 'suspended') {
+        emitProductEvent('ProductSuspended', req, saved);
+      }
+    },
+  };
+}
+
+function sendProductPatchError(res: Response, error: unknown) {
+  if (error instanceof ProductLifecycleError) {
+    res.status(error.statusCode).json({ error: error.message });
+    return;
+  }
+  res.status(400).json({ error: validationErrorMessage(error, 'Invalid product patch payload') });
+}
+
+// Phase C.1: runs inside the product lock (plus the detail lock when the detail
+// version is asserted). Authorization + validation first, version check last,
+// immediately before the write.
+catalogRouter.patch(
+  '/catalog/products/:id',
+  ...requireProductEdit,
+  lockedHandler(
+    (req) => [recordKey('product', req.params.id), ...(req.get(EXPECTED_DETAIL_UPDATED_AT_HEADER) ? [recordKey('productDetail', req.params.id)] : [])],
+    async (req, res) => {
+      try {
+        const existing = await catalogStore.getProduct(req.params.id);
+        if (!forbidUnlessOwnsProduct(req, res, existing)) return;
+        const prepared = await prepareProductPatch(req, res, existing, (req.body ?? {}) as Record<string, unknown>);
+        if (!prepared) return;
+        if (rejectStaleWrite(req, res, existing, 'product')) return;
+        if (req.get(EXPECTED_DETAIL_UPDATED_AT_HEADER)) {
+          const detail = await catalogStore.getProductDetail(req.params.id);
+          if (rejectStaleWrite(req, res, detail, 'product', EXPECTED_DETAIL_UPDATED_AT_HEADER)) return;
+        }
+        const saved = await prepared.write();
+        await prepared.effects(saved);
+        res.json({ success: true, data: saved });
+      } catch (error) {
+        sendProductPatchError(res, error);
+      }
+    },
+  ),
+);
+
+/**
+ * Phase C.1 — Product Studio section save as ONE all-or-nothing operation.
+ * Body: { product?: <section patch>, detail?: <changed detail fields> }.
+ * Under the product + detail locks: both halves are fully validated (the detail
+ * against the product state this save produces, so a category change is checked
+ * with its variants), BOTH expected versions are checked, and only then are the
+ * two records written — both records first, then their side effects (inventory
+ * sync, events). A refusal of either half (authorization, validation or a stale
+ * version) writes neither.
+ */
+catalogRouter.post(
+  '/catalog/products/:id/studio-save',
+  ...requireProductEdit,
+  lockedHandler(
+    (req) => [recordKey('product', req.params.id), recordKey('productDetail', req.params.id)],
+    async (req, res) => {
+      try {
+        const body = (req.body ?? {}) as { product?: unknown; detail?: unknown };
+        const productBody = body.product && typeof body.product === 'object' ? (body.product as Record<string, unknown>) : null;
+        const detailBody = body.detail && typeof body.detail === 'object' ? (body.detail as Record<string, unknown>) : null;
+        if (!productBody && !detailBody) {
+          res.status(400).json({ error: 'Nothing to save: send `product` and/or `detail`.' });
+          return;
+        }
+        const existing = await catalogStore.getProduct(req.params.id);
+        if (!forbidUnlessOwnsProduct(req, res, existing)) return;
+        let preparedProduct: ProductPatchPrepared | null = null;
+        try {
+          preparedProduct = productBody ? await prepareProductPatch(req, res, existing, productBody) : null;
+          if (productBody && !preparedProduct) return;
+        } catch (error) {
+          sendProductPatchError(res, error);
+          return;
+        }
+        const existingDetail = await catalogStore.getProductDetail(req.params.id);
+        let preparedDetail: ProductDetailPrepared | null = null;
+        try {
+          preparedDetail = detailBody
+            ? await prepareProductDetailPut(req, res, preparedProduct?.normalized ?? existing, existingDetail, detailBody)
+            : null;
+          if (detailBody && !preparedDetail) return;
+        } catch (error) {
+          res.status(400).json({ error: validationErrorMessage(error, 'Invalid product detail payload') });
+          return;
+        }
+        // Versions last — after every authorization / validation refusal — and
+        // nothing is written unless both match.
+        if (rejectStaleWrite(req, res, existing, 'product')) return;
+        if (rejectStaleWrite(req, res, existingDetail, 'product', EXPECTED_DETAIL_UPDATED_AT_HEADER)) return;
+        const savedProduct = preparedProduct ? await preparedProduct.write() : existing;
+        const savedDetail = preparedDetail ? await preparedDetail.write() : existingDetail;
+        if (preparedProduct) await preparedProduct.effects(savedProduct);
+        if (preparedDetail && savedDetail) await preparedDetail.effects(savedDetail);
+        // Detail side effects (inventory sync) can touch the product: return the current record.
+        const product = (await catalogStore.getProduct(req.params.id)) ?? savedProduct;
+        res.json({ success: true, data: { product, detail: savedDetail } });
+      } catch (error) {
+        if (!res.headersSent) {
+          res.status(500).json({ error: validationErrorMessage(error, 'Product save failed') });
+        }
+      }
+    },
+  ),
+);
 
 catalogRouter.delete('/catalog/products/:id', ...requireProductDelete, async (req, res) => {
   try {
@@ -2170,7 +2285,8 @@ catalogRouter.post('/catalog/brands', ...requireBrandStudioBrandWrite, async (re
   }
 });
 
-catalogRouter.put('/catalog/brands/:id', ...requireBrandStudioBrandWrite, async (req, res) => {
+// Phase C.1: record lock; version check moved after authorization/validation, right before the write.
+catalogRouter.put('/catalog/brands/:id', ...requireBrandStudioBrandWrite, lockedHandler((req) => [recordKey('brand', req.params.id)], async (req, res) => {
   try {
     const existing = await catalogStore.getBrand(req.params.id);
     if (!existing) {
@@ -2193,6 +2309,7 @@ catalogRouter.put('/catalog/brands/:id', ...requireBrandStudioBrandWrite, async 
       nextSlug: normalized.slug,
       isSuperAdmin: isSuperAdminRequest(req),
     });
+    if (rejectStaleWrite(req, res, existing, 'brand')) return;
     const withRef = {
       ...normalized,
       brandReferenceId:
@@ -2213,9 +2330,10 @@ catalogRouter.put('/catalog/brands/:id', ...requireBrandStudioBrandWrite, async 
   } catch (error) {
     sendCatalogWriteError(res, error, 'Invalid brand payload');
   }
-});
+}));
 
-catalogRouter.patch('/catalog/brands/:id', ...requireBrandStudioBrandWrite, async (req, res) => {
+// Phase C.1: record lock; version check moved after authorization/validation, right before the write.
+catalogRouter.patch('/catalog/brands/:id', ...requireBrandStudioBrandWrite, lockedHandler((req) => [recordKey('brand', req.params.id)], async (req, res) => {
   try {
     const existing = await catalogStore.getBrand(req.params.id);
     if (!existing) {
@@ -2238,6 +2356,7 @@ catalogRouter.patch('/catalog/brands/:id', ...requireBrandStudioBrandWrite, asyn
       nextSlug: normalized.slug,
       isSuperAdmin: isSuperAdminRequest(req),
     });
+    if (rejectStaleWrite(req, res, existing, 'brand')) return;
     const withRef = {
       ...normalized,
       brandReferenceId:
@@ -2258,7 +2377,7 @@ catalogRouter.patch('/catalog/brands/:id', ...requireBrandStudioBrandWrite, asyn
   } catch (error) {
     sendCatalogWriteError(res, error, 'Invalid brand patch payload');
   }
-});
+}));
 
 /**
  * Admin-only Marketplace Access lifecycle transition (ES-005). Controls public
@@ -2666,7 +2785,8 @@ catalogRouter.get('/catalog/creators', softAuthenticateRequest, async (req, res)
 
 const requireCreatorStudioWriteMw = [authenticateRequest, requirePartnerEntitlement, requireMarketplaceAccess, requireCreatorStudioWrite];
 
-catalogRouter.put('/catalog/creators/:id', ...requireCreatorStudioWriteMw, async (req, res) => {
+// Phase C.1: record lock; version check moved after authorization/validation, right before the write.
+catalogRouter.put('/catalog/creators/:id', ...requireCreatorStudioWriteMw, lockedHandler((req) => [recordKey('creator', req.params.id)], async (req, res) => {
   try {
     const existing = await catalogStore.getCreator(req.params.id);
     const scoped = scopeCreatorSelfWrite(req, existing, req.body as Record<string, unknown>);
@@ -2684,14 +2804,16 @@ catalogRouter.put('/catalog/creators/:id', ...requireCreatorStudioWriteMw, async
       }
       normalized.slug = await slugAvoidingHandles('creator', normalized.slug, normalized.id);
     }
+    if (rejectStaleWrite(req, res, existing, 'creator profile')) return;
     const saved = await catalogStore.upsertCreator(normalized);
     res.json({ success: true, data: saved });
   } catch (error) {
     sendCatalogWriteError(res, error, 'Invalid creator payload');
   }
-});
+}));
 
-catalogRouter.patch('/catalog/creators/:id', ...requireCreatorStudioWriteMw, async (req, res) => {
+// Phase C.1: record lock; version check moved after authorization/validation, right before the write.
+catalogRouter.patch('/catalog/creators/:id', ...requireCreatorStudioWriteMw, lockedHandler((req) => [recordKey('creator', req.params.id)], async (req, res) => {
   try {
     const existing = await catalogStore.getCreator(req.params.id);
     if (!existing) {
@@ -2711,12 +2833,13 @@ catalogRouter.patch('/catalog/creators/:id', ...requireCreatorStudioWriteMw, asy
       });
       normalized.slug = await slugAvoidingHandles('creator', normalized.slug, normalized.id);
     }
+    if (rejectStaleWrite(req, res, existing, 'creator profile')) return;
     const saved = await catalogStore.upsertCreator(normalized);
     res.json({ success: true, data: saved });
   } catch (error) {
     sendCatalogWriteError(res, error, 'Invalid creator patch payload');
   }
-});
+}));
 
 /**
  * Guide Studio writes — cms:edit staff OR the owning creator (server-enforced,
@@ -2980,6 +3103,9 @@ async function persistGuideStudioWrite(
     return s;
   });
 
+  // Phase C.1: after publisher authorization / coercion and validation, right before
+  // the write (the PUT/PATCH routes hold the guide's record lock).
+  if (rejectStaleWrite(req, res, existing, 'guide')) return;
   const withRef = {
     ...normalized,
     status,
@@ -3006,6 +3132,26 @@ async function persistGuideLifecycle(
     res.status(404).json({ error: 'Guide not found' });
     return;
   }
+  // Phase E (E1): publishing a guide never changes its author's Creator profile.
+  // A Creator profile goes live only through its own lifecycle (Choosify, or the
+  // creator once Marketplace Access allows it) — a guide publish used to promote a
+  // draft profile to live, which bypassed that approval. The storefront credits a
+  // creator-authored guide to its LIVE author profile, so such a guide can be
+  // published only once that profile is live; otherwise it would be shown under
+  // the default "Choosify Editorial" byline.
+  if (nextStatus === 'live' && existing.publisherType !== 'brand' && existing.creatorId) {
+    const author = await catalogStore.getCreator(existing.creatorId);
+    if (!author || author.status !== 'live') {
+      res.status(409).json({
+        error:
+          'This guide can be published once its author’s Creator profile is live. Publishing a guide never makes a Creator profile live — Choosify makes the profile live (or the creator publishes it once Marketplace Access is enabled). The guide is saved as a draft.',
+        code: 'CREATOR_PROFILE_NOT_LIVE',
+        creatorId: existing.creatorId,
+        creatorStatus: author?.status ?? null,
+      });
+      return;
+    }
+  }
   const normalized = normalizeGuideInput(
     { ...existing, id: req.params.id, status: nextStatus },
     existing,
@@ -3015,22 +3161,6 @@ async function persistGuideLifecycle(
     ...normalized,
     contentReferenceId: existing.contentReferenceId || normalized.contentReferenceId,
   });
-
-  // Publishing a guide makes its author resolvable on the storefront: promote a
-  // still-draft owning creator workspace to live so "About the Author" renders
-  // canonical identity (never a fabricated stand-in).
-  if (nextStatus === 'live' && saved.creatorId) {
-    try {
-      const creator = await catalogStore.getCreator(saved.creatorId);
-      if (creator && creator.status === 'draft') {
-        await catalogStore.upsertCreator(
-          normalizeCreatorInput({ ...creator, status: 'live' }, creator),
-        );
-      }
-    } catch {
-      /* non-fatal — guide still publishes */
-    }
-  }
 
   res.json({ success: true, data: saved });
 }
@@ -3162,7 +3292,7 @@ catalogRouter.post('/catalog/guides', ...requireGuideStudioWriteMw, async (req, 
 
 catalogRouter.put('/catalog/guides/:id', ...requireGuideStudioWriteMw, async (req, res) => {
   try {
-    await persistGuideStudioWrite(req, res, { patch: false });
+    await withRecordLocks([recordKey('guide', req.params.id)], () => persistGuideStudioWrite(req, res, { patch: false }));
   } catch (error) {
     res.status(400).json({ error: validationErrorMessage(error, 'Invalid guide payload') });
   }
@@ -3170,7 +3300,7 @@ catalogRouter.put('/catalog/guides/:id', ...requireGuideStudioWriteMw, async (re
 
 catalogRouter.patch('/catalog/guides/:id', ...requireGuideStudioWriteMw, async (req, res) => {
   try {
-    await persistGuideStudioWrite(req, res, { patch: true });
+    await withRecordLocks([recordKey('guide', req.params.id)], () => persistGuideStudioWrite(req, res, { patch: true }));
   } catch (error) {
     res.status(400).json({ error: validationErrorMessage(error, 'Invalid guide patch payload') });
   }
@@ -3601,77 +3731,74 @@ catalogRouter.post('/catalog/creator-reviews/resolve-facebook-share-url', ...req
   res.status(422).json({ error: result.message, code: result.code });
 });
 
-catalogRouter.put('/catalog/product-details/:productId', ...requireProductEdit, async (req, res) => {
-  try {
-    const product = await catalogStore.getProduct(req.params.productId);
-    if (!forbidUnlessOwnsProduct(req, res, product)) return;
-    const existing = await catalogStore.getProductDetail(req.params.productId);
-    const normalized = normalizeProductDetailInput(
-      { ...req.body, productId: req.params.productId },
-      req.params.productId,
-      existing || undefined,
-    );
-    {
-      const denied = enforceRelatedInfoOwnership(req, existing, normalized);
-      if (denied) {
-        res.status(denied.status).json({ error: denied.error });
-        return;
-      }
+type ProductDetailPrepared = {
+  /** Writes the detail record only. */
+  write: () => Promise<CatalogProductDetail>;
+  /** Side effects of the write: variant events, inventory records + product stock sync. */
+  effects: (saved: CatalogProductDetail) => Promise<void>;
+};
+
+/**
+ * Phase C.1 — everything a product-detail PUT checks, with NO writes:
+ * normalization, related-info ownership (403), creator-review thumbnails (400)
+ * and category-schema validation of options/variants against `product` (the
+ * product state this save will leave — the stored one, or the Studio save's
+ * new one).
+ */
+async function prepareProductDetailPut(
+  req: Request,
+  res: Response,
+  product: CatalogProduct,
+  existingDetail: CatalogProductDetail | null,
+  body: Record<string, unknown>,
+): Promise<ProductDetailPrepared | null> {
+  const normalizedDetail = normalizeProductDetailInput({ ...body, productId: product.id }, product.id, existingDetail || undefined);
+  {
+    const denied = enforceRelatedInfoOwnership(req, existingDetail, normalizedDetail);
+    if (denied) {
+      res.status(denied.status).json({ error: denied.error });
+      return null;
     }
-    {
-      const missing = findCreatorContentMissingRequiredThumbnail(normalized.creatorContent, existing?.creatorContent);
-      if (missing) {
-        res.status(400).json({
-          error: `"${missing.title}" needs a thumbnail — ${missing.platformName} doesn't provide a reliable preview image, so one is required before saving.`,
-          code: 'CREATOR_REVIEW_THUMBNAIL_REQUIRED',
-        });
-        return;
-      }
-    }
-    try {
-      // Free-form `detail.specs` are presentation data and are NEVER folded into
-      // category-schema validation. Only the product's own canonical
-      // `product.attributes` are checked here (unchanged by a detail save).
-      await validateListingAgainstCategorySchema({
-        categoryId: product!.categoryId,
-        status: product!.status,
-        attributes: (product?.attributes as Record<string, unknown> | undefined) ?? {},
-        optionGroups: normalized.optionGroups,
-        productVariants: normalized.productVariants,
+  }
+  {
+    const missing = findCreatorContentMissingRequiredThumbnail(normalizedDetail.creatorContent, existingDetail?.creatorContent);
+    if (missing) {
+      res.status(400).json({
+        error: `"${missing.title}" needs a thumbnail — ${missing.platformName} doesn't provide a reliable preview image, so one is required before saving.`,
+        code: 'CREATOR_REVIEW_THUMBNAIL_REQUIRED',
       });
-    } catch (error) {
-      if (error instanceof CategorySchemaError) {
-        res.status(error.statusCode).json({ error: error.message });
-        return;
-      }
-      throw error;
+      return null;
     }
-    const saved = await catalogStore.upsertProductDetail(normalized);
-    // Services/bookables never get physical-stock inventory records auto-created
-    // for their configurable dimensions (variants sprint services boundary).
-    const usesPhysicalInventory = product.productType !== 'service';
-    const prevIds = new Set((existing?.productVariants ?? []).map((v) => v.id));
-    for (const variant of saved.productVariants ?? []) {
-      if (!prevIds.has(variant.id)) {
+  }
+  try {
+    // Free-form `detail.specs` are presentation data and are NEVER folded into
+    // category-schema validation. Only the product's own canonical
+    // `product.attributes` are checked here (unchanged by a detail save).
+    await validateListingAgainstCategorySchema({
+      categoryId: product.categoryId,
+      status: product.status,
+      attributes: (product.attributes as Record<string, unknown> | undefined) ?? {},
+      optionGroups: normalizedDetail.optionGroups,
+      productVariants: normalizedDetail.productVariants,
+    });
+  } catch (error) {
+    if (error instanceof CategorySchemaError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return null;
+    }
+    throw error;
+  }
+  return {
+    write: () => catalogStore.upsertProductDetail(normalizedDetail),
+    effects: async (saved) => {
+      // Services/bookables never get physical-stock inventory records auto-created
+      // for their configurable dimensions (variants sprint services boundary).
+      const usesPhysicalInventory = product.productType !== 'service';
+      const prevIds = new Set((existingDetail?.productVariants ?? []).map((v) => v.id));
+      const prevStock = new Map((existingDetail?.productVariants ?? []).map((v) => [v.id, v.stock]));
+      for (const variant of saved.productVariants ?? []) {
         publishEvent({
-          eventName: 'VariantCreated',
-          domain: 'Catalog',
-          producer: 'catalogRouter',
-          aggregateId: product.id,
-          actor: req.userId || 'anonymous',
-          payload: { productId: product.id, variantId: variant.id, sku: variant.sku },
-        });
-        if (usesPhysicalInventory && typeof variant.stock === 'number') {
-          await ensureInventoryRecord({
-            productId: product.id,
-            variantId: variant.id,
-            sku: variant.sku,
-            quantity: Math.max(0, variant.stock),
-          });
-        }
-      } else {
-        publishEvent({
-          eventName: 'VariantUpdated',
+          eventName: prevIds.has(variant.id) ? 'VariantUpdated' : 'VariantCreated',
           domain: 'Catalog',
           producer: 'catalogRouter',
           aggregateId: product.id,
@@ -3684,26 +3811,62 @@ catalogRouter.put('/catalog/product-details/:productId', ...requireProductEdit, 
         // `quantity` while preserving `reservedQuantity`, so this is idempotent
         // and safe to run on every save. Skipped when the seller left Stock
         // blank (undefined) — that is "unchanged", not "zero".
+        //
+        // Phase E (E5): the inventory record (on-hand `quantity`, `reservedQuantity`)
+        // is authoritative; the detail's `variant.stock` is a copy the inventory
+        // endpoint rewrites with the AVAILABLE quantity. Re-asserting that copy as
+        // on-hand on an unrelated save (Specifications, About, …) shrank on-hand by
+        // the reserved units on every save. So on-hand is set only when the seller
+        // actually set Stock for this variant in this save (new variant, or a
+        // different value than stored), or when the variant has no inventory
+        // record yet (nothing to lose — the old behaviour).
         if (usesPhysicalInventory && typeof variant.stock === 'number') {
-          await ensureInventoryRecord({
-            productId: product.id,
-            variantId: variant.id,
-            sku: variant.sku,
-            quantity: Math.max(0, variant.stock),
-          });
+          const stockSetInThisSave = !prevIds.has(variant.id) || prevStock.get(variant.id) !== variant.stock;
+          const hasRecord = !!(await getInventoryRecord(product.id, variant.id));
+          if (stockSetInThisSave || !hasRecord) {
+            await ensureInventoryRecord({
+              productId: product.id,
+              variantId: variant.id,
+              sku: variant.sku,
+              quantity: Math.max(0, variant.stock),
+            });
+          }
         }
       }
-    }
-    if (usesPhysicalInventory) {
-      await syncProductStockFromInventory(product.id);
-    }
-    res.json({ success: true, data: saved });
-  } catch (error) {
-    res.status(400).json({ error: validationErrorMessage(error, 'Invalid product detail payload') });
-  }
-});
+      if (usesPhysicalInventory) {
+        await syncProductStockFromInventory(product.id);
+      }
+    },
+  };
+}
 
-catalogRouter.patch('/catalog/product-details/:productId', ...requireProductEdit, async (req, res) => {
+// Phase C.1: product + detail locks (the write's inventory sync writes the
+// product); authorization/validation first, version check last, then write.
+catalogRouter.put(
+  '/catalog/product-details/:productId',
+  ...requireProductEdit,
+  lockedHandler(
+    (req) => [recordKey('product', req.params.productId), recordKey('productDetail', req.params.productId)],
+    async (req, res) => {
+      try {
+        const product = await catalogStore.getProduct(req.params.productId);
+        if (!forbidUnlessOwnsProduct(req, res, product)) return;
+        const existing = await catalogStore.getProductDetail(req.params.productId);
+        const prepared = await prepareProductDetailPut(req, res, product, existing, (req.body ?? {}) as Record<string, unknown>);
+        if (!prepared) return;
+        if (rejectStaleWrite(req, res, existing, 'product')) return;
+        const saved = await prepared.write();
+        await prepared.effects(saved);
+        res.json({ success: true, data: saved });
+      } catch (error) {
+        res.status(400).json({ error: validationErrorMessage(error, 'Invalid product detail payload') });
+      }
+    },
+  ),
+);
+
+// Phase C.1: product + detail locks; version check moved after authorization/validation.
+catalogRouter.patch('/catalog/product-details/:productId', ...requireProductEdit, lockedHandler((req) => [recordKey('product', req.params.productId), recordKey('productDetail', req.params.productId)], async (req, res) => {
   try {
     const product = await catalogStore.getProduct(req.params.productId);
     if (!forbidUnlessOwnsProduct(req, res, product)) return;
@@ -3752,6 +3915,7 @@ catalogRouter.patch('/catalog/product-details/:productId', ...requireProductEdit
       }
       throw error;
     }
+    if (rejectStaleWrite(req, res, existing, 'product')) return;
     const saved = await catalogStore.upsertProductDetail(normalized);
     const prevIds = new Set((existing.productVariants ?? []).map((v) => v.id));
     for (const variant of saved.productVariants ?? []) {
@@ -3768,7 +3932,7 @@ catalogRouter.patch('/catalog/product-details/:productId', ...requireProductEdit
   } catch (error) {
     res.status(400).json({ error: validationErrorMessage(error, 'Invalid product detail patch payload') });
   }
-});
+}));
 
 /**
  * Admin-only management of the Related Information section's Choosify-owned

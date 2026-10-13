@@ -55,13 +55,26 @@ async function main() {
   console.log('=== Product Studio save-integrity probe ===');
 
   // locate the newest sneaker fixture (schema-bearing category)
+  // Page through the WHOLE catalog until an empty page — a fixed page count misses
+  // fixtures once the catalog grows. Guards: a hard page cap and an "offset ignored"
+  // check (same first id twice) so a misbehaving API can never loop forever.
   const all: CatalogProduct[] = [];
-  for (const off of [0, 100, 200, 300, 400, 500]) {
-    const page = (await j(await fetch(`${base}/catalog/products?limit=100&offset=${off}`))) as {
-      data?: CatalogProduct[];
-    };
-    all.push(...(page.data || []));
+  const PAGE_SIZE = 100;
+  const MAX_PAGES = 500;
+  let previousFirstId = '';
+  for (let pageNo = 0; ; pageNo += 1) {
+    const offset = pageNo * PAGE_SIZE;
+    if (pageNo >= MAX_PAGES) throw new Error(`catalog pagination: no empty page after ${MAX_PAGES} pages (offset ${offset})`);
+    const res = await fetch(`${base}/catalog/products?limit=${PAGE_SIZE}&offset=${offset}`);
+    if (!res.ok) throw new Error(`catalog pagination failed at offset ${offset}: HTTP ${res.status}`);
+    const page = (await j(res)) as { data?: CatalogProduct[] };
+    if (!Array.isArray(page.data)) throw new Error(`catalog pagination: unexpected response shape at offset ${offset}`);
+    if (page.data.length === 0) break;
+    if (page.data[0].id === previousFirstId) throw new Error(`catalog pagination: offset ${offset} returned the previous page again`);
+    previousFirstId = page.data[0].id;
+    all.push(...page.data);
   }
+  console.log(`catalog scanned: ${all.length} products`);
   const product = all
     .filter((p) => SNEAKER_SLUG_RE.test(p.slug))
     .sort((a, b) => b.slug.localeCompare(a.slug))[0];

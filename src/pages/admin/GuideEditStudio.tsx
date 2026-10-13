@@ -11,8 +11,15 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
-import { catalogApi } from '../../services/catalogApi';
-import { StudioConfirmDialog, useUnsavedChangesGuard } from '../../components/studio';
+import { catalogApi, isStaleWriteError } from '../../services/catalogApi';
+import {
+  StudioChecklist,
+  StudioConfirmDialog,
+  StudioConflictNotice,
+  changedFields,
+  guideReadiness,
+  useUnsavedChangesGuard,
+} from '../../components/studio';
 import { useAuth } from '../../contexts/AuthContext';
 import type {
   CatalogBrand,
@@ -1223,6 +1230,14 @@ export default function GuideEditStudio() {
   const [model, setModel] = useState<GuideStudioModel | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // 'not_found' = genuine 404; 'failed' = network/server error (retryable).
+  // Either way no editable model exists, so nothing can be saved over the guide.
+  const [loadFailure, setLoadFailure] = useState<'not_found' | 'failed' | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
+  // Phase C — a save refused because the guide changed elsewhere (409 STALE_WRITE).
+  const [conflict, setConflict] = useState(false);
+  // Phase E (E1): server refused a publish because the author's Creator profile is not live.
+  const [publishBlocked, setPublishBlocked] = useState<string | null>(null);
   const [products, setProducts] = useState<CatalogProduct[]>([]);
   const [brands, setBrands] = useState<CatalogBrand[]>([]);
   const [categoryNames, setCategoryNames] = useState<string[]>([]);
@@ -1250,6 +1265,7 @@ export default function GuideEditStudio() {
     (async () => {
       setLoading(true);
       setLoadError(null);
+      setLoadFailure(null);
       const [prods, brs, cats] = await Promise.all([
         catalogApi.listProducts().catch(() => []),
         catalogApi.listBrands().catch(() => []),
@@ -1282,11 +1298,26 @@ export default function GuideEditStudio() {
         return;
       }
 
-      const guide = await catalogApi.getGuide(activeId).catch(() => null);
+      let guide: Awaited<ReturnType<typeof catalogApi.getGuideForEdit>>;
+      try {
+        guide = await catalogApi.getGuideForEdit(activeId);
+      } catch (e) {
+        if (cancelled) return;
+        // Never fall back to a blank model here: saving it would create a new
+        // guide (or overwrite this one) from empty fields.
+        setModel(null);
+        setLoadFailure('failed');
+        setLoadError(
+          `This guide could not be loaded${e instanceof Error && e.message ? ` (${e.message})` : ''}. Nothing was changed — try again.`,
+        );
+        setLoading(false);
+        return;
+      }
       if (cancelled) return;
       if (!guide) {
+        setModel(null);
+        setLoadFailure('not_found');
         setLoadError(`Guide "${activeId}" was not found or you don’t have access.`);
-        setModel(createBlankGuideStudioModel());
         setLoading(false);
         return;
       }
@@ -1299,7 +1330,7 @@ export default function GuideEditStudio() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeId, isNew]);
+  }, [activeId, isNew, reloadNonce]);
 
   const resolvePublisher = useCallback(
     async (m: GuideStudioModel, _p: CatalogProduct[], brs: CatalogBrand[]) => {
@@ -1389,15 +1420,34 @@ export default function GuideEditStudio() {
         flash('Guide created (draft)');
         return;
       }
-      const saved = await catalogApi.patchGuide(savedId, guideStudioModelToPatch(draft));
+      // Phase C: send only what this section changed, guarded by the version this
+      // tab loaded — a stale copy is refused (409) instead of overwriting newer data.
+      const patch = changedFields(
+        guideStudioModelToPatch(draft) as Record<string, unknown>,
+        model ? (guideStudioModelToPatch(model) as Record<string, unknown>) : null,
+      );
+      if (!Object.keys(patch).length) {
+        setEditingId(null);
+        setDraft(null);
+        flash('No changes to save');
+        return;
+      }
+      const saved = await catalogApi.patchGuide(savedId, patch as Partial<CatalogGuide>, { expectedUpdatedAt: model?.updatedAt || undefined });
       const m = mapCatalogGuideToStudioModel(saved);
       setModel(m);
       setEditingId(null);
       setDraft(null);
+      setConflict(false);
       void resolvePublisher(m, products, brands);
       flash('Section saved');
     } catch (e) {
-      flash(e instanceof Error ? e.message : 'Save failed');
+      if (isStaleWriteError(e)) {
+        // Keep the editor and the author's edits; recovery is an explicit choice.
+        setConflict(true);
+        flash('Not saved — this guide was changed somewhere else.');
+      } else {
+        flash(e instanceof Error ? e.message : 'Save failed');
+      }
     } finally {
       setSaving(false);
     }
@@ -1418,9 +1468,16 @@ export default function GuideEditStudio() {
             : await catalogApi.archiveGuide(model.id);
       const m = mapCatalogGuideToStudioModel(saved);
       setModel(m);
+      setPublishBlocked(null);
       void resolvePublisher(m, products, brands);
       flash(action === 'publish' ? 'Guide published' : action === 'archive' ? 'Guide archived' : 'Guide moved to draft');
     } catch (e) {
+      if ((e as { code?: string } | null)?.code === 'CREATOR_PROFILE_NOT_LIVE') {
+        // Phase E (E1): the guide stays a draft; keep the next step on screen.
+        setPublishBlocked(e instanceof Error ? e.message : 'The author’s Creator profile is not live yet.');
+        flash('Not published — the author’s Creator profile isn’t live yet');
+        return;
+      }
       flash(e instanceof Error ? e.message : `${action} failed`);
     } finally {
       setBusy(false);
@@ -1428,22 +1485,53 @@ export default function GuideEditStudio() {
   };
 
   // ── optional-section layout (add / remove / toggle / reorder) ───────────
+  // One layout change at a time: rapid repeats are ignored while a save is in
+  // flight, and a failed save restores the previous layout (nothing is lost —
+  // section content lives outside the layout).
+  const layoutBusyRef = useRef(false);
+  const [layoutBusy, setLayoutBusy] = useState(false);
+  const modelRef = useRef(model);
+  modelRef.current = model;
   const applyLayout = useCallback(
-    async (next: SectionLayoutEntry[]) => {
+    async (next: SectionLayoutEntry[]): Promise<boolean> => {
+      const current = modelRef.current;
+      if (!current) return false;
+      if (isNew || current.id === 'new') {
+        setModel((m) => (m ? { ...m, sectionLayout: next } : m));
+        if (editingId) setDraft((dd) => (dd ? { ...dd, sectionLayout: next } : dd));
+        return true;
+      }
+      if (layoutBusyRef.current) return false;
+      layoutBusyRef.current = true;
+      setLayoutBusy(true);
+      const previous = current.sectionLayout;
       setModel((m) => (m ? { ...m, sectionLayout: next } : m));
       if (editingId) setDraft((dd) => (dd ? { ...dd, sectionLayout: next } : dd));
-      if (isNew || !model || model.id === 'new') return;
       try {
-        const saved = await catalogApi.patchGuide(
-          model.id,
-          guideStudioModelToPatch({ ...model, sectionLayout: next }),
+        // Phase C: only the layout-derived fields, guarded by the loaded version.
+        const patch = changedFields(
+          guideStudioModelToPatch({ ...current, sectionLayout: next }) as Record<string, unknown>,
+          guideStudioModelToPatch(current) as Record<string, unknown>,
         );
+        const saved = await catalogApi.patchGuide(current.id, patch as Partial<CatalogGuide>, {
+          expectedUpdatedAt: current.updatedAt || undefined,
+        });
         setModel(mapCatalogGuideToStudioModel(saved));
+        return true;
       } catch (e) {
-        flash(e instanceof Error ? e.message : 'Could not update sections');
+        setModel((m) => (m ? { ...m, sectionLayout: previous } : m));
+        if (editingId) setDraft((dd) => (dd ? { ...dd, sectionLayout: previous } : dd));
+        if (isStaleWriteError(e)) setConflict(true);
+        flash(
+          `Section change was not saved — your previous sections are restored.${e instanceof Error && e.message ? ` (${e.message})` : ''}`,
+        );
+        return false;
+      } finally {
+        layoutBusyRef.current = false;
+        setLayoutBusy(false);
       }
     },
-    [editingId, isNew, model, flash],
+    [editingId, isNew, flash],
   );
 
   const layout = (editingId && draft ? draft : model)?.sectionLayout ?? [];
@@ -1460,8 +1548,9 @@ export default function GuideEditStudio() {
     addableSections,
     onAddSection: (k) => {
       if (layout.some((e) => e.id === k)) return;
-      void applyLayout([...layout, { id: k, enabled: true }]);
-      flash(`Added "${GUIDE_SECTION_TITLE[k]}"`);
+      void applyLayout([...layout, { id: k, enabled: true }]).then((ok) => {
+        if (ok) flash(`Added "${GUIDE_SECTION_TITLE[k]}"`);
+      });
     },
     onRemoveSection: (k) => setPendingRemove(k),
     onToggleSection: (k, enabled) =>
@@ -1474,6 +1563,7 @@ export default function GuideEditStudio() {
       [next[i], next[j]] = [next[j], next[i]];
       void applyLayout(next);
     },
+    layoutBusy,
   };
 
   const d = draft;
@@ -2007,6 +2097,35 @@ export default function GuideEditStudio() {
     }
   }
 
+  if (loadFailure && !model) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[420px] gap-3" role="alert" data-testid="guide-load-failure" data-kind={loadFailure}>
+        <span className="text-[13px] font-extrabold text-[#1A1A2E]">
+          {loadFailure === 'not_found' ? 'Guide not found' : 'Could not load this guide'}
+        </span>
+        <span className="text-[12px] text-[#DC2626] max-w-md text-center">{loadError}</span>
+        <div className="flex gap-2">
+          {loadFailure === 'failed' ? (
+            <button
+              type="button"
+              onClick={() => setReloadNonce((n) => n + 1)}
+              className="px-3.5 py-2 rounded-lg bg-[#EF3C23] text-white text-[11px] font-extrabold"
+            >
+              Try again
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => navigate('/admin/guides')}
+            className="px-3.5 py-2 rounded-lg border border-[#E8EDF2] text-[11px] font-extrabold bg-white"
+          >
+            Back to Guide Management
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (loading || !model) {
     return (
       <div className="flex flex-col items-center justify-center h-[420px] gap-3 text-[#9AA0AC]">
@@ -2193,6 +2312,60 @@ export default function GuideEditStudio() {
         </div>
       ) : null}
 
+      {conflict ? (
+        <div className="max-w-[1180px] mx-auto px-5 sm:px-8 pt-4">
+          <StudioConflictNotice
+            what="guide"
+            onDismiss={() => setConflict(false)}
+            onReload={() => {
+              setConflict(false);
+              setEditingId(null);
+              setDraft(null);
+              setReloadNonce((n) => n + 1);
+            }}
+          />
+        </div>
+      ) : null}
+
+      {publishBlocked ? (
+        <div className="max-w-[1180px] mx-auto px-5 sm:px-8 pt-4">
+          <div
+            role="status"
+            data-testid="guide-publish-blocked"
+            className="rounded-xl border border-[#FDE68A] bg-[#FFFBEB] px-4 py-3 flex items-start gap-3"
+          >
+            <div className="flex-1 text-[13px] font-semibold text-[#92400E] leading-relaxed">
+              <div className="font-extrabold mb-0.5">Not published — the author’s Creator profile isn’t live yet</div>
+              {publishBlocked}
+            </div>
+            <button
+              type="button"
+              className="text-[12px] font-extrabold text-[#92400E] underline"
+              onClick={() => setPublishBlocked(null)}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {editMode ? (
+        <div className="max-w-[1180px] mx-auto px-5 sm:px-8 pt-4">
+          <StudioChecklist
+            title="Before you publish"
+            testId="guide-readiness"
+            defaultOpen={false}
+            items={guideReadiness(model)}
+            intro={
+              <>
+                Drafts are private. A live guide is public on the Choosify storefront; Unpublish returns it to draft and
+                Archive hides it. These checks are recommendations — Choosify does not require them to publish.
+              </>
+            }
+          />
+        </div>
+      ) : null}
+
       <GuideStudioPresentation
         model={showModel}
         mode={editMode ? 'studio' : 'view'}
@@ -2213,7 +2386,11 @@ export default function GuideEditStudio() {
         }
         description={
           pendingLifecycle === 'publish'
-            ? 'It becomes visible on the Choosify storefront. Save any section you are editing first.'
+            ? `Readers can find it on the Choosify storefront once it is live. Choosify does not require particular sections before publishing — the checklist only lists recommendations. Save any section you are editing first.${
+                model?.creatorId
+                  ? ' Publishing a guide never changes its author’s Creator profile: a creator-authored guide can go live only once that profile is live.'
+                  : ''
+              }`
             : pendingLifecycle === 'unpublish'
               ? 'It is removed from the storefront and becomes a draft. You can publish it again later.'
               : 'It is removed from the storefront and moved to Archived. You can publish it again later.'
@@ -2232,14 +2409,18 @@ export default function GuideEditStudio() {
       <StudioConfirmDialog
         open={pendingRemove !== null}
         title={pendingRemove ? `Remove the “${GUIDE_SECTION_TITLE[pendingRemove as keyof typeof GUIDE_SECTION_TITLE] ?? 'this'}” section?` : ''}
-        description="It will no longer appear on this guide. You can add it back later from Add section."
+        description="It will no longer appear on this guide. Its content is kept: add the section again from Add section and it comes back."
         confirmLabel="Remove section"
         tone="danger"
         onCancel={() => setPendingRemove(null)}
         onConfirm={() => {
           const k = pendingRemove;
           setPendingRemove(null);
-          if (k) void applyLayout(layout.filter((e) => e.id !== k));
+          if (k) {
+            void applyLayout(layout.filter((e) => e.id !== k)).then((ok) => {
+              if (ok) flash(`Removed "${GUIDE_SECTION_TITLE[k as keyof typeof GUIDE_SECTION_TITLE] ?? 'section'}" — its content is kept`);
+            });
+          }
         }}
       />
       {leaveDialog}

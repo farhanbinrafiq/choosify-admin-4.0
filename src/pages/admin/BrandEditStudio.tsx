@@ -17,8 +17,9 @@ import { useMatch, useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, GripVertical, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { PublicIdentitySection } from '../../components/publicIdentity/PublicIdentitySection';
-import { catalogApi } from '../../services/catalogApi';
-import { useUnsavedChangesGuard } from '../../components/studio';
+import { catalogApi, isStaleWriteError } from '../../services/catalogApi';
+import { StudioConflictNotice, changedFields, useUnsavedChangesGuard, type BrandVisibilityFacts } from '../../components/studio';
+import { publicProfileUrl } from '../../components/admin/PublicHandlePanels';
 import type { CatalogBrand, CatalogGuide } from '../../types/catalog';
 import type { BrandCMSModel, BrandServiceCenterEntry, BrandStoreEntry } from './brandSeeds';
 import {
@@ -75,6 +76,8 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
   }, [activeId, setActiveBrandId]);
 
   const [model, setModel] = useState<BrandCMSModel | null>(null);
+  // Authoritative catalog facts: marketplace visibility + the active public handle.
+  const [recordFacts, setRecordFacts] = useState<(BrandVisibilityFacts & { publicHandle: string | null }) | null>(null);
   const [guides, setGuides] = useState<CatalogGuide[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<BrandEditSection | null>(null);
@@ -83,6 +86,9 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
+  // Phase C — server version this tab loaded (save precondition) + refused-save state.
+  const versionRef = useRef<string | undefined>(undefined);
+  const [conflict, setConflict] = useState(false);
 
   const triggerToast = (msg: string) => {
     setToast(msg);
@@ -94,6 +100,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
     let cancelled = false;
     setLoadError(null);
     setModel(null);
+    setRecordFacts(null);
     async function load() {
       if (!activeId) {
         setModel(createBlankBrandModel('new', '', ''));
@@ -108,6 +115,15 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
           return;
         }
         loaded = mapCatalogBrandToModel(found);
+        versionRef.current = found.updatedAt;
+        if (!cancelled) {
+          setRecordFacts({
+            marketplaceStatus: found.marketplaceStatus,
+            marketplaceAccess: found.marketplaceAccess,
+            sellerId: found.sellerId,
+            publicHandle: (found as { publicHandle?: string | null }).publicHandle ?? null,
+          });
+        }
       } catch (e) {
         if (!cancelled) {
           setLoadError(
@@ -218,7 +234,18 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
         navigate(`/admin/brand-studio/${encodeURIComponent(created.id)}/edit`, { replace: true });
         return;
       }
-      const saved = await catalogApi.updateBrand(activeId, brandModelToCanonicalPatch(draft));
+      // Phase C: send only the canonical fields this section changed, guarded by the
+      // version this tab loaded — a stale copy is refused (409) instead of overwriting.
+      const patch = changedFields(brandModelToCanonicalPatch(draft), brandModelToCanonicalPatch(model));
+      if (!Object.keys(patch).length) {
+        setEditingId(null);
+        setDraft(null);
+        triggerToast('No changes to save.');
+        return;
+      }
+      const saved = await catalogApi.updateBrand(activeId, patch, { expectedUpdatedAt: versionRef.current });
+      versionRef.current = saved.updatedAt;
+      setConflict(false);
       const next = mapCatalogBrandToModel(saved);
       // keep the preview-only lists we already attached
       setModel({ ...next, products: model.products, deals: model.deals, promoCodes: model.promoCodes });
@@ -226,7 +253,13 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
       setDraft(null);
       triggerToast('Section saved.');
     } catch (e) {
-      triggerToast(e instanceof Error ? `Save failed — ${e.message}` : 'Save failed.');
+      if (isStaleWriteError(e)) {
+        // Keep the editor and the seller's edits; recovery is an explicit choice.
+        setConflict(true);
+        triggerToast('Not saved — this brand was changed somewhere else.');
+      } else {
+        triggerToast(e instanceof Error ? `Save failed — ${e.message}` : 'Save failed.');
+      }
     } finally {
       setSaving(false);
     }
@@ -639,7 +672,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
           <div className="flex items-center gap-2">
             {model.slug ? (
               <a
-                href={`/brands/${model.slug}`}
+                href={publicProfileUrl('brand', { handle: recordFacts?.publicHandle, slug: model.slug, id: model.id })}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 rounded-lg border border-[#E8EDF2] px-3 py-1.5 text-[11px] font-bold text-[#374151]"
@@ -652,12 +685,29 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
         </header>
       ) : null}
 
+      {conflict ? (
+        <div className="max-w-[1440px] mx-auto px-5 sm:px-8 lg:px-10 pt-4">
+          <StudioConflictNotice
+            what="brand"
+            onDismiss={() => setConflict(false)}
+            onReload={() => {
+              setConflict(false);
+              setEditingId(null);
+              setDraft(null);
+              setReloadNonce((n) => n + 1);
+            }}
+          />
+        </div>
+      ) : null}
+
       <BrandProfilePresentation
         model={model}
         mode="studio"
         studio={studio}
         compareBrands={compareBrands}
         storyContentById={storyContentById}
+        publicUrl={activeId ? publicProfileUrl('brand', { handle: recordFacts?.publicHandle, slug: model.slug, id: model.id }) : undefined}
+        visibility={recordFacts ?? undefined}
         manageLinks={{
           products: '/admin/products',
           deals: '/admin/ads-deals',

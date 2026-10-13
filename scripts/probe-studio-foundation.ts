@@ -9,6 +9,7 @@
  */
 import { draftDiffers, guardedInAppPath, type LinkClickFacts } from '../src/components/studio/unsavedChangesLogic';
 import { editPillAccessibleName } from '../src/components/studio/StudioEditPill';
+import { changedFields } from '../src/components/studio/changedFields';
 
 let passed = 0;
 let failed = 0;
@@ -69,6 +70,16 @@ check('default label → "Edit <section>"', editPillAccessibleName('Pricing') ==
 check('explicit "Edit" label → "Edit <section>"', editPillAccessibleName('Media', 'Edit') === 'Edit Media');
 const custom = editPillAccessibleName('Cover & Avatar', 'Cover');
 check('custom label keeps visible text and names the section', custom.includes('Cover') && custom.includes('Cover & Avatar'), custom);
+
+console.log('changedFields (Phase C section-scoped saves)');
+const baseRec = { title: 'Lamp', price: 100, tags: ['a'], specs: { w: 2 }, note: 'x' };
+check('identical payload → nothing to send', Object.keys(changedFields({ ...baseRec, tags: ['a'], specs: { w: 2 } }, baseRec)).length === 0);
+const onlyPrice = changedFields({ ...baseRec, price: 120 }, baseRec);
+check('only the changed key is sent', JSON.stringify(onlyPrice) === JSON.stringify({ price: 120 }), onlyPrice);
+check('nested / array changes are detected', JSON.stringify(changedFields({ ...baseRec, tags: ['a', 'b'], specs: { w: 3 } }, baseRec)) === JSON.stringify({ tags: ['a', 'b'], specs: { w: 3 } }));
+check('undefined values are never sent', !('note' in changedFields({ ...baseRec, note: undefined as unknown as string }, baseRec)));
+check('a key absent from the base is sent', JSON.stringify(changedFields({ ...baseRec, extra: 1 } as Record<string, unknown>, baseRec)) === JSON.stringify({ extra: 1 }));
+check('no base (create) → everything is sent', Object.keys(changedFields(baseRec, null)).length === Object.keys(baseRec).length);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

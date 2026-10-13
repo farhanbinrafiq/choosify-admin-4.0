@@ -31,7 +31,8 @@ import {
   type BrandProfilePresentationMode,
   type BrandStudioBridge,
 } from './BrandProfileHero';
-import { StudioEditPill } from '../studio';
+import { StudioChecklist, StudioEditPill, brandHealth, brandVisibilityExplanation, type BrandVisibilityFacts } from '../studio';
+import { publicProfileUrl } from '../admin/PublicHandlePanels';
 
 const SECTION_TITLES: Record<BrandEditSection, string> = {
   identity: 'Brand Identity',
@@ -162,8 +163,14 @@ export function BrandProfilePresentation({
   compareBrands = [],
   manageLinks = {},
   storyContentById = {},
+  publicUrl,
+  visibility,
 }: {
   model: BrandCMSModel;
+  /** Canonical storefront URL (production host + active handle). */
+  publicUrl?: string;
+  /** Authoritative marketplace facts from the catalog record (Studio only). */
+  visibility?: BrandVisibilityFacts;
   mode?: BrandProfilePresentationMode;
   onEditSection?: (section: BrandProfileEditSection) => void;
   /** Inline section-editing bridge (mode="studio"). */
@@ -248,11 +255,52 @@ export function BrandProfilePresentation({
         onExploreProducts={() => scrollTo('products-section')}
         onShare={() => {
           if (typeof navigator !== 'undefined' && navigator.clipboard) {
-            const slug = model.slug || model.id;
-            void navigator.clipboard.writeText(`${window.location.origin}/brands/${slug}`);
+            // The storefront URL, never the Admin host this page runs on.
+            void navigator.clipboard.writeText(publicUrl || publicProfileUrl('brand', { slug: model.slug, id: model.id }));
           }
         }}
       />
+
+      {isStudio ? (
+        <div className="max-w-[1440px] mx-auto px-5 sm:px-8 lg:px-10 mb-4">
+          <StudioChecklist
+            title="Brand profile health"
+            testId="brand-health"
+            defaultOpen={false}
+            items={brandHealth(
+              {
+                brandName: model.brandName,
+                logo: model.logo || model.logoUrl || '',
+                coverImage: model.coverImage,
+                category: model.category,
+                tagline: model.tagline,
+                description: model.description,
+                website: model.website,
+                socials: [
+                  model.socialFbUrl, model.socialInstaUrl, model.socialTiktokUrl, model.socialYtUrl,
+                  ...(model.customSocials || []).map((c) => c.url),
+                ].map((v) => v || ''),
+              },
+              visibility,
+            )}
+            intro={
+              visibility ? (
+                brandVisibilityExplanation(visibility).visible && publicUrl ? (
+                  <>
+                    {brandVisibilityExplanation(visibility).text}{' '}
+                    <a href={publicUrl} target="_blank" rel="noopener noreferrer" data-testid="brand-health-public-link" className="font-bold text-[#2323FF] underline">
+                      Open public page
+                    </a>
+                  </>
+                ) : (
+                  brandVisibilityExplanation(visibility).text
+                )
+              ) : undefined
+            }
+            footer="Marketplace Access is granted by Choosify; the other items are recommendations for a complete brand page."
+          />
+        </div>
+      ) : null}
 
       {/* Choosify-Web DcUnderlineTabs parity */}
       <div className="choosify-sticky-section-nav sticky top-[64px] z-[15] w-full mb-4 bg-white">

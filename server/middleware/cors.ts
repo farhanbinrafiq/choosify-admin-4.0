@@ -44,7 +44,8 @@ export function createCorsMiddleware() {
       callback(new Error(`Origin not allowed by CORS: ${origin}`));
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
+    // X-Expected-*-Updated-At: optional Studio save preconditions (stale-write protection).
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-Expected-Updated-At', 'X-Expected-Detail-Updated-At'],
     exposedHeaders: ['X-Request-ID'],
     credentials: true,
   };

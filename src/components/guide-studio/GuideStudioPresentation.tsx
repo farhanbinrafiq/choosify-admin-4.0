@@ -5,6 +5,7 @@ import type { CatalogBrand, CatalogProduct, GuideEntityRef } from '../../types/c
 import {
   GUIDE_FORMAT_LABEL,
   GUIDE_SECTION_TITLE,
+  guideSectionHelp,
   type GuideStudioModel,
   type GuideOptionalSection,
   type GuideStudioSection,
@@ -30,6 +31,8 @@ export type GuideStudioBridge = {
   onRemoveSection: (k: GuideOptionalSection) => void;
   onToggleSection: (k: GuideOptionalSection, enabled: boolean) => void;
   onMoveSection: (k: GuideOptionalSection, dir: -1 | 1) => void;
+  /** A section-layout save is in flight — layout controls are disabled until it settles. */
+  layoutBusy?: boolean;
 };
 
 export type GuidePublisherView =
@@ -45,18 +48,22 @@ export function toYoutubeEmbed(url: string): string {
 
 export function GuideInlineEditFrame({
   title,
+  description,
   studio,
   children,
 }: {
   title: string;
+  /** What this section does on the published guide. */
+  description?: string;
   studio: GuideStudioBridge;
   children: React.ReactNode;
 }) {
   return (
     <div className="relative rounded-xl bg-white border border-[#E8EDF2] p-4 sm:p-5">
-      <div className="text-[10px] font-extrabold uppercase tracking-wider text-[#9AA0AC] mb-3">
+      <div className={`text-[10px] font-extrabold uppercase tracking-wider text-[#9AA0AC] ${description ? 'mb-1' : 'mb-3'}`}>
         Editing — {title}
       </div>
+      {description ? <p className="mt-0 mb-3 text-[11px] leading-snug text-[#6B7280]">{description}</p> : null}
       {children}
       <div className="flex items-center gap-2 mt-4 pt-3 border-t border-[#F1F1F3]">
         <button
@@ -460,27 +467,32 @@ export function GuideStudioPresentation({
           <h3 className="text-[13px] font-extrabold text-[#1A1A2E] tracking-wide uppercase m-0">
             {GUIDE_SECTION_TITLE[id]}
             {entry && !entry.enabled ? (
-              <span className="ml-2 text-[9px] font-bold text-[#9AA0AC] uppercase">hidden</span>
+              <span className="ml-2 text-[9px] font-bold text-[#9AA0AC] uppercase" title="Hidden sections keep their content but are not shown on the published guide.">hidden</span>
             ) : null}
           </h3>
           {isStudio && !editingThis ? (
             <div className="flex items-center gap-1">
-              <button type="button" className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#E8EDF2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2323FF] focus-visible:ring-offset-1 text-[#6B7280]" aria-label={`Move ${GUIDE_SECTION_TITLE[id]} up`} title={`Move ${GUIDE_SECTION_TITLE[id]} up`} onClick={() => studio!.onMoveSection(id, -1)} disabled={idx <= 0}>↑</button>
-              <button type="button" className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#E8EDF2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2323FF] focus-visible:ring-offset-1 text-[#6B7280]" aria-label={`Move ${GUIDE_SECTION_TITLE[id]} down`} title={`Move ${GUIDE_SECTION_TITLE[id]} down`} onClick={() => studio!.onMoveSection(id, 1)} disabled={idx === model.sectionLayout.length - 1}>↓</button>
+              <button type="button" className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#E8EDF2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2323FF] focus-visible:ring-offset-1 text-[#6B7280]" aria-label={`Move ${GUIDE_SECTION_TITLE[id]} up`} title={`Move ${GUIDE_SECTION_TITLE[id]} up`} onClick={() => studio!.onMoveSection(id, -1)} disabled={idx <= 0 || !!studio!.layoutBusy}>↑</button>
+              <button type="button" className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#E8EDF2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2323FF] focus-visible:ring-offset-1 text-[#6B7280]" aria-label={`Move ${GUIDE_SECTION_TITLE[id]} down`} title={`Move ${GUIDE_SECTION_TITLE[id]} down`} onClick={() => studio!.onMoveSection(id, 1)} disabled={idx === model.sectionLayout.length - 1 || !!studio!.layoutBusy}>↓</button>
               <button
                 type="button"
                 className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#E8EDF2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2323FF] focus-visible:ring-offset-1 text-[#6B7280]"
                 aria-label={`${entry?.enabled ?? true ? 'Hide' : 'Show'} ${GUIDE_SECTION_TITLE[id]}`}
+                title={entry?.enabled ?? true ? 'Hide from the published guide — the content is kept' : 'Show on the published guide'}
+                disabled={!!studio!.layoutBusy}
                 onClick={() => studio!.onToggleSection(id, !(entry?.enabled ?? true))}
               >
                 {entry?.enabled ?? true ? 'Hide' : 'Show'}
               </button>
-              <button type="button" className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#E8EDF2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2323FF] focus-visible:ring-offset-1 text-[#DC2626]" aria-label={`Remove ${GUIDE_SECTION_TITLE[id]}`} onClick={() => studio!.onRemoveSection(id)}>Remove</button>
+              <button type="button" className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#E8EDF2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2323FF] focus-visible:ring-offset-1 text-[#DC2626]" aria-label={`Remove ${GUIDE_SECTION_TITLE[id]}`} disabled={!!studio!.layoutBusy} onClick={() => studio!.onRemoveSection(id)}>Remove</button>
             </div>
           ) : null}
         </div>
+        {isStudio && !editingThis ? (
+          <p className="mt-0 mb-2 text-[11px] leading-snug text-[#6B7280]" data-section-help={id}>{guideSectionHelp(id)}</p>
+        ) : null}
         {editingThis ? (
-          <GuideInlineEditFrame title={GUIDE_SECTION_TITLE[id]} studio={studio!}>
+          <GuideInlineEditFrame title={GUIDE_SECTION_TITLE[id]} description={guideSectionHelp(id)} studio={studio!}>
             {studio!.renderEditor(id)}
           </GuideInlineEditFrame>
         ) : (
@@ -499,7 +511,7 @@ export function GuideStudioPresentation({
       <section className="relative bg-white py-7 border-b border-[#E5E7EB]">
         <div className="max-w-[1180px] mx-auto px-5 sm:px-8">
           {editingHero ? (
-            <GuideInlineEditFrame title="Media" studio={studio!}>
+            <GuideInlineEditFrame title="Media" description={guideSectionHelp('media')} studio={studio!}>
               {studio!.renderEditor('media')}
             </GuideInlineEditFrame>
           ) : (
@@ -580,7 +592,7 @@ export function GuideStudioPresentation({
 
         {/* ── Identity (core) ── */}
         {editingIdentity ? (
-          <GuideInlineEditFrame title="Guide Identity" studio={studio!}>
+          <GuideInlineEditFrame title="Guide Identity" description={guideSectionHelp('identity')} studio={studio!}>
             {studio!.renderEditor('identity')}
           </GuideInlineEditFrame>
         ) : (
@@ -630,7 +642,9 @@ export function GuideStudioPresentation({
                   key={id}
                   type="button"
                   onClick={() => studio!.onAddSection(id)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-[#E8EDF2] bg-white px-2.5 py-1.5 text-[11px] font-bold text-[#374151] hover:bg-[#F8FAFC]"
+                  title={guideSectionHelp(id)}
+                  disabled={!!studio!.layoutBusy}
+                  className="inline-flex items-center gap-1 rounded-lg border border-[#E8EDF2] bg-white px-2.5 py-1.5 text-[11px] font-bold text-[#374151] hover:bg-[#F8FAFC] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2323FF] focus-visible:ring-offset-1"
                 >
                   <Plus className="h-3 w-3" /> {GUIDE_SECTION_TITLE[id]}
                 </button>

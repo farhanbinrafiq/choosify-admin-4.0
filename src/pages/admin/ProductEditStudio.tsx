@@ -2,8 +2,17 @@ import React, { useEffect, useMemo, useRef, useState, CSSProperties } from 'reac
 import { useNavigate, useParams } from 'react-router-dom';
 import { LinesTextarea } from '../../components/admin/ListInputs';
 import { ArrowLeft, History, Image as ImageIcon, RotateCw, Trash2, Upload } from 'lucide-react';
-import { catalogApi } from '../../services/catalogApi';
-import { StudioConfirmDialog, draftDiffers, useUnsavedChangesGuard } from '../../components/studio';
+import { catalogApi, isStaleWriteError } from '../../services/catalogApi';
+import {
+  StudioChecklist,
+  StudioConfirmDialog,
+  StudioConflictNotice,
+  changedFields,
+  draftDiffers,
+  productReadiness,
+  useUnsavedChangesGuard,
+  type BrandVisibilityFacts,
+} from '../../components/studio';
 import {
   describeUploadFailures,
   uploadProductImages,
@@ -509,6 +518,10 @@ export default function ProductEditStudio() {
   // it must NEVER PATCH a blank model over a real listing.
   const [loadError, setLoadError] = useState<{ kind: 'notfound' | 'error'; message: string } | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
+  // Phase C — the server versions this tab loaded (product + its detail record).
+  // Sent as save preconditions so a stale tab can never overwrite newer data.
+  const versionRef = useRef<{ product?: string; detail?: string }>({});
+  const [conflict, setConflict] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showVersions, setShowVersions] = useState(false);
   const [pendingLifecycle, setPendingLifecycle] = useState<LifecycleAction | null>(null);
@@ -560,13 +573,16 @@ export default function ProductEditStudio() {
         return;
       }
 
+      const loaded: { product?: string; detail?: string } = {};
       const result = await resolveExistingProductLoad(activeId, {
-        getProduct: (pid) => catalogApi.getProduct(pid),
-        getProductDetail: (pid) => catalogApi.getProductDetail(pid),
+        getProduct: (pid) => catalogApi.getProduct(pid).then((p) => { loaded.product = p?.updatedAt; return p; }),
+        getProductDetail: (pid) => catalogApi.getProductDetail(pid).then((d) => { loaded.detail = d?.updatedAt; return d; }),
       });
       if (cancelled) return;
 
       if (result.status === 'ok') {
+        versionRef.current = loaded;
+        setConflict(false);
         setModel(result.model);
         setSectionDraft(result.model);
         setLoading(false);
@@ -595,6 +611,24 @@ export default function ProductEditStudio() {
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId, isNew, reloadNonce]);
+
+  // Authoritative brand record for the readiness checklist (Marketplace Access
+  // decides whether the product can go live). undefined = not loaded / unknown.
+  const [brandFacts, setBrandFacts] = useState<BrandVisibilityFacts | null | undefined>(undefined);
+  const readinessBrandId = model?.brandId || '';
+  useEffect(() => {
+    let cancelled = false;
+    setBrandFacts(undefined);
+    if (!readinessBrandId) return;
+    catalogApi.listBrands()
+      .then((brands) => {
+        if (cancelled) return;
+        const b = brands.find((x) => x.id === readinessBrandId);
+        setBrandFacts(b ? { marketplaceStatus: b.marketplaceStatus, marketplaceAccess: b.marketplaceAccess, sellerId: b.sellerId } : null);
+      })
+      .catch(() => { if (!cancelled) setBrandFacts(undefined); });
+    return () => { cancelled = true; };
+  }, [readinessBrandId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -707,6 +741,8 @@ export default function ProductEditStudio() {
   const readServerState = async (productId: string): Promise<Pick<ProductEditorModel, 'status' | 'stock'> | null> => {
     try {
       const p = await catalogApi.getProduct(productId);
+      // Keep the precondition current after our own writes (lifecycle / inventory side effects).
+      if (p?.updatedAt) versionRef.current = { ...versionRef.current, product: p.updatedAt };
       return { status: productStatusFromServer(p.status), stock: typeof p.stock === 'number' ? p.stock : Number(p.stock) || 0 };
     } catch {
       return null;
@@ -752,23 +788,40 @@ export default function ProductEditStudio() {
       const merged: ProductEditorModel = { ...model, ...sectionDraft } as ProductEditorModel;
       let productId = merged.id;
       const creatingProduct = isNew || productId === 'new';
+      const needsDetail = creatingProduct || detailSaveRequired(merged, model);
       if (creatingProduct) {
         const created = await catalogApi.createProduct(editorModelToCreatePatch(merged)); // always a Draft
         productId = created.id;
+        // Options & Variants, the size guide and every other rich Product Detail
+        // field are persisted here. A failure (category-schema rejection, invalid
+        // variant pricing, auth) MUST surface — swallowing it told the seller the
+        // save succeeded while the storefront kept the old (or empty) variants.
+        const savedDetail = await catalogApi.upsertProductDetail(productId, editorModelToDetailPayload({ ...merged, id: productId }));
+        if (savedDetail?.updatedAt) versionRef.current = { ...versionRef.current, detail: savedDetail.updatedAt };
       } else {
-        // No `status` (the lifecycle state is kept); `stock` only from a changed Inventory section.
-        await catalogApi.updateProduct(productId, editorModelToSectionPatch(merged, editingId, model));
-      }
-      // Options & Variants, the size guide and every other rich Product Detail
-      // field are persisted here. A failure (category-schema rejection, invalid
-      // variant pricing, auth) MUST surface — swallowing it told the seller the
-      // save succeeded while the storefront kept the old (or empty) variants.
-      // Skipped when this save changed no detail data (the detail PUT re-asserts
-      // every variant's inventory quantity from the stored variant stock) — but
-      // always sent after a category change on a product with options/variants,
-      // so the server validates them against the new category schema.
-      if (creatingProduct || detailSaveRequired(merged, model)) {
-        await catalogApi.upsertProductDetail(productId, editorModelToDetailPayload({ ...merged, id: productId }));
+        // Phase C.1: ONE all-or-nothing server save. No `status` (the lifecycle
+        // state is kept); `stock` only from a changed Inventory section. The
+        // detail half carries only the detail fields this section changed
+        // (omitted fields keep their stored value); it is skipped when the save
+        // changed no detail data, but always sent (even empty) after a category
+        // change on a product with options/variants, so the server validates them
+        // against the new category schema. A stale product OR detail version is
+        // refused with neither half written; failures MUST surface.
+        const detailPayload = needsDetail
+          ? changedFields(editorModelToDetailPayload({ ...merged, id: productId }), editorModelToDetailPayload({ ...model, id: productId }))
+          : undefined;
+        const savedBoth = await catalogApi.saveProductStudio(
+          productId,
+          { product: editorModelToSectionPatch(merged, editingId, model), ...(detailPayload ? { detail: detailPayload } : {}) },
+          {
+            expectedUpdatedAt: versionRef.current.product,
+            expectedDetailUpdatedAt: needsDetail ? versionRef.current.detail : undefined,
+          },
+        );
+        versionRef.current = {
+          product: savedBoth.product?.updatedAt ?? versionRef.current.product,
+          detail: savedBoth.detail?.updatedAt ?? versionRef.current.detail,
+        };
       }
       const serverState = creatingProduct ? null : await readServerState(productId);
       // Photos that never uploaded were left out of the save; keep the editor in step with what was stored.
@@ -790,7 +843,13 @@ export default function ProductEditStudio() {
       );
       if (isNew) navigate(`/admin/products/${productId}/edit`, { replace: true });
     } catch (err) {
-      triggerToast(err instanceof Error ? err.message : 'Save failed');
+      if (isStaleWriteError(err)) {
+        // Keep the editor and the user's edits; recovery is an explicit choice.
+        setConflict(true);
+        triggerToast('Not saved — this product was changed somewhere else.');
+      } else {
+        triggerToast(err instanceof Error ? err.message : 'Save failed');
+      }
     } finally {
       setSaving(false);
     }
@@ -1322,6 +1381,10 @@ export default function ProductEditStudio() {
               <span style={{ ...S.badge, ...STATUS_BADGE[shownStatus] }} data-testid="product-status-badge" data-status={shownStatus}>
                 ● {PRODUCT_STATUS_LABEL[shownStatus].toUpperCase()}
               </span>
+              {/* Phase E (E4): stock availability is stated next to — never instead of — the lifecycle status. */}
+              {shownStatus === 'LIVE' && model.productType !== 'service' && model.stock === 0 ? (
+                <span style={{ ...S.kicker, color: '#B91C1C' }} data-testid="product-stock-note">NO STOCK · BUYERS SEE OUT OF STOCK</span>
+              ) : null}
               {editingId && !creating ? <span style={{ ...S.kicker, color: ACCENT }}>● EDITING: {SECTION_LABELS[editingId]}</span> : null}
             </div>
             <div style={{ ...S.h1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 460 }}>{heading}</div>
@@ -1389,6 +1452,44 @@ export default function ProductEditStudio() {
           </div>
         </div>
       ) : null}
+
+      {conflict ? (
+        <div style={{ marginBottom: 16 }}>
+          <StudioConflictNotice
+            what="product"
+            onDismiss={() => setConflict(false)}
+            onReload={() => {
+              setConflict(false);
+              setEditingId(null);
+              setDirty(false);
+              setReloadNonce((n) => n + 1);
+            }}
+          />
+        </div>
+      ) : null}
+
+      {/* Readiness — from the saved product (or the create draft) and the brand's
+          authoritative Marketplace Access; it never blocks saving. */}
+      {(() => {
+        const r = creating && sectionDraft ? sectionDraft : model;
+        return (
+          <div style={{ marginBottom: 16 }}>
+            <StudioChecklist
+              title="Product readiness"
+              testId="product-readiness"
+              defaultOpen={false}
+              items={productReadiness(
+                {
+                  title: r.title, brandId: r.brandId, categoryId: r.categoryId, image: r.image, gallery: r.gallery,
+                  price: r.price, stock: r.stock, description: r.description, status: r.status,
+                },
+                brandFacts,
+              )}
+              footer="Items marked as needing attention are what Choosify itself checks before a product can go live; the others are recommendations."
+            />
+          </div>
+        );
+      })()}
 
       {/* -- Storefront-parity Product Detail with section-level inline editing.
           Each EDITABLE region carries an "Edit" pill; clicking it swaps that

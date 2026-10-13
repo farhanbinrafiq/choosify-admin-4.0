@@ -257,10 +257,13 @@ async function main() {
     );
 
     // ---- platform-owned fields untouched ----
+    // `followers` on GET /catalog/brands is the authoritative count of real follows
+    // (since 9c88b3d) — never the stored seed figure — and this new brand has none.
+    // The patch-omits-followers assertion above still proves the Studio never writes it.
     assert(
       stored.verifiedStatus === true &&
         stored.claimStatus === 'verified' &&
-        stored.followers === 4210 &&
+        stored.followers === 0 &&
         stored.ratings === 4.6 &&
         stored.featuredFlag === true,
       'platform-owned fields unchanged by the Studio save',

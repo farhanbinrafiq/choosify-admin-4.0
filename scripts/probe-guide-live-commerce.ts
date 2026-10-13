@@ -120,6 +120,9 @@ async function main() {
         brandName: sellerBrand.name,
         categoryId: cat?.id || '',
         categoryName: cat?.name || 'Audio',
+        // The product contract requires a primary image (disposable placeholder URL).
+        image: 'https://example.invalid/probe-northwind-soundbar.jpg',
+        gallery: ['https://example.invalid/probe-northwind-soundbar.jpg'],
         price: 20000,
         originalPrice: 24000,
         sellerId: seller.userId,

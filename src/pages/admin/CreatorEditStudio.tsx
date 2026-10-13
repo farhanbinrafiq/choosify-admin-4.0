@@ -1,8 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, History, Plus, RotateCw, Trash2, Upload } from 'lucide-react';
-import { catalogApi } from '../../services/catalogApi';
-import { StudioConfirmDialog, useUnsavedChangesGuard } from '../../components/studio';
+import { catalogApi, isStaleWriteError } from '../../services/catalogApi';
+import {
+  StudioChecklist,
+  StudioConfirmDialog,
+  StudioConflictNotice,
+  changedFields,
+  creatorReadiness,
+  useUnsavedChangesGuard,
+} from '../../components/studio';
+import { publicProfileUrl } from '../../components/admin/PublicHandlePanels';
+import { publicHandlesOwnerApi } from '../../services/publicHandlesOwnerApi';
 import { useAuth } from '../../contexts/AuthContext';
 import { PublicIdentitySection } from '../../components/publicIdentity/PublicIdentitySection';
 import { useEntityDraft } from '../../hooks/useEntityDraft';
@@ -22,7 +31,6 @@ import {
   type CreatorFeaturedItem,
 } from './creatorEditorModel';
 
-const WEB_ORIGIN = 'http://localhost:5173';
 
 const label = 'block text-[10px] font-extrabold uppercase tracking-wider text-[#6B7280] mb-1';
 const input =
@@ -620,6 +628,18 @@ export default function CreatorEditStudio() {
   const [model, setModel] = useState<CreatorEditorModel | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // 'not_found' / 'failed': no editable model exists, so a blank fallback can
+  // never be saved over (or duplicate) a real creator profile.
+  const [loadFailure, setLoadFailure] = useState<'not_found' | 'failed' | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
+  // Canonical public handle (authoritative handle store); the URL falls back to slug.
+  const [publicHandle, setPublicHandle] = useState<string | null>(null);
+  // Persistent result of a lifecycle action the server did not apply (e.g. publish held).
+  const [lifecycleNotice, setLifecycleNotice] = useState<string | null>(null);
+  // Phase C — server version this tab loaded (sent as the save precondition) and
+  // whether the last save was refused because the profile changed elsewhere.
+  const versionRef = useRef<string | undefined>(undefined);
+  const [conflict, setConflict] = useState(false);
   const [brands, setBrands] = useState<CatalogBrand[]>([]);
   const [ownGuides, setOwnGuides] = useState<Array<{ id: string; slug?: string; title: string; image?: string }>>([]);
 
@@ -659,6 +679,7 @@ export default function CreatorEditStudio() {
     (async () => {
       setLoading(true);
       setLoadError(null);
+      setLoadFailure(null);
       if (isNew) {
         // Creators own exactly one profile — resolve (or auto-create the draft)
         // via ensureCreatorWorkspace and edit that instead of a throwaway canvas.
@@ -670,14 +691,32 @@ export default function CreatorEditStudio() {
             });
             const own = creators[0];
             if (own && !cancelled) {
+              versionRef.current = own.updatedAt;
               setModel(mapCatalogCreatorToEditor(own));
               navigate(`/admin/creator-studio/${own.id}/edit`, { replace: true });
               setLoading(false);
               return;
             }
-          } catch {
-            /* fall through to blank */
+          } catch (e) {
+            // A creator owns exactly one profile: a blank canvas here could create
+            // a second one on save. Stop and let them retry instead.
+            if (!cancelled) {
+              setModel(null);
+              setLoadFailure('failed');
+              setLoadError(
+                `Your creator profile could not be loaded${e instanceof Error && e.message ? ` (${e.message})` : ''}. Nothing was changed — try again.`,
+              );
+              setLoading(false);
+            }
+            return;
           }
+          if (!cancelled) {
+            setModel(null);
+            setLoadFailure('not_found');
+            setLoadError('No creator profile was found for your account.');
+            setLoading(false);
+          }
+          return;
         }
         if (!cancelled) {
           setModel(createBlankCreatorModel('new'));
@@ -697,15 +736,24 @@ export default function CreatorEditStudio() {
         }
         if (cancelled) return;
         if (!creator) {
+          setModel(null);
+          setLoadFailure('not_found');
           setLoadError(`Creator "${id}" was not found or you don’t have access.`);
-          setModel(createBlankCreatorModel(id as string));
         } else {
+          versionRef.current = creator.updatedAt;
+          setConflict(false);
           setModel(mapCatalogCreatorToEditor(creator));
+          setPublicHandle((creator as { publicHandle?: string | null }).publicHandle ?? null);
         }
       } catch (e) {
         if (!cancelled) {
-          setLoadError(e instanceof Error ? e.message : 'Failed to load creator profile');
-          setModel(createBlankCreatorModel(id as string));
+          // Never substitute a blank model with the real id — saving it would
+          // overwrite the existing profile with empty fields.
+          setModel(null);
+          setLoadFailure('failed');
+          setLoadError(
+            `This creator profile could not be loaded${e instanceof Error && e.message ? ` (${e.message})` : ''}. Nothing was changed — try again.`,
+          );
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -715,7 +763,20 @@ export default function CreatorEditStudio() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, isNew, isCreatorRole]);
+  }, [id, isNew, isCreatorRole, reloadNonce]);
+
+  // The active handle from the owner endpoint (covers loads that came through the
+  // workspace, which does not carry publicHandle). Best effort: slug fallback.
+  const handleEntityId = model?.id && model.id !== 'new' ? model.id : '';
+  useEffect(() => {
+    if (!handleEntityId) return;
+    let cancelled = false;
+    publicHandlesOwnerApi
+      .getState('creator', handleEntityId)
+      .then((s) => { if (!cancelled) setPublicHandle(s.activeHandle?.handle ?? null); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [handleEntityId]);
 
   // Reference data for the Partnerships brand-tag picker + Featured guide picker.
   useEffect(() => {
@@ -784,6 +845,7 @@ export default function CreatorEditStudio() {
           slug: draft.slug || newId,
         });
         const m = mapCatalogCreatorToEditor(created);
+        versionRef.current = created.updatedAt;
         setModel(m);
         setEditingId(null);
         setDraft(null);
@@ -792,15 +854,32 @@ export default function CreatorEditStudio() {
         flash('Creator profile created (draft)');
         return;
       }
-      const saved = await catalogApi.patchCreator(model!.id, editorModelToCreatorSectionPatch(draft));
+      // Phase C: send only the fields this section changed, guarded by the version
+      // this tab loaded — a stale copy is refused (409) instead of overwriting.
+      const patch = changedFields(editorModelToCreatorSectionPatch(draft), editorModelToCreatorSectionPatch(model!));
+      if (!Object.keys(patch).length) {
+        setEditingId(null);
+        setDraft(null);
+        flash('No changes to save');
+        return;
+      }
+      const saved = await catalogApi.patchCreator(model!.id, patch, { expectedUpdatedAt: versionRef.current });
       const m = mapCatalogCreatorToEditor(saved);
+      versionRef.current = saved.updatedAt;
+      setConflict(false);
       setModel(m);
       setEditingId(null);
       setDraft(null);
       void snapshotAfterSave(m, SECTION_LABEL[editingId ?? 'identity']);
       flash('Section saved');
     } catch (e) {
-      flash(e instanceof Error ? e.message : 'Save failed');
+      if (isStaleWriteError(e)) {
+        // Keep the editor and the creator's edits; recovery is an explicit choice.
+        setConflict(true);
+        flash('Not saved — this profile was changed somewhere else.');
+      } else {
+        flash(e instanceof Error ? e.message : 'Save failed');
+      }
     } finally {
       setSaving(false);
     }
@@ -815,14 +894,29 @@ export default function CreatorEditStudio() {
     try {
       const status = action === 'publish' ? 'live' : action === 'archive' ? 'archived' : 'draft';
       const saved = await catalogApi.setCreatorPublishStatus(model.id, status);
-      setModel(mapCatalogCreatorToEditor(saved));
-      flash(
-        action === 'publish'
-          ? 'Creator profile published'
-          : action === 'archive'
-            ? 'Creator profile archived'
-            : 'Creator profile moved to draft',
-      );
+      const m = mapCatalogCreatorToEditor(saved);
+      versionRef.current = saved.updatedAt;
+      setModel(m);
+      const expected = status === 'live' ? 'LIVE' : status === 'archived' ? 'ARCHIVED' : 'DRAFT';
+      if (m.status !== expected) {
+        // The server keeps the status when the account has no Marketplace Access
+        // (a pending creator cannot self-publish) — never report a false success.
+        setLifecycleNotice(
+          action === 'publish'
+            ? 'Your profile was not published: Choosify has not enabled Marketplace Access for this account yet, so only Choosify can make the profile live. Your edits are saved — contact Choosify support if you are waiting for access.'
+            : `The status was not changed (still ${m.status.toLowerCase()}).`,
+        );
+        flash(action === 'publish' ? 'Not published — Marketplace Access is pending' : 'Status not changed');
+      } else {
+        setLifecycleNotice(null);
+        flash(
+          action === 'publish'
+            ? 'Creator profile published'
+            : action === 'archive'
+              ? 'Creator profile archived'
+              : 'Creator profile moved to draft',
+        );
+      }
     } catch (e) {
       flash(e instanceof Error ? e.message : `${action} failed`);
     } finally {
@@ -1034,6 +1128,35 @@ export default function CreatorEditStudio() {
     manageGuidesHref: '/admin/guides',
   };
 
+  if (loadFailure && !model) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[420px] gap-3 px-4" role="alert" data-testid="creator-load-failure" data-kind={loadFailure}>
+        <span className="text-[13px] font-extrabold text-[#1A1A2E]">
+          {loadFailure === 'not_found' ? 'Creator profile not found' : 'Could not load this creator profile'}
+        </span>
+        <span className="text-[12px] text-[#DC2626] max-w-md text-center">{loadError}</span>
+        <div className="flex flex-wrap justify-center gap-2">
+          {loadFailure === 'failed' ? (
+            <button
+              type="button"
+              onClick={() => setReloadNonce((n) => n + 1)}
+              className="px-3.5 py-2 rounded-lg bg-[#EF3C23] text-white text-[11px] font-extrabold"
+            >
+              Try again
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => navigate(isCreatorRole ? '/admin/creator-profile' : '/admin/creator-studio')}
+            className="px-3.5 py-2 rounded-lg border border-[#E8EDF2] text-[11px] font-extrabold bg-white"
+          >
+            Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (loading || !model) {
     return (
       <div className="flex flex-col items-center justify-center h-[420px] gap-3 text-[#9AA0AC]">
@@ -1045,7 +1168,8 @@ export default function CreatorEditStudio() {
   }
 
   const canPublish = !isNew && model.id !== 'new';
-  const publicHref = model.slug || model.id ? `${WEB_ORIGIN}/creators/${model.slug || model.id}` : '';
+  // Canonical storefront URL (production host, active handle → slug → id), never the Admin host.
+  const publicHref = canPublish ? publicProfileUrl('creator', { handle: publicHandle, slug: model.slug, id: model.id }) : '';
 
   return (
     <div className="aws-page w-full bg-[#F0F8FF] min-h-screen overflow-x-clip">
@@ -1076,7 +1200,7 @@ export default function CreatorEditStudio() {
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 min-w-0 max-w-full" data-testid="creator-header-actions">
           <div className="inline-flex rounded-lg border border-[#E8EDF2] overflow-hidden">
             <button
               type="button"
@@ -1186,6 +1310,62 @@ export default function CreatorEditStudio() {
           <div className="rounded-xl border border-[#FDE68A] bg-[#FFFBEB] px-4 py-3 text-[12px] text-[#B45309]">
             {loadError}
           </div>
+        </div>
+      ) : null}
+
+      {conflict ? (
+        <div className="max-w-[1180px] mx-auto px-5 sm:px-8 pt-4">
+          <StudioConflictNotice
+            what="creator profile"
+            onDismiss={() => setConflict(false)}
+            onReload={() => {
+              setConflict(false);
+              setEditingId(null);
+              setDraft(null);
+              setReloadNonce((n) => n + 1);
+            }}
+          />
+        </div>
+      ) : null}
+
+      {lifecycleNotice ? (
+        <div className="max-w-[1180px] mx-auto px-5 sm:px-8 pt-4">
+          <div role="status" data-testid="creator-lifecycle-notice" className="flex items-start justify-between gap-3 rounded-xl border border-[#FDE68A] bg-[#FFFBEB] px-4 py-3 text-[12px] text-[#92400E]">
+            <span>{lifecycleNotice}</span>
+            <button type="button" onClick={() => setLifecycleNotice(null)} className="shrink-0 text-[11px] font-bold underline" aria-label="Dismiss notice">
+              Dismiss
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {editMode && canPublish ? (
+        <div className="max-w-[1180px] mx-auto px-5 sm:px-8 pt-4">
+          <StudioChecklist
+            title="Profile readiness"
+            testId="creator-readiness"
+            defaultOpen={false}
+            items={creatorReadiness({
+              name: model.name,
+              avatar: model.avatar,
+              coverImage: model.coverImage,
+              bio: model.bio,
+              socials: [
+                model.socialLinks.facebook, model.socialLinks.instagram, model.socialLinks.youtube,
+                model.socialLinks.linkedin, model.socialLinks.tiktok, ...(model.socialLinks.custom || []).map((c) => c.url),
+              ].map((v) => v || ''),
+              email: model.email,
+              phone: model.phone,
+              status: model.status,
+            })}
+            intro={
+              model.status === 'LIVE'
+                ? 'Your profile is public on the Choosify storefront.'
+                : isCreatorRole
+                  ? 'Your profile is not public yet — only you and Choosify can see it. Publish makes it public once Choosify has enabled Marketplace Access for your account; until then only Choosify can make it live.'
+                  : 'This profile is not public. Publish makes it public on the Choosify storefront.'
+            }
+          />
         </div>
       ) : null}
 

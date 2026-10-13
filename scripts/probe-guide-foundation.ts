@@ -275,6 +275,21 @@ async function main() {
 
   // ── 9. Cross-owner + unauthorized mutation rejected (server-enforced) ─
   // Staff seeds a guide owned by a different (synthetic) creator identity.
+  // Phase E (E1): a creator-authored guide publishes only once its author's
+  // Creator profile is live, so the synthetic author is a real, LIVE Creator
+  // record (idempotent upsert; owned by no account, so creator A still does not
+  // own it). This keeps the cross-owner + marketing-publish assertions below.
+  const synthCreator = await req('PUT', '/catalog/creators/probe-synthetic-creator-B', admin.token, {
+    id: 'probe-synthetic-creator-B',
+    slug: 'probe-synthetic-creator-b',
+    name: '[probe] Synthetic Creator B',
+    status: 'live',
+  });
+  check(
+    synthCreator.status === 200 && synthCreator.body.data?.status === 'live' && !synthCreator.body.data?.userId,
+    'setup: synthetic creator B is a live Creator profile owned by no account',
+    { status: synthCreator.status, creator: synthCreator.body.data?.status, userId: synthCreator.body.data?.userId },
+  );
   const staffSeed = await req('POST', '/catalog/guides', admin.token, {
     title: '[probe] Creator B guide (staff-seeded)',
     format: 'product_review',
@@ -336,7 +351,21 @@ async function main() {
     publisherType: 'brand',
     publisherBrandId: realBrandId, // seeded brand, not owned by the seed seller
   });
-  check(wrongBrand.status === 403, 'seller cannot publish as a brand they do not own → 403', wrongBrand.status);
+  // Since 34eda5e the server attributes a seller's guide to a brand the seller
+  // OWNS (403 only when they own none) — never the requested foreign brand.
+  const brandOwners = ((await j(await fetch(`${API}/catalog/brands`, { headers: { Authorization: `Bearer ${admin.token}` } }))).data || []) as Array<{ id: string; sellerId?: string }>;
+  const ownerOf = (id: string | undefined) => brandOwners.find((b) => b.id === id)?.sellerId;
+  check(ownerOf(realBrandId) !== seller.userId, 'precondition: the requested brand is not owned by the seed seller', { realBrandId, owner: ownerOf(realBrandId) });
+  const attributedBrandId = wrongBrand.body?.data?.publisherBrandId as string | undefined;
+  check(
+    wrongBrand.status === 403 ||
+      (wrongBrand.status === 200 &&
+        wrongBrand.body.data.publisherType === 'brand' &&
+        attributedBrandId !== realBrandId &&
+        ownerOf(attributedBrandId) === seller.userId),
+    'seller cannot publish as a brand they do not own (403, or attributed to a brand they own — rule since 34eda5e)',
+    { status: wrongBrand.status, attributedBrandId, owner: ownerOf(attributedBrandId) },
+  );
 
   // Seller authors a brand guide for their OWN brand → ok, publisherType brand, no creatorId.
   const brandGuide = await req('POST', '/catalog/guides', seller.token, {

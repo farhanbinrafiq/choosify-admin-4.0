@@ -38,9 +38,13 @@ async function main() {
   console.log('=== Product Guide probe ===');
 
   const all: CatalogProduct[] = [];
-  for (const off of [0, 100, 200, 300, 400, 500]) {
+  // Walk every page: the newest seeded fixture is appended at the end of the
+  // public list, which can be longer than any fixed window.
+  for (let off = 0; off < 20000; off += 100) {
     const page = (await j(await fetch(`${base}/catalog/products?limit=100&offset=${off}`))) as { data?: CatalogProduct[] };
-    all.push(...(page.data || []));
+    const rows = page.data || [];
+    all.push(...rows);
+    if (rows.length < 100) break;
   }
   const product = all
     .filter((p) => SNEAKER_SLUG_RE.test(p.slug))

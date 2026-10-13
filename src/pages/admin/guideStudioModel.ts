@@ -108,6 +108,16 @@ export const GUIDE_SECTION_BLURB: Record<GuideOptionalSection, string> = {
   socialLinks: 'Continue-on-platform links for this guide (YouTube, TikTok…).',
 };
 
+const GUIDE_CORE_SECTION_BLURB: Record<GuideCoreSection, string> = {
+  media: 'Photos and video at the top of the guide — the first photo is also its cover image.',
+  identity: 'Title, summary, category, tags and format — what readers see first about this guide.',
+};
+
+/** One-line explanation of a Studio section, shown to the author while editing. */
+export function guideSectionHelp(id: GuideStudioSection): string {
+  return id === 'media' || id === 'identity' ? GUIDE_CORE_SECTION_BLURB[id] : GUIDE_SECTION_BLURB[id];
+}
+
 export type SectionLayoutEntry = { id: GuideOptionalSection; enabled: boolean };
 
 export type GuidePick = { id: string; label: string; ref: GuideEntityRef };

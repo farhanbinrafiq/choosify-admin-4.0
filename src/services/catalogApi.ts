@@ -75,6 +75,26 @@ export interface ViewersReport {
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
+/**
+ * Phase C — the record version a Studio loaded. Sent as a precondition so the
+ * server refuses (409 STALE_WRITE) a save made from an out-of-date copy.
+ */
+export type SaveVersion = { expectedUpdatedAt?: string; expectedDetailUpdatedAt?: string };
+
+function versionHeaders(v?: SaveVersion): Record<string, string> | undefined {
+  if (!v) return undefined;
+  const h: Record<string, string> = {};
+  if (v.expectedUpdatedAt) h['X-Expected-Updated-At'] = v.expectedUpdatedAt;
+  if (v.expectedDetailUpdatedAt) h['X-Expected-Detail-Updated-At'] = v.expectedDetailUpdatedAt;
+  return Object.keys(h).length ? h : undefined;
+}
+
+/** True when a save was refused because the record changed after it was loaded. */
+export function isStaleWriteError(e: unknown): boolean {
+  const x = e as { status?: number; code?: string } | null;
+  return !!x && x.status === 409 && x.code === 'STALE_WRITE';
+}
+
 function parseErrorMessage(rawError: string, status: number): string {
   if (!rawError) return `Request failed (${status})`;
   try {
@@ -87,9 +107,10 @@ function parseErrorMessage(rawError: string, status: number): string {
   return rawError;
 }
 
-function doFetch(path: string, method: HttpMethod, body: unknown, token: string | null) {
+function doFetch(path: string, method: HttpMethod, body: unknown, token: string | null, extraHeaders?: Record<string, string>) {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    ...(extraHeaders ?? {}),
   };
   if (token) {
     headers.Authorization = `Bearer ${token}`;
@@ -101,12 +122,12 @@ function doFetch(path: string, method: HttpMethod, body: unknown, token: string 
   });
 }
 
-async function request<T>(path: string, method: HttpMethod = 'GET', body?: unknown): Promise<T> {
+async function request<T>(path: string, method: HttpMethod = 'GET', body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
   // Write routes require a Firebase Bearer token (authenticateRequest); some GET
   // routes (draft/version endpoints) are admin-only too, so attach it whenever
   // present — public GET routes simply ignore the header.
   const token = getStoredAccessToken();
-  let response = await doFetch(path, method, body, token);
+  let response = await doFetch(path, method, body, token, extraHeaders);
 
   // A dashboard tab left open across a long session (e.g. drafting a product)
   // can outlive its access token. Try one silent refresh via the httpOnly
@@ -114,14 +135,23 @@ async function request<T>(path: string, method: HttpMethod = 'GET', body?: unkno
   if (response.status === 401 && token) {
     const refreshed = await refreshAccessToken();
     if (refreshed) {
-      response = await doFetch(path, method, body, refreshed);
+      response = await doFetch(path, method, body, refreshed, extraHeaders);
     }
   }
 
   if (!response.ok) {
     const rawError = await response.text();
     reportFeatureEntitlementDenied(response.status, rawError);
-    throw new Error(parseErrorMessage(rawError, response.status));
+    // `status` lets callers tell a genuine 404 from a network/server failure;
+    // `code` carries the server's machine-readable reason (e.g. STALE_WRITE).
+    let code: string | undefined;
+    try {
+      const parsed = JSON.parse(rawError) as { code?: unknown };
+      if (typeof parsed.code === 'string') code = parsed.code;
+    } catch {
+      // not JSON
+    }
+    throw Object.assign(new Error(parseErrorMessage(rawError, response.status)), { status: response.status, code });
   }
 
   return response.json() as Promise<T>;
@@ -215,8 +245,9 @@ export const catalogApi = {
   updateProduct: async (
     id: string,
     payload: Partial<CatalogProduct> & Record<string, unknown>,
+    version?: SaveVersion,
   ): Promise<CatalogProduct> => {
-    const result = await request<{ data: CatalogProduct }>(`/catalog/products/${id}`, 'PATCH', payload);
+    const result = await request<{ data: CatalogProduct }>(`/catalog/products/${id}`, 'PATCH', payload, versionHeaders(version));
     return result.data;
   },
   deleteProduct: async (id: string): Promise<void> => {
@@ -370,8 +401,8 @@ export const catalogApi = {
     const result = await request<{ data: CatalogBrand }>('/catalog/brands', 'POST', payload);
     return result.data;
   },
-  updateBrand: async (id: string, payload: Partial<CatalogBrand>): Promise<CatalogBrand> => {
-    const result = await request<{ data: CatalogBrand }>(`/catalog/brands/${id}`, 'PATCH', payload);
+  updateBrand: async (id: string, payload: Partial<CatalogBrand>, version?: SaveVersion): Promise<CatalogBrand> => {
+    const result = await request<{ data: CatalogBrand }>(`/catalog/brands/${id}`, 'PATCH', payload, versionHeaders(version));
     return result.data;
   },
   deleteBrand: async (id: string): Promise<void> => {
@@ -513,8 +544,8 @@ export const catalogApi = {
    * featuredFlag / userId) are stripped server-side for a creator editing their
    * own profile. Never send `status` here — lifecycle uses setCreatorPublishStatus.
    */
-  patchCreator: async (id: string, payload: Partial<CatalogCreator>): Promise<CatalogCreator> => {
-    const result = await request<{ data: CatalogCreator }>(`/catalog/creators/${id}`, 'PATCH', payload);
+  patchCreator: async (id: string, payload: Partial<CatalogCreator>, version?: SaveVersion): Promise<CatalogCreator> => {
+    const result = await request<{ data: CatalogCreator }>(`/catalog/creators/${id}`, 'PATCH', payload, versionHeaders(version));
     return result.data;
   },
   /**
@@ -551,6 +582,19 @@ export const catalogApi = {
     }
   },
   /**
+   * Guide Studio load: `null` only for a genuine 404 (not found / no access).
+   * Network and server failures throw, so an editor never mistakes them for a
+   * missing guide and offers a blank one that could be saved over real data.
+   */
+  getGuideForEdit: async (id: string): Promise<CatalogGuide | null> => {
+    try {
+      return await request<CatalogGuide>(`/catalog/guides/${encodeURIComponent(id)}`);
+    } catch (e) {
+      if ((e as { status?: number }).status === 404) return null;
+      throw e;
+    }
+  },
+  /**
    * Authenticated owned-guide management list (draft / live / archived).
    * Creators get their own guides; cms:edit staff get all.
    */
@@ -581,11 +625,12 @@ export const catalogApi = {
     );
     return result.data;
   },
-  patchGuide: async (id: string, payload: Partial<CatalogGuide>): Promise<CatalogGuide> => {
+  patchGuide: async (id: string, payload: Partial<CatalogGuide>, version?: SaveVersion): Promise<CatalogGuide> => {
     const result = await request<{ data: CatalogGuide }>(
       `/catalog/guides/${encodeURIComponent(id)}`,
       'PATCH',
       payload,
+      versionHeaders(version),
     );
     return result.data;
   },
@@ -634,8 +679,31 @@ export const catalogApi = {
       return null;
     }
   },
-  upsertProductDetail: async (productId: string, payload: Partial<CatalogProductDetail>): Promise<CatalogProductDetail> => {
-    const result = await request<{ data: CatalogProductDetail }>(`/catalog/product-details/${productId}`, 'PUT', payload);
+  upsertProductDetail: async (
+    productId: string,
+    payload: Partial<CatalogProductDetail>,
+    version?: SaveVersion,
+  ): Promise<CatalogProductDetail> => {
+    const result = await request<{ data: CatalogProductDetail }>(`/catalog/product-details/${productId}`, 'PUT', payload, versionHeaders(version));
+    return result.data;
+  },
+  /**
+   * Phase C.1 — Product Studio section save of an existing product as ONE
+   * all-or-nothing server operation: the product patch and the changed detail
+   * fields are validated together and written only if BOTH expected versions
+   * still match (409 STALE_WRITE otherwise, with nothing written).
+   */
+  saveProductStudio: async (
+    productId: string,
+    payload: { product: Partial<CatalogProduct>; detail?: Partial<CatalogProductDetail> },
+    version?: SaveVersion,
+  ): Promise<{ product: CatalogProduct; detail: CatalogProductDetail | null }> => {
+    const result = await request<{ data: { product: CatalogProduct; detail: CatalogProductDetail | null } }>(
+      `/catalog/products/${productId}/studio-save`,
+      'POST',
+      payload,
+      versionHeaders(version),
+    );
     return result.data;
   },
 

@@ -8,6 +8,7 @@ import type { CatalogProduct, CatalogInventory } from '../../types/catalog';
 import { AdminEditModeBar, useAdminEditMode } from '../../components/admin/AdminEditMode';
 import { productStatusFromServer, type ProductEditorStatus } from './productEditorModel';
 import { isLocalPreviewUrl } from '../../lib/localPreview';
+import { StudioConfirmDialog } from '../../components/studio';
 
 /** List label for each server lifecycle state (all five — none folded into another). */
 const LIST_STATUS: Record<ProductEditorStatus, string> = {
@@ -205,8 +206,14 @@ export default function ProductsPage() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
+  // Phase E (E4): stock availability is filtered separately from the lifecycle status.
+  const [stockFilter, setStockFilter] = useState<'All' | 'In stock' | 'Low stock' | 'No stock'>('All');
   const [sortKey, setSortKey] = useState<SortKey>('name_asc');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  // List-level lifecycle actions are confirmed first (shared Studio dialog).
+  const [pendingListAction, setPendingListAction] = useState<
+    null | { kind: 'toggle'; row: ProductRow } | { kind: 'bulk'; action: 'publish' | 'archive' | 'delete'; count: number }
+  >(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [restockingId, setRestockingId] = useState<string | null>(null);
@@ -318,6 +325,7 @@ export default function ProductsPage() {
 
   const displayedProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const lowStockIds = new Set(attentionRows.filter((r) => r.state === 'low_stock').map((r) => r.productId));
     const filtered = products.filter((p) => {
       const matchesSearch = !q
         || p.name.toLowerCase().includes(q)
@@ -326,7 +334,13 @@ export default function ProductsPage() {
         || (p.productReferenceId ? p.productReferenceId.toLowerCase().includes(q) : false);
       const matchesCategory = categoryFilter === 'All' || p.category === categoryFilter;
       const matchesStatus = statusFilter === 'All' || p.status === statusFilter;
-      return matchesSearch && matchesCategory && matchesStatus;
+      const low = lowStockIds.has(p.id);
+      const matchesStock =
+        stockFilter === 'All'
+        || (stockFilter === 'No stock' && p.stock === 0)
+        || (stockFilter === 'Low stock' && p.stock > 0 && low)
+        || (stockFilter === 'In stock' && p.stock > 0 && !low);
+      return matchesSearch && matchesCategory && matchesStatus && matchesStock;
     });
     const sorted = [...filtered];
     sorted.sort((a, b) => {
@@ -340,7 +354,7 @@ export default function ProductsPage() {
       }
     });
     return sorted;
-  }, [products, search, categoryFilter, statusFilter, sortKey]);
+  }, [products, search, categoryFilter, statusFilter, stockFilter, attentionRows, sortKey]);
 
   // ----- Inventory conditions: hydrated once per loaded catalog set, from the
   // canonical ownership-checked read endpoint. Feeds both the "LOW STOCK SKUS"
@@ -430,28 +444,69 @@ export default function ProductsPage() {
   }, [attentionRows]);
 
   // ----- Bulk catalog mutations (canonical API) -----
-  const runBulk = async (
-    label: string,
-    fn: (id: string) => Promise<unknown>,
-    apply: (prev: ProductRow[]) => ProductRow[],
-  ) => {
+  // The server decides each product's final status (e.g. zero stock → Out of
+  // Stock), so the list is updated from what the server reports, never from the
+  // requested status. Partial failures are reported per item.
+  const readBackStatus = async (id: string, fallback: string | null): Promise<string | null> =>
+    catalogApi.getProduct(id).then((x) => listStatusOf(x.status)).catch(() => fallback);
+
+  const runBulkStatus = async (action: 'publish' | 'archive') => {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
     setBulkActionLoading(true);
     try {
-      await Promise.all(ids.map(fn));
-      setProducts(apply);
-      showToast(`${label} ${ids.length} product${ids.length === 1 ? '' : 's'}`);
-      setSelectedIds(new Set());
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : `${label} failed`, 'error');
+      const target = action === 'publish' ? 'live' : 'archived';
+      const results = await Promise.allSettled(ids.map((id) => catalogApi.updateProduct(id, { status: target })));
+      const statuses = await Promise.all(
+        ids.map((id, i) => {
+          const r = results[i];
+          return r.status === 'fulfilled' ? readBackStatus(id, listStatusOf(r.value?.status)) : readBackStatus(id, null);
+        }),
+      );
+      setProducts((prev) => prev.map((p) => {
+        const i = ids.indexOf(p.id);
+        return i >= 0 && statuses[i] ? { ...p, status: statuses[i] as string } : p;
+      }));
+      const failed = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+      const ok = ids.filter((_, i) => results[i].status === 'fulfilled');
+      const counts = new Map<string, number>();
+      ok.forEach((id) => {
+        const s = statuses[ids.indexOf(id)] || 'Unknown';
+        // Phase E (E4): the lifecycle state, as in the Status column.
+        counts.set(s, (counts.get(s) ?? 0) + 1);
+      });
+      const liveNoStock = ok.filter((id) => statuses[ids.indexOf(id)] === 'Active' && products.find((p) => p.id === id)?.stock === 0).length;
+      const parts = [...counts].map(([s, n]) => `${n} now ${s}`);
+      if (liveNoStock) parts.push(`${liveNoStock} live with no stock (buyers see Out of stock)`);
+      const firstError = failed[0]?.reason instanceof Error ? ` — ${(failed[0].reason as Error).message}` : '';
+      const failPart = failed.length ? `${failed.length} failed${firstError}` : '';
+      showToast([parts.join(', '), failPart].filter(Boolean).join('; ') || 'No products changed', failed.length ? 'error' : 'success');
+      // Keep only the failed products selected so they can be retried.
+      setSelectedIds(new Set(ids.filter((_, i) => results[i].status === 'rejected')));
     } finally {
       setBulkActionLoading(false);
     }
   };
-  const handleBulkApprove = () => runBulk('Approved', (id) => catalogApi.updateProduct(id, { status: 'live' }), (prev) => prev.map((p) => (selectedIds.has(p.id) ? { ...p, status: 'Active' } : p)));
-  const handleBulkReject = () => runBulk('Archived', (id) => catalogApi.updateProduct(id, { status: 'archived' }), (prev) => prev.map((p) => (selectedIds.has(p.id) ? { ...p, status: 'Archived' } : p)));
-  const handleBulkDelete = () => runBulk('Deleted', (id) => catalogApi.deleteProduct(id), (prev) => prev.filter((p) => !selectedIds.has(p.id)));
+
+  const runBulkDelete = async () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    setBulkActionLoading(true);
+    try {
+      const results = await Promise.allSettled(ids.map((id) => catalogApi.deleteProduct(id)));
+      const deleted = new Set(ids.filter((_, i) => results[i].status === 'fulfilled'));
+      const failed = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+      setProducts((prev) => prev.filter((p) => !deleted.has(p.id)));
+      setSelectedIds(new Set(ids.filter((id) => !deleted.has(id))));
+      const firstError = failed[0]?.reason instanceof Error ? ` — ${(failed[0].reason as Error).message}` : '';
+      showToast(
+        [deleted.size ? `${deleted.size} deleted` : '', failed.length ? `${failed.length} failed${firstError}` : ''].filter(Boolean).join('; '),
+        failed.length ? 'error' : 'success',
+      );
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
 
   // Row "stock ON/OFF" toggle — no canonical stock-active flag exists, so this
   // drives the real publish status (live ↔ draft) via the ownership-checked
@@ -460,11 +515,21 @@ export default function ProductsPage() {
     const next = p.status === 'Active' ? 'draft' : 'live';
     setTogglingId(p.id);
     try {
-      await catalogApi.updateProduct(p.id, { status: next });
+      const saved = await catalogApi.updateProduct(p.id, { status: next });
       // Read the state back rather than assuming the requested one.
-      const current = await catalogApi.getProduct(p.id).then((x) => listStatusOf(x.status)).catch(() => (next === 'live' ? 'Active' : 'Draft'));
-      setProducts((prev) => prev.map((x) => (x.id === p.id ? { ...x, status: current } : x)));
-      showToast(next === 'live' ? 'Listing published' : 'Listing unpublished');
+      const current = await readBackStatus(p.id, saved?.status ? listStatusOf(saved.status) : null);
+      if (current) setProducts((prev) => prev.map((x) => (x.id === p.id ? { ...x, status: current } : x)));
+      const wanted = next === 'live' ? 'Active' : 'Draft';
+      showToast(
+        !current
+          ? 'Status changed, but it could not be confirmed — refresh the list'
+          : current === wanted
+            ? next === 'live'
+              ? p.stock === 0 ? 'Listing published — shown as Out of Stock until you restock' : 'Listing published'
+              : 'Listing unpublished'
+            : `Listing is now ${current}`,
+        current && current !== wanted ? 'info' : 'success',
+      );
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Could not update listing status', 'error');
     } finally {
@@ -549,14 +614,15 @@ export default function ProductsPage() {
     const total = products.length;
     const active = products.filter((p) => p.status === 'Active').length;
     const pending = products.filter((p) => p.status === 'Draft').length;
-    const outOfStock = products.filter((p) => p.stock === 0).length;
+    // Phase E (E4): published listings (Active or Out of Stock) that buyers see with no stock.
+    const outOfStock = products.filter((p) => p.stock === 0 && (p.status === 'Active' || p.status === 'Out of Stock')).length;
     const lowStock = attentionRows.filter((r) => r.state === 'low_stock').length;
     const activePct = total ? Math.round((active / total) * 100) : 0;
     return [
       { label: 'Total Products', value: total, sub: 'Full catalog', barColor: '#3B82F6' },
       { label: 'Active Products', value: active, sub: `${activePct}% of catalog`, barColor: '#16A34A' },
       { label: 'Low Stock SKUs', value: attentionLoaded ? lowStock : '—', sub: 'Needs replenishment', barColor: '#F59E0B' },
-      { label: 'Out Of Stock', value: outOfStock, sub: 'Disrupting checkouts', barColor: '#DC2626' },
+      { label: 'Out Of Stock', value: outOfStock, sub: 'Published with no stock', barColor: '#DC2626' },
       { label: 'Pending Approval', value: pending, sub: 'Awaiting review', barColor: 'var(--cms-accent)' },
     ];
   }, [products, attentionRows, attentionLoaded]);
@@ -611,19 +677,32 @@ export default function ProductsPage() {
 
   // Reference "stock ON/OFF" switch — bound to publish status (see handleTogglePublish).
   const publishToggle = (p: ProductRow) => {
-    const on = p.status === 'Active';
+    // Phase E (E4): an Out of Stock listing is still published (the server moves it
+    // there from Active when stock runs out, and back when restocked).
+    const on = p.status === 'Active' || p.status === 'Out of Stock';
     const busy = togglingId === p.id;
-    // Suspended is set by Choosify — the switch is not a way to lift it.
-    const locked = p.status === 'Suspended';
+    // Suspended is set by Choosify — the switch is not a way to lift it. Out of
+    // Stock can only be restocked or archived (server transition table), so the
+    // switch cannot unpublish it either.
+    const suspended = p.status === 'Suspended';
+    const outOfStock = p.status === 'Out of Stock';
+    const locked = suspended || outOfStock;
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5 }}>
         <span
           role="switch"
           aria-checked={on}
           aria-disabled={locked || undefined}
-          aria-label={locked ? `${p.name} is suspended by Choosify` : `${on ? 'Unpublish' : 'Publish'} ${p.name}`}
-          title={locked ? 'Suspended by Choosify — contact support to restore it.' : undefined}
-          onClick={() => !busy && !locked && handleTogglePublish(p)}
+          aria-label={suspended ? `${p.name} is suspended by Choosify` : outOfStock ? `${p.name} is published and out of stock` : `${on ? 'Unpublish' : 'Publish'} ${p.name}`}
+          title={suspended ? 'Suspended by Choosify — contact support to restore it.' : outOfStock ? 'Published and out of stock — it returns to Active when you restock. Archive it from the Studio to remove it.' : undefined}
+          tabIndex={locked ? -1 : 0}
+          onClick={() => !busy && !locked && setPendingListAction({ kind: 'toggle', row: p })}
+          onKeyDown={(e) => {
+            if ((e.key === 'Enter' || e.key === ' ') && !busy && !locked) {
+              e.preventDefault();
+              setPendingListAction({ kind: 'toggle', row: p });
+            }
+          }}
           style={{ width: 30, height: 16, borderRadius: 999, position: 'relative', cursor: locked ? 'not-allowed' : busy ? 'wait' : 'pointer', background: on ? '#16A34A' : '#E5E7EB', opacity: busy || locked ? 0.6 : 1, transition: 'background 0.15s', flexShrink: 0, display: 'inline-block' }}
         >
           <span style={{ position: 'absolute', top: 2, left: on ? 16 : 2, width: 12, height: 12, borderRadius: '50%', background: '#fff', transition: 'left 0.15s', boxShadow: '0 1px 2px rgba(0,0,0,0.2)' }} />
@@ -706,6 +785,9 @@ export default function ProductsPage() {
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={S.select}>
               {['All', 'Active', 'Draft', 'Out of Stock', 'Suspended', 'Archived'].map((s) => <option key={s} value={s}>{s === 'All' ? 'Status: Any' : s}</option>)}
             </select>
+            <select value={stockFilter} onChange={(e) => setStockFilter(e.target.value as typeof stockFilter)} style={S.select} aria-label="Filter by stock">
+              {(['All', 'In stock', 'Low stock', 'No stock'] as const).map((s) => <option key={s} value={s}>{s === 'All' ? 'Stock: Any' : s}</option>)}
+            </select>
             <select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)} style={S.select}>
               {SORT_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
             </select>
@@ -723,12 +805,12 @@ export default function ProductsPage() {
                 <span style={S.bulkChip}>{selectedCount} selected</span>
                 {canMutate && (
                   <>
-                    <button onClick={handleBulkApprove} disabled={bulkActionLoading} style={bulkBtn('#16A34A')}>Approve All</button>
-                    <button onClick={handleBulkReject} disabled={bulkActionLoading} style={bulkBtn('#B45309')}>Reject All</button>
+                    <button onClick={() => setPendingListAction({ kind: 'bulk', action: 'publish', count: selectedCount })} disabled={bulkActionLoading} style={bulkBtn('#16A34A')}>Publish selected</button>
+                    <button onClick={() => setPendingListAction({ kind: 'bulk', action: 'archive', count: selectedCount })} disabled={bulkActionLoading} style={bulkBtn('#B45309')}>Archive selected</button>
                   </>
                 )}
                 {canMutate && canDeleteProducts && (
-                  <button onClick={handleBulkDelete} disabled={bulkActionLoading} style={bulkBtn('#DC2626')}>Delete All</button>
+                  <button onClick={() => setPendingListAction({ kind: 'bulk', action: 'delete', count: selectedCount })} disabled={bulkActionLoading} style={bulkBtn('#DC2626')}>Delete selected</button>
                 )}
                 <button onClick={handleExportProductsCSV} disabled={bulkActionLoading} style={bulkBtn('#4338CA')}>Export CSV</button>
               </div>
@@ -773,8 +855,11 @@ export default function ProductsPage() {
                     const att = attentionByProduct[p.id];
                     const vsum = variantStock[p.id];
                     const stockColor = p.stock === 0 ? '#DC2626' : att?.state === 'low_stock' ? '#B45309' : '#111827';
-                    // A live listing with no stock reads as Out of Stock; every other state is shown as it is.
-                    const displayStatus = p.status === 'Active' && p.stock === 0 ? 'Out of Stock' : p.status;
+                    // Phase E (E4): the Status column is the lifecycle state the server holds,
+                    // never relabelled from stock. Stock availability is the Stock column; a live
+                    // listing with no stock gets an explicit note instead of a different status.
+                    const displayStatus = p.status;
+                    const liveNoStock = p.status === 'Active' && p.stock === 0;
                     return (
                       <React.Fragment key={p.id}>
                       <tr style={S.row}>
@@ -830,7 +915,14 @@ export default function ProductsPage() {
                           {canMutate && publishToggle(p)}
                         </td>
                         <td style={S.td}><span style={{ fontWeight: 800 }}>{p.price}</span></td>
-                        <td style={S.td}><span style={statusPill(displayStatus)}>{displayStatus}</span></td>
+                        <td style={S.td}>
+                          <span style={statusPill(displayStatus)} data-testid="product-row-status">{displayStatus}</span>
+                          {liveNoStock ? (
+                            <div data-testid="product-row-stock-note" style={{ fontSize: 9, color: '#B91C1C', fontWeight: 700, marginTop: 3 }}>
+                              Live · no stock — buyers see Out of stock
+                            </div>
+                          ) : null}
+                        </td>
                         <td style={{ ...S.td, textAlign: 'right' }}>
                           {confirmDeleteId === p.id ? (
                             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
@@ -1045,9 +1137,58 @@ export default function ProductsPage() {
         </div>
       )}
 
+      <StudioConfirmDialog
+        open={pendingListAction !== null}
+        title={
+          !pendingListAction
+            ? ''
+            : pendingListAction.kind === 'toggle'
+              ? `${pendingListAction.row.status === 'Active' ? 'Unpublish' : 'Publish'} “${pendingListAction.row.name}”?`
+              : `${pendingListAction.action === 'publish' ? 'Publish' : pendingListAction.action === 'archive' ? 'Archive' : 'Delete'} ${pendingListAction.count} selected product${pendingListAction.count === 1 ? '' : 's'}?`
+        }
+        description={
+          !pendingListAction
+            ? undefined
+            : pendingListAction.kind === 'toggle'
+              ? pendingListAction.row.status === 'Active'
+                ? 'It is removed from the storefront and becomes a draft. You can publish it again later.'
+                : 'It goes live on the storefront if its brand has Marketplace Access. With no stock it is listed as Out of stock. The list shows the status Choosify actually saved.'
+              : pendingListAction.action === 'publish'
+                ? 'Each product goes live if its brand has Marketplace Access; products with no stock are listed as Out of stock. The list shows the status Choosify actually saved for each one.'
+                : pendingListAction.action === 'archive'
+                  ? 'Archived products are hidden from the storefront. You can publish them again later.'
+                  : 'The selected products are permanently deleted. This cannot be undone.'
+        }
+        confirmLabel={
+          !pendingListAction
+            ? ''
+            : pendingListAction.kind === 'toggle'
+              ? pendingListAction.row.status === 'Active' ? 'Unpublish' : 'Publish'
+              : pendingListAction.action === 'publish' ? 'Publish' : pendingListAction.action === 'archive' ? 'Archive' : 'Delete'
+        }
+        tone={pendingListAction?.kind === 'bulk' && pendingListAction.action !== 'publish' ? 'danger' : 'primary'}
+        busy={bulkActionLoading || (pendingListAction?.kind === 'toggle' && togglingId === pendingListAction.row.id)}
+        busyLabel="Working…"
+        confirmTestId="product-list-confirm"
+        onCancel={() => setPendingListAction(null)}
+        onConfirm={() => {
+          const a = pendingListAction;
+          if (!a) return;
+          const run =
+            a.kind === 'toggle'
+              ? handleTogglePublish(a.row)
+              : a.action === 'delete'
+                ? runBulkDelete()
+                : runBulkStatus(a.action);
+          void run.finally(() => setPendingListAction(null));
+        }}
+      />
+
       <AnimatePresence>
         {toast && (
           <motion.div
+            role="status"
+            data-testid="products-toast"
             initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 40 }}
             style={{
               position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 100,
