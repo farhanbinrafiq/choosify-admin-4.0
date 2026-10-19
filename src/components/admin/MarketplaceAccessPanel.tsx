@@ -152,7 +152,7 @@ export const MarketplaceAccessPanel: React.FC<MarketplaceAccessPanelProps> = ({
           <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 space-y-1.5 text-[11px] text-rose-800">
             <div>
               <span className="font-bold uppercase tracking-wider text-[9px] text-rose-500">Reason</span>
-              <p className="mt-0.5">{state.suspensionReason || 'No reason recorded for this session — not persisted server-side.'}</p>
+              <p className="mt-0.5">{state.suspensionReason || 'No reason recorded.'}</p>
             </div>
             {state.suspendedAt && (
               <div className="flex items-center gap-1.5 text-rose-600">

@@ -2356,6 +2356,14 @@ export default function GuideEditStudio() {
             testId="guide-readiness"
             defaultOpen={false}
             items={guideReadiness(model)}
+            onGo={(s) => {
+              if (dirty && editingId && editingId !== s) {
+                flash('Save or cancel the current section first.');
+                return false;
+              }
+              requestEdit(s as GuideStudioSection);
+              return true;
+            }}
             intro={
               <>
                 Drafts are private. A live guide is public on the Choosify storefront; Unpublish returns it to draft and

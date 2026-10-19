@@ -699,12 +699,7 @@ export type OpsVerificationStatus =
   | 'Under Review'
   | 'Approved'
   | 'Rejected';
-export type OpsDocumentType =
-  | 'Trade License'
-  | 'Business Registration'
-  | 'Tax Certificate'
-  | 'Brand Ownership Proof'
-  | 'Identity Verification';
+export type OpsDocumentType = import('../../shared/verification/verificationDocuments').VerificationDocumentType;
 export type OpsDocumentStatus = 'pending' | 'approved' | 'rejected';
 
 export interface OpsVerificationDocument {
@@ -751,4 +746,144 @@ export interface OpsVerificationRequest {
   audit_trail: OpsVerificationAuditEntry[];
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Super Admin "Edit User" session — the audit record for acting on a user's
+ * account. Opened with a reason before any edit control is offered on a
+ * profile; closed explicitly (or by expiry). Persisted in the operations
+ * snapshot; every start/end is also written to the audit log. It does NOT
+ * grant permissions: each edit still goes through its own endpoint's checks.
+ */
+export type OpsAdminEditReason =
+  | 'user_support_request'
+  | 'data_correction'
+  | 'compliance_review'
+  | 'fraud_investigation'
+  | 'other';
+
+export interface OpsAdminEditSession {
+  id: string;
+  adminUserId: string;
+  adminName?: string;
+  adminEmail?: string;
+  targetUserId: string;
+  targetRole: 'consumer' | 'seller' | 'creator';
+  targetLabel?: string;
+  reason: OpsAdminEditReason;
+  reasonDetail: string;
+  startedAt: string;
+  expiresAt: string;
+  endedAt?: string;
+  endedBy?: string;
+  endReason?: 'exited' | 'expired';
+}
+
+/**
+ * One Marketplace Access decision on a brand (marketplaceStatus) or creator
+ * (publish status) — who changed it, from/to, why and for how long. Written
+ * server-side by the access endpoints only; read by staff and the owner.
+ */
+export interface OpsMarketplaceAccessEvent {
+  id: string;
+  entityType: 'brand' | 'creator';
+  entityId: string;
+  entityName?: string;
+  ownerUserId?: string;
+  fromStatus?: string;
+  toStatus: string;
+  reason?: string;
+  durationDays?: number | null;
+  /** When a time-boxed suspension is meant to end (informational — not auto-applied). */
+  reviewAt?: string;
+  notifyOwner?: boolean;
+  actorId: string;
+  actorName?: string;
+  at: string;
+}
+
+/**
+ * How a Seller / Creator gets paid — one server-side payout profile per
+ * account (bank account and/or MFS wallets). Replaces the browser-only
+ * Payouts → Payment Info form. Written only by the owner.
+ */
+export interface OpsPayoutProfile {
+  userId: string;
+  accountHolderName: string;
+  bankName: string;
+  accountNumber: string;
+  routingNumber: string;
+  branchName: string;
+  bkashNumber: string;
+  nagadNumber: string;
+  rocketNumber: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A staff reminder asking an owner to add their payout details. */
+export interface OpsPayoutReminder {
+  id: string;
+  userId: string;
+  actorId: string;
+  actorName?: string;
+  at: string;
+}
+
+/**
+ * A signed-in shopper's own storefront signals, synced from the Web
+ * storefront: saved products / brands, followed creators and recent
+ * searches. Brand follows live in the follows store. Read by the owner and
+ * by Choosify staff on the Consumer profile.
+ */
+export interface OpsShopperSignalItem {
+  id: string;
+  label: string;
+  image?: string;
+  at: string;
+}
+export interface OpsShopperSignals {
+  userId: string;
+  savedProducts: OpsShopperSignalItem[];
+  savedBrands: OpsShopperSignalItem[];
+  followedCreators: OpsShopperSignalItem[];
+  searches: Array<{ q: string; at: string }>;
+  updatedAt: string;
+}
+
+/** Account Activity Log entry (Seller / Creator profile). See server/accountActivity. */
+export type OpsAccountActivityCategory = 'sign_in' | 'security' | 'account' | 'verification' | 'admin';
+export interface OpsAccountActivity {
+  id: string;
+  userId: string;
+  at: string;
+  type: string;
+  category: OpsAccountActivityCategory;
+  summary: string;
+  actor: 'self' | 'staff' | 'system';
+  success: boolean;
+  /** Owner's own request context (self actions only). */
+  ip?: string;
+  device?: string;
+  location?: string;
+  /** Staff-only fields — stripped from the owner's view. */
+  staffActorId?: string;
+  staffActorName?: string;
+  staffActorRole?: string;
+  staffIp?: string;
+  staffDevice?: string;
+  staffNote?: string;
+}
+
+/** Staff "Ask to Upload" — Choosify asked the owner for specific verification documents. */
+export interface OpsVerificationDocRequest {
+  id: string;
+  entityType: 'brand' | 'creator';
+  entityId: string;
+  ownerUserId: string;
+  docTypes: string[];
+  note?: string;
+  actorId: string;
+  actorName?: string;
+  at: string;
 }

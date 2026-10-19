@@ -15,7 +15,7 @@ import type {
   HomepageHeroBanner,
   HomepageSectionConfig,
 } from '../src/types/catalog';
-import type { ProfileImageCropParams } from '../shared/media/profileImageCrop';
+import { cropFrameFields, type ProfileImageCropParams } from '../shared/media/profileImageCrop';
 import { parseProductStatusInput } from './catalog/productLifecycle';
 import { detectBrandablePlatform, isUnsupportedFacebookShareUrl } from '../src/lib/creatorReviewPlatform';
 
@@ -94,7 +94,7 @@ const toCropParams = (value: unknown, existing?: ProfileImageCropParams): Profil
     )
   ) {
     const v = value as Record<string, number>;
-    return { scale: v.scale, x: v.x, y: v.y, naturalW: v.naturalW, naturalH: v.naturalH };
+    return { scale: v.scale, x: v.x, y: v.y, naturalW: v.naturalW, naturalH: v.naturalH, ...cropFrameFields(v) };
   }
   return existing;
 };
@@ -172,6 +172,8 @@ const brandSchema = z.object({
       y: z.number(),
       naturalW: z.number(),
       naturalH: z.number(),
+      frameW: z.number().optional(),
+      frameH: z.number().optional(),
     })
     .optional(),
   coverImage: z.string().optional(),

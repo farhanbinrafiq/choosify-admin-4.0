@@ -37,7 +37,7 @@
 }
 
 .admin-workspace__nav-toggle {
-  display: none;
+  display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
@@ -66,6 +66,18 @@
 
 .admin-workspace__sidebar-backdrop {
   display: none;
+}
+
+/* Desktop: hamburger-collapsed menu — content takes the full width. */
+@media (min-width: 901px) {
+  .admin-workspace__sidebar {
+    transition: margin-left 0.2s ease, visibility 0.2s;
+  }
+
+  .admin-workspace--nav-hidden .admin-workspace__sidebar {
+    margin-left: calc(-1 * var(--cms-sidebar-width, 240px));
+    visibility: hidden;
+  }
 }
 
 .admin-workspace__topbar-logo {

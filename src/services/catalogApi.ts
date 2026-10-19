@@ -189,6 +189,15 @@ export interface WorkspaceCustomerRow {
   reviews: Array<{ id: string; productName: string; rating: number; comment: string; date: string }>;
 }
 
+/** Reason / duration recorded with a Marketplace Access decision (server-side history). */
+export interface MarketplaceDecisionInput {
+  reason?: string;
+  durationDays?: number | null;
+  notifyOwner?: boolean;
+  /** Reject the change when a removal (suspend/restrict/revoke/archive) has no reason. */
+  requireReason?: boolean;
+}
+
 export const catalogApi = {
   /**
    * Owner-scoped customer directory. `owner: 'creator'` hits the creator route;
@@ -412,12 +421,26 @@ export const catalogApi = {
   setBrandMarketplaceAccess: async (
     id: string,
     status: NonNullable<CatalogBrand['marketplaceStatus']>,
+    decision?: MarketplaceDecisionInput,
   ): Promise<{ data: CatalogBrand; warning?: string | null }> => {
     return request<{ success: boolean; data: CatalogBrand; warning?: string | null }>(
       `/catalog/brands/${id}/marketplace-access`,
       'PATCH',
-      { status },
+      { status, ...(decision || {}) },
     );
+  },
+  /** Staff-only creator Marketplace Access (publish status) with a recorded reason. */
+  setCreatorMarketplaceAccess: async (
+    id: string,
+    status: 'live' | 'archived' | 'draft',
+    decision?: MarketplaceDecisionInput,
+  ): Promise<CatalogCreator> => {
+    const result = await request<{ success: boolean; data: CatalogCreator }>(
+      `/catalog/creators/${encodeURIComponent(id)}/marketplace-access`,
+      'PATCH',
+      { status, ...(decision || {}) },
+    );
+    return result.data;
   },
 
   /** Legacy CatalogDeal records — read-only (writes return 410; canonical Deals are adsApi.listDeals). */

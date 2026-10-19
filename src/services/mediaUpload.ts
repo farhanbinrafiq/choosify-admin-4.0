@@ -159,6 +159,30 @@ export async function uploadUserAvatar(file: File): Promise<string> {
   return uploadImage(file, 'choosify/users');
 }
 
+/**
+ * Verification document (trade license, ID, …) → PRIVATE storage via
+ * POST /operations/media/upload-verification. The returned URL is only
+ * readable by the uploader and platform admins (GET /catalog/media/private/:id).
+ */
+export async function uploadVerificationDocument(file: File): Promise<{ url: string; fileName: string }> {
+  const base64Data = await fileToBase64(file);
+  const send = (token: string | null) =>
+    fetch(`${API_BASE}/operations/media/upload-verification`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ fileName: file.name, mimeType: file.type || 'application/pdf', data: base64Data }),
+    });
+  const token = getStoredAccessToken();
+  let response = await send(token);
+  if (response.status === 401 && token) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) response = await send(refreshed);
+  }
+  const payload = (await response.json().catch(() => ({}))) as { url?: string; fileName?: string; error?: string };
+  if (!response.ok || !payload.url) throw new Error(payload.error || `Upload failed with ${response.status}`);
+  return { url: payload.url, fileName: payload.fileName || file.name };
+}
+
 /** Converts a canvas-exported `data:image/...;base64,...` URL (e.g. from AvatarCropModal) into a File for upload. */
 export function dataUrlToFile(dataUrl: string, fileName: string): File {
   const [meta, base64] = dataUrl.split(',');

@@ -227,7 +227,7 @@ async function main() {
     { name: 'Product', path: `/admin/products/${product.id}/edit`, ready: new RegExp(`PA Product ${sfx}`), listPath: '/admin/products', backName: 'Back to products', pill: /About/i, hasView: false, pillOffsetPx: 8 },
     { name: 'Guide', path: `/admin/guides/${guide.id}/edit`, ready: new RegExp(`PA Guide ${sfx}`), listPath: '/admin/guides', backName: 'Back', pill: /^Edit Guide Identity$/, hasView: true, pillOffsetPx: 8 },
     { name: 'Brand', path: `/admin/brand-studio/${brand.id}/edit`, ready: new RegExp(`PA Brand ${sfx}`), listPath: '/admin/brand-studio', backName: 'Back', pill: /Contact Information/, hasView: false, pillOffsetPx: 8 },
-    { name: 'Creator', path: `/admin/creator-studio/${creator.id}/edit`, ready: new RegExp(`PA Creator ${sfx}`), listPath: '/admin/creator-studio', backName: 'Back', pill: /Profile Identity/, hasView: true, pillOffsetPx: 12 },
+    { name: 'Creator', path: `/admin/creator-studio/${creator.id}/edit`, ready: new RegExp(`PA Creator ${sfx}`), listPath: '/admin/creator-studio', backName: 'Back', pill: /Profile Identity/, hasView: false, pillOffsetPx: 12 }, // Creator Studio is always in Studio mode (Brand pattern) — no View toggle
   ];
 
   for (const s of studios) {

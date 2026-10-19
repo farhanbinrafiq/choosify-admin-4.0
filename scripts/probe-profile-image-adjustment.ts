@@ -279,6 +279,50 @@ async function main() {
     creatorAfterUserEdit?.avatar,
   );
 
+  // ------------------------------------------- FRAME SIZE + CREATOR MEDIA ---
+  // The editor frame shrinks on narrow screens; crops now record frameW/frameH
+  // so "Adjust" on another screen can rescale them. And Creator Studio's own
+  // image uploads (category `creators`) must work for a creator account.
+  console.log('--- Frame size + creator media ---');
+  const framed = { ...cropA, frameW: 224, frameH: 224 };
+  await fetch(`${base}/auth/profile`, {
+    method: 'PATCH',
+    headers: H(seller.token),
+    body: JSON.stringify({ avatarUrl: 'https://example.com/media/avatar-out-f.png', avatarOriginalUrl: 'https://example.com/media/avatar-original-f.png', avatarCrop: framed }),
+  });
+  const meF = await j(await fetch(`${base}/auth/me`, { headers: H(seller.token) }));
+  assert(cropEquals(meF.avatarCrop, framed) && meF.avatarCrop?.frameW === 224 && meF.avatarCrop?.frameH === 224, 'user: crop frame size (frameW/frameH) persisted', meF.avatarCrop);
+  await fetch(`${base}/auth/profile`, {
+    method: 'PATCH',
+    headers: H(seller.token),
+    body: JSON.stringify({ avatarCrop: { ...cropA, frameW: -5, frameH: 'x' } }),
+  });
+  const meBad = await j(await fetch(`${base}/auth/me`, { headers: H(seller.token) }));
+  assert(cropEquals(meBad.avatarCrop, cropA) && meBad.avatarCrop?.frameW === undefined, 'user: invalid frame size is dropped, crop kept', meBad.avatarCrop);
+  await fetch(`${base}/auth/profile`, { method: 'PATCH', headers: H(seller.token), body: JSON.stringify({ avatarUrl: '', avatarOriginalUrl: '', avatarCrop: null }) });
+
+  const bF = await j(
+    await fetch(`${base}/catalog/brands/${realBrandId}`, { method: 'PATCH', headers: H(admin.token), body: JSON.stringify({ logoCrop: { ...cropB, frameW: 320, frameH: 180 } }) }),
+  );
+  assert(bF?.data?.logoCrop?.frameW === 320 && bF?.data?.logoCrop?.frameH === 180 && cropEquals(bF?.data?.logoCrop, cropB), 'brand: logoCrop frame size persisted', bF?.data?.logoCrop);
+  const cF = await j(
+    await fetch(`${base}/catalog/creators/${creatorId}`, { method: 'PATCH', headers: H(admin.token), body: JSON.stringify({ avatarCrop: { ...cropB, frameW: 224, frameH: 224 } }) }),
+  );
+  assert(cF?.data?.avatarCrop?.frameW === 224 && cropEquals(cF?.data?.avatarCrop, cropB), 'creator: avatarCrop frame size persisted', cF?.data?.avatarCrop);
+
+  const PNG1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  const upload = (token: string, category: string) =>
+    fetch(`${base}/catalog/media/upload`, { method: 'POST', headers: H(token), body: JSON.stringify({ fileName: 'p.png', mimeType: 'image/png', data: PNG1, category }) });
+  const upCreator = await upload(creator.token, 'creators');
+  assert(upCreator.status === 200, 'creator: can upload Creator Studio media (category creators)', upCreator.status);
+  const upCreatorBrands = await upload(creator.token, 'brands');
+  const upCreatorProducts = await upload(creator.token, 'products');
+  assert(upCreatorBrands.status === 403 && upCreatorProducts.status === 403, 'creator: still refused for brand/product media (no broader permission)', [upCreatorBrands.status, upCreatorProducts.status]);
+  const upSellerBrands = await upload(seller.token, 'brands');
+  assert(upSellerBrands.status === 200, 'seller: brand media upload unchanged (200)', upSellerBrands.status);
+  const upAnon = await fetch(`${base}/catalog/media/upload`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fileName: 'p.png', mimeType: 'image/png', data: PNG1, category: 'creators' }) });
+  assert(upAnon.status === 401, 'anonymous: creator media upload refused (401)', upAnon.status);
+
   // ------------------------------------------------------------- CLEANUP ---
   console.log('--- Cleanup ---');
   const delBrand = await fetch(`${base}/catalog/brands/${realBrandId}`, { method: 'DELETE', headers: H(admin.token) });

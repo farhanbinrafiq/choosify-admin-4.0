@@ -66,7 +66,11 @@ const linesToArr = (v: string) => v.split('\n').map((s) => s.trim()).filter(Bool
 export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudioProps = {}) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { activeBrandId, allBrands, setActiveBrandId, requestNewBrand } = useAuth();
+  const { activeBrandId, allBrands, setActiveBrandId, requestNewBrand, profile } = useAuth();
+  // Back only leads somewhere useful when there is a list to return to: staff always; a seller
+  // only when they own more than one brand (a single-brand seller has nowhere to go back to).
+  const isSellerAccount = profile?.role === 'seller' || profile?.role === 'verified_seller';
+  const showBack = !isSellerAccount || allBrands.length > 1;
   // /admin/brand-studio/new always starts a blank brand, never the last-opened one.
   const isCreateRoute = !!useMatch('/admin/brand-studio/new') && !overrideId;
   const activeId = isCreateRoute ? '' : overrideId || id || activeBrandId || '';
@@ -276,7 +280,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
           <div>
             <div className={label}>Cover image</div>
             <BrandImageUploadField
-              variant="banner"
+              variant="cover"
               value={d.coverImage}
               onChange={(url) => patch({ coverImage: url })}
             />
@@ -654,14 +658,16 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
       {!isNested ? (
         <header className="sticky top-[var(--cms-topbar-height,64px)] z-[8] flex items-center justify-between gap-3 border-b border-[#E8EDF2] bg-white/95 px-4 py-2.5 backdrop-blur">
           <div className="flex items-center gap-3 min-w-0">
-            <button
-              type="button"
-              onClick={() => confirmLeave(() => navigate('/admin/brand-studio'))}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#E8EDF2] text-[#374151]"
-              aria-label="Back"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
+            {showBack ? (
+              <button
+                type="button"
+                onClick={() => confirmLeave(() => navigate('/admin/brand-studio'))}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#E8EDF2] text-[#374151]"
+                aria-label="Back"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+            ) : null}
             <div className="min-w-0">
               <div className="text-[9px] font-extrabold uppercase tracking-widest text-[#EF3C23]">Brand Studio</div>
               <div className="truncate text-[13px] font-extrabold text-[#1A1A2E]">

@@ -23,8 +23,8 @@ export function isLegacyInspectionPath(pathname: string): boolean {
 export function inspectionUniversalPath(role: InspectionRole, id: string): string {
   const enc = encodeURIComponent(id);
   if (role === 'consumer') return `/admin/consumers/${enc}`;
-  if (role === 'creator') return `/admin/creators/${enc}`;
-  return `/admin/brand-studio?sellerId=${enc}`;
+  if (role === 'creator') return `/admin/creator-review?creatorId=${enc}`;
+  return `/admin/seller-profile?sellerId=${enc}`;
 }
 
 function decodeSegment(raw: string): string {

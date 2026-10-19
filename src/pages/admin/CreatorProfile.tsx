@@ -1,37 +1,41 @@
 import React, { useCallback, useEffect, useMemo, useState, CSSProperties } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRbac } from '../../contexts/RbacContext';
 import { useImpersonation } from '../../contexts/ImpersonationContext';
-import { Loader2, AlertTriangle, ArrowLeft, LogIn } from 'lucide-react';
+import { Loader2, AlertTriangle, ArrowLeft, LogIn, Phone, Mail } from 'lucide-react';
 import { AdminMessageUserButton } from '../../components/messaging/AdminMessageUserButton';
-import { ProfileMessagePopup } from '../../components/messaging/ProfileMessagePopup';
-import { catalogApi } from '../../services/catalogApi';
-import { authApi, type UserDirectoryEntry } from '../../services/authApi';
-import { operationsApi, type OpsVerification } from '../../services/operationsApi';
-import { cashbookApi, type FinanceSummary } from '../../services/cashbookApi';
-import type { CatalogCreator } from '../../types/catalog';
+import { catalogApi, type GuideManageRow } from '../../services/catalogApi';
+import { authApi, type UserDetail } from '../../services/authApi';
+import { operationsApi, type OpsReview } from '../../services/operationsApi';
+import type { CatalogCreator, CatalogGuide } from '../../types/catalog';
 import { Avatar } from '../../components/shared/Avatar';
 import { AccountEntitlementsPanel } from '../../components/admin/EntitlementAccessPanels';
-import { EntityHandlePanel, canViewPublicHandles } from '../../components/admin/PublicHandlePanels';
+import { EntityHandlePanel, canViewPublicHandles, publicProfileUrl } from '../../components/admin/PublicHandlePanels';
+import { CreatorProfilePresentation } from '../../components/creator-profile';
+import { mapCatalogCreatorToEditor } from './creatorEditorModel';
+import { personaCoverGradient } from '../../components/admin/profile/personaTheme';
+import { AdminEditHistory, AdminEditModeStrip, AdminEditUserButton, useAdminEditUser } from '../../components/admin/profile/AdminEditUser';
+import { AdsDealsPanel, ReviewsPanel, UnavailablePanel } from '../../components/admin/profile/ProfileSections';
+import { MarketplaceStatusBadge, PhotoVerificationBadge } from '../../components/admin/profile/PhotoVerificationBadge';
+import { PayoutInfoPanel } from '../../components/admin/profile/PayoutInfoPanel';
+import { AccountActivityPanel } from '../../components/admin/profile/AccountActivityPanel';
+import { VerificationCenterPanel } from '../../components/admin/profile/VerificationCenterPanel';
+import { MarketplaceAccessSection } from '../../components/admin/profile/MarketplaceAccessSection';
+import { ProfileMessagePopup } from '../../components/messaging/ProfileMessagePopup';
+import { ProfileContactActions } from '../../components/admin/profile/ProfileContactActions';
 
 // ============================================================================
-// Creator Profile — the real /admin/creator-review?creatorId= destination.
+// Creator Profile — the Super Admin 360° view at /admin/creator-review?creatorId=.
 //
-// Same approach as ConsumerProfileView.tsx / SellerProfile.tsx: PRESENTATION
-// keeps the full original tab/section layout from the legacy CmsMirrorHost
-// "Creator Profile" (Account Information / Verification Center / Creator
-// Studio / Recommended Product Listings / Recommendations & Guides / My
-// Earnings / Payment Info / Reviews & Score / Ads & Deals). FUNCTIONALITY
-// only fills a section with real data when a real backend source exists;
-// everything else keeps its shape but renders an honest "not available"
-// state. Login As User / Message reuse the same ImpersonationContext /
-// messaging components as every other real profile page in this app.
-//
-// NOTE: this route is "/admin/creator-review", not "/admin/creator-profile"
-// -- that exact path is already the canonical self-service route a CREATOR
-// uses to view their OWN profile (see App.tsx comments). Reusing it here
-// would have shadowed that route behind the admin-only role gate.
+// VIEW ONLY by default; every tab reads a canonical source:
+//   Account Information      → creator catalog record + auth user detail + Marketplace Access (recorded reasons)
+//   Verification Center      → /operations/verifications for this creator
+//   Creator Studio           → the creator record rendered by Creator Studio's own CreatorProfilePresentation
+//   Recommendations & Guides → the creator's guides (Guide Management) + featured content + video/reel counts
+//   My Earnings / Payment    → no server-side creator earnings / payout data exists (reported honestly)
+//   Reviews & Score          → review store: trust score + reviews this account posted (no review targets creators)
+//   Ads & Deals              → Ads & Deals records owned by the creator's account
 // ============================================================================
 
 const ACCENT = 'var(--cms-accent)';
@@ -41,15 +45,20 @@ const TABS: Array<{ key: string; label: string; icon: string }> = [
   { key: 'account', label: 'Account Information', icon: '⚙' },
   { key: 'verification', label: 'Verification Center', icon: '▤' },
   { key: 'studio', label: 'Creator Studio', icon: '♦' },
-  { key: 'products', label: 'Recommended Product Listings', icon: '▦' },
   { key: 'guides', label: 'Recommendations & Guides', icon: '📖' },
   { key: 'earnings', label: 'My Earnings', icon: '৳' },
   { key: 'payment', label: 'Payment Info', icon: '💳' },
   { key: 'reviews', label: 'Reviews & Score', icon: '●' },
   { key: 'ads', label: 'Ads & Deals', icon: '⛿' },
   { key: 'features', label: 'Feature Access', icon: '⚑' },
-  { key: 'handle', label: 'Public Handle', icon: '@' },
+  { key: 'activity', label: 'Activity Log', icon: '⏱' },
 ];
+
+const GUIDE_TONE: Record<string, CSSProperties> = {
+  live: { background: '#DCFCE7', color: '#166534' },
+  draft: { background: '#FEF3C7', color: '#92400E' },
+  archived: { background: '#F1F5F9', color: '#475569' },
+};
 
 export default function CreatorProfile() {
   const [searchParams] = useSearchParams();
@@ -59,19 +68,20 @@ export default function CreatorProfile() {
   const { can } = useRbac();
   const { state: impersonation, openLoginAsConfirm } = useImpersonation();
   const [showMessagePopup, setShowMessagePopup] = useState(false);
-  // ?tab=handle opens the public handle directly (handle request queue links).
-  const [activeTab, setActiveTab] = useState(() => (searchParams.get('tab') === 'handle' ? 'handle' : 'account'));
+  const rawTab = searchParams.get('tab');
+  const initialTab = rawTab === 'products' ? 'guides' : rawTab === 'handle' ? 'account' : rawTab;
+  const [activeTab, setActiveTab] = useState(() => (initialTab && TABS.some((t) => t.key === initialTab) ? initialTab : 'account'));
   const showHandles = canViewPublicHandles(profile?.role);
-  const visibleTabs = useMemo(() => TABS.filter((t) => t.key !== 'handle' || showHandles), [showHandles]);
+  const visibleTabs = TABS;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const [creator, setCreator] = useState<CatalogCreator | null>(null);
-  const [user, setUser] = useState<UserDirectoryEntry | null>(null);
-  const [verifications, setVerifications] = useState<OpsVerification[]>([]);
-  const [finance, setFinance] = useState<FinanceSummary | null>(null);
-  const [financeError, setFinanceError] = useState(false);
+  const [user, setUser] = useState<UserDetail | null>(null);
+  const [guides, setGuides] = useState<GuideManageRow[]>([]);
+  const [liveGuides, setLiveGuides] = useState<CatalogGuide[]>([]);
+  const [posted, setPosted] = useState<OpsReview[]>([]);
+  const [reviewsError, setReviewsError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!creatorId) {
@@ -82,26 +92,29 @@ export default function CreatorProfile() {
     setLoading(true);
     setError(null);
     try {
-      const [allCreators, directory, allCreatorVerifications] = await Promise.all([
-        catalogApi.listCreators(),
-        authApi.getUsersDirectory(),
-        operationsApi.listVerifications({ entityType: 'creator' }),
-      ]);
-      const matched = allCreators.find((c) => c.id === creatorId) || null;
+      const allCreators = await catalogApi.listCreators();
+      // Deep links carry either the creator profile id or the owner's user id.
+      const matched = allCreators.find((c) => c.id === creatorId) || allCreators.find((c) => c.userId === creatorId) || null;
       setCreator(matched);
-      const matchedUser = matched?.userId ? directory.find((u) => u.uid === matched.userId) || null : null;
-      setUser(matchedUser);
-      setVerifications(allCreatorVerifications.filter((v) => v.entityId === creatorId));
-
-      if (matchedUser?.uid) {
+      // No creator record: the id may be a creator-role account that has not
+      // set up Creator Studio yet — still load the account so staff can act on it.
+      const uid = matched?.userId || (matched ? '' : creatorId);
+      const [detail, manage, publicGuides] = await Promise.all([
+        uid ? authApi.getUserDetail(uid).catch(() => null) : Promise.resolve(null),
+        catalogApi.manageGuides({ status: 'all' }).then((r) => r.data || []).catch(() => [] as GuideManageRow[]),
+        catalogApi.listGuides().catch(() => [] as CatalogGuide[]),
+      ]);
+      setUser(detail);
+      const cid = matched?.id || creatorId;
+      setGuides(manage.filter((g) => g.creatorId === cid && g.publisherType !== 'brand'));
+      setLiveGuides(publicGuides.filter((g) => g.creatorId === cid));
+      if (uid) {
         try {
-          setFinance(await cashbookApi.getFinanceSummary(matchedUser.uid));
-          setFinanceError(false);
-        } catch {
-          setFinanceError(true);
+          setPosted(await operationsApi.listReviews({ userId: uid }));
+          setReviewsError(null);
+        } catch (e) {
+          setReviewsError(e instanceof Error ? e.message : 'Could not load reviews.');
         }
-      } else {
-        setFinanceError(true);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load creator profile.');
@@ -114,11 +127,18 @@ export default function CreatorProfile() {
     void load();
   }, [load]);
 
-  const displayName = creator?.name || 'Unknown Creator';
-  const followerPlatformCount = useMemo(() => Object.values(creator?.followers || {}).length, [creator]);
-  const targetUserId = user?.uid || '';
+  const displayName = creator?.name || user?.displayName || 'Unknown Creator';
+  const targetUserId = creator?.userId || user?.uid || '';
+  const email = user?.email || creator?.email || '';
+  const phone = user?.phone || creator?.phone || '';
   const isSelf = Boolean(profile?.id && targetUserId && profile.id === targetUserId);
   const showLoginAsUser = can('impersonate') && !impersonation.active && !isSelf && Boolean(targetUserId);
+  const edit = useAdminEditUser({ targetUserId, targetRole: 'creator', targetLabel: displayName });
+  const studioModel = useMemo(() => (creator ? mapCatalogCreatorToEditor(creator) : null), [creator]);
+  const viewsById = useMemo(() => new Map(liveGuides.map((g) => [g.id, (g as { views?: string | number }).views])), [liveGuides]);
+  const liveCount = guides.filter((g) => g.status === 'live').length;
+  // Listing responses carry the active public handle (Public Identity) alongside the record.
+  const publicHandle = (creator as (CatalogCreator & { publicHandle?: string | null }) | null)?.publicHandle ?? null;
 
   const requestLoginAs = useCallback(() => {
     if (!targetUserId) return;
@@ -139,28 +159,30 @@ export default function CreatorProfile() {
     hBtn: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: '9px 14px', fontSize: '11.5px', fontWeight: 800, color: '#374151', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 },
     grid: { display: 'grid', gridTemplateColumns: 'minmax(0,260px) minmax(0,1fr)', gap: 16, alignItems: 'start' },
     card: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 10, overflow: 'hidden' },
-    cover: { height: 80, background: `linear-gradient(120deg,#C4B5FD 0%,#FDE68A 50%, ${ACCENT} 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+    cover: { height: 80, background: personaCoverGradient('creator'), display: 'flex', alignItems: 'center', justifyContent: 'center' },
     coverLabel: { fontSize: 14, fontWeight: 800, letterSpacing: '0.15em', color: '#fff' },
     avatar: { width: 56, height: 56, borderRadius: '50%', background: '#fff', border: '1px solid #E8EDF2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16, marginTop: -42, marginBottom: 10, boxShadow: '0 2px 6px rgba(0,0,0,0.08)' },
     pName: { fontSize: '13.5px', fontWeight: 800 },
-    pEmail: { fontSize: 11, color: '#2563EB', fontWeight: 600, marginTop: 2 },
     kv: { display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 },
     kLabel: { fontSize: 9, fontWeight: 800, color: '#9CA3AF', letterSpacing: '0.02em' },
-    kValue: { fontSize: '11.5px', fontWeight: 700, marginTop: 2, color: '#111827' },
+    kValue: { fontSize: '11.5px', fontWeight: 700, marginTop: 2, color: '#111827', overflowWrap: 'anywhere' },
     kRow: { borderTop: '1px solid #F1F3F5', paddingTop: 8 },
+    contact: { display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 },
+    contactLink: { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: '#2563EB', textDecoration: 'none', overflowWrap: 'anywhere' },
     panel: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: 16 },
     panelTitle: { fontSize: '12.5px', fontWeight: 800, marginBottom: 2 },
     panelSub: { fontSize: '10.5px', color: '#9CA3AF', fontWeight: 600, marginBottom: 12 },
-    statGrid: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 },
+    statGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 14 },
     statCard: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: 14 },
     statLabel: { fontSize: 9, fontWeight: 800, color: '#9CA3AF' },
     statValue: { fontSize: 18, fontWeight: 800, color: '#111827', marginTop: 6 },
     tabBar: { display: 'flex', gap: 16, background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: '0 16px', overflowX: 'auto' },
-    tab: { padding: '12px 4px', fontSize: '11.5px', fontWeight: 800, whiteSpace: 'nowrap', cursor: 'pointer', borderBottom: '2px solid transparent', color: '#6B7280' },
+    tab: { padding: '12px 4px', fontSize: '11.5px', fontWeight: 800, whiteSpace: 'nowrap', cursor: 'pointer', borderBottom: '2px solid transparent', color: '#6B7280', background: 'transparent', borderTop: 0, borderLeft: 0, borderRight: 0 },
     tabActive: { color: ACCENT, borderBottom: `2px solid ${ACCENT}` },
     emptyBox: { textAlign: 'center', color: '#9CA3AF', fontSize: 12, fontWeight: 600, fontStyle: 'italic', padding: '24px 0' },
-    row: { fontSize: '11.5px', fontWeight: 700, padding: '10px 0', borderTop: '1px solid #F1F3F5', display: 'flex', justifyContent: 'space-between', gap: 10 },
-    badge: { padding: '2px 8px', borderRadius: 6, fontSize: 9, fontWeight: 800, textTransform: 'uppercase' },
+    th: { textAlign: 'left', fontSize: 9, fontWeight: 800, color: '#9CA3AF', padding: '9px 12px', borderBottom: '1px solid #F1F3F5', whiteSpace: 'nowrap', background: '#FAFBFC' },
+    td: { fontSize: '11.5px', fontWeight: 600, padding: '10px 12px', borderBottom: '1px solid #F5F6F8', verticalAlign: 'middle' },
+    badge: { padding: '2px 8px', borderRadius: 6, fontSize: 9, fontWeight: 800, textTransform: 'uppercase', whiteSpace: 'nowrap' },
   }), []);
 
   if (loading) {
@@ -172,7 +194,7 @@ export default function CreatorProfile() {
     );
   }
 
-  if (error || !creator) {
+  if (error || (!creator && !user)) {
     return (
       <div style={{ padding: '48px 0', textAlign: 'center' }}>
         <p style={{ color: '#DC2626', fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
@@ -193,201 +215,309 @@ export default function CreatorProfile() {
     </div>
   );
 
+  if (!creator && user) {
+    // Creator-role account without a Creator Studio record: account actions only.
+    return (
+      <div style={{ color: '#111827' }} data-testid="creator-account-only">
+        <div style={S.headRow}>
+          <div>
+            <div style={S.h1}>Creator Profile</div>
+            <div style={S.sub}>Account only — this creator has not set up Creator Studio yet</div>
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }} data-testid="profile-header-actions">
+            <AdminMessageUserButton targetUserId={targetUserId} />
+            {showLoginAsUser && (
+              <button onClick={requestLoginAs} style={{ ...S.hBtn, borderColor: ACCENT, color: ACCENT, background: ACCENT_WASH }}>
+                <LogIn size={13} /> Login As User
+              </button>
+            )}
+            <AdminEditUserButton state={edit} />
+            <button onClick={() => navigate('/admin/creator-management')} style={S.hBtn}>
+              <ArrowLeft size={13} /> All Creators
+            </button>
+          </div>
+        </div>
+        <AdminEditModeStrip state={edit} />
+        <div style={S.grid} className="cprv-grid">
+          <div style={S.card} data-testid="profile-identity">
+            <div style={S.cover}><span style={S.coverLabel}>CREATOR</span></div>
+            <div style={{ padding: 16, position: 'relative' }}>
+              <Avatar src={user.avatarUrl || null} name={displayName} size={56} style={S.avatar} />
+              <div style={S.pName}>{displayName}</div>
+              <ProfileContactActions targetUserId={targetUserId} targetName={displayName} email={email} phone={phone} phoneTitle={user?.phoneSource === 'partner_application' ? 'From the partner application' : undefined} />
+              <div style={S.kv}>
+                {kv('ROLE', user.role || 'creator', false, true)}
+                {kv('CHOOSIFY USER ID', user.choosifyUserId || '—', true)}
+                {kv('JOINED', user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—')}
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={S.panel}>
+              <div style={S.panelTitle}>NO CREATOR STUDIO PROFILE YET</div>
+              <div style={{ fontSize: 12, color: '#4B5563', fontWeight: 600, lineHeight: 1.6 }}>
+                This account has the creator role but no Creator Studio record, so there is no public creator profile, guides,
+                verification or marketplace access to show. They appear here once the creator sets up Creator Studio (or a partner
+                application is approved).
+              </div>
+            </div>
+            <AdminEditHistory state={edit} />
+          </div>
+        </div>
+        <style>{`@media (max-width: 860px){ .cprv-grid{ grid-template-columns: minmax(0,1fr) !important; } }`}</style>
+      </div>
+    );
+  }
+
   return (
     <div style={{ color: '#111827' }}>
       <div style={S.headRow}>
         <div>
           <div style={S.h1}>Creator Profile</div>
-          <div style={S.sub}>Real creator account, verification, and publication status</div>
+          <div style={S.sub}>Read-only 360° view of this creator across Choosify</div>
         </div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }} data-testid="profile-header-actions">
           {targetUserId ? <AdminMessageUserButton targetUserId={targetUserId} /> : null}
           {showLoginAsUser && (
             <button onClick={requestLoginAs} style={{ ...S.hBtn, borderColor: ACCENT, color: ACCENT, background: ACCENT_WASH }}>
               <LogIn size={13} /> Login As User
             </button>
           )}
+          <AdminEditUserButton state={edit} />
           <button onClick={() => navigate('/admin/creator-management')} style={S.hBtn}>
             <ArrowLeft size={13} /> All Creators
           </button>
         </div>
       </div>
 
+      <AdminEditModeStrip state={edit} />
+
       <div style={S.grid} className="cprv-grid">
-        {/* Left column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={S.card}>
+          <div style={S.card} data-testid="profile-identity">
             <div style={S.cover}><span style={S.coverLabel}>CREATOR</span></div>
             <div style={{ padding: 16, position: 'relative' }}>
-              <Avatar src={creator.avatar || null} name={displayName} size={56} style={S.avatar} />
+              <Avatar src={creator.avatar || user?.avatarUrl || null} name={displayName} size={56} style={S.avatar} />
               <div style={S.pName}>{displayName}</div>
-              <div style={S.pEmail}>@{creator.handle}</div>
-
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <PhotoVerificationBadge entityType="creator" entityIds={[creator.id]} currentAvatarUrl={user?.avatarUrl} />
+                <MarketplaceStatusBadge active={creator.status === 'live'} status={creator.status} />
+              </div>
+              {publicHandle ? <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 700 }}>@{publicHandle}</div> : null}
+              <ProfileContactActions targetUserId={targetUserId} targetName={displayName} email={email} phone={phone} phoneTitle={user?.phoneSource === 'partner_application' ? 'From the partner application' : undefined} />
               <div style={S.kv}>
-                {kv('ROLE', creator.role || 'Content Creator', false, true)}
+                {kv('ROLE', creator.role || 'Creator', false, true)}
                 {kv('CHOOSIFY USER ID', user?.choosifyUserId || '—', true)}
-                {kv('STATUS', creator.status)}
-                {kv('PRIMARY PLATFORM', creator.platforms?.[0] || '—')}
+                {kv('PUBLICATION', creator.status || '—')}
+                {kv('VERIFIED', creator.verifiedStatus ? 'Yes' : 'No')}
                 {kv('LOCATION', creator.location || '—')}
-                {kv('LINKED PLATFORMS', String(followerPlatformCount))}
+                {kv('JOINED', creator.createdAt?.slice(0, 10) || '—')}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Right column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
           <div style={S.statGrid}>
-            <div style={S.statCard}>
-              <div style={S.statLabel}>PUBLICATION STATUS</div>
-              <div style={S.statValue}>{creator.status}</div>
-            </div>
-            <div style={S.statCard}>
-              <div style={S.statLabel}>SCORE</div>
-              <div style={S.statValue}>{creator.score ?? 0}</div>
-            </div>
-            <div style={S.statCard}>
-              <div style={S.statLabel}>VERIFICATION RECORDS</div>
-              <div style={S.statValue}>{verifications.length}</div>
-            </div>
+            <div style={S.statCard}><div style={S.statLabel}>LIFETIME EARNINGS</div><div style={S.statValue}>—</div><div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>Not recorded — no creator earnings backend yet</div></div>
+            <div style={S.statCard}><div style={S.statLabel}>TRUST SCORE</div><div style={S.statValue}>{creator.score ? `${creator.score}/100` : '—'}</div><div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>{creator.score ? 'Creator record score' : 'Not scored yet'}</div></div>
+            <div style={S.statCard}><div style={S.statLabel}>LIVE GUIDES</div><div style={S.statValue}>{liveCount} <span style={{ fontSize: 11, color: '#9CA3AF' }}>/ {guides.length}</span></div><div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>{guides.reduce((n, g) => n + (g.productCount || 0), 0)} product recommendations</div></div>
+            <div style={S.statCard}><div style={S.statLabel}>ENDORSED BRANDS</div><div style={S.statValue}>{(creator.brandPartners || []).length}</div><div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>{(creator.brandPartners || []).slice(0, 2).map((b) => b.name).join(', ') || 'None listed'}</div></div>
+            <div style={S.statCard}><div style={S.statLabel}>REVIEWS POSTED</div><div style={S.statValue}>{posted.length}</div><div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>Creators can’t be reviewed directly</div></div>
           </div>
 
-          <div style={S.tabBar}>
+          <div style={S.tabBar} role="tablist">
             {visibleTabs.map((t) => (
-              <div key={t.key} onClick={() => setActiveTab(t.key)} style={{ ...S.tab, ...(activeTab === t.key ? S.tabActive : {}) }}>
+              <button key={t.key} type="button" role="tab" aria-selected={activeTab === t.key} data-tab={t.key} onClick={() => setActiveTab(t.key)} style={{ ...S.tab, ...(activeTab === t.key ? S.tabActive : {}) }}>
                 {t.icon} {t.label}
-              </div>
+              </button>
             ))}
           </div>
 
           {activeTab === 'account' && (
-            <div style={S.panel}>
-              <div style={S.panelTitle}>ACCOUNT INFORMATION</div>
-              <div style={S.panelSub}>Real fields from the creator catalog record.</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
-                {kv('CATEGORY', creator.category || '—', false, true)}
-                {kv('EMAIL', creator.email || '—')}
-                {kv('PHONE', creator.phone || '—')}
-                {kv('BEST FOR', creator.bestFor || '—')}
-                {kv('JOINED', creator.createdAt?.slice(0, 10) || '—')}
+            <>
+              <div style={S.panel}>
+                <div style={S.panelTitle}>ACCOUNT INFORMATION</div>
+                <div style={S.panelSub}>From the creator catalog record and the linked login account.</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+                  {kv('CATEGORY', creator.category || '—', false, true)}
+                  {kv('BUSINESS EMAIL', creator.email || '—', false, true)}
+                  {kv('BUSINESS PHONE', creator.phone || (phone && user?.phoneSource === 'partner_application' ? `${phone} (from application)` : '—'), false, true)}
+                  {kv('BEST FOR', creator.bestFor || '—', false, true)}
+                  {kv('LOGIN ACCOUNT', user ? user.email : 'Not linked to a login account', false, true)}
+                  {kv('PARTNER APPLICATION', user?.partnerApplicationStatus || '—', false, true)}
+                  {kv('ACCOUNT MARKETPLACE ACCESS', user ? (user.marketplaceAccess ? 'On' : 'Off') : '—', false, true)}
+                  {kv('IDENTITY VERIFIED', user ? (user.identityVerified ? 'Yes' : 'No') : '—', false, true)}
+                  {kv('PUBLIC HANDLE', publicHandle ? `@${publicHandle}` : 'None', false, true)}
+                  {kv(
+                    'PUBLIC PROFILE',
+                    <a href={publicProfileUrl('creator', { handle: publicHandle, slug: creator.slug, id: creator.id })} target="_blank" rel="noreferrer" style={{ color: '#2563EB', fontWeight: 700, textDecoration: 'none', overflowWrap: 'anywhere' as const }}>
+                      {publicProfileUrl('creator', { handle: publicHandle, slug: creator.slug, id: creator.id })}
+                    </a>,
+                    false,
+                    true,
+                  )}
+                </div>
+                {creator.bio ? <div style={{ marginTop: 14, fontSize: '11.5px', color: '#374151', fontWeight: 600, lineHeight: 1.6 }}>{creator.bio}</div> : null}
               </div>
-              {creator.bio && (
-                <div style={{ marginTop: 14, fontSize: '11.5px', color: '#374151', fontWeight: 600, lineHeight: 1.6 }}>{creator.bio}</div>
-              )}
-            </div>
+              <MarketplaceAccessSection entityType="creator" creator={creator} onChanged={(u) => setCreator(u as CatalogCreator)} />
+              {/* Handle management (history + staff override) only while editing, or when opened from a handle request. */}
+              {showHandles && (edit.editing || searchParams.get('tab') === 'handle') ? (
+                <EntityHandlePanel
+                  key={creator.id}
+                  entity={{ entityType: 'creator', entityId: creator.id, name: creator.name, slug: creator.slug, status: creator.status, ownerUserId: creator.userId ?? null }}
+                />
+              ) : null}
+              <AdminEditHistory state={edit} />
+            </>
           )}
 
           {activeTab === 'verification' && (
-            <div style={S.card}>
-              <div style={{ padding: '14px 16px', fontSize: 12, fontWeight: 800, borderBottom: '1px solid #F1F3F5' }}>REAL VERIFICATION RECORDS</div>
-              {verifications.length === 0 ? (
-                <div style={S.emptyBox}>No verification records for this creator.</div>
-              ) : (
-                verifications.map((v) => (
-                  <div key={v.id} style={{ ...S.row, padding: '12px 16px' }}>
-                    <div>
-                      <div>{displayName}</div>
-                      <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>Submitted {v.created_at ? v.created_at.slice(0, 10) : '—'}</div>
-                    </div>
-                    <span style={{ ...S.badge, background: '#FEF3C7', color: '#B45309' }}>{v.status}</span>
-                  </div>
-                ))
-              )}
-            </div>
+            <VerificationCenterPanel
+              entityType="creator"
+              entities={[{ id: creator.id, name: creator.name }]}
+              emptyHint="The creator submits documents from their own Creator Profile → Verification Center."
+              onRequestDocuments={targetUserId ? () => setShowMessagePopup(true) : undefined}
+            />
           )}
 
-          {activeTab === 'studio' && (
-            <div style={S.panel}>
-              <div style={S.panelTitle}>CREATOR STUDIO</div>
-              <div style={S.panelSub}>Cover image, bio, featured content and social links.</div>
-              <div style={S.emptyBox}>
-                Not available in this admin view yet. The creator's own Creator Studio already edits this data live —
-                no separate admin editor has been built here.
+          {activeTab === 'studio' && studioModel && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }} data-testid="creator-studio-view">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: '10px 14px' }}>
+                <span style={{ fontSize: 10, fontWeight: 800, color: '#9CA3AF' }}>
+                  CREATOR PROFILE (LIVE CREATOR STUDIO DATA) · updated {creator.updatedAt ? new Date(creator.updatedAt).toLocaleString() : '—'}
+                </span>
+                {edit.editing ? (
+                  <Link to={`/admin/creator-studio/${encodeURIComponent(creator.id)}/edit`} style={{ fontSize: 11.5, fontWeight: 800, color: ACCENT, textDecoration: 'none' }} data-testid="creator-studio-edit">
+                    Edit in Creator Studio →
+                  </Link>
+                ) : (
+                  <span style={{ fontSize: 10.5, color: '#9CA3AF', fontWeight: 700 }}>View only</span>
+                )}
               </div>
-            </div>
-          )}
-
-          {activeTab === 'products' && (
-            <div style={S.panel}>
-              <div style={S.panelTitle}>RECOMMENDED PRODUCT LISTINGS</div>
-              <div style={S.panelSub}>Products this creator has reviewed or recommended.</div>
-              <div style={S.emptyBox}>
-                Not available — no real backend links a creator to specific catalog products (creators review/recommend,
-                they don't own listings). Showing one here would mean fabricating data.
+              <div style={{ border: '1px solid #E8EDF2', borderRadius: 8, overflow: 'hidden' }}>
+                <CreatorProfilePresentation
+                  model={studioModel}
+                  mode="view"
+                  publicHandle={publicHandle}
+                  guides={guides.map((g) => ({ id: g.id, slug: g.slug, title: g.title, image: g.image, status: g.status }))}
+                />
               </div>
             </div>
           )}
 
           {activeTab === 'guides' && (
-            <div style={S.panel}>
-              <div style={S.panelTitle}>RECOMMENDATIONS &amp; GUIDES</div>
-              <div style={S.panelSub}>Guides, videos and reels published by this creator.</div>
-              <div style={S.emptyBox}>Not available here yet — see Guide Management for this creator's real published content.</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ ...S.card }} data-testid="creator-guides">
+                <div style={{ padding: '14px 16px', borderBottom: '1px solid #F1F3F5' }}>
+                  <div style={{ fontSize: 12, fontWeight: 800 }}>RECOMMENDATIONS &amp; GUIDES</div>
+                  <div style={{ fontSize: '10.5px', color: '#9CA3AF', fontWeight: 600 }}>
+                    Guides this creator authored (Guide Management) — product recommendations live inside these guides.
+                  </div>
+                </div>
+                {guides.length === 0 ? (
+                  <div style={S.emptyBox}>This creator has not written any guides yet.</div>
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
+                      <thead>
+                        <tr>{['GUIDE', 'FORMAT', 'PRODUCTS', 'BRANDS', 'VIEWS', 'PUBLISHED', 'UPDATED', 'STATUS'].map((h) => <th key={h} style={S.th}>{h}</th>)}</tr>
+                      </thead>
+                      <tbody>
+                        {guides.map((g) => (
+                          <tr key={g.id} data-testid="creator-guide-row">
+                            <td style={S.td}>
+                              {edit.editing ? (
+                                <Link to={`/admin/guides/${encodeURIComponent(g.id)}/edit`} style={{ color: ACCENT, fontWeight: 800, textDecoration: 'none' }}>{g.title}</Link>
+                              ) : (
+                                g.title
+                              )}
+                              <div style={{ fontSize: 10, color: '#9CA3AF', fontFamily: 'monospace' }}>{g.contentReferenceId || g.id}</div>
+                            </td>
+                            <td style={S.td}>{(g.format || g.type || '—').replace(/_/g, ' ')}</td>
+                            <td style={S.td}>{g.productCount}</td>
+                            <td style={S.td}>{g.brandCount}</td>
+                            <td style={S.td}>{viewsById.get(g.id) ?? '—'}</td>
+                            <td style={S.td}>{g.status === 'live' && g.publishedAt ? new Date(g.publishedAt).toLocaleDateString() : '—'}</td>
+                            <td style={S.td}>{g.updatedAt ? new Date(g.updatedAt).toLocaleDateString() : '—'}</td>
+                            <td style={S.td}><span style={{ ...S.badge, ...(GUIDE_TONE[g.status] || GUIDE_TONE.archived) }}>{g.status}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+              <div style={S.panel}>
+                <div style={S.panelTitle}>FEATURED CONTENT &amp; MEDIA</div>
+                <div style={S.panelSub}>From the creator’s Creator Studio record.</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 10 }}>
+                  {kv('FEATURED ITEMS', String((creator.featuredContent || []).length), false, true)}
+                  {kv('VIDEOS', String((creator.videos || []).length), false, true)}
+                  {kv('REELS', String((creator.reels || []).length), false, true)}
+                </div>
+                {(creator.featuredContent || []).length ? (
+                  <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 11.5, fontWeight: 600, color: '#374151' }}>
+                    {(creator.featuredContent || []).map((f) => (
+                      <li key={f.id}>{f.title} <span style={{ color: '#9CA3AF' }}>· {f.source === 'platform' ? f.kind : 'external link'}</span></li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
             </div>
           )}
 
           {activeTab === 'earnings' && (
-            <div style={S.panel}>
-              <div style={S.panelTitle}>MY EARNINGS</div>
-              <div style={S.panelSub}>Real escrow-derived balance — GET /finance/summary.</div>
-              {financeError || !finance ? (
-                <div style={S.emptyBox}>No finance summary available for this creator yet.</div>
-              ) : (
-                <div style={S.statGrid}>
-                  <div style={S.statCard}><div style={S.statLabel}>LIFETIME EARNINGS</div><div style={S.statValue}>৳{finance.lifetimeEarnings.toLocaleString()}</div></div>
-                  <div style={S.statCard}><div style={S.statLabel}>AVAILABLE BALANCE</div><div style={S.statValue}>৳{finance.availableBalance.toLocaleString()}</div></div>
-                  <div style={S.statCard}><div style={S.statLabel}>PENDING APPROVAL</div><div style={S.statValue}>৳{finance.pendingApproval.toLocaleString()}</div></div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'payment' && (
-            <div style={S.panel}>
-              <div style={S.panelTitle}>PAYMENT INFO</div>
-              <div style={S.panelSub}>Payout bank/mobile-wallet account details.</div>
-              <div style={S.emptyBox}>Not available — no payout account persistence exists in the backend yet.</div>
-            </div>
-          )}
-
-          {activeTab === 'reviews' && (
-            <div style={S.panel}>
-              <div style={S.panelTitle}>REVIEWS &amp; SCORE</div>
-              <div style={S.panelSub}>Community reviews and trust scoring for this creator.</div>
-              <div style={S.emptyBox}>Not available here yet — see Trust &amp; Analytics / Moderation Center for real review data.</div>
-            </div>
-          )}
-
-          {activeTab === 'ads' && (
-            <div style={S.panel}>
-              <div style={S.panelTitle}>ADS &amp; DEALS</div>
-              <div style={S.panelSub}>Active sponsored placements for this creator.</div>
-              <div style={S.emptyBox}>Not available here yet — see Ads &amp; Deals Studio for this creator's real campaigns.</div>
-            </div>
-          )}
-
-          {activeTab === 'handle' && showHandles && creator && (
-            <EntityHandlePanel
-              key={creator.id}
-              entity={{
-                entityType: 'creator',
-                entityId: creator.id,
-                name: creator.name,
-                slug: creator.slug,
-                status: creator.status,
-                ownerUserId: creator.userId ?? null,
-              }}
+            <UnavailablePanel
+              title="MY EARNINGS"
+              sub="Creator earnings and payouts."
+              testId="profile-earnings"
+              message={
+                <>
+                  No creator earnings are recorded on Choosify’s servers yet.
+                  <br />
+                  The creator Earnings page currently runs on sample data stored in the creator’s browser, so there is nothing real to
+                  show here. (Seller escrow earnings don’t apply to creators.)
+                </>
+              }
             />
           )}
 
-          {/* Read-oriented entry point; changes are made on the central Feature Access page. */}
+          {activeTab === 'payment' && targetUserId ? <PayoutInfoPanel userId={targetUserId} ownerLabel="creator" /> : null}
+
+          {activeTab === 'reviews' && (
+            <>
+              <div style={S.panel} data-testid="creator-reputation">
+                <div style={S.panelTitle}>REPUTATION</div>
+                <div style={S.panelSub}>Trust score is set by Choosify on the creator record.</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
+                  {kv('TRUST SCORE', creator.score ? String(creator.score) : 'Not scored yet', false, true)}
+                  {kv('VERIFIED', creator.verifiedStatus ? 'Yes' : 'No', false, true)}
+                </div>
+                <div style={{ marginTop: 10, fontSize: 11, color: '#6B7280', fontWeight: 600 }}>
+                  Reviews received: the review system records reviews of products and orders, not of creators — so a creator has none to show.
+                </div>
+              </div>
+              <ReviewsPanel direction="posted" reviews={posted} error={reviewsError} emptyText={targetUserId ? 'This account has not posted any reviews.' : 'Not linked to a login account.'} />
+            </>
+          )}
+
+          {activeTab === 'ads' &&
+            (targetUserId ? (
+              <AdsDealsPanel ownerUserId={targetUserId} editing={edit.editing} />
+            ) : (
+              <UnavailablePanel title="ADS & DEALS" message="This creator profile is not linked to a login account, so it owns no ads or deals." />
+            ))}
+
+          {activeTab === 'activity' && (targetUserId ? <AccountActivityPanel userId={targetUserId} ownerLabel="this creator account" /> : <UnavailablePanel title="ACTIVITY LOG" message="This creator profile is not linked to a login account, so there is no account activity." />)}
+
           {activeTab === 'features' &&
-            (creator?.userId ? (
+            (targetUserId ? (
               <AccountEntitlementsPanel
-                userId={creator.userId}
+                userId={targetUserId}
                 canMutate={false}
-                manageHref={`/admin/feature-access?view=accounts&userId=${encodeURIComponent(creator.userId)}`}
-                auditHref={`/admin/feature-access?view=audit&userId=${encodeURIComponent(creator.userId)}`}
+                manageHref={`/admin/feature-access?view=accounts&userId=${encodeURIComponent(targetUserId)}`}
+                auditHref={`/admin/feature-access?view=audit&userId=${encodeURIComponent(targetUserId)}`}
               />
             ) : (
               <div style={S.panel} data-testid="creator-feature-access-no-account">
@@ -401,6 +531,7 @@ export default function CreatorProfile() {
 
       <style>{`@media (max-width: 860px){ .cprv-grid{ grid-template-columns: minmax(0,1fr) !important; } }`}</style>
 
+      {edit.dialog}
       {showMessagePopup && targetUserId ? (
         <ProfileMessagePopup targetUserId={targetUserId} targetName={displayName} onClose={() => setShowMessagePopup(false)} />
       ) : null}

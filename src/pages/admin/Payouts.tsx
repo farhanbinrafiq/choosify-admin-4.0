@@ -49,6 +49,7 @@ interface PaymentInfo {
   branchName: string;
   bkashNumber: string;
   nagadNumber: string;
+  rocketNumber: string;
   updatedAt: string;
 }
 
@@ -60,12 +61,15 @@ const EMPTY_PAYMENT_INFO: PaymentInfo = {
   branchName: '',
   bkashNumber: '',
   nagadNumber: '',
+  rocketNumber: '',
   updatedAt: '',
 };
 
 export const Payouts = () => {
   const { profile } = useAuth();
-  const [activeTab, setActiveTab] = useState<PayoutsPageTab>('requests');
+  const [activeTab, setActiveTab] = useState<PayoutsPageTab>(() =>
+    new URLSearchParams(window.location.search).get('tab') === 'payment-info' ? 'payment-info' : 'requests',
+  );
   const [platformRevenue, setPlatformRevenue] = useState<number | null>(null);
 
   const role = (profile?.role || '').toLowerCase();
@@ -105,22 +109,65 @@ export const Payouts = () => {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // ----- Payment Info tab (self-service settings, no backend endpoint) -----
-  const paymentInfoKey = `choosify_payment_info_${profile?.id || 'guest'}`;
-  const [paymentInfo, setPaymentInfo] = useState<PaymentInfo>(() => {
-    try {
-      const saved = localStorage.getItem(paymentInfoKey);
-      return saved ? JSON.parse(saved) : EMPTY_PAYMENT_INFO;
-    } catch {
-      return EMPTY_PAYMENT_INFO;
-    }
-  });
+  // ----- Payment Info tab — server-side payout profile (GET/PUT /operations/payout-profile/me) -----
+  // Older versions kept these details only in this browser; if such a copy
+  // exists and nothing is on the server yet, it pre-fills the form so the
+  // owner can save it to Choosify.
+  const legacyPaymentInfoKey = `choosify_payment_info_${profile?.id || 'guest'}`;
+  const [paymentInfo, setPaymentInfo] = useState<PaymentInfo>(EMPTY_PAYMENT_INFO);
+  const [paymentInfoLoading, setPaymentInfoLoading] = useState(true);
+  const [paymentInfoSaving, setPaymentInfoSaving] = useState(false);
+  const [paymentInfoError, setPaymentInfoError] = useState<string | null>(null);
+  const [legacyPrefill, setLegacyPrefill] = useState(false);
 
-  const handleSavePaymentInfo = () => {
-    const next = { ...paymentInfo, updatedAt: new Date().toISOString() };
-    setPaymentInfo(next);
-    localStorage.setItem(paymentInfoKey, JSON.stringify(next));
-    triggerToast('Payment info saved successfully.');
+  useEffect(() => {
+    if (!profile?.id) return;
+    let alive = true;
+    setPaymentInfoLoading(true);
+    operationsApi
+      .getMyPayoutProfile()
+      .then((d) => {
+        if (!alive) return;
+        if (d.profile) {
+          setPaymentInfo({ ...EMPTY_PAYMENT_INFO, ...d.profile, bankName: d.profile.bankName || BD_BANKS[0], updatedAt: d.profile.updatedAt });
+          return;
+        }
+        try {
+          const saved = localStorage.getItem(legacyPaymentInfoKey);
+          if (saved) {
+            setPaymentInfo({ ...EMPTY_PAYMENT_INFO, ...JSON.parse(saved), updatedAt: '' });
+            setLegacyPrefill(true);
+          }
+        } catch {
+          // ignore unreadable legacy copy
+        }
+      })
+      .catch((e) => alive && setPaymentInfoError(e instanceof Error ? e.message : 'Could not load payment info.'))
+      .finally(() => alive && setPaymentInfoLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [profile?.id, legacyPaymentInfoKey]);
+
+  const handleSavePaymentInfo = async () => {
+    setPaymentInfoSaving(true);
+    setPaymentInfoError(null);
+    try {
+      const { updatedAt: _u, ...input } = paymentInfo;
+      const d = await operationsApi.saveMyPayoutProfile(input);
+      setPaymentInfo({ ...EMPTY_PAYMENT_INFO, ...d.profile, bankName: d.profile.bankName || BD_BANKS[0], updatedAt: d.profile.updatedAt });
+      setLegacyPrefill(false);
+      try {
+        localStorage.removeItem(legacyPaymentInfoKey);
+      } catch {
+        // ignore
+      }
+      triggerToast('Payment info saved to Choosify.');
+    } catch (e) {
+      setPaymentInfoError(e instanceof Error ? e.message : 'Could not save payment info.');
+    } finally {
+      setPaymentInfoSaving(false);
+    }
   };
 
   const payoutsTabs: TabItem[] = [
@@ -347,9 +394,15 @@ export const Payouts = () => {
           <div>
             <h3 className="text-base font-extrabold text-app-text-primary">Payment Info</h3>
             <p className="text-xs text-app-text-secondary mt-1">
-              Bank account and mobile wallet details used when your payout/withdrawal requests are settled.
+              Bank account and mobile wallet (MFS) details Choosify uses to settle your payouts. Add at least one.
             </p>
           </div>
+          {paymentInfoLoading ? <p className="text-xs text-app-text-secondary">Loading your payment info…</p> : null}
+          {legacyPrefill ? (
+            <p className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
+              These details were saved only in this browser before. Save them to send them to Choosify.
+            </p>
+          ) : null}
 
           <div className="space-y-1">
             <label className="text-[10px] uppercase font-bold tracking-wider text-app-text-secondary">Account Holder Name</label>
@@ -422,15 +475,27 @@ export const Payouts = () => {
             </div>
           </div>
 
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase font-bold tracking-wider text-app-text-secondary">Rocket Number</label>
+            <input
+              value={paymentInfo.rocketNumber}
+              onChange={(e) => setPaymentInfo((p) => ({ ...p, rocketNumber: e.target.value }))}
+              className="w-full bg-white border border-app-border rounded-lg p-2.5 text-xs font-mono text-app-text-primary focus:border-app-accent focus:outline-none transition"
+            />
+          </div>
+
+          {paymentInfoError ? <p className="text-[11px] font-bold text-red-600" role="alert">{paymentInfoError}</p> : null}
+
           {paymentInfo.updatedAt && (
             <p className="text-[10px] text-app-text-secondary">Last updated: {new Date(paymentInfo.updatedAt).toLocaleString()}</p>
           )}
 
           <button
-            onClick={handleSavePaymentInfo}
-            className="w-full py-2.5 bg-app-accent hover:bg-app-accent-hover text-white text-xs font-bold rounded-lg uppercase tracking-wider transition-all"
+            onClick={() => void handleSavePaymentInfo()}
+            disabled={paymentInfoSaving || paymentInfoLoading}
+            className="w-full py-2.5 bg-app-accent hover:bg-app-accent-hover disabled:opacity-60 text-white text-xs font-bold rounded-lg uppercase tracking-wider transition-all"
           >
-            Save Payment Info
+            {paymentInfoSaving ? 'Saving…' : 'Save Payment Info'}
           </button>
         </GlassCard>
       )}

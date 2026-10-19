@@ -5,7 +5,17 @@ import type {
   CatalogProductDetail,
   SiteSeoEntry,
 } from './catalogEditorialTypes';
-import type { ProfileImageCropParams } from '../../shared/media/profileImageCrop';
+import { cropFrameFields, type ProfileImageCropParams } from '../../shared/media/profileImageCrop';
+import {
+  CREATOR_SOCIAL_PLATFORM_KEYS,
+  creatorCustomContactProblem,
+  creatorCustomLinkProblem,
+  creatorOverviewSectionProblem,
+  creatorEmailProblem,
+  creatorPhoneProblem,
+  creatorSocialLinkProblem,
+  type CreatorSocialPlatform,
+} from '../../shared/creatorProfileRules';
 
 const nowIso = () => new Date().toISOString();
 
@@ -31,7 +41,7 @@ const toCropParams = (value: unknown, existing?: ProfileImageCropParams): Profil
     )
   ) {
     const v = value as Record<string, number>;
-    return { scale: v.scale, x: v.x, y: v.y, naturalW: v.naturalW, naturalH: v.naturalH };
+    return { scale: v.scale, x: v.x, y: v.y, naturalW: v.naturalW, naturalH: v.naturalH, ...cropFrameFields(v) };
   }
   return existing;
 };
@@ -80,17 +90,113 @@ const safeUrlOrPath = (value: unknown): string => {
   return safeHttpUrl(s);
 };
 
-/** Creator-defined extra social links. Presence-aware (`[]` clears); max 8. */
+/** Creator-defined extra social links. Presence-aware (`[]` clears); max 8, deduped by URL.
+ *  A new or changed entry with a missing name or an unsafe/malformed URL is rejected (400);
+ *  unchanged stored entries are kept as-is so legacy data never blocks an unrelated save. */
 const normalizeCreatorCustomSocial = (
   raw: unknown,
   existing: Array<{ label: string; url: string }> | undefined,
 ): Array<{ label: string; url: string }> => {
   if (!Array.isArray(raw)) return existing ?? [];
-  return raw
-    .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object')
-    .map((r) => ({ label: clampStr(r.label, 40), url: safeHttpUrl(r.url) }))
-    .filter((r) => r.label && r.url)
-    .slice(0, 8);
+  const known = new Set((existing ?? []).map((r) => `${r.label}\u0000${r.url}`));
+  const seen = new Set<string>();
+  const out: Array<{ label: string; url: string }> = [];
+  for (const r of raw) {
+    if (!r || typeof r !== 'object') continue;
+    const label = clampStr((r as Record<string, unknown>).label, 40);
+    const url = clampStr((r as Record<string, unknown>).url, 2000);
+    if (!label && !url) continue;
+    if (!known.has(`${label}\u0000${url}`)) {
+      const problem = creatorCustomLinkProblem(label, url);
+      if (problem) throw new Error(problem);
+    }
+    const safe = safeHttpUrl(url);
+    const key = safe.toLowerCase().replace(/\/+$/, '');
+    if (!label || !safe || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ label, url: safe });
+  }
+  return out.slice(0, 8);
+};
+
+/** Creator-defined contact methods. Presence-aware (`[]` clears); max 8; new/changed rows validated. */
+const normalizeCreatorCustomContacts = (
+  raw: unknown,
+  existing: Array<{ label: string; value: string }> | undefined,
+): Array<{ label: string; value: string }> | undefined => {
+  if (!Array.isArray(raw)) return existing;
+  const known = new Set((existing ?? []).map((r) => `${r.label}\u0000${r.value}`));
+  const seen = new Set<string>();
+  const out: Array<{ label: string; value: string }> = [];
+  for (const r of raw) {
+    if (!r || typeof r !== 'object') continue;
+    const label = clampStr((r as Record<string, unknown>).label, 40);
+    const value = clampStr((r as Record<string, unknown>).value, 200);
+    if (!label && !value) continue;
+    if (!known.has(`${label}\u0000${value}`)) {
+      const problem = creatorCustomContactProblem(label, value);
+      if (problem) throw new Error(problem);
+    }
+    const key = `${label.toLowerCase()}\u0000${value.toLowerCase()}`;
+    if (!label || !value || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ label, value });
+  }
+  return out.slice(0, 8);
+};
+
+/** Creator Overview sections. Presence-aware (`[]` clears); max 8; new/changed sections validated. */
+const normalizeCreatorOverviewSections = (
+  raw: unknown,
+  existing: Array<{ id: string; title: string; body: string }> | undefined,
+): Array<{ id: string; title: string; body: string }> | undefined => {
+  if (!Array.isArray(raw)) return existing;
+  const known = new Set((existing ?? []).map((r) => `${r.title}\u0000${r.body}`));
+  const out: Array<{ id: string; title: string; body: string }> = [];
+  raw.forEach((r, i) => {
+    if (!r || typeof r !== 'object') return;
+    const rec = r as Record<string, unknown>;
+    const title = (typeof rec.title === 'string' ? rec.title : '').trim();
+    const body = (typeof rec.body === 'string' ? rec.body : '').trim();
+    if (!title && !body) return;
+    if (!known.has(`${title}\u0000${body}`)) {
+      const problem = creatorOverviewSectionProblem(title, body);
+      if (problem) throw new Error(problem);
+    }
+    if (!title || !body) return;
+    out.push({ id: clampStr(rec.id, 40) || `cos-${i}`, title: title.slice(0, 60), body: body.slice(0, 2000) });
+  });
+  return out.slice(0, 8);
+};
+
+/** One platform link. Absent → keep stored; '' → clear; a new value must be an http(s) URL on that platform. */
+const normalizeCreatorPlatformLink = (
+  platform: CreatorSocialPlatform,
+  raw: unknown,
+  existingValue: string | undefined,
+): string | undefined => {
+  if (typeof raw !== 'string') return existingValue || undefined;
+  const value = raw.trim();
+  if (!value) return undefined;
+  if (value === existingValue) return value;
+  const problem = creatorSocialLinkProblem(platform, value);
+  if (problem) throw new Error(problem);
+  return safeHttpUrl(value) || undefined;
+};
+
+/** Present-aware contact field: absent → keep stored; a new non-empty value must pass `problem`. */
+const normalizeCreatorContact = (
+  raw: unknown,
+  existingValue: string | undefined,
+  problem: (v: string) => string | null,
+): string | undefined => {
+  if (typeof raw !== 'string') return existingValue;
+  const value = raw.trim();
+  if (value && value !== existingValue) {
+    const p = problem(value);
+    if (p) throw new Error(p);
+  }
+  return value;
 };
 
 /** Creator-curated Featured Content. Presence-aware (`[]` clears); max 12. */
@@ -135,7 +241,8 @@ export const normalizeCreatorInput = (payload: unknown, existing?: CatalogCreato
     id,
     slug: toString(raw.slug, existing?.slug ?? slugify(name || id)),
     name,
-    handle: toString(raw.handle, existing?.handle ?? `@${slugify(name)}`),
+    // Display handle as entered — never invented from the name (the public username lives in Public Identity).
+    handle: toString(raw.handle, existing?.handle ?? '').trim(),
     avatar: toString(raw.avatar, existing?.avatar ?? ''),
     avatarOriginal: toString(raw.avatarOriginal, existing?.avatarOriginal ?? '') || undefined,
     avatarCrop: toCropParams(raw.avatarCrop, existing?.avatarCrop),
@@ -144,9 +251,10 @@ export const normalizeCreatorInput = (payload: unknown, existing?: CatalogCreato
     location: toString(raw.location, existing?.location ?? '') || undefined,
     reviewVideoUrl: toString(raw.reviewVideoUrl, existing?.reviewVideoUrl ?? '') || undefined,
     score: toNumber(raw.score, existing?.score ?? 0),
-    bestFor: toString(raw.bestFor, existing?.bestFor ?? 'General'),
-    bestForTags: toStringArray(raw.bestForTags).length ? toStringArray(raw.bestForTags) : existing?.bestForTags ?? [],
-    platforms: toStringArray(raw.platforms).length ? toStringArray(raw.platforms) : existing?.platforms ?? [],
+    bestFor: toString(raw.bestFor, existing?.bestFor ?? '').trim(),
+    // Present-aware lists: an explicit `[]` clears; an absent key keeps the stored list.
+    bestForTags: Array.isArray(raw.bestForTags) ? strList(raw.bestForTags, 24) : existing?.bestForTags ?? [],
+    platforms: Array.isArray(raw.platforms) ? strList(raw.platforms, 12) : existing?.platforms ?? [],
     bio: toString(raw.bio, existing?.bio ?? ''),
     followers:
       raw.followers && typeof raw.followers === 'object'
@@ -155,23 +263,24 @@ export const normalizeCreatorInput = (payload: unknown, existing?: CatalogCreato
     socialLinks:
       socialRaw || existing?.socialLinks
         ? {
-            facebook: toString(socialRaw?.facebook, existing?.socialLinks?.facebook ?? '') || undefined,
-            instagram: toString(socialRaw?.instagram, existing?.socialLinks?.instagram ?? '') || undefined,
-            youtube: toString(socialRaw?.youtube, existing?.socialLinks?.youtube ?? '') || undefined,
-            tiktok: toString(socialRaw?.tiktok, existing?.socialLinks?.tiktok ?? '') || undefined,
-            linkedin: toString(socialRaw?.linkedin, existing?.socialLinks?.linkedin ?? '') || undefined,
+            ...Object.fromEntries(
+              CREATOR_SOCIAL_PLATFORM_KEYS.map((k) => [
+                k,
+                normalizeCreatorPlatformLink(k, socialRaw?.[k], existing?.socialLinks?.[k]),
+              ]),
+            ),
             ...(customSocial.length ? { custom: customSocial } : {}),
           }
         : undefined,
     featuredContent: featuredContent.length ? featuredContent : undefined,
-    brandPartners: toBrandPartners(raw.brandPartners).length
-      ? toBrandPartners(raw.brandPartners)
-      : existing?.brandPartners,
-    collabTypes: toStringArray(raw.collabTypes).length ? toStringArray(raw.collabTypes) : existing?.collabTypes,
+    brandPartners: Array.isArray(raw.brandPartners) ? toBrandPartners(raw.brandPartners) : existing?.brandPartners,
+    collabTypes: Array.isArray(raw.collabTypes) ? strList(raw.collabTypes, 24) : existing?.collabTypes,
     responseTime: toString(raw.responseTime, existing?.responseTime ?? '') || undefined,
     preferredContact: toString(raw.preferredContact, existing?.preferredContact ?? '') || undefined,
-    email: toString(raw.email, existing?.email),
-    phone: toString(raw.phone, existing?.phone),
+    email: normalizeCreatorContact(raw.email, existing?.email, creatorEmailProblem),
+    phone: normalizeCreatorContact(raw.phone, existing?.phone, creatorPhoneProblem),
+    customContacts: normalizeCreatorCustomContacts(raw.customContacts, existing?.customContacts),
+    overviewSections: normalizeCreatorOverviewSections(raw.overviewSections, existing?.overviewSections),
     category: toString(raw.category, existing?.category),
     verifiedStatus: toBoolean(raw.verifiedStatus, existing?.verifiedStatus ?? false),
     featuredFlag: toBoolean(raw.featuredFlag, existing?.featuredFlag ?? false),

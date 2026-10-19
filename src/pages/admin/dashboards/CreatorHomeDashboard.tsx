@@ -99,8 +99,8 @@ export default function CreatorHomeDashboard() {
       ? ((c!.socialLinks as { custom?: unknown[] }).custom as unknown[]).length > 0
       : false;
     return [
-      { key: 'avatar', label: 'Profile photo', done: !!c?.avatar, hint: 'Add an avatar in Creator Studio → Cover & Avatar' },
-      { key: 'cover', label: 'Cover image', done: !!c?.coverImage, hint: 'Add a cover image in Creator Studio → Cover & Avatar' },
+      { key: 'avatar', label: 'Profile photo', done: !!c?.avatar, hint: 'Add a profile photo in Creator Studio → Profile Photo' },
+      { key: 'cover', label: 'Cover image', done: !!c?.coverImage, hint: 'Add a cover image in Creator Studio → Cover Image' },
       { key: 'bio', label: 'Bio (40+ characters)', done: (c?.bio?.trim().length || 0) >= 40, hint: 'Write your bio in Creator Studio → Creator Overview' },
       { key: 'expertise', label: 'Areas of expertise', done: (c?.bestForTags?.length || 0) >= 1, hint: 'Add expertise topics in Creator Studio → Creator Overview' },
       { key: 'social', label: 'Social presence', done: social || customSocial, hint: 'Add a social link in Creator Studio → Social Links' },

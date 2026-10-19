@@ -59,3 +59,14 @@ followRouter.delete('/follows/brands/:brandId', authenticateRequest, async (req:
 followRouter.get('/follows/me/brands', authenticateRequest, (req: Request, res: Response) => {
   res.json({ brandIds: brandsFollowedBy(req.userId as string) });
 });
+
+/** Staff read-only: the brands a given user follows (Super Admin consumer profile). */
+followRouter.get('/follows/users/:userId/brands', authenticateRequest, (req: Request, res: Response) => {
+  const role = req.userRole;
+  const staff = role === 'super_admin' || role === 'admin' || role === 'support_agent' || role === 'moderator';
+  if (!staff) {
+    res.status(403).json({ error: 'Not authorized to view another user’s follows' });
+    return;
+  }
+  res.json({ brandIds: brandsFollowedBy(req.params.userId) });
+});

@@ -9,9 +9,22 @@ const ICON: Record<ReadinessItem['state'], { Icon: typeof Circle; color: string;
   info: { Icon: Info, color: '#2563EB', sr: 'Note' },
 };
 
+/** After a Studio opens a section, bring its inline editor ("Editing — …" frame) into view. */
+function scrollToOpenEditor() {
+  window.setTimeout(() => {
+    const label = Array.from(document.querySelectorAll('div')).find(
+      (d) => d.children.length === 0 && /^Editing\b/.test((d.textContent || '').trim()),
+    );
+    (label?.parentElement ?? label)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 80);
+}
+
 /**
  * Readiness / profile-health checklist shared by the Studios. Each Studio
  * decides where it sits; the panel only renders the items it is given.
+ * With `onGo`, every item that names a `section` gets an Add / Edit button
+ * that opens that section's inline editor — the checklist doubles as a guide
+ * through all of the Studio's sections.
  */
 export function StudioChecklist({
   title,
@@ -20,6 +33,8 @@ export function StudioChecklist({
   footer,
   defaultOpen = true,
   testId,
+  onGo,
+  sectionLabels,
 }: {
   title: string;
   items: ReadinessItem[];
@@ -27,6 +42,10 @@ export function StudioChecklist({
   footer?: React.ReactNode;
   defaultOpen?: boolean;
   testId?: string;
+  /** Open a Studio section (item.section). Return false when it could not open (e.g. unsaved edits elsewhere). */
+  onGo?: (section: string) => boolean | void;
+  /** Human names of the sections, for the buttons' accessible names. */
+  sectionLabels?: Record<string, string>;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const headingId = useId();
@@ -73,11 +92,28 @@ export function StudioChecklist({
             return (
               <li key={item.id} data-item={item.id} data-state={item.state} className="flex items-start gap-2 text-[11.5px]">
                 <Icon aria-hidden="true" className="mt-[1px] h-3.5 w-3.5 shrink-0" style={{ color }} />
-                <span>
+                <span className="min-w-0 flex-1">
                   <span className="sr-only">{sr}: </span>
                   <span className={`font-semibold ${item.state === 'done' ? 'text-[#374151]' : 'text-[#1A1A2E]'}`}>{item.label}</span>
                   {item.detail ? <span className="block text-[10.5px] text-[#6B7280]">{item.detail}</span> : null}
                 </span>
+                {onGo && item.section ? (
+                  <button
+                    type="button"
+                    data-checklist-go={item.section}
+                    aria-label={`${item.state === 'done' ? 'Edit' : 'Add'} — ${sectionLabels?.[item.section] || item.label}`}
+                    onClick={() => {
+                      if (onGo(item.section!) !== false) scrollToOpenEditor();
+                    }}
+                    className={`shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-extrabold uppercase focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2323FF] focus-visible:ring-offset-2 ${
+                      item.state === 'done'
+                        ? 'border-[#E8EDF2] bg-white text-[#6B7280] hover:text-[#1A1A2E]'
+                        : 'border-[#EF3C23] bg-[#EF3C23] text-white hover:bg-[#CF3319]'
+                    }`}
+                  >
+                    {item.state === 'done' ? 'Edit' : 'Add'}
+                  </button>
+                ) : null}
               </li>
             );
           })}

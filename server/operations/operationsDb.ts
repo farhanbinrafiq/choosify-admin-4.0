@@ -45,6 +45,13 @@ export interface OperationsSnapshot {
   verifications?: OpsVerificationRequest[];
   warrantyClaims?: import('./types').OpsWarrantyClaim[];
   disputes?: import('./types').OpsDispute[];
+  adminEditSessions?: import('./types').OpsAdminEditSession[];
+  marketplaceAccessEvents?: import('./types').OpsMarketplaceAccessEvent[];
+  payoutProfiles?: import('./types').OpsPayoutProfile[];
+  payoutReminders?: import('./types').OpsPayoutReminder[];
+  shopperSignals?: import('./types').OpsShopperSignals[];
+  accountActivity?: import('./types').OpsAccountActivity[];
+  verificationDocRequests?: import('./types').OpsVerificationDocRequest[];
 }
 
 export interface OpsSellerOfferRow {

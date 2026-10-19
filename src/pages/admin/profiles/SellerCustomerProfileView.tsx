@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState, CSSProperties } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Loader2, AlertTriangle, ArrowLeft, MessageSquare, ShoppingBag, Package, ExternalLink, Star } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { catalogApi, type WorkspaceCustomerRow } from '../../../services/catalogApi';
@@ -278,7 +278,8 @@ export default function SellerCustomerProfileView() {
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontWeight: 700, fontSize: '11.5px' }}>{o.product}</div>
                         <div style={{ fontSize: 10, color: '#9CA3AF', fontFamily: 'monospace' }}>
-                          {o.id} · {o.date}{o.qty ? ` · ×${o.qty}` : ''}{o.bill ? ` · ${o.bill}` : ''}
+                          <Link to={`/admin/orders/${encodeURIComponent(o.id)}`} style={{ color: 'var(--cms-accent)', fontWeight: 800, textDecoration: 'none' }} data-testid="customer-order-link">{o.id}</Link>
+                          {' · '}{o.date}{o.qty ? ` · ×${o.qty}` : ''}{o.bill ? ` · ${o.bill}` : ''}
                         </div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

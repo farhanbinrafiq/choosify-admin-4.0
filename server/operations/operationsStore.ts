@@ -369,6 +369,13 @@ const state: {
   verifications: OpsVerificationRequest[];
   warrantyClaims: OpsWarrantyClaim[];
   disputes: OpsDispute[];
+  adminEditSessions: import('./types').OpsAdminEditSession[];
+  marketplaceAccessEvents: import('./types').OpsMarketplaceAccessEvent[];
+  payoutProfiles: import('./types').OpsPayoutProfile[];
+  payoutReminders: import('./types').OpsPayoutReminder[];
+  shopperSignals: import('./types').OpsShopperSignals[];
+  accountActivity: import('./types').OpsAccountActivity[];
+  verificationDocRequests: import('./types').OpsVerificationDocRequest[];
 } = {
   orders: [],
   coupons: defaultCoupons(),
@@ -385,6 +392,13 @@ const state: {
   verifications: [],
   warrantyClaims: [],
   disputes: [],
+  adminEditSessions: [],
+  marketplaceAccessEvents: [],
+  payoutProfiles: [],
+  payoutReminders: [],
+  shopperSignals: [],
+  accountActivity: [],
+  verificationDocRequests: [],
   featureFlags: {
     creator_hub: true,
     compare_tool: true,
@@ -443,6 +457,13 @@ export const operationsStore = {
     if (snapshot.verifications) state.verifications = snapshot.verifications as OpsVerificationRequest[];
     if (snapshot.warrantyClaims) state.warrantyClaims = snapshot.warrantyClaims;
     if (snapshot.disputes) state.disputes = snapshot.disputes;
+    if (snapshot.adminEditSessions) state.adminEditSessions = snapshot.adminEditSessions;
+    if (snapshot.marketplaceAccessEvents) state.marketplaceAccessEvents = snapshot.marketplaceAccessEvents;
+    if (snapshot.payoutProfiles) state.payoutProfiles = snapshot.payoutProfiles;
+    if (snapshot.payoutReminders) state.payoutReminders = snapshot.payoutReminders;
+    if (snapshot.shopperSignals) state.shopperSignals = snapshot.shopperSignals;
+    if (snapshot.accountActivity) state.accountActivity = snapshot.accountActivity;
+    if (snapshot.verificationDocRequests) state.verificationDocRequests = snapshot.verificationDocRequests;
   },
 
   listCouponUsage: () => [...state.couponUsage],
@@ -1024,6 +1045,117 @@ export const operationsStore = {
     state.warrantyClaims[idx] = { ...state.warrantyClaims[idx], ...patch, updatedAt: nowIso() };
     touch();
     return state.warrantyClaims[idx];
+  },
+
+  /** Marketplace Access history (newest first). */
+  listMarketplaceAccessEvents: (filter?: { entityType?: 'brand' | 'creator'; entityId?: string; ownerUserId?: string }) =>
+    state.marketplaceAccessEvents
+      .filter(
+        (e) =>
+          (!filter?.entityType || e.entityType === filter.entityType) &&
+          (!filter?.entityId || e.entityId === filter.entityId) &&
+          (!filter?.ownerUserId || e.ownerUserId === filter.ownerUserId),
+      )
+      .slice()
+      .sort((a, b) => (a.at < b.at ? 1 : -1)),
+
+  addMarketplaceAccessEvent: (event: import('./types').OpsMarketplaceAccessEvent) => {
+    state.marketplaceAccessEvents.push(event);
+    touch();
+    return event;
+  },
+
+  /** Staff document requests (newest first). */
+  listVerificationDocRequests: (filter?: { entityType?: string; entityId?: string }) =>
+    state.verificationDocRequests
+      .filter((r) => (!filter?.entityType || r.entityType === filter.entityType) && (!filter?.entityId || r.entityId === filter.entityId))
+      .slice()
+      .sort((a, b) => (a.at < b.at ? 1 : -1)),
+  addVerificationDocRequest: (r: import('./types').OpsVerificationDocRequest) => {
+    state.verificationDocRequests.push(r);
+    touch();
+    return r;
+  },
+  /** Account activity (newest first), optionally for one account. */
+  listAccountActivity: (userId?: string) =>
+    state.accountActivity
+      .filter((a) => !userId || a.userId === userId)
+      .slice()
+      .sort((a, b) => (a.at < b.at ? 1 : -1)),
+  addAccountActivity: (entry: import('./types').OpsAccountActivity, perAccountCap: number) => {
+    state.accountActivity.push(entry);
+    const mine = state.accountActivity.filter((a) => a.userId === entry.userId);
+    if (mine.length > perAccountCap) {
+      const drop = new Set(mine.sort((a, b) => (a.at < b.at ? -1 : 1)).slice(0, mine.length - perAccountCap).map((a) => a.id));
+      state.accountActivity = state.accountActivity.filter((a) => !drop.has(a.id));
+    }
+    touch();
+    return entry;
+  },
+  listShopperSignals: () => state.shopperSignals.slice(),
+  getShopperSignals: (userId: string) => state.shopperSignals.find((x) => x.userId === userId) || null,
+  saveShopperSignals: (signals: import('./types').OpsShopperSignals) => {
+    const idx = state.shopperSignals.findIndex((x) => x.userId === signals.userId);
+    if (idx >= 0) state.shopperSignals[idx] = signals;
+    else state.shopperSignals.push(signals);
+    touch();
+    return signals;
+  },
+  listPayoutProfiles: () => state.payoutProfiles.slice(),
+  getPayoutProfile: (userId: string) => state.payoutProfiles.find((p) => p.userId === userId) || null,
+  upsertPayoutProfile: (profile: import('./types').OpsPayoutProfile) => {
+    const idx = state.payoutProfiles.findIndex((p) => p.userId === profile.userId);
+    if (idx >= 0) state.payoutProfiles[idx] = profile;
+    else state.payoutProfiles.push(profile);
+    touch();
+    return profile;
+  },
+  /** Payout reminders (newest first). */
+  listPayoutReminders: (userId?: string) =>
+    state.payoutReminders
+      .filter((r) => !userId || r.userId === userId)
+      .slice()
+      .sort((a, b) => (a.at < b.at ? 1 : -1)),
+  addPayoutReminder: (reminder: import('./types').OpsPayoutReminder) => {
+    state.payoutReminders.push(reminder);
+    touch();
+    return reminder;
+  },
+
+  /** Super Admin edit sessions (newest first). Expired open sessions are closed on read. */
+  listAdminEditSessions: (filter?: { targetUserId?: string; adminUserId?: string }) => {
+    const now = Date.now();
+    let changed = false;
+    for (const s of state.adminEditSessions) {
+      if (!s.endedAt && Date.parse(s.expiresAt) <= now) {
+        s.endedAt = s.expiresAt;
+        s.endReason = 'expired';
+        changed = true;
+      }
+    }
+    if (changed) touch();
+    return state.adminEditSessions
+      .filter((s) => (!filter?.targetUserId || s.targetUserId === filter.targetUserId) && (!filter?.adminUserId || s.adminUserId === filter.adminUserId))
+      .slice()
+      .sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1));
+  },
+
+  createAdminEditSession: (session: import('./types').OpsAdminEditSession) => {
+    state.adminEditSessions.push(session);
+    touch();
+    return session;
+  },
+
+  endAdminEditSession: (id: string, endedBy: string) => {
+    const s = state.adminEditSessions.find((x) => x.id === id);
+    if (!s) return null;
+    if (!s.endedAt) {
+      s.endedAt = new Date().toISOString();
+      s.endedBy = endedBy;
+      s.endReason = 'exited';
+      touch();
+    }
+    return s;
   },
 
   listDisputes: (filter?: {

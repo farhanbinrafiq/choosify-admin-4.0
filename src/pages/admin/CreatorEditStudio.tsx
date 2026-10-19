@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ExternalLink, History, Plus, RotateCw, Trash2, Upload } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Plus, RotateCw, Trash2, Upload } from 'lucide-react';
 import { catalogApi, isStaleWriteError } from '../../services/catalogApi';
 import {
   StudioChecklist,
@@ -19,6 +19,16 @@ import { dataUrlToFile, describeUploadFailures, uploadCreatorImage } from '../..
 import { CreatorProfilePresentation, type CreatorStudioBridge } from '../../components/creator-profile';
 import { ProfileImageAdjustModal, type ProfileImageAdjustResult } from '../../components/media/ProfileImageAdjustModal';
 import type { ProfileImageCropParams } from '../../../shared/media/profileImageCrop';
+import {
+  CREATOR_SOCIAL_PLATFORMS,
+  CREATOR_SOCIAL_PLATFORM_KEYS,
+  creatorCustomContactProblem,
+  creatorCustomLinkProblem,
+  creatorEmailProblem,
+  creatorOverviewSectionProblem,
+  creatorPhoneProblem,
+  creatorSocialLinkProblem,
+} from '../../../shared/creatorProfileRules';
 import type { CatalogBrand } from '../../types/catalog';
 import {
   createBlankCreatorModel,
@@ -39,11 +49,55 @@ const textarea = `${input} min-h-[110px] leading-relaxed`;
 const ghostBtn =
   'inline-flex items-center gap-1 rounded-md border border-[#E8EDF2] bg-white px-2 py-1 text-[10px] font-bold text-[#374151] hover:bg-[#F8FAFC]';
 const hint = 'mt-1 text-[10.5px] leading-snug text-[#9CA3AF]';
+const inputInvalid = 'border-[#DC2626] focus:border-[#DC2626]';
+const fieldError = 'mt-1 text-[10.5px] font-semibold leading-snug text-[#DC2626]';
+
+/** Field-level problems in a section's draft — the same rules the server enforces
+ *  (shared/creatorProfileRules). Save is blocked while any are present. */
+type CreatorFieldErrors = Record<string, string>;
+function creatorSectionErrors(section: CreatorEditSection | null, d: CreatorEditorModel | null): CreatorFieldErrors {
+  const out: CreatorFieldErrors = {};
+  if (!d || !section) return out;
+  if (section === 'social') {
+    for (const k of CREATOR_SOCIAL_PLATFORM_KEYS) {
+      const p = creatorSocialLinkProblem(k, d.socialLinks[k] || '');
+      if (p) out[k] = p;
+    }
+    const seen = new Set<string>();
+    (d.socialLinks.custom ?? []).forEach((c, i) => {
+      const p = creatorCustomLinkProblem(c.label || '', c.url || '');
+      const key = (c.url || '').trim().toLowerCase().replace(/\/+$/, '');
+      if (p) out[`custom.${i}`] = p;
+      else if (key && seen.has(key)) out[`custom.${i}`] = 'This link is already listed';
+      if (key) seen.add(key);
+    });
+  }
+  if (section === 'contact') {
+    const e = creatorEmailProblem(d.email);
+    if (e) out.email = e;
+    const ph = creatorPhoneProblem(d.phone);
+    if (ph) out.phone = ph;
+    (d.customContacts ?? []).forEach((c, i) => {
+      const p = creatorCustomContactProblem(c.label || '', c.value || '');
+      if (p) out[`contact.${i}`] = p;
+    });
+  }
+  if (section === 'overview') {
+    (d.overviewSections ?? []).forEach((o, i) => {
+      const p = creatorOverviewSectionProblem(o.title || '', o.body || '');
+      if (p) out[`overview.${i}`] = p;
+    });
+  }
+  if (section === 'identity' && !d.name.trim()) out.name = 'Add your creator name';
+  return out;
+}
 
 const SECTION_LABEL: Record<CreatorEditSection, string> = {
-  cover: 'Cover & Avatar',
+  cover: 'Cover Image',
+  avatar: 'Profile Photo',
   identity: 'Profile Identity',
   social: 'Social Links',
+  expertise: 'Expertise & Topics',
   overview: 'Creator Overview',
   contact: 'Contact & Reach',
   partnerships: 'Partnerships',
@@ -223,6 +277,14 @@ function ImageField({
             {busy ? 'Uploading…' : emptyLabel}
           </span>
         )}
+        {busy && value ? (
+          <span
+            role="status"
+            className="absolute inset-0 flex items-center justify-center gap-1.5 bg-white/75 text-[11px] font-bold text-[#374151]"
+          >
+            <RotateCw className="h-4 w-4 animate-spin" /> Uploading…
+          </span>
+        ) : null}
       </div>
       <div className="mt-1.5 flex gap-2">
         <button type="button" className={ghostBtn} disabled={busy} onClick={() => fileRef.current?.click()}>
@@ -237,6 +299,7 @@ function ImageField({
           <button
             type="button"
             className={`${ghostBtn} text-[#DC2626]`}
+            disabled={busy}
             onClick={() => {
               onChange('');
               crop?.onAdjustMeta?.(null);
@@ -251,7 +314,7 @@ function ImageField({
           open={cropOpen}
           imageSrc={cropSrc}
           initialCrop={cropSrc && cropSrc === crop.originalValue ? crop.cropValue : null}
-          title="Edit creator avatar"
+          title="Edit profile photo"
           helpText="Drag to reposition. Zoom in/out or use the slider."
           shape="circle"
           outputLongSide={256}
@@ -328,35 +391,53 @@ function ThumbField({
 function SocialCustomEditor({
   items,
   onChange,
+  errors,
 }: {
   items: Array<{ label: string; url: string }>;
   onChange: (v: Array<{ label: string; url: string }>) => void;
+  errors: CreatorFieldErrors;
 }) {
   const upd = (i: number, p: Partial<{ label: string; url: string }>) =>
     onChange(items.map((x, idx) => (idx === i ? { ...x, ...p } : x)));
   return (
     <div className="space-y-1.5">
       <div className={label}>More links</div>
-      {items.map((c, i) => (
-        <div key={i} className="flex items-center gap-1.5">
-          <input
-            className={`${input} max-w-[150px]`}
-            value={c.label}
-            placeholder="Label (e.g. Twitch)"
-            maxLength={40}
-            onChange={(e) => upd(i, { label: e.target.value })}
-          />
-          <input
-            className={input}
-            value={c.url}
-            placeholder="https://…"
-            onChange={(e) => upd(i, { url: e.target.value })}
-          />
-          <button type="button" className={`${ghostBtn} text-[#DC2626]`} onClick={() => onChange(items.filter((_, idx) => idx !== i))}>
-            <Trash2 className="h-3 w-3" />
-          </button>
-        </div>
-      ))}
+      {items.map((c, i) => {
+        const err = errors[`custom.${i}`];
+        return (
+          <div key={i}>
+            <div className="flex items-center gap-1.5">
+              <input
+                className={`${input} max-w-[150px]`}
+                value={c.label}
+                placeholder="Label (e.g. Twitch)"
+                aria-label={`Other link ${i + 1} name`}
+                maxLength={40}
+                onChange={(e) => upd(i, { label: e.target.value })}
+              />
+              <input
+                className={`${input} ${err ? inputInvalid : ''}`}
+                value={c.url}
+                type="url"
+                inputMode="url"
+                placeholder="https://…"
+                aria-label={`Other link ${i + 1} address`}
+                aria-invalid={err ? true : undefined}
+                onChange={(e) => upd(i, { url: e.target.value })}
+              />
+              <button
+                type="button"
+                className={`${ghostBtn} text-[#DC2626]`}
+                aria-label={`Remove other link ${i + 1}`}
+                onClick={() => onChange(items.filter((_, idx) => idx !== i))}
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+            {err ? <div className={fieldError} role="alert">{err}</div> : null}
+          </div>
+        );
+      })}
       {items.length < 8 ? (
         <button
           type="button"
@@ -368,6 +449,238 @@ function SocialCustomEditor({
       ) : (
         <div className={hint}>Up to 8 extra links.</div>
       )}
+    </div>
+  );
+}
+
+/* ── Creator Overview — bio + creator-defined titled sections ───────────── */
+const OVERVIEW_PRESETS = ['Experience', 'How I review', 'Equipment & setup', 'Awards & recognition', 'What I cover'];
+
+function OverviewEditor({
+  d,
+  patchDraft,
+  errors,
+}: {
+  d: CreatorEditorModel;
+  patchDraft: (p: Partial<CreatorEditorModel>) => void;
+  errors: CreatorFieldErrors;
+}) {
+  const secs = d.overviewSections ?? [];
+  const set = (next: typeof secs) => patchDraft({ overviewSections: next });
+  const upd = (i: number, p: Partial<{ title: string; body: string }>) => set(secs.map((x, idx) => (idx === i ? { ...x, ...p } : x)));
+  const move = (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (j < 0 || j >= secs.length) return;
+    const next = [...secs];
+    [next[i], next[j]] = [next[j], next[i]];
+    set(next);
+  };
+  const add = (title: string) => {
+    if (secs.length >= 8) return;
+    set([...secs, { id: `cos-${Date.now().toString(36)}`, title, body: '' }]);
+  };
+  return (
+    <div className="space-y-3" data-testid="creator-overview-editor">
+      <div className="rounded-lg border border-[#E8EDF2] bg-[#FBFCFE] p-3">
+        <div className={label}>📄 Background &amp; Bio</div>
+        <textarea
+          className={textarea}
+          rows={4}
+          value={d.bio}
+          placeholder="A short, first-person intro shown on your public profile — who you are, what you cover, why buyers should trust your picks."
+          onChange={(e) => patchDraft({ bio: e.target.value })}
+        />
+        <div className={hint}>Also appears in your profile header.</div>
+      </div>
+      {secs.map((o, i) => {
+        const err = errors[`overview.${i}`];
+        return (
+          <div key={o.id} className="rounded-lg border border-[#E8EDF2] bg-white p-3">
+            <div className="flex items-center gap-1.5 mb-2">
+              <input
+                className={`${input} font-bold`}
+                value={o.title}
+                placeholder="Section title (e.g. Experience)"
+                aria-label={`Overview section ${i + 1} title`}
+                maxLength={60}
+                onChange={(e) => upd(i, { title: e.target.value })}
+              />
+              <button type="button" className={ghostBtn} aria-label={`Move overview section ${i + 1} up`} disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
+              <button type="button" className={ghostBtn} aria-label={`Move overview section ${i + 1} down`} disabled={i === secs.length - 1} onClick={() => move(i, 1)}>↓</button>
+              <button
+                type="button"
+                className={`${ghostBtn} text-[#DC2626]`}
+                aria-label={`Remove overview section ${i + 1}`}
+                onClick={() => set(secs.filter((_, idx) => idx !== i))}
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+            <textarea
+              className={`${textarea} min-h-[80px] ${err ? inputInvalid : ''}`}
+              rows={3}
+              value={o.body}
+              placeholder="Write a few sentences for this section."
+              aria-label={`Overview section ${i + 1} text`}
+              aria-invalid={err ? true : undefined}
+              maxLength={2000}
+              onChange={(e) => upd(i, { body: e.target.value })}
+            />
+            {err ? <div className={fieldError} role="alert">{err}</div> : null}
+          </div>
+        );
+      })}
+      {secs.length < 8 ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[10.5px] font-bold text-[#6B7280] mr-1">Add a section:</span>
+          {OVERVIEW_PRESETS.filter((t) => !secs.some((s) => s.title === t)).map((t) => (
+            <button key={t} type="button" className={ghostBtn} onClick={() => add(t)}>
+              <Plus className="h-3 w-3" /> {t}
+            </button>
+          ))}
+          <button type="button" className={ghostBtn} onClick={() => add('')}>
+            <Plus className="h-3 w-3" /> Custom…
+          </button>
+        </div>
+      ) : (
+        <div className={hint}>Up to 8 overview sections.</div>
+      )}
+      <div className={hint}>Areas of expertise and content platforms are edited in Expertise &amp; Topics.</div>
+    </div>
+  );
+}
+
+/* ── Contact & Reach — the creator chooses which contact methods to show ──── */
+type StdContactKey = 'email' | 'phone' | 'responseTime' | 'preferredContact';
+const STD_CONTACTS: Array<{ key: StdContactKey; label: string; placeholder: string; type?: string; inputMode?: 'email' | 'tel'; hint?: string }> = [
+  { key: 'email', label: 'Business email', placeholder: 'you@example.com', type: 'email', inputMode: 'email' },
+  { key: 'phone', label: 'Phone', placeholder: '+8801…', type: 'tel', inputMode: 'tel' },
+  { key: 'responseTime', label: 'Response time', placeholder: 'e.g. Within 24 hours', hint: 'Your own estimate, shown exactly as you write it.' },
+  { key: 'preferredContact', label: 'Preferred contact', placeholder: 'e.g. Email' },
+];
+const CUSTOM_CONTACT_PRESETS: Array<{ label: string; placeholder: string }> = [
+  { label: 'WhatsApp', placeholder: '+8801… or https://wa.me/…' },
+  { label: 'Website', placeholder: 'https://…' },
+  { label: 'Telegram', placeholder: '@username or https://t.me/…' },
+  { label: 'Messenger', placeholder: 'https://m.me/…' },
+];
+
+function ContactEditor({
+  d,
+  patchDraft,
+  errors,
+}: {
+  d: CreatorEditorModel;
+  patchDraft: (p: Partial<CreatorEditorModel>) => void;
+  errors: CreatorFieldErrors;
+}) {
+  // Standard methods are shown when they hold a value or the creator just added them.
+  const [added, setAdded] = useState<Set<StdContactKey>>(() => new Set());
+  const shown = STD_CONTACTS.filter((m) => (d[m.key] || '').trim() || added.has(m.key));
+  const available = STD_CONTACTS.filter((m) => !shown.includes(m));
+  const custom = d.customContacts ?? [];
+  const removeStd = (k: StdContactKey) => {
+    setAdded((s) => { const n = new Set(s); n.delete(k); return n; });
+    patchDraft({ [k]: '' } as Partial<CreatorEditorModel>);
+  };
+  const updCustom = (i: number, p: Partial<{ label: string; value: string }>) =>
+    patchDraft({ customContacts: custom.map((c, idx) => (idx === i ? { ...c, ...p } : c)) });
+  const onAdd = (v: string) => {
+    if (!v) return;
+    if (v.startsWith('std:')) {
+      const k = v.slice(4) as StdContactKey;
+      setAdded((s) => new Set(s).add(k));
+    } else if (custom.length < 8) {
+      patchDraft({ customContacts: [...custom, { label: v === 'custom' ? '' : v.slice(7), value: '' }] });
+    }
+  };
+  const rowCount = shown.length + custom.length;
+  return (
+    <div className="space-y-3" data-testid="creator-contact-editor">
+      {rowCount === 0 ? (
+        <p className="text-[11.5px] text-[#9AA0AC] m-0">No contact methods yet — add the ones you want brands to use.</p>
+      ) : null}
+      {shown.map((m) => {
+        const err = errors[m.key];
+        const id = `creator-contact-${m.key === 'responseTime' ? 'response' : m.key === 'preferredContact' ? 'preferred' : m.key}`;
+        return (
+          <div key={m.key}>
+            <label className={label} htmlFor={id}>{m.label}</label>
+            <div className="flex items-center gap-1.5">
+              <input
+                id={id}
+                type={m.type || 'text'}
+                inputMode={m.inputMode}
+                className={`${input} ${err ? inputInvalid : ''}`}
+                value={d[m.key]}
+                placeholder={m.placeholder}
+                aria-invalid={err ? true : undefined}
+                onChange={(e) => patchDraft({ [m.key]: e.target.value } as Partial<CreatorEditorModel>)}
+              />
+              <button type="button" className={`${ghostBtn} text-[#DC2626]`} aria-label={`Remove ${m.label}`} onClick={() => removeStd(m.key)}>
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+            {err ? <div className={fieldError} role="alert">{err}</div> : m.hint ? <div className={hint}>{m.hint}</div> : null}
+          </div>
+        );
+      })}
+      {custom.map((c, i) => {
+        const err = errors[`contact.${i}`];
+        const preset = CUSTOM_CONTACT_PRESETS.find((p) => p.label === c.label);
+        return (
+          <div key={`c-${i}`}>
+            <div className="flex items-center gap-1.5">
+              <input
+                className={`${input} max-w-[150px]`}
+                value={c.label}
+                placeholder="Name (e.g. WhatsApp)"
+                aria-label={`Contact method ${i + 1} name`}
+                maxLength={40}
+                onChange={(e) => updCustom(i, { label: e.target.value })}
+              />
+              <input
+                className={`${input} ${err ? inputInvalid : ''}`}
+                value={c.value}
+                placeholder={preset?.placeholder || 'Number, handle or https:// link'}
+                aria-label={`Contact method ${i + 1} details`}
+                aria-invalid={err ? true : undefined}
+                maxLength={200}
+                onChange={(e) => updCustom(i, { value: e.target.value })}
+              />
+              <button
+                type="button"
+                className={`${ghostBtn} text-[#DC2626]`}
+                aria-label={`Remove contact method ${i + 1}`}
+                onClick={() => patchDraft({ customContacts: custom.filter((_, idx) => idx !== i) })}
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+            {err ? <div className={fieldError} role="alert">{err}</div> : null}
+          </div>
+        );
+      })}
+      <div>
+        <select
+          className={`${input} max-w-[260px] cursor-pointer`}
+          value=""
+          aria-label="Add a contact method"
+          onChange={(e) => onAdd(e.target.value)}
+        >
+          <option value="">+ Add a contact method…</option>
+          {available.map((m) => (
+            <option key={m.key} value={`std:${m.key}`}>{m.label}</option>
+          ))}
+          {custom.length < 8
+            ? CUSTOM_CONTACT_PRESETS.filter((p) => !custom.some((c) => c.label === p.label)).map((p) => (
+                <option key={p.label} value={`preset:${p.label}`}>{p.label}</option>
+              ))
+            : null}
+          {custom.length < 8 ? <option value="custom">Other (your own label)…</option> : null}
+        </select>
+        <div className={hint}>Only the methods you add are shown on your profile. Remove one to hide it.</div>
+      </div>
     </div>
   );
 }
@@ -641,15 +954,15 @@ export default function CreatorEditStudio() {
   const versionRef = useRef<string | undefined>(undefined);
   const [conflict, setConflict] = useState(false);
   const [brands, setBrands] = useState<CatalogBrand[]>([]);
-  const [ownGuides, setOwnGuides] = useState<Array<{ id: string; slug?: string; title: string; image?: string }>>([]);
+  const [ownGuides, setOwnGuides] = useState<
+    Array<{ id: string; slug?: string; title: string; image?: string; creatorId?: string; status?: string }>
+  >([]);
 
-  const [editMode, setEditMode] = useState(isNew);
   const [editingId, setEditingId] = useState<CreatorEditSection | null>(null);
   const [draft, setDraft] = useState<CreatorEditorModel | null>(null);
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [showVersions, setShowVersions] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [pendingLifecycle, setPendingLifecycle] = useState<'publish' | 'unpublish' | 'archive' | null>(null);
 
@@ -661,7 +974,9 @@ export default function CreatorEditStudio() {
   const activeId = model?.id && model.id !== 'new' ? model.id : '';
   // Snapshot / version history only. We deliberately ignore the hook's backend
   // draft-hydration path — the canonical Creator API is the sole source of truth.
-  const { versions, saveVersion } = useEntityDraft<CreatorEditorModel>(
+  // Snapshots are still recorded after every saved section (server-side history); the header no
+  // longer shows a Snapshots button.
+  const { saveVersion } = useEntityDraft<CreatorEditorModel>(
     'creator',
     activeId,
     {
@@ -792,7 +1107,14 @@ export default function CreatorEditStudio() {
       if (cancelled) return;
       setBrands(brs);
       setOwnGuides(
-        guides.map((g) => ({ id: g.id, slug: g.slug, title: g.title || 'Untitled guide', image: g.image })),
+        guides.map((g) => ({
+          id: g.id,
+          slug: g.slug,
+          title: g.title || 'Untitled guide',
+          image: g.image,
+          creatorId: (g as { creatorId?: string }).creatorId,
+          status: (g as { status?: string }).status,
+        })),
       );
     })();
     return () => {
@@ -832,8 +1154,15 @@ export default function CreatorEditStudio() {
     }
   };
 
+  const sectionErrors = useMemo(() => creatorSectionErrors(editingId, draft), [editingId, draft]);
+  const sectionErrorCount = Object.keys(sectionErrors).length;
+
   const saveSection = async () => {
     if (!draft) return;
+    if (sectionErrorCount) {
+      flash('Fix the highlighted fields before saving.');
+      return;
+    }
     setSaving(true);
     try {
       if (isNew || draft.id === 'new') {
@@ -934,27 +1263,30 @@ export default function CreatorEditStudio() {
     switch (section) {
       case 'cover':
         return (
-          <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr] gap-4">
-            <div>
-              <div className={label}>Cover image</div>
-              <ImageField
-                value={d.coverImage}
-                onChange={(coverImage) => patchDraft({ coverImage })}
-                onToast={flash}
-                aspect="aspect-[16/6]"
-                emptyLabel="Upload cover"
-              />
-              <div className={hint}>Wide banner shown at the top of your public profile.</div>
-            </div>
-            <div>
-              <div className={label}>Avatar</div>
+          <div>
+            <div className={label}>Cover image</div>
+            <ImageField
+              value={d.coverImage}
+              onChange={(coverImage) => patchDraft({ coverImage })}
+              onToast={flash}
+              aspect="aspect-[16/6]"
+              emptyLabel="Upload cover"
+            />
+            <div className={hint}>Wide banner shown at the top of your public profile. JPG, PNG, WEBP or GIF.</div>
+          </div>
+        );
+      case 'avatar':
+        return (
+          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+            <div className="w-[140px] max-w-full">
+              <div className={label}>Profile photo</div>
               <ImageField
                 value={d.avatar}
                 onChange={(avatar) => patchDraft({ avatar })}
                 onToast={flash}
-                aspect="aspect-square max-w-[140px]"
+                aspect="aspect-square w-[140px] max-w-full"
                 roundedFull
-                emptyLabel="Upload avatar"
+                emptyLabel="Upload photo"
                 crop={{
                   originalValue: d.avatarOriginal,
                   cropValue: d.avatarCrop,
@@ -965,6 +1297,10 @@ export default function CreatorEditStudio() {
                 }}
               />
             </div>
+            <div className={`${hint} sm:mt-6 max-w-sm`}>
+              Shown in a circle on your profile, guides and comments. After choosing a photo you can zoom and reposition
+              it; use Adjust later to reframe it without uploading again.
+            </div>
           </div>
         );
       case 'identity':
@@ -973,11 +1309,14 @@ export default function CreatorEditStudio() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
                 <div className={label}>Name</div>
-                <input className={input} value={d.name} placeholder="e.g. Rifat Hasan" onChange={(e) => patchDraft({ name: e.target.value })} />
-              </div>
-              <div>
-                <div className={label}>Handle</div>
-                <input className={input} value={d.handle} placeholder="@rifathasan" onChange={(e) => patchDraft({ handle: e.target.value })} />
+                <input
+                  className={`${input} ${sectionErrors.name ? inputInvalid : ''}`}
+                  value={d.name}
+                  placeholder="e.g. Rifat Hasan"
+                  aria-invalid={sectionErrors.name ? true : undefined}
+                  onChange={(e) => patchDraft({ name: e.target.value })}
+                />
+                {sectionErrors.name ? <div className={fieldError} role="alert">{sectionErrors.name}</div> : null}
               </div>
               <div>
                 <div className={label}>Title / role</div>
@@ -1001,19 +1340,10 @@ export default function CreatorEditStudio() {
           </div>
         );
       case 'overview':
+        return <OverviewEditor d={d} patchDraft={patchDraft} errors={sectionErrors} />;
+      case 'expertise':
         return (
-          <div className="space-y-4">
-            <div>
-              <div className={label}>Background &amp; Bio</div>
-              <textarea
-                className={textarea}
-                rows={5}
-                value={d.bio}
-                placeholder="A short, first-person intro shown on your public profile — who you are, what you cover, why buyers should trust your picks."
-                onChange={(e) => patchDraft({ bio: e.target.value })}
-              />
-              <div className={hint}>The one canonical bio. It also appears in the profile header.</div>
-            </div>
+          <div className="space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <div className={label}>Areas of expertise</div>
@@ -1037,8 +1367,7 @@ export default function CreatorEditStudio() {
               </div>
             </div>
             <div className={hint}>
-              Bio, expertise and platforms are the Creator Overview shown on your public profile. Expertise also feeds
-              the “Why Follow” highlights.
+              Shown as Expertise &amp; Topics and in your Creator Overview.
             </div>
           </div>
         );
@@ -1046,45 +1375,37 @@ export default function CreatorEditStudio() {
         return (
           <div className="space-y-3">
             <div className="space-y-2">
-              {(['facebook', 'instagram', 'youtube', 'linkedin', 'tiktok'] as const).map((k) => (
-                <div key={k}>
-                  <div className={label}>{k}</div>
-                  <input
-                    className={input}
-                    value={d.socialLinks[k] || ''}
-                    placeholder={`https://${k}.com/…`}
-                    onChange={(e) => patchDraft({ socialLinks: { ...d.socialLinks, [k]: e.target.value } })}
-                  />
-                </div>
-              ))}
+              {CREATOR_SOCIAL_PLATFORM_KEYS.map((k) => {
+                const err = sectionErrors[k];
+                const id = `creator-social-${k}`;
+                return (
+                  <div key={k}>
+                    <label className={label} htmlFor={id}>{CREATOR_SOCIAL_PLATFORMS[k].label}</label>
+                    <input
+                      id={id}
+                      className={`${input} ${err ? inputInvalid : ''}`}
+                      type="url"
+                      inputMode="url"
+                      value={d.socialLinks[k] || ''}
+                      placeholder={`https://${CREATOR_SOCIAL_PLATFORMS[k].hosts[0]}/…`}
+                      aria-invalid={err ? true : undefined}
+                      onChange={(e) => patchDraft({ socialLinks: { ...d.socialLinks, [k]: e.target.value } })}
+                    />
+                    {err ? <div className={fieldError} role="alert">{err}</div> : null}
+                  </div>
+                );
+              })}
             </div>
+            <div className={hint}>Leave a field empty to remove that link. Only full https:// addresses are accepted.</div>
             <SocialCustomEditor
               items={d.socialLinks.custom ?? []}
               onChange={(custom) => patchDraft({ socialLinks: { ...d.socialLinks, custom } })}
+              errors={sectionErrors}
             />
           </div>
         );
       case 'contact':
-        return (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <div>
-              <div className={label}>Business email</div>
-              <input className={input} value={d.email} placeholder="you@example.com" onChange={(e) => patchDraft({ email: e.target.value })} />
-            </div>
-            <div>
-              <div className={label}>Phone</div>
-              <input className={input} value={d.phone} placeholder="+8801…" onChange={(e) => patchDraft({ phone: e.target.value })} />
-            </div>
-            <div>
-              <div className={label}>Response time</div>
-              <input className={input} value={d.responseTime} placeholder="e.g. Within 24 hours" onChange={(e) => patchDraft({ responseTime: e.target.value })} />
-            </div>
-            <div>
-              <div className={label}>Preferred contact</div>
-              <input className={input} value={d.preferredContact} placeholder="e.g. Email" onChange={(e) => patchDraft({ preferredContact: e.target.value })} />
-            </div>
-          </div>
-        );
+        return <ContactEditor d={d} patchDraft={patchDraft} errors={sectionErrors} />;
       case 'partnerships':
         return (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1121,6 +1442,7 @@ export default function CreatorEditStudio() {
     editingSection: editingId,
     dirty,
     saving,
+    saveBlocked: sectionErrorCount > 0,
     onEdit: requestEdit,
     onCancel: cancelEdit,
     onSave: saveSection,
@@ -1168,21 +1490,26 @@ export default function CreatorEditStudio() {
   }
 
   const canPublish = !isNew && model.id !== 'new';
-  // Canonical storefront URL (production host, active handle → slug → id), never the Admin host.
-  const publicHref = canPublish ? publicProfileUrl('creator', { handle: publicHandle, slug: model.slug, id: model.id }) : '';
+  // This creator's own Guides (Guide Management rows carry the authoring creatorId).
+  const creatorGuides = ownGuides
+    .filter((g) => g.creatorId === model.id)
+    .map((g) => ({ id: g.id, slug: g.slug, title: g.title, image: g.image, status: g.status }));
 
   return (
     <div className="aws-page w-full bg-[#F0F8FF] min-h-screen overflow-x-clip">
       <header className="sticky top-[var(--cms-topbar-height,64px)] z-[8] flex flex-wrap items-center justify-between gap-3 border-b border-[#E8EDF2] bg-white/95 px-4 py-2.5 backdrop-blur">
         <div className="flex items-center gap-3 min-w-0">
-          <button
-            type="button"
-            onClick={() => confirmLeave(() => navigate(isCreatorRole ? '/admin/creator-profile' : '/admin/creator-studio'))}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#E8EDF2] text-[#374151]"
-            aria-label="Back"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
+          {/* A creator owns exactly one profile — there is no list to go back to. Staff return to the creators list. */}
+          {!isCreatorRole ? (
+            <button
+              type="button"
+              onClick={() => confirmLeave(() => navigate('/admin/creator-studio'))}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#E8EDF2] text-[#374151]"
+              aria-label="Back"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+          ) : null}
           <div className="min-w-0">
             <div className="text-[9px] font-extrabold uppercase tracking-widest text-[#EF3C23]">Creator Studio</div>
             <div className="truncate text-[13px] font-extrabold text-[#1A1A2E]">{model.name || 'New Creator'}</div>
@@ -1201,65 +1528,6 @@ export default function CreatorEditStudio() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 min-w-0 max-w-full" data-testid="creator-header-actions">
-          <div className="inline-flex rounded-lg border border-[#E8EDF2] overflow-hidden">
-            <button
-              type="button"
-              onClick={() =>
-                confirmLeave(() => {
-                  if (editingId) cancelEdit();
-                  setEditMode(false);
-                })
-              }
-              className={`px-3 py-1.5 text-[11px] font-bold ${!editMode ? 'bg-[#1A1A2E] text-white' : 'bg-white text-[#374151]'}`}
-            >
-              View
-            </button>
-            <button
-              type="button"
-              onClick={() => setEditMode(true)}
-              className={`px-3 py-1.5 text-[11px] font-bold ${editMode ? 'bg-[#EF3C23] text-white' : 'bg-white text-[#374151]'}`}
-            >
-              Edit
-            </button>
-          </div>
-
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setShowVersions((v) => !v)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#E8EDF2] px-3 py-1.5 text-[11px] font-bold bg-white"
-            >
-              <History className="h-4 w-4 text-[#EF3C23]" /> Snapshots ({versions?.length || 0})
-            </button>
-            {showVersions ? (
-              <div className="absolute right-0 top-full mt-2 w-72 bg-white border border-[#E8EDF2] rounded-xl shadow-xl p-3 z-40">
-                <div className="text-[10px] font-extrabold uppercase text-[#EF3C23] border-b border-slate-100 pb-2 mb-2">History</div>
-                {(versions || []).length === 0 ? (
-                  <p className="text-[11px] text-slate-500 m-0">No snapshots yet.</p>
-                ) : (
-                  <ul className="m-0 p-0 list-none space-y-1 max-h-48 overflow-y-auto">
-                    {(versions || []).slice(0, 10).map((v) => (
-                      <li key={v.id} className="text-[11px] text-slate-700 py-1 border-b border-slate-50">
-                        {v.label || v.createdAt}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ) : null}
-          </div>
-
-          {publicHref && model.status === 'LIVE' ? (
-            <a
-              href={publicHref}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 rounded-lg border border-[#E8EDF2] px-3 py-1.5 text-[11px] font-bold text-[#374151]"
-            >
-              View public profile <ExternalLink className="h-3 w-3" />
-            </a>
-          ) : null}
-
           {canPublish && model.status !== 'LIVE' ? (
             <button
               type="button"
@@ -1300,7 +1568,7 @@ export default function CreatorEditStudio() {
             </button>
           ) : null}
           <span className="hidden lg:inline text-[10px] text-[#9AA0AC]">
-            {editMode ? 'Each section saves on its own' : 'Read-only preview — click Edit to make changes'}
+            Each section saves on its own
           </span>
         </div>
       </header>
@@ -1339,7 +1607,7 @@ export default function CreatorEditStudio() {
         </div>
       ) : null}
 
-      {editMode && canPublish ? (
+      {canPublish ? (
         <div className="max-w-[1180px] mx-auto px-5 sm:px-8 pt-4">
           <StudioChecklist
             title="Profile readiness"
@@ -1356,8 +1624,22 @@ export default function CreatorEditStudio() {
               ].map((v) => v || ''),
               email: model.email,
               phone: model.phone,
+              otherContacts: model.customContacts.map((c) => c.value),
               status: model.status,
+              username: publicHandle,
+              expertiseCount: model.bestForTags.length,
+              featuredCount: model.featuredContent.length,
+              partnershipCount: model.brandPartners.length + model.collabTypes.length,
             })}
+            sectionLabels={SECTION_LABEL}
+            onGo={(s) => {
+              if (dirty && editingId && editingId !== s) {
+                flash('Save or cancel the current section first.');
+                return false;
+              }
+              requestEdit(s as CreatorEditSection);
+              return true;
+            }}
             intro={
               model.status === 'LIVE'
                 ? 'Your profile is public on the Choosify storefront.'
@@ -1369,7 +1651,15 @@ export default function CreatorEditStudio() {
         </div>
       ) : null}
 
-      <CreatorProfilePresentation model={showModel} mode={editMode ? 'studio' : 'view'} studio={bridge} />
+      <CreatorProfilePresentation
+        model={showModel}
+        // Always the Studio (Brand Studio pattern): every section's Edit pill is visible at once —
+        // no global View/Edit toggle. The public look is one click away via "View public profile".
+        mode="studio"
+        studio={bridge}
+        publicHandle={publicHandle}
+        guides={creatorGuides}
+      />
 
       {/* Lifecycle confirmation (Publish / Unpublish / Archive) — shared Studio dialog. */}
       <StudioConfirmDialog

@@ -37,7 +37,8 @@ async function request<T>(path: string, method: HttpMethod = 'GET'): Promise<T> 
   if (!response.ok || body.success === false) {
     throw new Error(body.error || `Request failed (${response.status})`);
   }
-  return body.data as T;
+  // GET /auth/me answers unwrapped; every other route wraps in { data }.
+  return ('data' in body ? body.data : body) as T;
 }
 
 /** Row shape returned by GET /auth/users/directory — see server/authRouter.ts. */
@@ -65,6 +66,10 @@ export interface UserDirectoryEntry {
  */
 export interface UserDetail extends UserDirectoryEntry {
   createdAt?: string;
+  /** Primary account phone (E.164) — admin user-detail endpoint only. */
+  phone?: string | null;
+  /** Where `phone` came from: the account itself, or the user's partner application. */
+  phoneSource?: 'account' | 'partner_application' | null;
   partnerApplicationStatus?: string | null;
   identityVerified?: boolean;
   marketplaceAccess?: boolean;
@@ -93,6 +98,10 @@ export const authApi = {
   /** Admin directory of all registered accounts (uid/email/displayName/role/choosifyUserId only). */
   getUsersDirectory: async (): Promise<UserDirectoryEntry[]> => {
     return request<UserDirectoryEntry[]>('/auth/users/directory');
+  },
+  /** The signed-in account's own record (GET /auth/me) — e.g. its primary phone. */
+  getMyAccount: async (): Promise<{ uid: string; email: string; displayName: string; role: string; choosifyUserId?: string | null; phone?: string | null }> => {
+    return request('/auth/me');
   },
   /** Admin lookup of a single account by internal Auth UID. */
   getUserDetail: async (userId: string): Promise<UserDetail> => {

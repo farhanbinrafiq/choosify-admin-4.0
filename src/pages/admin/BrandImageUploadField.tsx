@@ -9,8 +9,9 @@ type BrandImageUploadFieldProps = {
   value: string;
   onChange: (url: string) => void;
   label?: string;
-  /** `banner` = wide cover; `logo` = square tile; `avatar` = circular tile */
-  variant?: 'banner' | 'logo' | 'avatar';
+  /** `banner` = short wide strip; `cover` = profile cover at the shared Studio cover size (16:6,
+   *  same as Creator Studio); `logo` = square tile; `avatar` = circular tile */
+  variant?: 'banner' | 'cover' | 'logo' | 'avatar';
   /** Fill parent (hero overlay); parent must be position:relative */
   embedded?: boolean;
   className?: string;
@@ -284,7 +285,9 @@ export function BrandImageUploadField({
             ? 'rounded-full aspect-square w-full max-w-[112px]'
             : isLogo
               ? 'rounded-2xl aspect-square w-full max-w-[112px]'
-              : 'rounded-xl w-full h-28'
+              : variant === 'cover'
+                ? 'rounded-xl w-full aspect-[16/6]'
+                : 'rounded-xl w-full h-28'
         } ${dragOver ? 'border-[#EF3C23] bg-orange-50' : 'border-slate-200 bg-slate-50'}`}
       >
         {value ? (
@@ -322,10 +325,11 @@ export function BrandImageUploadField({
             type="button"
             disabled={uploading}
             onClick={openEditLogo}
+            title="Adjust logo framing"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:border-[#EF3C23] text-[10px] font-bold text-slate-700 rounded-lg cursor-pointer disabled:opacity-50"
           >
             <Pencil className="w-3 h-3" />
-            Edit logo
+            Adjust
           </button>
         ) : null}
         <button
@@ -363,7 +367,14 @@ export function BrandImageUploadField({
       {error && <p className="text-[10px] font-medium text-red-600">{error}</p>}
 
       {isLogo && (
-        <BrandLogoCropModal open={cropOpen} imageSrc={cropSrc} onCancel={onCropCancel} onSave={onCropSave} />
+        <BrandLogoCropModal
+          open={cropOpen}
+          imageSrc={cropSrc}
+          // Re-framing the stored original resumes the saved position/zoom (same rule as the embedded tile).
+          initialCrop={cropSrc && cropSrc === originalValue ? cropValue : null}
+          onCancel={onCropCancel}
+          onSave={onCropSave}
+        />
       )}
     </div>
   );

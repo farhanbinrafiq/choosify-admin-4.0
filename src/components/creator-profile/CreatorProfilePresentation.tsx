@@ -1,14 +1,5 @@
-import React, { useState } from 'react';
-import {
-  Check,
-  CheckCircle2,
-  ExternalLink,
-  Heart,
-  MessageCircleMore,
-  Share2,
-  ShieldCheck,
-  Sparkles,
-} from 'lucide-react';
+import React from 'react';
+import { Check, CheckCircle2, ExternalLink, Pencil, ShieldCheck } from 'lucide-react';
 import {
   normalizeTrustScore,
   type CreatorEditSection,
@@ -21,12 +12,16 @@ import { StudioEditPill } from '../studio';
  * STUDIO mode swaps one section at a time for an inline editor (Save Changes /
  * Cancel). No drawer, no modal, no slide-over. Trust score, followers,
  * verification, media and reviews are platform/relationship-derived and render
- * read-only with no edit affordance.
+ * read-only with no edit affordance. Every value shown comes from the stored
+ * profile — anything not recorded renders as an honest empty state, never a
+ * placeholder number or name.
  */
 export type CreatorStudioBridge = {
   editingSection: CreatorEditSection | null;
   dirty: boolean;
   saving: boolean;
+  /** The open section has field errors — Save is disabled until they are fixed. */
+  saveBlocked?: boolean;
   onEdit: (k: CreatorEditSection) => void;
   onCancel: () => void;
   onSave: () => void;
@@ -35,10 +30,15 @@ export type CreatorStudioBridge = {
   manageGuidesHref?: string;
 };
 
+/** One of this creator's own Guides (from Guide Management). */
+export type CreatorProfileGuide = { id: string; slug?: string; title: string; image?: string; status?: string };
+
 const SECTION_TITLE: Record<CreatorEditSection, string> = {
-  cover: 'Cover & Avatar',
+  cover: 'Cover Image',
+  avatar: 'Profile Photo',
   identity: 'Profile Identity',
   social: 'Social Links',
+  expertise: 'Expertise & Topics',
   overview: 'Creator Overview',
   contact: 'Contact & Reach',
   partnerships: 'Partnerships & Collaborations',
@@ -59,13 +59,14 @@ function CreatorInlineEditFrame({
   studio: CreatorStudioBridge;
   children: React.ReactNode;
 }) {
+  const blocked = !!studio.saveBlocked;
   return (
-    <div className="relative rounded-xl bg-white border border-[#E8EDF2] p-4 sm:p-5">
+    <div className="relative rounded-xl bg-white border border-[#E8EDF2] p-4 sm:p-5" data-testid="creator-inline-editor">
       <div className="text-[10px] font-extrabold uppercase tracking-wider text-[#9AA0AC] mb-3">
         Editing — {title}
       </div>
       {children}
-      <div className="flex items-center gap-2 mt-4 pt-3 border-t border-[#F1F1F3]">
+      <div className="flex flex-wrap items-center gap-2 mt-4 pt-3 border-t border-[#F1F1F3]">
         <button
           type="button"
           onClick={studio.onCancel}
@@ -77,12 +78,16 @@ function CreatorInlineEditFrame({
         <button
           type="button"
           onClick={studio.onSave}
-          disabled={studio.saving}
-          className="px-4 py-2 rounded-lg text-[11px] font-extrabold text-white bg-[#EF3C23]"
+          disabled={studio.saving || blocked}
+          className="px-4 py-2 rounded-lg text-[11px] font-extrabold text-white bg-[#EF3C23] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {studio.saving ? 'Saving…' : 'Save Changes'}
         </button>
-        {studio.dirty ? <span className="text-[10px] text-[#9AA0AC] italic">Unsaved changes</span> : null}
+        {blocked ? (
+          <span className="text-[10px] font-semibold text-[#DC2626]">Fix the highlighted fields to save</span>
+        ) : studio.dirty ? (
+          <span className="text-[10px] text-[#9AA0AC] italic">Unsaved changes</span>
+        ) : null}
       </div>
     </div>
   );
@@ -111,26 +116,62 @@ function OverviewCardHeader({ title }: { title: string }) {
   );
 }
 
-const SCORE_ROWS = [
-  { label: 'Accuracy', key: 0.96 },
-  { label: 'Depth', key: 0.94 },
-  { label: 'Clarity', key: 0.92 },
-  { label: 'Trust', key: 0.98 },
-  { label: 'Value', key: 0.9 },
-] as const;
+/** Only absolute http(s) links are ever rendered as hrefs. */
+const isSafeHref = (url: string | undefined): url is string => !!url && /^https?:\/\//i.test(url.trim());
 
-const TABS = ['Overview', 'Guides', 'Videos', 'Reviews', 'Collections', 'Deals', 'About'] as const;
+/**
+ * Creator-only status strip (mirrors Brand Studio's seller strip): lifecycle status and
+ * verification, from platform-owned fields. Studio-only — never part of the public profile.
+ */
+function CreatorStudioStatusStrip({ model }: { model: CreatorEditorModel }) {
+  const status =
+    model.status === 'LIVE'
+      ? { value: 'Live', cls: 'bg-[#DCFCE7] text-[#166534]' }
+      : model.status === 'ARCHIVED'
+        ? { value: 'Archived', cls: 'bg-[#F3F4F6] text-[#6B7280]' }
+        : { value: 'Draft', cls: 'bg-[#FEF3C7] text-[#92400E]' };
+  return (
+    <div className="mb-4 rounded-xl border border-[#E8EDF2] bg-[#FBFCFE] px-4 py-3" data-testid="creator-status-strip">
+      <div className="mb-2 text-[9.5px] font-extrabold uppercase tracking-wider text-[#9AA0AC]">
+        Creator status · owner &amp; Choosify staff only — not shown on the public creator profile
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E8EDF2] bg-white px-2.5 py-1 text-[10px] font-bold text-[#6B7280]">
+          Profile
+          <span className={`rounded-full px-1.5 py-0.5 text-[9.5px] font-extrabold uppercase ${status.cls}`}>{status.value}</span>
+        </span>
+        <span
+          className={`inline-flex items-center rounded-full px-2 py-1 text-[9.5px] font-extrabold uppercase ${
+            model.verified ? 'bg-[#EEF2FF] text-[#2323FF]' : 'bg-[#F3F4F6] text-[#6B7280]'
+          }`}
+        >
+          {model.verified ? 'Verified creator' : 'Not verified by Choosify yet'}
+        </span>
+      </div>
+      {model.status !== 'LIVE' ? (
+        <p className="mt-2 mb-0 text-[10.5px] font-semibold text-[#92400E]">
+          This profile is not public yet — only its owner and Choosify can see it.
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 export function CreatorProfilePresentation({
   model,
   mode = 'view',
   studio,
+  publicHandle,
+  guides = [],
 }: {
   model: CreatorEditorModel;
   mode?: 'view' | 'studio';
   studio?: CreatorStudioBridge;
+  /** The approved public username (Public Identity), without "@". */
+  publicHandle?: string | null;
+  /** This creator's own Guides (all statuses; only LIVE ones count publicly). */
+  guides?: CreatorProfileGuide[];
 }) {
-  const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('Overview');
   const isStudio = mode === 'studio' && !!studio;
   const trust = normalizeTrustScore(model.score);
   const initial = String(model.name || 'C')
@@ -139,8 +180,9 @@ export function CreatorProfilePresentation({
     .join('')
     .slice(0, 2)
     .toUpperCase();
-  const handle = model.handle || (model.name ? `@${model.name.toLowerCase().replace(/\s+/g, '')}` : '@creator');
-  const firstName = (model.name || 'Creator').split(/\s+/)[0];
+  // Only the registered public username (Public Identity) — the same rule as the storefront.
+  const handle = publicHandle ? `@${publicHandle.replace(/^@/, '')}` : '';
+  const liveGuides = guides.filter((g) => (g.status || '').toLowerCase() === 'live');
   // Featured Content: creator-curated list, else fall back to newest media.
   const curatedFeatured = Array.isArray(model.featuredContent) ? model.featuredContent : [];
   const featured = curatedFeatured.length
@@ -171,15 +213,16 @@ export function CreatorProfilePresentation({
       ['TikTok', model.socialLinks.tiktok],
       ...(model.socialLinks.custom ?? []).map((c) => [c.label, c.url] as const),
     ] as ReadonlyArray<readonly [string, string | undefined]>
-  ).filter(([, url]) => !!url);
+  ).filter((e): e is readonly [string, string] => !!e[0] && isSafeHref(e[1]));
 
+  const bestFor = model.bestFor || model.bestForTags[0] || '';
   const infoFacts = [
-    { icon: '📹', label: 'Videos', value: String(model.videos.length || '—') },
-    { icon: '✦', label: 'Reels', value: String(model.reels.length || '—') },
-    { icon: '📝', label: 'Blogs', value: String(model.blogs.length || '—') },
-    { icon: '♥', label: 'Followers', value: model.followerTotal || '—' },
+    { icon: '📝', label: 'Guides', value: String(liveGuides.length) },
+    { icon: '📹', label: 'Videos', value: String(model.videos.length) },
+    { icon: '✦', label: 'Reels', value: String(model.reels.length) },
+    { icon: '♥', label: 'Followers', value: model.followerTotal || '0' },
     { icon: '★', label: 'Trust', value: trust > 0 ? String(trust) : '—' },
-    { icon: '🎯', label: 'Best for', value: model.bestFor || model.bestForTags[0] || '—' },
+    { icon: '🎯', label: 'Best for', value: bestFor || '—' },
   ];
 
   const editingId = isStudio ? studio!.editingSection : null;
@@ -191,26 +234,48 @@ export function CreatorProfilePresentation({
       {studio!.renderEditor(k)}
     </CreatorInlineEditFrame>
   );
+  const heroEditing = editingHere('cover') ? 'cover' : editingHere('avatar') ? 'avatar' : null;
+
+  // Contact & Reach: only the methods the creator added, in their order of importance.
+  const linkFor = (v: string): string | undefined => {
+    const t = v.trim();
+    if (/^(https?:\/\/|mailto:|tel:)/i.test(t)) return t;
+    return undefined;
+  };
+  const contactRows = [
+    model.email ? { key: 'email', icon: '✉', label: 'Business email', value: model.email, href: `mailto:${model.email}` } : null,
+    model.phone ? { key: 'phone', icon: '📞', label: 'Phone', value: model.phone, href: `tel:${model.phone.replace(/[^+0-9]/g, '')}` } : null,
+    ...(model.customContacts || []).map((c, i) => ({ key: `c-${i}`, icon: '💬', label: c.label, value: c.value, href: linkFor(c.value) })),
+    model.responseTime ? { key: 'rt', icon: '⏱', label: 'Response time', value: model.responseTime, href: undefined } : null,
+    model.preferredContact ? { key: 'pc', icon: '⭐', label: 'Preferred contact', value: model.preferredContact, href: undefined } : null,
+  ].filter(Boolean) as Array<{ key: string; icon: string; label: string; value: string; href?: string }>;
+
 
   return (
     <div className="bg-[#F0F8FF] text-[#1A1A2E] overflow-hidden">
-      {/* Cover + avatar */}
+      {/* Cover + profile photo — each its own section (Brand Studio pattern) */}
       <div className="w-full px-5 sm:px-8 lg:px-10 pt-4 relative">
         <div className="max-w-[1180px] mx-auto relative">
-          {editingHere('cover') ? (
-            <div className="pb-2">{frame('cover')}</div>
+          <CreatorStudioStatusStrip model={model} />
+          {heroEditing ? (
+            <div className="pb-2">{frame(heroEditing)}</div>
           ) : (
             <>
-              {pill('cover', 'Cover')}
-              <div className="relative h-[220px] sm:h-[280px] md:h-[320px] overflow-hidden choosify-dark-surface rounded-none">
+              <div
+                className={`relative h-[220px] sm:h-[280px] md:h-[320px] overflow-hidden rounded-none ${
+                  model.coverImage || !isStudio ? 'choosify-dark-surface' : 'bg-[#F1F3F5] border border-dashed border-[#D9DEE7]'
+                }`}
+                data-testid="creator-cover"
+              >
+                {pill('cover')}
                 {model.coverImage ? (
                   <img src={model.coverImage} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-[12px] text-white/50 font-semibold">
-                    {isStudio ? 'Add cover image' : 'No cover image'}
+                ) : isStudio ? (
+                  <div className="w-full h-full flex items-center justify-center text-[11px] text-[#6B7280] font-semibold">
+                    Add a creator cover image
                   </div>
-                )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+                ) : null}
+                {model.coverImage ? <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" /> : null}
               </div>
               <div className="absolute left-1/2 top-full -translate-x-1/2 -translate-y-[60px] w-[100px] h-[100px] md:w-[120px] md:h-[120px] z-[5]">
                 <div className="w-full h-full rounded-full bg-[#1A1A2E] border-[5px] border-white shadow-[0_16px_36px_rgba(0,0,0,0.28),0_0_0_4px_rgba(7,208,80,0.18)] overflow-hidden flex items-center justify-center text-white text-[30px] font-extrabold">
@@ -220,6 +285,18 @@ export function CreatorProfilePresentation({
                     initial
                   )}
                 </div>
+                {isStudio ? (
+                  <button
+                    type="button"
+                    onClick={() => studio!.onEdit('avatar')}
+                    title="Upload / change profile photo"
+                    aria-label="Edit Profile Photo"
+                    data-testid="creator-avatar-edit"
+                    className="absolute -bottom-1 -right-1 z-10 inline-flex items-center gap-1 rounded-full border-2 border-white bg-[#EF3C23] px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-wide text-white shadow-md hover:bg-[#CF3319] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2323FF] focus-visible:ring-offset-2"
+                  >
+                    <Pencil className="h-3 w-3" aria-hidden="true" /> Photo
+                  </button>
+                ) : null}
               </div>
             </>
           )}
@@ -228,7 +305,7 @@ export function CreatorProfilePresentation({
 
       <div className="max-w-[1180px] mx-auto px-5 sm:px-8 lg:px-10 pb-6">
         {/* Identity + social */}
-        <div className={`relative ${editingHere('cover') ? 'mt-6' : 'mt-[74px]'} mb-6`}>
+        <div className={`relative ${heroEditing ? 'mt-6' : 'mt-[74px]'} mb-6`}>
           {editingHere('identity') ? (
             frame('identity')
           ) : (
@@ -243,53 +320,53 @@ export function CreatorProfilePresentation({
                     </span>
                   ) : null}
                 </div>
-                <div className="text-[13px] text-[#2323FF] font-semibold">
-                  {model.title || (isStudio ? 'Add creator title' : 'Creator')}
-                </div>
-                <div className="text-[12.5px] text-[#9AA0AC] mb-2.5">
-                  {handle}
-                  {model.location ? ` · ${model.location}` : isStudio ? ' · Add location' : ''}
-                </div>
+                {model.title ? (
+                  <div className="text-[13px] text-[#2323FF] font-semibold">{model.title}</div>
+                ) : isStudio ? (
+                  <div className="text-[13px] text-[#9AA0AC] font-semibold">Add a creator title</div>
+                ) : null}
+                {handle || model.location || isStudio ? (
+                  <div className="text-[12.5px] text-[#9AA0AC] mb-2.5 break-words" data-testid="creator-handle-line">
+                    {[handle || (isStudio ? 'No username yet — set one in Identity' : ''), model.location || (isStudio ? 'Add location' : '')]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </div>
+                ) : null}
                 {model.verified ? (
                   <div className="inline-flex items-center gap-1.5 text-[10px] font-bold text-[#2323FF] mb-2">
                     <ShieldCheck size={12} /> Verified Creator
                   </div>
-                ) : (
-                  <div className="text-[10px] font-bold text-[#9AA0AC] mb-2">Community creator profile</div>
-                )}
+                ) : null}
 
                 {/* Social — its own editable section */}
-                <div className="relative mt-2.5 min-h-[30px]">
+                <div
+                  className={`relative mt-2.5 min-h-[30px] ${
+                    isStudio && !editingHere('social')
+                      ? 'rounded-lg border border-dashed border-[#E8EDF2] px-3 pt-11 pb-3 lg:pt-3 lg:pr-28 lg:min-h-[48px]'
+                      : ''
+                  }`}
+                  data-testid="creator-social"
+                >
                   {editingHere('social') ? (
-                    frame('social')
+                    <div className="text-left">{frame('social')}</div>
                   ) : (
                     <>
-                      {isStudio ? (
-                        <button
-                          type="button"
-                          onClick={() => studio!.onEdit('social')}
-                          className="absolute -top-1 right-0 text-[10px] font-extrabold text-[#EF3C23] uppercase bg-transparent border-0 cursor-pointer"
-                        >
-                          Edit social
-                        </button>
-                      ) : null}
+                      {pill('social', 'Social')}
                       <div className="flex flex-wrap gap-2 justify-center lg:justify-start">
                         {socialEntries.length ? (
                           socialEntries.map(([label, url]) => (
                             <a
-                              key={label}
+                              key={`${label}-${url}`}
                               href={url}
                               target="_blank"
-                              rel="noreferrer"
-                              className="px-3 py-1.5 rounded-full border border-[#E8EDF2] bg-white text-[11px] font-bold text-[#1A1A2E]"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1.5 rounded-full border border-[#E8EDF2] bg-white text-[11px] font-bold text-[#1A1A2E] max-w-full truncate"
                             >
                               {label}
                             </a>
                           ))
                         ) : (
-                          <span className="text-[11px] text-[#9AA0AC]">
-                            {isStudio ? 'Add social links' : 'No social links'}
-                          </span>
+                          <span className="text-[11px] text-[#9AA0AC]">No social links added yet.</span>
                         )}
                       </div>
                     </>
@@ -301,29 +378,19 @@ export function CreatorProfilePresentation({
                     {model.bio}
                   </p>
                 ) : isStudio ? (
-                  <p className="text-[12.5px] text-[#9AA0AC] mt-3 m-0">Add a bio for the storefront profile.</p>
+                  <p className="text-[12.5px] text-[#9AA0AC] mt-3 m-0">Add a bio in Creator Overview.</p>
                 ) : null}
               </div>
 
-              <div className="flex gap-2.5 flex-wrap justify-center lg:justify-end lg:mt-[52px] shrink-0 w-full lg:w-auto">
-                {['Follow', 'Message', 'Share', 'Love', 'Ask For Branding'].map((b, i) => (
-                  <button
-                    key={b}
-                    type="button"
-                    disabled
-                    className={`inline-flex items-center gap-1.5 px-[18px] py-2.5 rounded-lg text-xs font-bold ${
-                      i === 0
-                        ? 'bg-[#2323FF] text-white border border-[#2323FF]'
-                        : 'bg-white text-[#1A1A2E] border border-[#E5E7EB] font-semibold'
-                    } ${isStudio ? 'opacity-60' : ''}`}
-                  >
-                    {i === 1 ? <MessageCircleMore size={13} className="text-[#EF3C23]" /> : null}
-                    {i === 2 ? <Share2 size={13} /> : null}
-                    {i === 3 ? <Heart size={13} /> : null}
-                    {i === 4 ? <Sparkles size={13} /> : null}
-                    {b}
-                  </button>
-                ))}
+              {/* Owner view (Brand Studio pattern): the real recorded follower count; Follow /
+                  Message / Share are shopper actions that only exist on the storefront. */}
+              <div className="flex justify-center lg:justify-end lg:mt-[52px] shrink-0 w-full lg:w-auto">
+                <span
+                  className="inline-flex items-center gap-1.5 bg-[#EEF0FF] text-[#2323FF] border border-[#D9DCFF] px-[18px] py-2.5 rounded-lg text-xs font-bold"
+                  data-testid="creator-follower-count"
+                >
+                  ♥ {model.followerTotal || '0'} Follower{model.followerTotal === '1' ? '' : 's'}
+                </span>
               </div>
             </div>
           )}
@@ -333,27 +400,13 @@ export function CreatorProfilePresentation({
         <div className="flex flex-col md:flex-row gap-4 mb-2">
           <div className="bg-white border border-[#E8EDF2] rounded-[10px] p-5 md:w-[300px] shadow-[0_2px_10px_rgba(0,0,0,0.03)] shrink-0">
             <div className="text-[11px] font-extrabold text-[#9AA0AC] tracking-wide mb-2.5">TRUST SCORE</div>
-            <div className="flex items-baseline gap-2 mb-4">
+            <div className="flex items-baseline gap-2 mb-2">
               <div className="text-[30px] font-extrabold text-[#1A1A2E]">{trust > 0 ? trust : '—'}</div>
-              <div className="text-[11.5px] text-[#9AA0AC]">/5 · platform-managed</div>
+              <div className="text-[11.5px] text-[#9AA0AC]">/5</div>
             </div>
-            {trust > 0 ? (
-              SCORE_ROWS.map((r) => {
-                const rowVal = Math.min(5, Math.round(trust * r.key * 10) / 10);
-                const pct = `${Math.min(100, Math.round((rowVal / 5) * 100))}%`;
-                return (
-                  <div key={r.label} className="flex items-center gap-2.5 mb-2">
-                    <div className="text-[11px] text-[#4B5563] font-semibold w-[74px]">{r.label}</div>
-                    <div className="flex-1 h-1.5 bg-[#F1F1F3] rounded-sm overflow-hidden">
-                      <div className="h-full bg-[#2323FF] rounded-sm" style={{ width: pct }} />
-                    </div>
-                    <div className="text-[11px] font-extrabold text-[#1A1A2E] w-5 text-right">{rowVal}</div>
-                  </div>
-                );
-              })
-            ) : (
-              <p className="text-[11px] text-[#9AA0AC] m-0">No trust score yet.</p>
-            )}
+            <p className="text-[11px] text-[#9AA0AC] m-0">
+              {trust > 0 ? 'Calculated by Choosify.' : 'No trust score yet.'}
+            </p>
             {isStudio ? <DerivedNote>Trust Score is calculated by Choosify — not editable here.</DerivedNote> : null}
           </div>
 
@@ -361,95 +414,30 @@ export function CreatorProfilePresentation({
             <div className="text-[11px] font-extrabold text-[#9AA0AC] tracking-wide mb-4">CREATOR INFO</div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-5">
               {infoFacts.map((f) => (
-                <div key={f.label} className="flex items-center gap-2.5">
+                <div key={f.label} className="flex items-center gap-2.5 min-w-0">
                   <div className="w-[34px] h-[34px] rounded-lg bg-[#F4F7F9] flex items-center justify-center text-sm shrink-0">
                     {f.icon}
                   </div>
-                  <div>
-                    <div className="text-[15px] font-extrabold text-[#1A1A2E]">{f.value}</div>
+                  <div className="min-w-0">
+                    <div className="text-[15px] font-extrabold text-[#1A1A2E] truncate">{f.value}</div>
                     <div className="text-[10.5px] text-[#9AA0AC]">{f.label}</div>
                   </div>
                 </div>
               ))}
             </div>
             {isStudio ? (
-              <DerivedNote>Followers, media counts and Trust are resolved from your account &amp; content.</DerivedNote>
+              <DerivedNote>
+                Guides counts your live guides. Followers and Trust are recorded by Choosify; “—” means no trust score
+                yet.
+              </DerivedNote>
             ) : null}
           </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="sticky top-[64px] z-[15] w-full bg-[#F0F8FF] border-b border-[#E8EDF2]">
-        <div className="max-w-[1180px] mx-auto px-5 sm:px-8 lg:px-10 flex gap-7 overflow-x-auto">
-          {TABS.map((tab) => {
-            const active = activeTab === tab;
-            const count =
-              tab === 'Guides'
-                ? model.blogs.length || ''
-                : tab === 'Videos'
-                  ? model.videos.length + model.reels.length || ''
-                  : '';
-            return (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setActiveTab(tab)}
-                className={`shrink-0 py-3.5 text-[13px] font-bold cursor-pointer whitespace-nowrap border-0 border-b-2 bg-transparent ${
-                  active
-                    ? 'text-app-accent border-app-accent'
-                    : 'text-[#6B7280] border-transparent hover:text-[#1A1A2E]'
-                }`}
-              >
-                {tab}
-                {count ? <span className="text-[#9AA0AC] font-semibold ml-1">{count}</span> : null}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
+      {/* No storefront tab bar here: Guides, Reviews and Deals are managed in their own Studio pages
+          (Guide Management, Reviews, Ads & Deals Studio) — this page is only the editable profile. */}
       <div className="max-w-[1180px] mx-auto px-5 sm:px-8 lg:px-10 py-6 w-full space-y-8 pb-10">
-        {activeTab === 'Guides' ? (
-          <section className="bg-white border border-[#E8EDF2] rounded-[10px] p-5">
-            <div className="flex items-center justify-between gap-3 mb-3.5">
-              <h2 className="text-sm font-extrabold text-[#1A1A2E] m-0">Guides &amp; Content</h2>
-              <a
-                href={studio?.manageGuidesHref || '/admin/guides'}
-                className="inline-flex items-center gap-1 text-[11px] font-extrabold text-[#EF3C23] uppercase"
-              >
-                Manage Guides <ExternalLink className="w-3 h-3" />
-              </a>
-            </div>
-            {model.blogs.length ? (
-              <div className="grid grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-3 gap-3.5">
-                {model.blogs.map((b) => (
-                  <div key={b.id} className="border border-[#E8EDF2] rounded-[10px] overflow-hidden bg-[#F9FAFB]">
-                    <div className="aspect-video bg-[#1A1A2E]/10 flex items-center justify-center overflow-hidden">
-                      {b.thumbnail ? <img src={b.thumbnail} alt="" className="w-full h-full object-cover" /> : <span className="text-[10px] font-bold text-[#9AA0AC] uppercase">guide</span>}
-                    </div>
-                    <div className="p-3 text-[12px] font-bold text-[#1A1A2E] line-clamp-2">{b.title}</div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState message="No guides yet — publish one from Guide Management." />
-            )}
-            {isStudio ? (
-              <DerivedNote>Guides are managed in Guide Management; this tab mirrors your published content.</DerivedNote>
-            ) : null}
-          </section>
-        ) : activeTab !== 'Overview' ? (
-          <EmptyState
-            message={
-              activeTab === 'Videos' && model.videos.length + model.reels.length === 0
-                ? 'No videos yet.'
-                : activeTab === 'Reviews'
-                  ? 'No reviews yet.'
-                  : `No ${activeTab.toLowerCase()} yet.`
-            }
-          />
-        ) : (
           <>
             {/* Featured Content — creator-curated (own Guides + external links) */}
             <section className="relative">
@@ -458,11 +446,8 @@ export function CreatorProfilePresentation({
               ) : (
                 <div className="relative bg-white border border-[#E8EDF2] rounded-[10px] p-5">
                   {pill('featured')}
-                  <div className="flex justify-between items-baseline mb-3.5">
+                  <div className="flex justify-between items-baseline mb-3.5 pr-16">
                     <h2 className="text-sm font-extrabold text-[#1A1A2E] m-0">Featured Content</h2>
-                    {curatedFeatured.length === 0 && isStudio ? (
-                      <span className="text-[10px] text-[#9AA0AC] italic">auto — newest content</span>
-                    ) : null}
                   </div>
                   {featured.length ? (
                     <div className="grid grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 items-start">
@@ -505,32 +490,36 @@ export function CreatorProfilePresentation({
                   ) : (
                     <EmptyState message={isStudio ? 'Feature your own guides or add external links.' : 'No featured content yet.'} />
                   )}
-                  {isStudio && curatedFeatured.length === 0 ? (
-                    <DerivedNote>Empty — the profile shows your newest videos/reels/guides until you curate this.</DerivedNote>
+                  {isStudio && curatedFeatured.length === 0 && featured.length ? (
+                    <DerivedNote>Not curated — showing your newest videos and reels until you pick featured items.</DerivedNote>
                   ) : null}
                 </div>
               )}
             </section>
 
-            {/* Expertise & Topics (read-only mirror of Creator Overview) + Latest Reviews (derived) */}
+            {/* Expertise & Topics (editable in place) + Latest Reviews (community-written, read-only) */}
             <section className="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-4">
               <div className="relative">
+                {editingHere('expertise') ? (
+                  frame('expertise')
+                ) : (
                 <div className="relative bg-white border border-[#E8EDF2] rounded-[10px] p-5">
-                  <h3 className="text-[13px] font-extrabold text-[#1A1A2E] mb-3.5 m-0">Expertise &amp; Topics</h3>
+                  {pill('expertise')}
+                  <h3 className="text-[13px] font-extrabold text-[#1A1A2E] mb-3.5 m-0 pr-16">Expertise &amp; Topics</h3>
                   {model.bestForTags.length ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       {model.bestForTags.map((tag) => (
-                        <div key={tag} className="flex items-center gap-2">
+                        <div key={tag} className="flex items-center gap-2 min-w-0">
                           <div className="w-[30px] h-[30px] rounded-lg bg-[#F4F7F9] flex items-center justify-center text-[13px] shrink-0">#</div>
-                          <div>
-                            <div className="text-[11.5px] font-bold text-[#1A1A2E]">{tag}</div>
+                          <div className="min-w-0">
+                            <div className="text-[11.5px] font-bold text-[#1A1A2E] break-words">{tag}</div>
                             <div className="text-[10px] text-[#9AA0AC]">Topic</div>
                           </div>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <EmptyState message={isStudio ? 'Add expertise in Creator Overview' : 'No expertise topics'} />
+                    <EmptyState message={isStudio ? 'No expertise topics yet — use Edit to add them.' : 'No expertise topics yet.'} />
                   )}
                   {model.platforms.length ? (
                     <div className="mt-4 flex flex-wrap gap-1.5">
@@ -541,36 +530,21 @@ export function CreatorProfilePresentation({
                       ))}
                     </div>
                   ) : null}
-                  {isStudio ? <DerivedNote>Expertise topics and platforms are edited in the Creator Overview section below.</DerivedNote> : null}
                 </div>
+                )}
               </div>
-              <div className="bg-white border border-[#E8EDF2] rounded-[10px] p-5">
-                <h3 className="text-[13px] font-extrabold text-[#1A1A2E] mb-3.5 m-0">Latest Reviews</h3>
+              <div className="relative bg-white border border-[#E8EDF2] rounded-[10px] p-5">
+                <div className="flex items-center justify-between gap-2 mb-3.5">
+                  <h3 className="text-[13px] font-extrabold text-[#1A1A2E] m-0">Latest Reviews</h3>
+                  {isStudio ? (
+                    <span className="rounded-full bg-[#F3F4F6] px-2 py-0.5 text-[9.5px] font-extrabold uppercase text-[#6B7280]" title="Reviews are written by the community and can't be edited by the creator">
+                      Read-only
+                    </span>
+                  ) : null}
+                </div>
                 <EmptyState message="No reviews yet." />
                 {isStudio ? <DerivedNote>Community reviews are collected by Choosify and shown read-only.</DerivedNote> : null}
               </div>
-            </section>
-
-            {/* Why Follow (derived from editable data) */}
-            <section className="choosify-dark-surface rounded-xl px-[30px] py-[26px] text-white overflow-hidden">
-              <h3 className="text-sm font-extrabold mb-[18px] m-0">Why Follow {firstName}?</h3>
-              {model.collabTypes.length || model.bestForTags.length ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                  {(model.collabTypes.length ? model.collabTypes : model.bestForTags).slice(0, 4).map((item) => (
-                    <div key={item} className="flex gap-2.5">
-                      <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-[13px] shrink-0">✦</div>
-                      <div>
-                        <div className="text-xs font-bold mb-0.5">{item}</div>
-                        <div className="text-[10.5px] text-white/50 leading-snug">From creator profile data</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-[12px] text-white/60 m-0">
-                  {isStudio ? 'Add collaboration types or expertise to populate this section.' : 'No reasons listed yet.'}
-                </p>
-              )}
             </section>
 
             {/* Creator Overview (editable — the one canonical bio) + Contact */}
@@ -582,25 +556,21 @@ export function CreatorProfilePresentation({
                   <div className="relative bg-white border border-[#E8EDF2] rounded-[10px] p-[18px]">
                     {pill('overview')}
                     <OverviewCardHeader title="Creator Overview" />
-                    <div className="mb-3.5">
+                    <div className="mb-3.5 last:mb-0">
                       <div className="text-[11.5px] font-bold text-[#1A1A2E] flex items-center gap-1.5 mb-1">📄 Background &amp; Bio</div>
-                      <p className="text-[11px] text-[#4B5563] leading-relaxed m-0 whitespace-pre-wrap">
+                      <p className={`text-[11px] leading-relaxed m-0 whitespace-pre-wrap ${model.bio ? 'text-[#4B5563]' : 'text-[#9AA0AC]'}`}>
                         {model.bio || (isStudio ? 'Add a bio.' : 'No bio yet.')}
                       </p>
                     </div>
-                    <div className="mb-3.5">
-                      <div className="text-[11.5px] font-bold text-[#1A1A2E] flex items-center gap-1.5 mb-1">🎯 Areas of Expertise</div>
-                      <p className="text-[11px] text-[#4B5563] leading-relaxed m-0">
-                        {model.bestForTags.length ? model.bestForTags.join(', ') : isStudio ? 'Add expertise topics.' : 'No expertise listed.'}
-                      </p>
-                    </div>
-                    <div>
-                      <div className="text-[11.5px] font-bold text-[#1A1A2E] flex items-center gap-1.5 mb-1">▷ Content Platforms</div>
-                      <p className="text-[11px] text-[#4B5563] leading-relaxed m-0">
-                        {model.platforms.length ? model.platforms.join(', ') : isStudio ? 'Add the platforms you publish on.' : 'No platforms listed.'}
-                      </p>
-                    </div>
-                    {isStudio ? <DerivedNote>Bio, expertise and platforms save together here. The bio also appears in your profile header.</DerivedNote> : null}
+                    {(model.overviewSections || []).map((o) => (
+                      <div key={o.id} className="mb-3.5 last:mb-0 rounded-lg bg-[#F9FAFB] border border-[#F1F1F3] px-3 py-2.5" data-testid="creator-overview-section">
+                        <div className="text-[11.5px] font-bold text-[#1A1A2E] mb-1 break-words">{o.title}</div>
+                        <p className="text-[11px] text-[#4B5563] leading-relaxed m-0 whitespace-pre-wrap break-words">{o.body}</p>
+                      </div>
+                    ))}
+                    {isStudio && !(model.overviewSections || []).length ? (
+                      <DerivedNote>Add your own sections — Experience, How I review, Equipment &amp; setup… — with Edit.</DerivedNote>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -611,23 +581,31 @@ export function CreatorProfilePresentation({
                   <div className="relative bg-white border border-[#E8EDF2] rounded-[10px] p-[18px]">
                     {pill('contact')}
                     <OverviewCardHeader title="Contact & Reach" />
-                    {(
-                      [
-                        ['✉', 'Business email', model.email],
-                        ['📞', 'Phone', model.phone],
-                        ['⏱', 'Response time', model.responseTime],
-                        ['💬', 'Preferred contact', model.preferredContact],
-                        ['📺', 'Platforms', model.platforms.join(', ')],
-                      ] as const
-                    ).map(([icon, label, value]) => (
-                      <div key={label} className="flex items-start gap-2 mb-3 last:mb-0">
-                        <div className="text-xs shrink-0">{icon}</div>
-                        <div>
-                          <div className="text-[11px] font-bold text-[#1A1A2E]">{label}</div>
-                          <div className="text-[11px] text-[#4B5563]">{value || (isStudio ? 'Not set' : '—')}</div>
+                    {contactRows.length ? (
+                      contactRows.map((r) => (
+                        <div key={r.key} className="flex items-start gap-2 mb-3 last:mb-0 min-w-0">
+                          <div className="text-xs shrink-0">{r.icon}</div>
+                          <div className="min-w-0">
+                            <div className="text-[11px] font-bold text-[#1A1A2E]">{r.label}</div>
+                            {r.href ? (
+                              <a
+                                href={r.href}
+                                {...(/^https?:/i.test(r.href) ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                                className="text-[11px] text-[#2323FF] break-words hover:underline"
+                              >
+                                {r.value}
+                              </a>
+                            ) : (
+                              <div className="text-[11px] text-[#4B5563] break-words">{r.value}</div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))
+                    ) : (
+                      <p className="text-[11px] text-[#9AA0AC] m-0">
+                        {isStudio ? 'No contact details yet — use Edit to add the ways brands can reach you.' : 'No contact details added yet.'}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -647,7 +625,7 @@ export function CreatorProfilePresentation({
                       {model.brandPartners.map((bp, i) => (
                         <div
                           key={bp.brandId || `${bp.name}-${i}`}
-                          className="border border-[#E5E7EB] rounded-md p-3 text-center text-[11px] font-extrabold flex flex-col items-center gap-1.5"
+                          className="border border-[#E5E7EB] rounded-md p-3 text-center text-[11px] font-extrabold flex flex-col items-center gap-1.5 min-w-0 break-words"
                           style={{ color: bp.color || '#1A1A2E' }}
                         >
                           {bp.logo ? (
@@ -659,7 +637,7 @@ export function CreatorProfilePresentation({
                     </div>
                   ) : (
                     <div className="mb-5">
-                      <EmptyState message={isStudio ? 'No partnerships added' : 'No brand partners'} />
+                      <EmptyState message={isStudio ? 'No partnerships added yet' : 'No brand partners yet.'} />
                     </div>
                   )}
                   <div className="text-[10px] font-bold text-[#9AA0AC] mb-2">COLLABORATION TYPES</div>
@@ -672,19 +650,13 @@ export function CreatorProfilePresentation({
                       ))}
                     </div>
                   ) : (
-                    <EmptyState message={isStudio ? 'Add collaboration types' : 'No collaboration types'} />
+                    <EmptyState message={isStudio ? 'Add collaboration types' : 'No collaboration types yet.'} />
                   )}
                 </div>
               )}
             </section>
 
-            {/* Community (derived) */}
-            <section>
-              <h2 className="text-sm font-extrabold text-[#1A1A2E] mb-3.5 m-0">What The Community Says</h2>
-              <EmptyState message="No reviews yet." />
-            </section>
           </>
-        )}
       </div>
     </div>
   );

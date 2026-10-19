@@ -647,6 +647,10 @@ export interface CatalogCreator {
   preferredContact?: string;
   email?: string;
   phone?: string;
+  /** Creator-chosen extra contact methods (WhatsApp, website, …), shown in Contact & Reach. Max 8. */
+  customContacts?: Array<{ label: string; value: string }>;
+  /** Creator-defined Creator Overview sections (title + text), shown after the bio. Max 8. */
+  overviewSections?: Array<{ id: string; title: string; body: string }>;
   category?: string;
   verifiedStatus: boolean;
   featuredFlag: boolean;

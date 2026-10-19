@@ -117,13 +117,18 @@ async function main() {
 
   // ── 1b. Custom social links + brand-partner logo/brandId + Featured Content ──
   const anyBrand = (await req('GET', '/catalog/brands', creator.token)).body.data?.[0];
+  // A new unsafe or unnamed custom link is refused outright (400), never silently dropped
+  // — see probe-creator-studio-integrity for the full validation matrix.
+  for (const bad of [{ label: 'Bad', url: 'javascript:alert(1)' }, { label: '', url: 'https://x.com/probe' }]) {
+    const refused = await req('PATCH', `/catalog/creators/${cid}`, creator.token, { socialLinks: { custom: [bad] } });
+    check(refused.status === 400, `social: custom link ${JSON.stringify(bad)} refused with 400`, refused.status);
+  }
   const patchRich = await req('PATCH', `/catalog/creators/${cid}`, creator.token, {
     socialLinks: {
       youtube: 'https://youtube.com/@probe',
       custom: [
         { label: 'Twitch', url: 'https://twitch.tv/probe' },
-        { label: 'Bad', url: 'javascript:alert(1)' }, // dropped: unsafe
-        { label: '', url: 'https://x.com/probe' }, // dropped: no label
+        { label: '', url: '' }, // blank row: ignored
       ],
     },
     brandPartners: [
@@ -139,7 +144,7 @@ async function main() {
   const cr = patchRich.body?.data;
   check(
     JSON.stringify(cr?.socialLinks?.custom) === JSON.stringify([{ label: 'Twitch', url: 'https://twitch.tv/probe' }]),
-    'social: only a valid { label, url } custom link survives (unsafe / unlabelled dropped)',
+    'social: the valid { label, url } custom link is stored (blank row ignored)',
     cr?.socialLinks?.custom,
   );
   const cco = (cr?.brandPartners || []).find((b: any) => b.name === 'Custom Co');

@@ -106,6 +106,12 @@ export function ProfileImageAdjustModal({
   const viewW = preset.ratio >= 1 ? viewMax : viewMax * preset.ratio;
   const viewH = preset.ratio >= 1 ? viewMax / preset.ratio : viewMax;
 
+  // Preview thumbnail: the frame scaled down to a typical display size.
+  const PREVIEW_LONG = 56;
+  const previewK = PREVIEW_LONG / Math.max(viewW, viewH);
+  const previewW = viewW * previewK;
+  const previewH = viewH * previewK;
+
   const minCoverScale = useMemo(
     () => Math.max(viewW / natural.w, viewH / natural.h),
     [viewW, viewH, natural.w, natural.h],
@@ -120,6 +126,25 @@ export function ProfileImageAdjustModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewMax]);
 
+  // The frame resizes with the viewport (e.g. a phone rotating while the editor
+  // is open): keep the same framing proportionally instead of letting the image
+  // stop covering the frame.
+  const prevViewMax = useRef(viewMax);
+  useEffect(() => {
+    const prev = prevViewMax.current;
+    prevViewMax.current = viewMax;
+    if (!open || prev === viewMax || prev <= 0) return;
+    const k = viewMax / prev;
+    const vw = preset.ratio >= 1 ? viewMax : viewMax * preset.ratio;
+    const vh = preset.ratio >= 1 ? viewMax / preset.ratio : viewMax;
+    const s = Math.max(Math.max(vw / natural.w, vh / natural.h), scale * k);
+    const maxX = Math.max(0, (natural.w * s - vw) / 2);
+    const maxY = Math.max(0, (natural.h * s - vh) / 2);
+    setScale(s);
+    setOffset((o) => ({ x: Math.min(maxX, Math.max(-maxX, o.x * k)), y: Math.min(maxY, Math.max(-maxY, o.y * k)) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMax]);
+
   useEffect(() => {
     if (!open) return;
     setLoadFailed(false);
@@ -128,15 +153,14 @@ export function ProfileImageAdjustModal({
     if (!imageSrc.startsWith('data:') && !imageSrc.startsWith('blob:')) {
       img.crossOrigin = 'anonymous';
     }
-    img.onload = () => {
-      const w = img.naturalWidth || 1;
-      const h = img.naturalHeight || 1;
+    // Resume a prior adjustment against this same original when the caller
+    // supplies one (and it looks like it belongs to this image) — otherwise
+    // start from the default centered "cover" fit. Used by both load paths.
+    const applyLoaded = (loaded: HTMLImageElement) => {
+      const w = loaded.naturalWidth || 1;
+      const h = loaded.naturalHeight || 1;
       setNatural({ w, h });
-      imgRef.current = img;
-
-      // Resume a prior adjustment against this same original when the caller
-      // supplies one (and it looks like it belongs to this image) — otherwise
-      // start from the default centered "cover" fit.
+      imgRef.current = loaded;
       if (
         initialCrop &&
         initialCrop.naturalW === w &&
@@ -144,9 +168,31 @@ export function ProfileImageAdjustModal({
         Number.isFinite(initialCrop.scale) &&
         initialCrop.scale > 0
       ) {
-        setPreset(presets[0]);
-        setScale(initialCrop.scale);
-        setOffset({ x: initialCrop.x, y: initialCrop.y });
+        // The stored scale/offset are in the pixels of the frame it was saved
+        // in (smaller on narrow screens). Restore that frame's aspect preset,
+        // rescale to this screen's frame, and re-clamp so the image still
+        // covers it. Older crops carry no frame size: they were saved in the
+        // full-size desktop frame.
+        const savedW = initialCrop.frameW ?? null;
+        const savedH = initialCrop.frameH ?? null;
+        const savedRatio = savedW && savedH ? savedW / savedH : presets[0].ratio;
+        const p = presets.reduce(
+          (best, cand) => (Math.abs(Math.log(cand.ratio / savedRatio)) < Math.abs(Math.log(best.ratio / savedRatio)) ? cand : best),
+          presets[0],
+        );
+        const vw = p.ratio >= 1 ? viewMax : viewMax * p.ratio;
+        const vh = p.ratio >= 1 ? viewMax / p.ratio : viewMax;
+        const legacyW = p.ratio >= 1 ? BASE_VIEW_MAX : BASE_VIEW_MAX * p.ratio;
+        const k = vw / (savedW || legacyW);
+        const s = Math.max(Math.max(vw / w, vh / h), initialCrop.scale * k);
+        const maxX = Math.max(0, (w * s - vw) / 2);
+        const maxY = Math.max(0, (h * s - vh) / 2);
+        setPreset(p);
+        setScale(s);
+        setOffset({
+          x: Math.min(maxX, Math.max(-maxX, initialCrop.x * k)),
+          y: Math.min(maxY, Math.max(-maxY, initialCrop.y * k)),
+        });
       } else {
         const guess =
           shape === 'rect'
@@ -159,6 +205,7 @@ export function ProfileImageAdjustModal({
         applyDefaultFit(w, h, guess);
       }
     };
+    img.onload = () => applyLoaded(img);
     img.onerror = () => {
       // The CORS-mode load can fail even for a perfectly viewable image, when
       // the host doesn't send permissive CORS headers (some external/legacy
@@ -168,13 +215,9 @@ export function ProfileImageAdjustModal({
       if (img.crossOrigin) {
         const retry = new Image();
         retry.decoding = 'async';
-        retry.onload = () => {
-          const w = retry.naturalWidth || 1;
-          const h = retry.naturalHeight || 1;
-          setNatural({ w, h });
-          imgRef.current = retry;
-          applyDefaultFit(w, h, presets[0]);
-        };
+        // Same resume-or-default rule as the CORS load (a stored adjustment is
+        // not lost just because this host lacks CORS headers).
+        retry.onload = () => applyLoaded(retry);
         retry.onerror = () => {
           imgRef.current = null;
           setLoadFailed(true);
@@ -286,7 +329,7 @@ export function ProfileImageAdjustModal({
       ctx.drawImage(source, drawX * ratio, drawY * ratio, dispW * ratio, dispH * ratio);
       onSave({
         dataUrl: canvas.toDataURL('image/png'),
-        crop: { scale, x: offset.x, y: offset.y, naturalW: natural.w, naturalH: natural.h },
+        crop: { scale, x: offset.x, y: offset.y, naturalW: natural.w, naturalH: natural.h, frameW: viewW, frameH: viewH },
       });
     } catch {
       window.alert('Unable to adjust this image (browser blocked the source). Try uploading a local file instead of a URL.');
@@ -416,7 +459,7 @@ export function ProfileImageAdjustModal({
                   disabled={loadFailed}
                   aria-label="Zoom out"
                   title="Zoom out"
-                  className="inline-flex items-center justify-center w-7 h-7 rounded-lg border border-slate-200 text-slate-600 hover:border-slate-300 shrink-0 disabled:opacity-40"
+                  className="inline-flex items-center justify-center w-9 h-9 sm:w-7 sm:h-7 rounded-lg border border-slate-200 text-slate-600 hover:border-slate-300 shrink-0 disabled:opacity-40"
                 >
                   <Minus className="w-3.5 h-3.5" />
                 </button>
@@ -438,7 +481,7 @@ export function ProfileImageAdjustModal({
                   disabled={loadFailed}
                   aria-label="Zoom in"
                   title="Zoom in"
-                  className="inline-flex items-center justify-center w-7 h-7 rounded-lg border border-slate-200 text-slate-600 hover:border-slate-300 shrink-0 disabled:opacity-40"
+                  className="inline-flex items-center justify-center w-9 h-9 sm:w-7 sm:h-7 rounded-lg border border-slate-200 text-slate-600 hover:border-slate-300 shrink-0 disabled:opacity-40"
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </button>
@@ -448,13 +491,40 @@ export function ProfileImageAdjustModal({
                   disabled={loadFailed}
                   aria-label="Reset"
                   title="Reset"
-                  className="inline-flex items-center justify-center w-7 h-7 rounded-lg border border-slate-200 text-slate-600 hover:border-slate-300 shrink-0 disabled:opacity-40"
+                  className="inline-flex items-center justify-center w-9 h-9 sm:w-7 sm:h-7 rounded-lg border border-slate-200 text-slate-600 hover:border-slate-300 shrink-0 disabled:opacity-40"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                 </button>
               </div>
-              <div className="text-[10px] text-[#9CA3AF] font-semibold mt-1.5 text-center sm:text-left">
-                Drag the photo to reposition. Zoom with the buttons or slider.
+              <div className="mt-2.5 flex items-center gap-3">
+                {/* Live preview of the saved result at display size — the same
+                    transform as the frame above, scaled down (no second cropper). */}
+                {!loadFailed && (
+                  <div className="shrink-0 flex flex-col items-center gap-1" data-testid="profile-image-preview">
+                    <div
+                      className={`relative overflow-hidden ${shape === 'circle' ? 'rounded-full' : 'rounded-md'}`}
+                      style={{ width: previewW, height: previewH, boxShadow: 'inset 0 0 0 1px rgba(15,23,42,0.12)', ...frameBg }}
+                      aria-hidden
+                    >
+                      <img
+                        src={imageSrc}
+                        alt=""
+                        draggable={false}
+                        className="pointer-events-none absolute max-w-none"
+                        style={{
+                          width: natural.w * scale * previewK,
+                          height: natural.h * scale * previewK,
+                          left: ((viewW - natural.w * scale) / 2 + offset.x) * previewK,
+                          top: ((viewH - natural.h * scale) / 2 + offset.y) * previewK,
+                        }}
+                      />
+                    </div>
+                    <span className="text-[9px] font-extrabold uppercase tracking-wide text-[#9CA3AF]">Preview</span>
+                  </div>
+                )}
+                <div className="text-[10px] text-[#9CA3AF] font-semibold">
+                  Drag the photo to reposition. Zoom with the buttons or slider. Reset re-centres it.
+                </div>
               </div>
             </div>
 

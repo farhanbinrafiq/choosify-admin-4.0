@@ -16,7 +16,7 @@ export interface MarketplaceAccessState {
   status?: MarketplaceLifecycleStatus;
   /** Authoritative access boolean mirrored from the server (marketplaceAccess for brands, status==='live' for creators). */
   access: boolean;
-  /** Operator-entered note from the current session only — the backend does not persist a suspend reason, so this clears on refresh/reload. */
+  /** Latest recorded suspension reason (server-side Marketplace Access history). */
   suspensionReason?: string;
   suspendedAt?: string;
   notifyOnSuspend?: boolean;
@@ -24,7 +24,7 @@ export interface MarketplaceAccessState {
 
 export interface SuspendInput {
   reason: string;
-  /** Collected for operator context only — the backend endpoint does not accept or store duration. */
+  /** Recorded with the decision (informational review date — not auto-reinstated). */
   durationDays: number | null;
   notify: boolean;
 }
@@ -79,7 +79,7 @@ export function useMarketplaceAccess({
   const grant = () => {
     if (isCreator) {
       return run(
-        () => catalogApi.setCreatorPublishStatus(entityId, 'live'),
+        () => catalogApi.setCreatorMarketplaceAccess(entityId, 'live'),
         'Marketplace Access Granted',
         `${entityType} "${entityName}" granted Marketplace Access (status set to live).`,
         'Your account has been activated. Marketplace Access is now on.',
@@ -96,16 +96,16 @@ export function useMarketplaceAccess({
   const suspend = ({ reason, durationDays, notify }: SuspendInput) => {
     if (isCreator) {
       return run(
-        () => catalogApi.setCreatorPublishStatus(entityId, 'archived'),
+        () => catalogApi.setCreatorMarketplaceAccess(entityId, 'archived', { reason, durationDays, notifyOwner: notify, requireReason: true }),
         'Marketplace Access Suspended',
-        `${entityType} "${entityName}" archived (creators have no separate suspend-with-reason state). Operator note: ${reason}`,
+        `${entityType} "${entityName}" archived. Reason: ${reason}`,
         notify ? `Your ${entityType} account has been deactivated. Reason: ${reason}` : undefined,
       );
     }
     return run(
-      () => catalogApi.setBrandMarketplaceAccess(entityId, 'suspended').then((r) => r.data),
+      () => catalogApi.setBrandMarketplaceAccess(entityId, 'suspended', { reason, durationDays, notifyOwner: notify, requireReason: true }).then((r) => r.data),
       'Marketplace Access Suspended',
-      `${entityType} "${entityName}" suspended${durationDays ? ` for ${durationDays} day(s)` : ' indefinitely'}. Reason: ${reason} (duration/reason are operator notes only — not persisted server-side).`,
+      `${entityType} "${entityName}" suspended${durationDays ? ` for ${durationDays} day(s)` : ' indefinitely'}. Reason: ${reason}`,
       notify ? `Your ${entityType} account has been suspended${durationDays ? ` for ${durationDays} day(s)` : ''}. Reason: ${reason}` : undefined,
     );
   };
@@ -113,7 +113,7 @@ export function useMarketplaceAccess({
   const reinstate = () => {
     if (isCreator) {
       return run(
-        () => catalogApi.setCreatorPublishStatus(entityId, 'live'),
+        () => catalogApi.setCreatorMarketplaceAccess(entityId, 'live'),
         'Marketplace Access Reinstated',
         `${entityType} "${entityName}" reinstated (status set back to live).`,
         `Your ${entityType} account access has been reinstated.`,

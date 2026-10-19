@@ -280,9 +280,17 @@ export function BrandProfilePresentation({
                   model.socialFbUrl, model.socialInstaUrl, model.socialTiktokUrl, model.socialYtUrl,
                   ...(model.customSocials || []).map((c) => c.url),
                 ].map((v) => v || ''),
+                contact: [model.contactEmail || '', model.phone || ''],
+                address: model.address || '',
+                story: !!(model.brandStory || '').trim() || (model.storyBlocks || []).length > 0,
+                storesCount:
+                  (model.stores?.authorized?.length || 0) + (model.stores?.distributors?.length || 0) + (model.stores?.serviceCenters?.length || 0),
+                faqCount: (model.faq || []).length,
               },
               visibility,
             )}
+            sectionLabels={SECTION_TITLES}
+            onGo={studio ? (s) => { studio.onEdit(s as BrandEditSection); return true; } : undefined}
             intro={
               visibility ? (
                 brandVisibilityExplanation(visibility).visible && publicUrl ? (

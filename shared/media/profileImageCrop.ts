@@ -15,4 +15,19 @@ export type ProfileImageCropParams = {
   y: number;
   naturalW: number;
   naturalH: number;
+  /**
+   * The editor frame's size (px) when the crop was saved. `scale`/`x`/`y` are
+   * in that frame's pixels, and the frame shrinks on narrow screens, so these
+   * let a later "Adjust" — on any screen — rescale the stored framing and pick
+   * the same aspect preset. Absent on crops saved before this was recorded
+   * (those were made in the 320px desktop frame).
+   */
+  frameW?: number;
+  frameH?: number;
 };
+
+/** Keep only finite, positive frame dimensions (shared by every crop validator). */
+export function cropFrameFields(value: Record<string, unknown>): { frameW?: number; frameH?: number } {
+  const ok = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n > 0;
+  return ok(value.frameW) && ok(value.frameH) ? { frameW: value.frameW, frameH: value.frameH } : {};
+}

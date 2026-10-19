@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { recordAccountActivity } from './accountActivity/accountActivity';
 import { Logger } from './lib/logger';
 import { detectBrandablePlatform } from '../src/lib/creatorReviewPlatform';
 import { resolveFacebookShareUrl } from './lib/facebookShareResolver';
@@ -194,6 +195,16 @@ const requireCatalogMediaPartner = [
 const CONSUMER_UPLOAD_CATEGORIES = new Set(['users', 'reviews', 'warranty-claims', 'return-evidence']);
 
 /**
+ * Creator Studio's own profile media (avatar / cover, folder `choosify/creators`).
+ * The creator role carries no product/CMS permission, so the generic partner
+ * gate below refused every creator upload with 403. A creator may upload to
+ * this one category; partner entitlement + Marketplace Access still apply, the
+ * file is still owned by `uploaderId = req.userId`, and attaching it to a
+ * Creator profile still goes through the ownership-checked creator write.
+ */
+const CREATOR_SELF_UPLOAD_CATEGORIES = new Set(['creators']);
+
+/**
  * Routes an authenticated request through the partner-gated chain for every
  * category except the consumer-safe ones above, which only need a valid
  * session. Both branches funnel into the same `storeUploadedImage()` —
@@ -224,6 +235,15 @@ const requireCatalogMedia = [
   async (req: Request, res: Response, next: (err?: unknown) => void) => {
     const category = typeof req.body?.category === 'string' ? req.body.category : '';
     if (CONSUMER_UPLOAD_CATEGORIES.has(category)) {
+      next();
+      return;
+    }
+    if (CREATOR_SELF_UPLOAD_CATEGORIES.has(category) && userIsCreatorRole(req)) {
+      for (const middleware of [requirePartnerEntitlement, requireMarketplaceAccess]) {
+        // eslint-disable-next-line no-await-in-loop
+        await runMiddleware(middleware, req, res);
+        if (res.headersSent) return;
+      }
       next();
       return;
     }
@@ -303,9 +323,12 @@ function stripPendingCreatorPublish(
   payload: Record<string, unknown>,
 ): Record<string, unknown> {
   if (!req.partnerMarketplaceLocked || userIsPlatformAdmin(req)) return payload;
+  // Pending creators can never go live, but they can still take their own profile
+  // down (Unpublish → draft, Archive) — those moves only reduce visibility.
+  const goingLive = payload.status === 'live' && existing?.status !== 'live';
   return {
     ...payload,
-    status: existing?.status,
+    status: goingLive || payload.status === undefined ? existing?.status : payload.status,
     verifiedStatus: existing?.verifiedStatus,
   };
 }
@@ -2380,6 +2403,110 @@ catalogRouter.patch('/catalog/brands/:id', ...requireBrandStudioBrandWrite, lock
 }));
 
 /**
+ * Staff-only creator Marketplace Access (publish status live ↔ archived) with a
+ * recorded reason — the creator equivalent of the brand endpoint below.
+ */
+catalogRouter.patch(
+  '/catalog/creators/:id/marketplace-access',
+  authenticateRequest,
+  requirePartnerEntitlement,
+  requireMarketplaceAccess,
+  requireAnyPermission([PERMISSIONS.CMS_EDIT]),
+  lockedHandler((req) => [recordKey('creator', req.params.id)], async (req, res) => {
+    try {
+      const existing = await catalogStore.getCreator(req.params.id);
+      if (!existing) {
+        res.status(404).json({ error: 'Creator not found' });
+        return;
+      }
+      const status = req.body?.status;
+      if (status !== 'live' && status !== 'archived' && status !== 'draft') {
+        res.status(400).json({ error: 'status must be one of: live, archived, draft' });
+        return;
+      }
+      const access = marketplaceDecisionOf(req.body, status);
+      if ('error' in access) {
+        res.status(400).json({ error: access.error });
+        return;
+      }
+      const saved = await catalogStore.upsertCreator(normalizeCreatorInput({ ...existing, status }, existing));
+      recordMarketplaceDecision(req, {
+        entityType: 'creator',
+        entityId: saved.id,
+        entityName: saved.name,
+        ownerUserId: saved.userId,
+        fromStatus: existing.status,
+        toStatus: status,
+        ...access,
+      });
+      res.json({ success: true, data: saved });
+    } catch (error) {
+      sendCatalogWriteError(res, error, 'Could not update creator marketplace access');
+    }
+  }),
+);
+
+/**
+ * Marketplace Access decision details. Callers that collect a reason send
+ * `requireReason: true` so a missing reason is rejected; the reason is recorded on
+ * every decision that carries one.
+ */
+const MARKETPLACE_REMOVAL_STATUSES = new Set(['restricted', 'suspended', 'revoked', 'archived']);
+function marketplaceDecisionOf(
+  body: unknown,
+  status: string,
+): { reason?: string; durationDays: number | null; notifyOwner: boolean } | { error: string } {
+  const b = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
+  const reason = typeof b.reason === 'string' ? b.reason.trim().slice(0, 1000) : '';
+  // The Super Admin profile always sends a reason for a removal. Legacy callers (the
+  // cms-mirror Seller Management toggle) send none; their decision is still recorded,
+  // shown as "No reason recorded", rather than rejected.
+  if (MARKETPLACE_REMOVAL_STATUSES.has(status) && b.requireReason === true && reason.length < 5) {
+    return { error: 'A reason (at least 5 characters) is required to suspend, restrict, revoke or archive access' };
+  }
+  const days = typeof b.durationDays === 'number' && Number.isFinite(b.durationDays) && b.durationDays > 0 ? Math.min(3650, Math.round(b.durationDays)) : null;
+  return { reason: reason || undefined, durationDays: MARKETPLACE_REMOVAL_STATUSES.has(status) ? days : null, notifyOwner: b.notifyOwner === true };
+}
+
+function recordMarketplaceDecision(
+  req: Request,
+  e: {
+    entityType: 'brand' | 'creator';
+    entityId: string;
+    entityName?: string;
+    ownerUserId?: string;
+    fromStatus?: string;
+    toStatus: string;
+    reason?: string;
+    durationDays: number | null;
+    notifyOwner: boolean;
+  },
+) {
+  const at = new Date();
+  const event = operationsStore.addMarketplaceAccessEvent({
+    id: `mae_${at.getTime().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+    ...e,
+    reviewAt: e.durationDays ? new Date(at.getTime() + e.durationDays * 86_400_000).toISOString() : undefined,
+    actorId: req.userId || 'system',
+    actorName: req.user?.displayName || undefined,
+    at: at.toISOString(),
+  });
+  Logger.audit('marketplace_access.decision', { ...event });
+  if (e.ownerUserId) {
+    const label = (st: string) =>
+      ({ granted: 'activated', restored: 'reactivated', live: 'activated', suspended: 'suspended', restricted: 'restricted', revoked: 'revoked', archived: 'suspended', not_granted: 'set to not granted', draft: 'set to draft' } as Record<string, string>)[st] || st;
+    recordAccountActivity(req, {
+      userId: e.ownerUserId,
+      type: 'marketplace_access_changed',
+      category: 'admin',
+      actor: 'staff',
+      summary: `Marketplace Access ${label(e.toStatus)} for ${e.entityName || 'this profile'}${e.reason ? ` — ${e.reason}` : ''}${e.durationDays ? ` (${e.durationDays} days)` : ''}`,
+    });
+  }
+  return event;
+}
+
+/**
  * Admin-only Marketplace Access lifecycle transition (ES-005). Controls public
  * visibility only — never ownership/editing (Seller keeps full Brand Studio
  * access regardless of status). Sellers/Creators cannot change Marketplace
@@ -2402,6 +2529,11 @@ catalogRouter.patch(
       const validStatuses = ['not_granted', 'granted', 'restricted', 'suspended', 'restored', 'revoked'];
       if (typeof status !== 'string' || !validStatuses.includes(status)) {
         res.status(400).json({ error: `status must be one of: ${validStatuses.join(', ')}` });
+        return;
+      }
+      const access = marketplaceDecisionOf(req.body, status);
+      if ('error' in access) {
+        res.status(400).json({ error: access.error });
         return;
       }
 
@@ -2438,6 +2570,16 @@ catalogRouter.patch(
         context,
       );
       const saved = await catalogStore.upsertBrand(normalized);
+
+      recordMarketplaceDecision(req, {
+        entityType: 'brand',
+        entityId: saved.id,
+        entityName: saved.name,
+        ownerUserId: saved.sellerId,
+        fromStatus: (existing as { marketplaceStatus?: string }).marketplaceStatus,
+        toStatus: status,
+        ...access,
+      });
 
       const eventByStatus: Record<string, string> = {
         granted: 'MarketplaceEnabled',

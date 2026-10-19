@@ -45,6 +45,30 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
   const location = useLocation();
   const [navSearch, setNavSearch] = useState('');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // Desktop: the hamburger hides / shows the left menu; remembered per browser.
+  const [desktopNavHidden, setDesktopNavHidden] = useState(() => {
+    try {
+      return localStorage.getItem('choosify_admin_nav_hidden') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const isDrawerViewport = () => typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches;
+  const toggleNav = () => {
+    if (isDrawerViewport()) {
+      setMobileNavOpen((v) => !v);
+      return;
+    }
+    setDesktopNavHidden((hidden) => {
+      const next = !hidden;
+      try {
+        localStorage.setItem('choosify_admin_nav_hidden', next ? '1' : '0');
+      } catch {
+        // per-browser preference only
+      }
+      return next;
+    });
+  };
 
   const activePageKey = pathToPageKey(location.pathname);
   const role = profile?.role;
@@ -107,14 +131,16 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
   }, [location.pathname]);
 
   return (
-    <div className="admin-workspace">
+    <div className={`admin-workspace${desktopNavHidden ? ' admin-workspace--nav-hidden' : ''}`}>
       <header className="admin-workspace__topbar">
         <button
           type="button"
           className="admin-workspace__nav-toggle"
-          onClick={() => setMobileNavOpen((v) => !v)}
-          aria-label={mobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
-          aria-expanded={mobileNavOpen}
+          onClick={toggleNav}
+          aria-label="Toggle navigation menu"
+          aria-expanded={isDrawerViewport() ? mobileNavOpen : !desktopNavHidden}
+          title={desktopNavHidden ? 'Show menu' : 'Hide menu'}
+          data-testid="admin-nav-toggle"
         >
           <span />
           <span />

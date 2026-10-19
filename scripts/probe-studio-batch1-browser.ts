@@ -364,10 +364,12 @@ async function main() {
     // C3 canonical public link
     await open(ap, `/admin/creator-studio/${creatorId}/edit`, `PB1 Creator ${sfx}`);
     await ap.waitForTimeout(1500);
-    const cHref = await ap.getByRole('link', { name: /View public profile/ }).getAttribute('href').catch(() => null);
-    check(cHref === `${STOREFRONT}/creators/${handleC}`, 'C3 "View public profile" = storefront host + canonical handle', cHref);
+    // C3: the header no longer carries View / Edit / Snapshots / View public profile (Brand Studio pattern);
+    // the canonical storefront URL is still what Public Identity shows.
+    check((await ap.locator('[data-testid="creator-header-actions"]').getByRole('link', { name: /View public profile/ }).count()) === 0
+      && (await ap.getByRole('button', { name: 'Edit', exact: true }).count()) === 0, 'C3 Creator header: no View/Edit toggle, Snapshots or public-profile link');
+    void STOREFRONT; void handleC;
     // C4 readiness
-    await ap.getByRole('button', { name: 'Edit', exact: true }).first().click();
     await ap.waitForTimeout(500);
     check((await itemState(ap, 'creator-readiness', 'visibility')) === 'done', 'C4 readiness: live profile reported as public');
     // C5 publish held → no false success (server keeps status, as for a creator without access)
@@ -398,12 +400,9 @@ async function main() {
       els.map((e) => { const r = e.getBoundingClientRect(); return { l: Math.round(r.left), r: Math.round(r.right), w: Math.round(r.width) }; }));
     const header = await mp.$eval('header', (h) => ({ sw: h.scrollWidth, cw: h.clientWidth }));
     const shown = boxes.filter((b) => b.w > 0); // the desktop-only hint is display:none below lg
-    check(shown.length >= 3 && shown.every((b) => b.l >= 0 && b.r <= 375) && header.sw <= header.cw + 1, 'C6 at 375px every visible header action is inside the viewport (no horizontal overflow)', { boxes, header });
-    await mp.getByRole('button', { name: 'Edit', exact: true }).first().click();
-    await mp.waitForTimeout(400);
-    await mp.getByRole('button', { name: 'View', exact: true }).first().click();
-    await mp.waitForTimeout(300);
-    check((await mp.getByRole('button', { name: /Unpublish|Archive/ }).first().isVisible()), 'C6 header controls stay usable at 375px (toggle + lifecycle visible)');
+    // Header is lifecycle-only now (Publish|Unpublish + Archive) — no toggle, Snapshots or public link.
+    check(shown.length >= 2 && shown.every((b) => b.l >= 0 && b.r <= 375) && header.sw <= header.cw + 1, 'C6 at 375px every visible header action is inside the viewport (no horizontal overflow)', { boxes, header });
+    check((await mp.getByRole('button', { name: /Unpublish|Archive/ }).first().isVisible()), 'C6 header controls stay usable at 375px (lifecycle visible)');
   } catch (e) {
     check(false, 'probe step threw', e instanceof Error ? e.message.split('\n')[0] : String(e));
   } finally {

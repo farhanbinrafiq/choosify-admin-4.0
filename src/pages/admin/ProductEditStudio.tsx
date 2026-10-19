@@ -1482,9 +1482,24 @@ export default function ProductEditStudio() {
                 {
                   title: r.title, brandId: r.brandId, categoryId: r.categoryId, image: r.image, gallery: r.gallery,
                   price: r.price, stock: r.stock, description: r.description, status: r.status,
+                  specsCount: (r.specs || []).filter((x) => (x.key || '').trim() && (x.value || '').trim()).length,
+                  overviewCount: (r.overviewBlocks || []).length,
+                  bestForTagsCount: (r.bestForTags || []).length,
+                  hasDelivery: !!(r.deliveryRegion || '').trim() || (r.deliveryBullets || []).length > 0,
+                  hasWarranty: Number(r.warrantyMonths) > 0 || !!(r.warrantyTerms || '').trim() || (r.afterSalesBullets || []).length > 0,
                 },
                 brandFacts,
               )}
+              sectionLabels={SECTION_LABELS}
+              // In create mode every section is already open on the page.
+              onGo={creating ? undefined : (s) => {
+                if (editingId && editingId !== s && dirty) {
+                  triggerToast(`Finish editing “${SECTION_LABELS[editingId] || editingId}” first — Save or Cancel.`);
+                  return false;
+                }
+                requestEdit(s);
+                return true;
+              }}
               footer="Items marked as needing attention are what Choosify itself checks before a product can go live; the others are recommendations."
             />
           </div>

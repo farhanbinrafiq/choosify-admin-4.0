@@ -272,8 +272,127 @@ export interface OpsReview {
   isAuthentic?: boolean;
   authenticityScore?: number;
   authenticityReason?: string;
+  /** The delivered order / line the review is for (Sprint 9 uniqueness key). */
+  orderId?: string;
+  orderItemId?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/** One Marketplace Access decision — mirrors server/operations/types.ts OpsMarketplaceAccessEvent. */
+export interface MarketplaceAccessEvent {
+  id: string;
+  entityType: 'brand' | 'creator';
+  entityId: string;
+  entityName?: string;
+  ownerUserId?: string;
+  fromStatus?: string;
+  toStatus: string;
+  reason?: string;
+  durationDays?: number | null;
+  reviewAt?: string;
+  notifyOwner?: boolean;
+  actorId: string;
+  actorName?: string;
+  at: string;
+}
+
+/** Staff "Ask to Upload" request — mirrors OpsVerificationDocRequest (actor fields absent for owners). */
+export interface VerificationDocRequest {
+  id: string;
+  entityType: 'brand' | 'creator';
+  entityId: string;
+  ownerUserId: string;
+  docTypes: string[];
+  note?: string;
+  actorId?: string;
+  actorName?: string;
+  at: string;
+}
+
+/** Account Activity Log entry — mirrors OpsAccountActivity (staff-only fields absent in the owner view). */
+export interface AccountActivityEntry {
+  id: string;
+  userId: string;
+  at: string;
+  type: string;
+  category: 'sign_in' | 'security' | 'account' | 'verification' | 'admin';
+  summary: string;
+  actor: 'self' | 'staff' | 'system';
+  success: boolean;
+  ip?: string;
+  device?: string;
+  location?: string;
+  staffActorId?: string;
+  staffActorName?: string;
+  staffActorRole?: string;
+  staffIp?: string;
+  staffDevice?: string;
+  staffNote?: string;
+}
+
+/** A shopper's storefront signals (saved items, followed creators, searches) — mirrors OpsShopperSignals. */
+export interface ShopperSignalItem {
+  id: string;
+  label: string;
+  image?: string;
+  at: string;
+}
+export interface ShopperSignals {
+  userId: string;
+  savedProducts: ShopperSignalItem[];
+  savedBrands: ShopperSignalItem[];
+  followedCreators: ShopperSignalItem[];
+  searches: Array<{ q: string; at: string }>;
+  updatedAt: string;
+}
+
+/** Server-side payout profile (how a Seller / Creator gets paid) — mirrors OpsPayoutProfile. */
+export interface PayoutProfile {
+  userId: string;
+  accountHolderName: string;
+  bankName: string;
+  accountNumber: string;
+  routingNumber: string;
+  branchName: string;
+  bkashNumber: string;
+  nagadNumber: string;
+  rocketNumber: string;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface PayoutChannel {
+  kind: 'bank' | 'mfs';
+  provider: string;
+  accountName: string;
+  number: string;
+  extra?: string;
+}
+export interface PayoutReminder {
+  id: string;
+  userId: string;
+  actorId: string;
+  actorName?: string;
+  at: string;
+}
+
+/** Super Admin "Edit User" session — mirrors server/operations/types.ts OpsAdminEditSession. */
+export type AdminEditReason = 'user_support_request' | 'data_correction' | 'compliance_review' | 'fraud_investigation' | 'other';
+export interface AdminEditSession {
+  id: string;
+  adminUserId: string;
+  adminName?: string;
+  adminEmail?: string;
+  targetUserId: string;
+  targetRole: 'consumer' | 'seller' | 'creator';
+  targetLabel?: string;
+  reason: AdminEditReason;
+  reasonDetail: string;
+  startedAt: string;
+  expiresAt: string;
+  endedAt?: string;
+  endedBy?: string;
+  endReason?: 'exited' | 'expired';
 }
 
 /** Public business inquiry — mirrors server/operations/types.ts OpsLead. */
@@ -597,6 +716,82 @@ export interface OpsPlatformConversation {
 
 export const operationsApi = {
   /** No params, called by staff, returns every real order (server auto-scopes non-staff callers). */
+  /** Marketplace Access decisions (staff, or the owner of the brand / creator). */
+  listMarketplaceAccessEvents: async (filter: { entityType?: 'brand' | 'creator'; entityId?: string; ownerUserId?: string }): Promise<MarketplaceAccessEvent[]> => {
+    const q = new URLSearchParams();
+    if (filter.entityType) q.set('entityType', filter.entityType);
+    if (filter.entityId) q.set('entityId', filter.entityId);
+    if (filter.ownerUserId) q.set('ownerUserId', filter.ownerUserId);
+    const result = await request<{ data: MarketplaceAccessEvent[] }>(`/operations/marketplace-access-events?${q}`);
+    return result.data;
+  },
+  /** Staff: ask the owner to upload specific verification documents (notifies them). */
+  requestVerificationDocuments: async (input: { entityType: 'brand' | 'creator'; entityId: string; docTypes: string[]; note?: string }) => {
+    const result = await request<{ data: VerificationDocRequest }>('/operations/verification-document-requests', 'POST', input);
+    return result.data;
+  },
+  /** Document requests (staff: all; owner: those addressed to them). */
+  listVerificationDocumentRequests: async (filter: { entityType?: 'brand' | 'creator'; entityId?: string }): Promise<VerificationDocRequest[]> => {
+    const q = new URLSearchParams();
+    if (filter.entityType) q.set('entityType', filter.entityType);
+    if (filter.entityId) q.set('entityId', filter.entityId);
+    const result = await request<{ data: VerificationDocRequest[] }>(`/operations/verification-document-requests?${q}`);
+    return result.data;
+  },
+  /** Account Activity Log — `me` for the signed-in owner, or a user id (staff). */
+  listAccountActivity: async (userId: string): Promise<{ rows: AccountActivityEntry[]; staffView: boolean }> => {
+    const result = await request<{ data: AccountActivityEntry[]; staffView?: boolean }>(`/operations/account-activity/${encodeURIComponent(userId)}`);
+    return { rows: result.data, staffView: Boolean(result.staffView) };
+  },
+  /** Staff view of a shopper's saved items, followed creators and recent searches. */
+  getUserShopperSignals: async (userId: string): Promise<ShopperSignals> => {
+    const result = await request<{ data: ShopperSignals }>(`/operations/shopper-signals/${encodeURIComponent(userId)}`);
+    return result.data;
+  },
+  /** Signed-in owner's payout profile (bank / bKash / Nagad / Rocket). */
+  getMyPayoutProfile: async (): Promise<{ profile: PayoutProfile | null; channels: PayoutChannel[]; updatedAt: string | null }> => {
+    const result = await request<{ data: { profile: PayoutProfile | null; channels: PayoutChannel[]; updatedAt: string | null } }>('/operations/payout-profile/me');
+    return result.data;
+  },
+  saveMyPayoutProfile: async (input: Partial<Omit<PayoutProfile, 'userId' | 'createdAt' | 'updatedAt'>>) => {
+    const result = await request<{ data: { profile: PayoutProfile; channels: PayoutChannel[]; updatedAt: string } }>('/operations/payout-profile/me', 'PUT', input);
+    return result.data;
+  },
+  /** Staff view of a user's payout channels (masked for support agents) + reminders sent. */
+  getUserPayoutProfile: async (userId: string): Promise<{ channels: PayoutChannel[]; updatedAt: string | null; masked: boolean; reminders: PayoutReminder[] }> => {
+    const result = await request<{ data: { channels: PayoutChannel[]; updatedAt: string | null; masked: boolean; reminders: PayoutReminder[] } }>(`/operations/payout-profile/${encodeURIComponent(userId)}`);
+    return result.data;
+  },
+  sendPayoutReminder: async (userId: string): Promise<PayoutReminder> => {
+    const result = await request<{ data: PayoutReminder }>(`/operations/payout-profile/${encodeURIComponent(userId)}/reminders`, 'POST', {});
+    return result.data;
+  },
+  /** Super Admin edit sessions for a user (audit history + the active one). */
+  listAdminEditSessions: async (targetUserId: string): Promise<AdminEditSession[]> => {
+    const result = await request<{ data: AdminEditSession[] }>(`/operations/admin-edit-sessions?targetUserId=${encodeURIComponent(targetUserId)}`);
+    return result.data;
+  },
+  startAdminEditSession: async (payload: {
+    targetUserId: string;
+    targetRole: AdminEditSession['targetRole'];
+    targetLabel?: string;
+    reason: AdminEditReason;
+    reasonDetail: string;
+    confirmed: true;
+  }): Promise<AdminEditSession> => {
+    const result = await request<{ data: AdminEditSession }>('/operations/admin-edit-sessions', 'POST', payload);
+    return result.data;
+  },
+  endAdminEditSession: async (id: string): Promise<AdminEditSession> => {
+    const result = await request<{ data: AdminEditSession }>(`/operations/admin-edit-sessions/${encodeURIComponent(id)}/end`, 'POST', {});
+    return result.data;
+  },
+  /** Staff read-only: brand ids a user follows. */
+  listUserFollowedBrandIds: async (userId: string): Promise<string[]> => {
+    const result = await request<{ brandIds: string[] }>(`/follows/users/${encodeURIComponent(userId)}/brands`);
+    return result.brandIds || [];
+  },
+
   listOrders: async (params?: {
     buyerId?: string;
     sellerId?: string;
@@ -830,8 +1025,11 @@ export const operationsApi = {
     return result.data;
   },
 
-  listReviews: async (filter?: { sellerId?: string }): Promise<OpsReview[]> => {
-    const qs = filter?.sellerId ? `?sellerId=${encodeURIComponent(filter.sellerId)}` : '';
+  listReviews: async (filter?: { sellerId?: string; userId?: string }): Promise<OpsReview[]> => {
+    const q = new URLSearchParams();
+    if (filter?.sellerId) q.set('sellerId', filter.sellerId);
+    if (filter?.userId) q.set('userId', filter.userId);
+    const qs = q.toString() ? `?${q}` : '';
     const result = await request<{ data: OpsReview[] }>(`/operations/reviews${qs}`);
     return result.data;
   },
@@ -1249,6 +1447,31 @@ export const operationsApi = {
       `/operations/verifications/${encodeURIComponent(id)}/document/${encodeURIComponent(docId)}`,
       'PATCH',
       payload,
+    );
+    return result.data;
+  },
+  /** Owner (or Admin) adds a document to an open request (Draft / Submitted / Under Review). */
+  addVerificationDocument: async (
+    id: string,
+    payload: { type: string; name: string; doc_url: string },
+  ) => {
+    const result = await request<{ data: unknown }>(
+      `/operations/verifications/${encodeURIComponent(id)}/documents`,
+      'POST',
+      payload,
+    );
+    return result.data;
+  },
+  /** Owner attaches (or re-submits) their current account profile picture as the Profile Photo document. */
+  attachVerificationProfilePhoto: async (id: string) => {
+    const result = await request<{ data: unknown }>(`/operations/verifications/${encodeURIComponent(id)}/profile-photo`, 'POST', {});
+    return result.data;
+  },
+  /** Owner (or Admin) removes a not-yet-approved document from an open request. */
+  removeVerificationDocument: async (id: string, docId: string) => {
+    const result = await request<{ data: unknown }>(
+      `/operations/verifications/${encodeURIComponent(id)}/document/${encodeURIComponent(docId)}`,
+      'DELETE',
     );
     return result.data;
   },

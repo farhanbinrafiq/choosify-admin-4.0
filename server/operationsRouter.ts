@@ -42,7 +42,7 @@ import { escrowStore } from './escrow/escrowStore';
 import { CommerceError } from './commerce/cartService';
 import { db } from './db/client';
 import { users } from './db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { validate } from './middleware/validate';
 import { authenticateRequest, softAuthenticateRequest } from './middleware/auth';
 import { requireRole } from './middleware/authorization';
@@ -91,6 +91,14 @@ import {
 import { findAccountByNormalizedEmail } from './operations/operationsDb';
 import { batchAccountPrimaryLabels } from './profileStatusFacts';
 import { Logger } from './lib/logger';
+import { randomUUID } from 'crypto';
+import { ownerView, recordAccountActivity } from './accountActivity/accountActivity';
+import {
+  PROFILE_PHOTO_DOCUMENT,
+  VERIFICATION_DOCUMENT_TYPES,
+  missingRequiredDocuments,
+  verificationDocumentLabel,
+} from '../shared/verification/verificationDocuments';
 import { createNotification } from './communication/notificationService';
 import { notifyRoles, notifyUser } from './communication/systemNotify';
 import { COMMUNICATION_TYPES, DELIVERY_CHANNELS } from './communication/communicationTypes';
@@ -4558,6 +4566,414 @@ operationsRouter.post(
   },
 );
 
+// ── Marketplace Access history (brand marketplaceStatus / creator publish status decisions) ──
+// ---------------------------------------------------------------------------
+// Shopper signals — saved products / brands, followed creators, recent searches
+// ---------------------------------------------------------------------------
+
+const SIGNAL_LISTS = ['savedProducts', 'savedBrands', 'followedCreators'] as const;
+type SignalList = (typeof SIGNAL_LISTS)[number];
+const SIGNAL_LIST_MAX = 200;
+const SEARCH_HISTORY_MAX = 50;
+const SIGNAL_STAFF_ROLES: string[] = [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.SUPPORT_AGENT, ROLES.MODERATOR];
+
+function emptySignals(userId: string): import('./operations/types').OpsShopperSignals {
+  return { userId, savedProducts: [], savedBrands: [], followedCreators: [], searches: [], updatedAt: new Date().toISOString() };
+}
+
+operationsRouter.get('/operations/shopper-signals/me', ...requireAuth, (req, res) => {
+  res.json({ success: true, data: operationsStore.getShopperSignals(req.userId!) || emptySignals(req.userId!) });
+});
+
+/** Replace one list with the storefront's current set (keeps the original saved date per id). */
+operationsRouter.put('/operations/shopper-signals/me/:list', ...requireAuth, (req, res) => {
+  const list = req.params.list as SignalList;
+  if (!SIGNAL_LISTS.includes(list)) {
+    res.status(400).json({ error: `list must be one of: ${SIGNAL_LISTS.join(', ')}` });
+    return;
+  }
+  const raw = Array.isArray(req.body?.items) ? (req.body.items as unknown[]) : null;
+  if (!raw) {
+    res.status(400).json({ error: 'items[] is required' });
+    return;
+  }
+  const current = operationsStore.getShopperSignals(req.userId!) || emptySignals(req.userId!);
+  const prevAt = new Map(current[list].map((x) => [x.id, x.at]));
+  const now = new Date().toISOString();
+  const seen = new Set<string>();
+  const items: import('./operations/types').OpsShopperSignalItem[] = [];
+  for (const entry of raw) {
+    const e = (entry || {}) as Record<string, unknown>;
+    const id = String(e.id ?? '').trim().slice(0, 120);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const image = typeof e.image === 'string' && /^(https?:\/\/|\/)/.test(e.image) ? e.image.slice(0, 500) : undefined;
+    items.push({ id, label: String(e.label ?? id).trim().slice(0, 160) || id, ...(image ? { image } : {}), at: prevAt.get(id) || now });
+    if (items.length >= SIGNAL_LIST_MAX) break;
+  }
+  const saved = operationsStore.saveShopperSignals({ ...current, [list]: items, updatedAt: now });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved });
+});
+
+operationsRouter.post('/operations/shopper-signals/me/searches', ...requireAuth, (req, res) => {
+  const q = String(req.body?.q ?? '').trim().replace(/\s+/g, ' ').slice(0, 120);
+  if (q.length < 2) {
+    res.status(400).json({ error: 'q must be at least 2 characters' });
+    return;
+  }
+  const current = operationsStore.getShopperSignals(req.userId!) || emptySignals(req.userId!);
+  const now = new Date().toISOString();
+  const searches = [{ q, at: now }, ...current.searches.filter((s) => s.q.toLowerCase() !== q.toLowerCase())].slice(0, SEARCH_HISTORY_MAX);
+  const saved = operationsStore.saveShopperSignals({ ...current, searches, updatedAt: now });
+  scheduleOperationsPersist();
+  res.status(201).json({ success: true, data: saved.searches });
+});
+
+/** Remove one search (?q=) or clear the whole history. */
+operationsRouter.delete('/operations/shopper-signals/me/searches', ...requireAuth, (req, res) => {
+  const current = operationsStore.getShopperSignals(req.userId!) || emptySignals(req.userId!);
+  const q = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : '';
+  const searches = q ? current.searches.filter((s) => s.q.toLowerCase() !== q) : [];
+  const saved = operationsStore.saveShopperSignals({ ...current, searches, updatedAt: new Date().toISOString() });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved.searches });
+});
+
+operationsRouter.get('/operations/shopper-signals/:userId', ...requireAuth, (req, res) => {
+  if (!req.userRole || !SIGNAL_STAFF_ROLES.includes(req.userRole)) {
+    res.status(403).json({ error: 'Not authorized to view this shopper’s activity' });
+    return;
+  }
+  const userId = String(req.params.userId || '').trim();
+  Logger.audit('shopper_signals.viewed', { actorId: req.userId, targetUserId: userId });
+  res.json({ success: true, data: operationsStore.getShopperSignals(userId) || emptySignals(userId) });
+});
+
+// ---------------------------------------------------------------------------
+// Account Activity Log — the account owner and Choosify staff
+// ---------------------------------------------------------------------------
+
+const ACTIVITY_STAFF_ROLES: string[] = [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.SUPPORT_AGENT, ROLES.MODERATOR];
+
+operationsRouter.get('/operations/account-activity/:userId', ...requireAuth, async (req, res) => {
+  const target = req.params.userId === 'me' ? String(req.userId || '') : String(req.params.userId || '').trim();
+  const isStaff = Boolean(req.userRole && ACTIVITY_STAFF_ROLES.includes(req.userRole)) && !req.realActorUserId;
+  const isOwner = Boolean(req.userId && target === req.userId);
+  if (!target || (!isOwner && !isStaff)) {
+    res.status(403).json({ error: 'Not authorized to view this account’s activity' });
+    return;
+  }
+  const category = typeof req.query.category === 'string' ? req.query.category : '';
+  const limit = Math.min(300, Math.max(1, Number(req.query.limit) || 200));
+  const rows = operationsStore
+    .listAccountActivity(target)
+    .filter((a) => !category || a.category === category)
+    .slice(0, limit);
+  const staffView = isStaff && !isOwner;
+  if (!staffView) {
+    res.json({ success: true, data: rows.map(ownerView), staffView });
+    return;
+  }
+  // Entries recorded during Login As carry only the staff id — resolve display names for staff.
+  const missing = [...new Set(rows.filter((a) => a.staffActorId && !a.staffActorName).map((a) => a.staffActorId as string))];
+  const names = new Map<string, string>();
+  if (missing.length) {
+    const found = await db.select({ id: users.id, displayName: users.displayName }).from(users).where(inArray(users.id, missing)).catch(() => []);
+    for (const u of found) if (u.displayName) names.set(u.id, u.displayName);
+  }
+  res.json({
+    success: true,
+    data: rows.map((a) => (a.staffActorId && !a.staffActorName && names.has(a.staffActorId) ? { ...a, staffActorName: names.get(a.staffActorId) } : a)),
+    staffView,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Payout profile — how a Seller / Creator gets paid (bank and/or MFS wallets)
+// ---------------------------------------------------------------------------
+
+const PAYOUT_FULL_VIEW_ROLES: string[] = [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.FINANCE_MANAGER];
+const PAYOUT_STAFF_ROLES: string[] = [...PAYOUT_FULL_VIEW_ROLES, ROLES.SUPPORT_AGENT];
+const PAYOUT_REMINDER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+function payoutRoleIn(req: { userRole?: string }, roles: readonly string[]): boolean {
+  return Boolean(req.userRole && roles.includes(req.userRole));
+}
+
+function maskTail(value: string): string {
+  const v = String(value || '');
+  return v.length <= 4 ? v : `${'•'.repeat(Math.max(0, v.length - 4))}${v.slice(-4)}`;
+}
+
+type PayoutChannel = { kind: 'bank' | 'mfs'; provider: string; accountName: string; number: string; extra?: string };
+
+function payoutChannels(p: import('./operations/types').OpsPayoutProfile | null, masked = false): PayoutChannel[] {
+  if (!p) return [];
+  const num = (v: string) => (masked ? maskTail(v) : v);
+  const out: PayoutChannel[] = [];
+  if (p.accountNumber) {
+    const extra = [p.branchName && `Branch: ${p.branchName}`, p.routingNumber && `Routing: ${masked ? '••••' : p.routingNumber}`].filter(Boolean).join(' · ');
+    out.push({ kind: 'bank', provider: p.bankName, accountName: p.accountHolderName, number: num(p.accountNumber), extra: extra || undefined });
+  }
+  if (p.bkashNumber) out.push({ kind: 'mfs', provider: 'bKash', accountName: p.accountHolderName, number: num(p.bkashNumber) });
+  if (p.nagadNumber) out.push({ kind: 'mfs', provider: 'Nagad', accountName: p.accountHolderName, number: num(p.nagadNumber) });
+  if (p.rocketNumber) out.push({ kind: 'mfs', provider: 'Rocket', accountName: p.accountHolderName, number: num(p.rocketNumber) });
+  return out;
+}
+
+const MFS_RE = /^01[3-9]\d{8}$/;
+function cleanMfs(v: unknown): string {
+  return String(v ?? '').replace(/[\s-]/g, '').replace(/^\+?88/, '');
+}
+
+operationsRouter.get('/operations/payout-profile/me', ...requireAuth, (req, res) => {
+  const p = operationsStore.getPayoutProfile(req.userId!);
+  res.json({ success: true, data: { profile: p, channels: payoutChannels(p), updatedAt: p?.updatedAt || null, masked: false } });
+});
+
+operationsRouter.put('/operations/payout-profile/me', ...requireAuth, (req, res) => {
+  const b = (req.body || {}) as Record<string, unknown>;
+  const str = (k: string, max = 120) => String(b[k] ?? '').trim().slice(0, max);
+  const accountNumber = str('accountNumber', 34).replace(/\s/g, '');
+  const routingNumber = str('routingNumber', 12).replace(/\s/g, '');
+  const bkashNumber = cleanMfs(b.bkashNumber);
+  const nagadNumber = cleanMfs(b.nagadNumber);
+  const rocketNumber = cleanMfs(b.rocketNumber);
+  const accountHolderName = str('accountHolderName');
+  const errors: string[] = [];
+  if (accountNumber && !/^\d{6,20}$/.test(accountNumber)) errors.push('Bank account number must be 6–20 digits.');
+  if (routingNumber && !/^\d{9}$/.test(routingNumber)) errors.push('Routing number must be 9 digits.');
+  for (const [label, v] of [['bKash', bkashNumber], ['Nagad', nagadNumber], ['Rocket', rocketNumber]] as const) {
+    if (v && !MFS_RE.test(v)) errors.push(`${label} number must be an 11-digit Bangladeshi mobile number (01XXXXXXXXX).`);
+  }
+  if ((accountNumber || bkashNumber || nagadNumber || rocketNumber) && !accountHolderName) errors.push('Account holder name is required.');
+  if (accountNumber && !str('bankName')) errors.push('Bank name is required for a bank account.');
+  if (errors.length) {
+    res.status(400).json({ error: errors.join(' '), errors });
+    return;
+  }
+  const now = new Date().toISOString();
+  const prev = operationsStore.getPayoutProfile(req.userId!);
+  const saved = operationsStore.upsertPayoutProfile({
+    userId: req.userId!,
+    accountHolderName,
+    bankName: accountNumber ? str('bankName') : '',
+    accountNumber,
+    routingNumber: accountNumber ? routingNumber : '',
+    branchName: accountNumber ? str('branchName') : '',
+    bkashNumber,
+    nagadNumber,
+    rocketNumber,
+    createdAt: prev?.createdAt || now,
+    updatedAt: now,
+  });
+  scheduleOperationsPersist();
+  Logger.audit('payout_profile.updated', { actorId: req.userId, channels: payoutChannels(saved).map((c) => c.provider) });
+  recordAccountActivity(req, {
+    userId: req.userId!,
+    type: 'payout_updated',
+    category: 'account',
+    summary: payoutChannels(saved).length ? `Payout details updated (${payoutChannels(saved).map((c) => c.provider).join(', ')})` : 'Payout details cleared',
+  });
+  res.json({ success: true, data: { profile: saved, channels: payoutChannels(saved), updatedAt: saved.updatedAt, masked: false } });
+});
+
+operationsRouter.get('/operations/payout-profile/:userId', ...requireAuth, (req, res) => {
+  if (!payoutRoleIn(req, PAYOUT_STAFF_ROLES)) {
+    res.status(403).json({ error: 'Not authorized to view payout details' });
+    return;
+  }
+  const masked = !payoutRoleIn(req, PAYOUT_FULL_VIEW_ROLES);
+  const p = operationsStore.getPayoutProfile(req.params.userId);
+  res.json({
+    success: true,
+    data: { channels: payoutChannels(p, masked), updatedAt: p?.updatedAt || null, masked, reminders: operationsStore.listPayoutReminders(req.params.userId) },
+  });
+});
+
+operationsRouter.post('/operations/payout-profile/:userId/reminders', ...requireAuth, async (req, res) => {
+  if (!payoutRoleIn(req, PAYOUT_STAFF_ROLES)) {
+    res.status(403).json({ error: 'Not authorized to send payout reminders' });
+    return;
+  }
+  const userId = String(req.params.userId || '').trim();
+  if (!userId || userId === req.userId) {
+    res.status(400).json({ error: 'A different target user is required' });
+    return;
+  }
+  if (payoutChannels(operationsStore.getPayoutProfile(userId)).length) {
+    res.status(409).json({ error: 'This account already has a payout method.' });
+    return;
+  }
+  const last = operationsStore.listPayoutReminders(userId)[0];
+  if (last && Date.now() - Date.parse(last.at) < PAYOUT_REMINDER_COOLDOWN_MS) {
+    res.status(429).json({ error: `A reminder was already sent at ${new Date(last.at).toLocaleString()}. You can send another 24 hours after that.` });
+    return;
+  }
+  const reminder = operationsStore.addPayoutReminder({
+    id: `prem_${randomUUID()}`,
+    userId,
+    actorId: req.userId!,
+    actorName: req.user?.displayName,
+    at: new Date().toISOString(),
+  });
+  scheduleOperationsPersist();
+  Logger.audit('payout_profile.reminder_sent', { actorId: req.userId, targetUserId: userId });
+  recordAccountActivity(req, { userId, type: 'payout_reminder', category: 'admin', actor: 'staff', summary: 'Choosify staff sent a reminder to add payout details' });
+  try {
+    await notifyUser(userId, {
+      type: COMMUNICATION_TYPES.SELLER_UPDATE,
+      category: 'seller',
+      eventKey: 'admin.direct',
+      persona: 'seller',
+      title: 'Add your payout details',
+      summary: 'Choosify needs a bank account or mobile wallet (bKash / Nagad / Rocket) to send your payouts. Add it under Payouts → Payment Info.',
+      actionUrl: '/admin/payouts?tab=payment-info',
+      metadata: { reminderId: reminder.id },
+    });
+  } catch (err) {
+    Logger.error('notifyUser failed (payout reminder)', { error: String(err) });
+  }
+  res.status(201).json({ success: true, data: reminder });
+});
+
+operationsRouter.get('/operations/marketplace-access-events', ...requireAuth, async (req, res) => {
+  const entityType = req.query.entityType === 'brand' || req.query.entityType === 'creator' ? req.query.entityType : undefined;
+  const entityId = typeof req.query.entityId === 'string' ? req.query.entityId : undefined;
+  const ownerUserId = typeof req.query.ownerUserId === 'string' ? req.query.ownerUserId : undefined;
+  if (!userIsStaff(req)) {
+    // Owners may read the history of their own brand / creator profile only.
+    if (!req.userId) {
+      res.status(401).json({ error: 'Sign in required' });
+      return;
+    }
+    let owns = false;
+    if (ownerUserId) owns = ownerUserId === req.userId;
+    else if (entityType === 'brand' && entityId) owns = (await catalogStore.getBrand(entityId))?.sellerId === req.userId;
+    else if (entityType === 'creator' && entityId) owns = (await catalogStore.getCreator(entityId))?.userId === req.userId;
+    if (!owns) {
+      res.status(403).json({ error: 'Not authorized to view this access history' });
+      return;
+    }
+  }
+  res.json({ data: operationsStore.listMarketplaceAccessEvents({ entityType, entityId, ownerUserId }) });
+});
+
+// ── Super Admin "Edit User" sessions (audit trail for acting on a user's account) ──
+const ADMIN_EDIT_REASONS = new Set(['user_support_request', 'data_correction', 'compliance_review', 'fraud_investigation', 'other']);
+const ADMIN_EDIT_SESSION_MS = 2 * 60 * 60 * 1000;
+
+operationsRouter.get('/operations/admin-edit-sessions', ...requireAuth, (req, res) => {
+  if (!userIsStaff(req)) {
+    res.status(403).json({ error: 'Not authorized to view edit sessions' });
+    return;
+  }
+  const targetUserId = typeof req.query.targetUserId === 'string' ? req.query.targetUserId : undefined;
+  res.json({ data: operationsStore.listAdminEditSessions({ targetUserId }) });
+});
+
+operationsRouter.post('/operations/admin-edit-sessions', ...requireAuth, (req, res) => {
+  // Only a Super Admin may enter edit mode on someone else's account.
+  if (!hasRole(req.userRole, ROLES.SUPER_ADMIN) || !req.userId) {
+    res.status(403).json({ error: 'Only a Super Admin can enter edit mode on a user account' });
+    return;
+  }
+  const body = (req.body || {}) as Record<string, unknown>;
+  const targetUserId = typeof body.targetUserId === 'string' ? body.targetUserId.trim() : '';
+  const targetRole = body.targetRole === 'consumer' || body.targetRole === 'seller' || body.targetRole === 'creator' ? body.targetRole : null;
+  const reason = typeof body.reason === 'string' ? body.reason : '';
+  const reasonDetail = typeof body.reasonDetail === 'string' ? body.reasonDetail.trim().slice(0, 500) : '';
+  if (!targetUserId || !targetRole) {
+    res.status(400).json({ error: 'targetUserId and targetRole are required' });
+    return;
+  }
+  if (targetUserId === req.userId) {
+    res.status(400).json({ error: 'Edit mode is for acting on another user’s account' });
+    return;
+  }
+  if (!ADMIN_EDIT_REASONS.has(reason)) {
+    res.status(400).json({ error: 'Choose a reason for entering edit mode' });
+    return;
+  }
+  if (reasonDetail.length < 10) {
+    res.status(400).json({ error: 'Describe why you are editing this account (at least 10 characters)' });
+    return;
+  }
+  if (body.confirmed !== true) {
+    res.status(400).json({ error: 'Edit mode must be explicitly confirmed' });
+    return;
+  }
+  const existing = operationsStore
+    .listAdminEditSessions({ targetUserId, adminUserId: req.userId })
+    .find((s) => !s.endedAt);
+  if (existing) {
+    res.json({ data: existing, reused: true });
+    return;
+  }
+  const now = new Date();
+  const session = operationsStore.createAdminEditSession({
+    id: `aes_${randomUUID()}`,
+    adminUserId: req.userId,
+    adminName: req.user?.displayName || undefined,
+    adminEmail: req.user?.email || undefined,
+    targetUserId,
+    targetRole,
+    targetLabel: typeof body.targetLabel === 'string' ? body.targetLabel.slice(0, 120) : undefined,
+    reason: reason as import('./operations/types').OpsAdminEditReason,
+    reasonDetail,
+    startedAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + ADMIN_EDIT_SESSION_MS).toISOString(),
+  });
+  recordAccountActivity(req, {
+    userId: targetUserId,
+    type: 'edit_session_started',
+    category: 'admin',
+    actor: 'staff',
+    summary: 'Choosify staff opened an Edit User session on this account',
+    staffNote: `Reason: ${session.reason} — ${session.reasonDetail}`,
+  });
+  Logger.audit('admin.edit_mode.start', {
+    sessionId: session.id,
+    adminUserId: session.adminUserId,
+    targetUserId: session.targetUserId,
+    targetRole: session.targetRole,
+    reason: session.reason,
+    reasonDetail: session.reasonDetail,
+    startedAt: session.startedAt,
+  });
+  res.status(201).json({ data: session });
+});
+
+operationsRouter.post('/operations/admin-edit-sessions/:id/end', ...requireAuth, (req, res) => {
+  if (!hasRole(req.userRole, ROLES.SUPER_ADMIN) || !req.userId) {
+    res.status(403).json({ error: 'Only a Super Admin can end an edit session' });
+    return;
+  }
+  const session = operationsStore.listAdminEditSessions().find((s) => s.id === req.params.id);
+  if (!session) {
+    res.status(404).json({ error: 'Edit session not found' });
+    return;
+  }
+  const ended = operationsStore.endAdminEditSession(session.id, req.userId);
+  recordAccountActivity(req, {
+    userId: session.targetUserId,
+    type: 'edit_session_ended',
+    category: 'admin',
+    actor: 'staff',
+    summary: 'Choosify staff closed the Edit User session',
+  });
+  Logger.audit('admin.edit_mode.end', {
+    sessionId: session.id,
+    adminUserId: session.adminUserId,
+    endedBy: req.userId,
+    targetUserId: session.targetUserId,
+    endedAt: ended?.endedAt,
+    endReason: ended?.endReason,
+  });
+  res.json({ data: ended });
+});
+
 operationsRouter.get('/operations/reviews', ...requireAuth, async (req, res) => {
   const status = typeof req.query.status === 'string' ? req.query.status : '';
   const productId = typeof req.query.productId === 'string' ? req.query.productId : '';
@@ -6099,6 +6515,13 @@ operationsRouter.patch('/operations/verifications/:id/submit', ...requireAuth, a
     res.status(400).json({ error: `Cannot submit from status ${existing.status}` });
     return;
   }
+  if (await isOwnerVerification(existing)) {
+    const missing = missingDocsMessage(existing);
+    if (missing) {
+      res.status(400).json({ error: `Upload every required document before submitting. Missing: ${missing}`, code: 'VERIFICATION_DOCUMENTS_MISSING' });
+      return;
+    }
+  }
   const actor = req.user?.displayName || req.userId || 'Claimant';
   const saved = operationsStore.updateVerification(req.params.id, {
     status: 'Submitted',
@@ -6117,6 +6540,7 @@ operationsRouter.patch('/operations/verifications/:id/submit', ...requireAuth, a
   } catch (err) {
     console.warn('[Verification] mark pending failed:', err);
   }
+  recordAccountActivity(req, { userId: existing.submitted_by, type: 'verification_submitted', category: 'verification', summary: `Verification submitted for review (${existing.entityName || existing.brand_name})` });
   scheduleOperationsPersist();
   res.json({ success: true, data: saved });
 });
@@ -6171,12 +6595,36 @@ operationsRouter.patch(
         },
       ],
     });
+    {
+      const reviewedDoc = (existing.documents || []).find((d) => d.id === req.params.docId);
+      if (existing.submitted_by) {
+        recordAccountActivity(req, {
+          userId: existing.submitted_by,
+          type: status === 'rejected' ? 'verification_document_rejected' : 'verification_document_approved',
+          category: 'verification',
+          actor: 'staff',
+          summary: `${reviewedDoc ? verificationDocumentLabel(existing.entityType, reviewedDoc.type) : 'Document'} ${status === 'rejected' ? `rejected — ${notes || 'no reason given'}` : 'approved'}`,
+        });
+      }
+    }
     Logger.audit('verification.document_reviewed', {
       actorId: req.userId,
       verificationId: req.params.id,
       docId: req.params.docId,
       status,
     });
+    if (status === 'rejected' && existing.submitted_by) {
+      const doc = (existing.documents || []).find((d) => d.id === req.params.docId);
+      notifyUser(existing.submitted_by, {
+        type: COMMUNICATION_TYPES.MODERATION_UPDATE,
+        category: 'seller',
+        eventKey: 'verification.update',
+        persona: existing.entityType === 'creator' ? 'creator' : 'seller',
+        title: 'A verification document needs to be replaced',
+        summary: `${doc ? verificationDocumentLabel(existing.entityType, doc.type) : 'A document'}: ${notes || 'rejected by Choosify'}`,
+        actionUrl: existing.entityType === 'creator' ? '/admin/creator-profile?tab=verification' : '/admin/brand-profile?tab=verification',
+      }).catch((err) => Logger.error('notifyUser failed (verification document rejected)', { error: String(err) }));
+    }
     scheduleOperationsPersist();
     res.json({ success: true, data: withAudit || saved });
   },
@@ -6242,6 +6690,15 @@ operationsRouter.put(
       ],
     });
     scheduleOperationsPersist();
+    if (existing.submitted_by) {
+      recordAccountActivity(req, {
+        userId: existing.submitted_by,
+        type: 'verification_document_replaced',
+        category: 'verification',
+        actor: isOwner ? 'self' : 'staff',
+        summary: `Replaced a verification document (${name || 'new file'})`,
+      });
+    }
     Logger.audit('verification.document_replaced', {
       actorId: req.userId,
       verificationId: req.params.id,
@@ -6251,6 +6708,322 @@ operationsRouter.put(
     res.json({ success: true, data: withAudit || saved });
   },
 );
+
+/**
+ * Owner (or Admin) removes a document from an open request — e.g. a wrong
+ * file uploaded by mistake. Documents Choosify already approved stay; closed
+ * requests cannot change.
+ */
+operationsRouter.delete('/operations/verifications/:id/document/:docId', ...requireAuth, (req, res) => {
+  const existing = operationsStore.getVerification(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Verification request not found' });
+    return;
+  }
+  const isOwner = Boolean(req.userId && existing.submitted_by === req.userId);
+  const isAdmin = userCanManageVerifications(req);
+  if (!isOwner && !isAdmin) {
+    res.status(403).json({ error: 'Not authorized to remove this verification document' });
+    return;
+  }
+  if (existing.status === 'Approved' || existing.status === 'Rejected') {
+    res.status(409).json({ error: `This request is already ${existing.status.toLowerCase()} and cannot be changed.` });
+    return;
+  }
+  const doc = (existing.documents || []).find((d) => d.id === req.params.docId);
+  if (!doc) {
+    res.status(404).json({ error: 'Document not found on this verification request' });
+    return;
+  }
+  if (doc.status === 'approved' && !isAdmin) {
+    res.status(409).json({ error: 'Choosify already approved this document. Use Upload New to replace it instead.' });
+    return;
+  }
+  const actor = req.user?.displayName || req.userId || 'Document Owner';
+  const saved = operationsStore.updateVerification(existing.id, {
+    documents: existing.documents.filter((d) => d.id !== doc.id),
+    audit_trail: [
+      ...existing.audit_trail,
+      {
+        timestamp: new Date().toISOString(),
+        action: 'Document Removed',
+        actor,
+        details: `${isOwner ? 'Owner' : 'Staff'} removed ${verificationDocumentLabel(existing.entityType, doc.type)}: ${doc.name}`,
+      },
+    ],
+  });
+  scheduleOperationsPersist();
+  Logger.audit('verification.document_removed', { actorId: req.userId, verificationId: existing.id, docId: doc.id, byOwner: isOwner });
+  recordAccountActivity(req, {
+    userId: existing.submitted_by,
+    type: 'verification_document_removed',
+    category: 'verification',
+    actor: isOwner ? 'self' : 'staff',
+    summary: `Removed ${verificationDocumentLabel(existing.entityType, doc.type)}: ${doc.name}`,
+  });
+  res.json({ success: true, data: saved });
+});
+
+const VERIFICATION_DOC_TYPES: readonly OpsVerificationDocument['type'][] = VERIFICATION_DOCUMENT_TYPES;
+
+/**
+ * Owner verification (seller verifying their OWN brand, or a creator) — as
+ * opposed to an ownership claim on someone else's brand, which keeps its own
+ * evidence rules. Only owner verifications must carry the full required set.
+ */
+async function isOwnerVerification(row: OpsVerificationRequest): Promise<boolean> {
+  if (row.entityType === 'creator') return true;
+  const brand = await catalogStore.getBrand(row.entityId || row.brand_id).catch(() => null);
+  return Boolean(brand && brand.sellerId === row.submitted_by);
+}
+
+function missingDocsMessage(row: OpsVerificationRequest): string | null {
+  const missing = missingRequiredDocuments(row.entityType, row.documents || []);
+  return missing.length ? missing.map((m) => m.label).join(', ') : null;
+}
+
+/**
+ * Profile-owner (or Admin) adds a document to an open request — how an owner
+ * answers "please send your Tax Certificate". Only private verification
+ * uploads are accepted. Closed (Approved / Rejected) requests cannot change;
+ * the owner starts a new request instead.
+ */
+operationsRouter.post('/operations/verifications/:id/documents', ...requireAuth, async (req, res) => {
+  const existing = operationsStore.getVerification(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Verification request not found' });
+    return;
+  }
+  const isOwner = Boolean(req.userId && existing.submitted_by === req.userId);
+  if (!isOwner && !userCanManageVerifications(req)) {
+    res.status(403).json({ error: 'Not authorized to add documents to this verification request' });
+    return;
+  }
+  if (existing.status === 'Approved' || existing.status === 'Rejected') {
+    res.status(409).json({ error: `This request is already ${existing.status.toLowerCase()}. Start a new verification request instead.` });
+    return;
+  }
+  const type = String(req.body?.type || '') as OpsVerificationDocument['type'];
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim().slice(0, 200) : '';
+  const docUrl = typeof req.body?.doc_url === 'string' ? req.body.doc_url.trim() : '';
+  if (!VERIFICATION_DOC_TYPES.includes(type)) {
+    res.status(400).json({ error: `type must be one of: ${VERIFICATION_DOC_TYPES.join(', ')}` });
+    return;
+  }
+  if (type === PROFILE_PHOTO_DOCUMENT) {
+    res.status(400).json({ error: 'The profile photo is attached from the account picture — use POST /operations/verifications/:id/profile-photo' });
+    return;
+  }
+  if (!name || !docUrl) {
+    res.status(400).json({ error: 'name and doc_url are required' });
+    return;
+  }
+  if (!docUrl.includes('/catalog/media/private/')) {
+    res.status(400).json({ error: 'doc_url must be a private verification upload (POST /operations/media/upload-verification)' });
+    return;
+  }
+  const actor = req.user?.displayName || req.userId || 'Document Owner';
+  const doc: OpsVerificationDocument = { id: `doc_${randomUUID()}`, type, name, doc_url: docUrl, status: 'pending' };
+  const saved = operationsStore.updateVerification(existing.id, {
+    documents: [...(existing.documents || []), doc],
+    audit_trail: [
+      ...existing.audit_trail,
+      {
+        timestamp: new Date().toISOString(),
+        action: 'Document Added',
+        actor,
+        details: `${isOwner ? 'Owner' : 'Staff'} added ${type}: ${name}`,
+      },
+    ],
+  });
+  scheduleOperationsPersist();
+  recordAccountActivity(req, {
+    userId: existing.submitted_by,
+    type: 'verification_document_added',
+    category: 'verification',
+    actor: isOwner ? 'self' : 'staff',
+    summary: `Uploaded ${verificationDocumentLabel(existing.entityType, type)}: ${name}`,
+  });
+  Logger.audit('verification.document_added', {
+    actorId: req.userId,
+    verificationId: existing.id,
+    docId: doc.id,
+    type,
+    byOwner: isOwner,
+  });
+  if (isOwner && existing.status !== 'Draft') {
+    try {
+      await notifyRoles(['admin', 'super_admin', 'moderator'], {
+        type: 'system_alert',
+        category: 'admin',
+        eventKey: 'staff.verification_submitted',
+        persona: 'staff',
+        title: 'Verification document added',
+        summary: `${actor} added a ${type} to the ${existing.entityType || 'brand'} verification for "${existing.entityName || existing.brand_name}".`,
+        actionUrl: `/upe/${existing.entityType || 'brand'}/${encodeURIComponent(existing.entityId || existing.brand_id)}`,
+        metadata: { verificationId: existing.id, entityType: existing.entityType, entityId: existing.entityId },
+      });
+    } catch (err) {
+      console.error('[Verification] Failed to notify staff of added document:', err);
+    }
+  }
+  res.status(201).json({ success: true, data: saved });
+});
+
+/**
+ * Photo verification: snapshot the submitter's CURRENT profile picture (read
+ * server-side from the account, never from the client) into the request as
+ * the 'Profile Photo' document, replacing any earlier snapshot. Owners can
+ * change their picture any time and call this again to re-submit it.
+ */
+operationsRouter.post('/operations/verifications/:id/profile-photo', ...requireAuth, async (req, res) => {
+  const existing = operationsStore.getVerification(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Verification request not found' });
+    return;
+  }
+  if (!req.userId || existing.submitted_by !== req.userId) {
+    res.status(403).json({ error: 'Only the account owner can attach their profile photo' });
+    return;
+  }
+  if (existing.status === 'Approved' || existing.status === 'Rejected') {
+    res.status(409).json({ error: `This request is already ${existing.status.toLowerCase()}. Start a new verification request instead.` });
+    return;
+  }
+  const rows = await db.select({ avatarUrl: users.avatarUrl }).from(users).where(eq(users.id, req.userId)).limit(1);
+  const avatarUrl = String(rows[0]?.avatarUrl || '').trim();
+  if (!avatarUrl) {
+    res.status(400).json({ error: 'Add a profile picture to your account first.', code: 'PROFILE_PHOTO_MISSING' });
+    return;
+  }
+  const actor = req.user?.displayName || req.userId;
+  const previous = (existing.documents || []).find((d) => d.type === PROFILE_PHOTO_DOCUMENT);
+  const doc: OpsVerificationDocument = {
+    id: previous?.id || `doc_${randomUUID()}`,
+    type: PROFILE_PHOTO_DOCUMENT,
+    name: 'Profile photo (account picture)',
+    doc_url: avatarUrl,
+    status: 'pending',
+  };
+  const saved = operationsStore.updateVerification(existing.id, {
+    documents: [...(existing.documents || []).filter((d) => d.type !== PROFILE_PHOTO_DOCUMENT), doc],
+    audit_trail: [
+      ...existing.audit_trail,
+      {
+        timestamp: new Date().toISOString(),
+        action: previous ? 'Document Replaced' : 'Document Added',
+        actor,
+        details: previous ? 'Owner re-submitted their current profile photo' : 'Owner attached their profile photo for photo verification',
+      },
+    ],
+  });
+  scheduleOperationsPersist();
+  Logger.audit('verification.profile_photo_attached', { actorId: req.userId, verificationId: existing.id, replaced: Boolean(previous) });
+  recordAccountActivity(req, { userId: req.userId, type: 'verification_photo_submitted', category: 'verification', summary: 'Submitted the current profile photo for photo verification' });
+  res.status(201).json({ success: true, data: saved });
+});
+
+/** Owner of a verification subject: the brand's seller or the creator's account. */
+async function verificationSubjectOwner(entityType: 'brand' | 'creator', entityId: string): Promise<{ ownerUserId: string; name: string } | null> {
+  if (entityType === 'creator') {
+    const c = (await catalogStore.listCreators()).find((x) => x.id === entityId);
+    return c?.userId ? { ownerUserId: c.userId, name: c.name } : null;
+  }
+  const b = await catalogStore.getBrand(entityId).catch(() => null);
+  return b?.sellerId ? { ownerUserId: b.sellerId, name: b.name } : null;
+}
+
+/**
+ * Staff "Ask to Upload": ask the owner for specific verification documents
+ * (missing or to be re-uploaded). Works with or without an existing request.
+ * Notifies the owner, shows in their Verification Center and Activity Log.
+ */
+operationsRouter.post('/operations/verification-document-requests', ...requireAuth, async (req, res) => {
+  if (!userCanManageVerifications(req)) {
+    res.status(403).json({ error: 'Not authorized to request verification documents' });
+    return;
+  }
+  const entityType = req.body?.entityType === 'creator' ? 'creator' : req.body?.entityType === 'brand' ? 'brand' : null;
+  const entityId = String(req.body?.entityId || '').trim();
+  const docTypes = Array.isArray(req.body?.docTypes)
+    ? [...new Set((req.body.docTypes as unknown[]).map((t) => String(t)).filter((t) => (VERIFICATION_DOC_TYPES as readonly string[]).includes(t)))]
+    : [];
+  const note = typeof req.body?.note === 'string' ? req.body.note.trim().slice(0, 500) : '';
+  if (!entityType || !entityId || !docTypes.length) {
+    res.status(400).json({ error: 'entityType, entityId and at least one valid docTypes entry are required' });
+    return;
+  }
+  const subject = await verificationSubjectOwner(entityType, entityId);
+  if (!subject) {
+    res.status(404).json({ error: 'This profile has no owner account to ask' });
+    return;
+  }
+  if (subject.ownerUserId === req.userId) {
+    res.status(400).json({ error: 'You cannot request documents from yourself' });
+    return;
+  }
+  const labels = docTypes.map((t) => verificationDocumentLabel(entityType, t));
+  const request = operationsStore.addVerificationDocRequest({
+    id: `vdr_${randomUUID()}`,
+    entityType,
+    entityId,
+    ownerUserId: subject.ownerUserId,
+    docTypes,
+    ...(note ? { note } : {}),
+    actorId: req.userId!,
+    actorName: req.user?.displayName,
+    at: new Date().toISOString(),
+  });
+  // Mirror onto the open request's audit trail so both sides see it in the history.
+  const open = operationsStore
+    .listVerifications({ entityType, entityId })
+    .filter((v) => v.status !== 'Approved' && v.status !== 'Rejected')
+    .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)))[0];
+  if (open) {
+    operationsStore.updateVerification(open.id, {
+      audit_trail: [
+        ...open.audit_trail,
+        { timestamp: request.at, action: 'Documents Requested', actor: req.user?.displayName || 'Choosify', details: `Please upload: ${labels.join(', ')}${note ? ` — ${note}` : ''}` },
+      ],
+    });
+  }
+  scheduleOperationsPersist();
+  Logger.audit('verification.documents_requested', { actorId: req.userId, entityType, entityId, docTypes });
+  recordAccountActivity(req, {
+    userId: subject.ownerUserId,
+    type: 'verification_documents_requested',
+    category: 'verification',
+    actor: 'staff',
+    summary: `Choosify asked you to upload: ${labels.join(', ')}${note ? ` — ${note}` : ''}`,
+  });
+  try {
+    await notifyUser(subject.ownerUserId, {
+      type: COMMUNICATION_TYPES.MODERATION_UPDATE,
+      category: 'seller',
+      eventKey: 'verification.update',
+      persona: entityType === 'creator' ? 'creator' : 'seller',
+      title: 'Please upload verification documents',
+      summary: `Choosify needs: ${labels.join(', ')}${note ? ` — ${note}` : ''}`,
+      actionUrl: entityType === 'creator' ? '/admin/creator-profile?tab=verification' : '/admin/brand-profile?tab=verification',
+      metadata: { requestId: request.id, entityType, entityId },
+    });
+  } catch (err) {
+    Logger.error('notifyUser failed (verification documents requested)', { error: String(err) });
+  }
+  res.status(201).json({ success: true, data: request });
+});
+
+operationsRouter.get('/operations/verification-document-requests', ...requireAuth, async (req, res) => {
+  const entityType = req.query.entityType === 'creator' ? 'creator' : req.query.entityType === 'brand' ? 'brand' : undefined;
+  const entityId = typeof req.query.entityId === 'string' ? req.query.entityId : undefined;
+  if (userCanManageVerifications(req)) {
+    res.json({ success: true, data: operationsStore.listVerificationDocRequests({ entityType, entityId }) });
+    return;
+  }
+  // Owners: only requests addressed to them.
+  const mine = operationsStore.listVerificationDocRequests({ entityType, entityId }).filter((r) => r.ownerUserId === req.userId);
+  res.json({ success: true, data: mine.map(({ actorId: _a, actorName: _n, ...rest }) => rest) });
+});
 
 operationsRouter.patch('/operations/verifications/:id/review', ...requireModerator, async (req, res) => {
   if (!userCanManageVerifications(req)) {
@@ -6291,6 +7064,9 @@ operationsRouter.patch('/operations/verifications/:id/review', ...requireModerat
       ],
     });
     scheduleOperationsPersist();
+    if (existing.submitted_by) {
+      recordAccountActivity(req, { userId: existing.submitted_by, type: 'verification_info_requested', category: 'verification', actor: 'staff', summary: `Choosify asked for more information: ${feedback}` });
+    }
     Logger.audit('verification.info_requested', {
       actorId: req.userId,
       verificationId: existing.id,
@@ -6303,7 +7079,7 @@ operationsRouter.patch('/operations/verifications/:id/review', ...requireModerat
         persona: existing.entityType === 'creator' ? 'creator' : 'seller',
         title: 'More information needed for your verification',
         summary: feedback,
-        actionUrl: '/admin/brand-verification',
+        actionUrl: existing.entityType === 'creator' ? '/admin/creator-profile?tab=verification' : '/admin/brand-profile?tab=verification',
       }).catch((err) => Logger.error('notifyUser failed (verification info requested)', { error: String(err) }));
     }
     res.json({ success: true, data: saved });
@@ -6326,6 +7102,19 @@ operationsRouter.patch('/operations/verifications/:id/review', ...requireModerat
   const wasOwnershipClaim = Boolean(
     brandBeforeDecision && brandBeforeDecision.sellerId !== existing.submitted_by,
   );
+  if (decision === 'approved' && !wasOwnershipClaim && (await isOwnerVerification(existing))) {
+    const missing = missingDocsMessage(existing);
+    const rejectedDocs = (existing.documents || []).filter((d) => d.status === 'rejected');
+    if (missing || rejectedDocs.length) {
+      res.status(400).json({
+        error: missing
+          ? `Required documents are missing: ${missing}. Request them from the owner before approving.`
+          : `Rejected documents must be replaced by the owner before approving: ${rejectedDocs.map((d) => verificationDocumentLabel(existing.entityType, d.type)).join(', ')}.`,
+        code: 'VERIFICATION_NOT_COMPLETE',
+      });
+      return;
+    }
+  }
 
   const sideEffect = await applyEntityVerificationSideEffect(existing, decision);
   if (sideEffect.ok === false) {
@@ -6375,6 +7164,15 @@ operationsRouter.patch('/operations/verifications/:id/review', ...requireModerat
   });
 
   scheduleOperationsPersist();
+  if (existing.submitted_by) {
+    recordAccountActivity(req, {
+      userId: existing.submitted_by,
+      type: decision === 'approved' ? 'verification_approved' : 'verification_rejected',
+      category: 'verification',
+      actor: 'staff',
+      summary: decision === 'approved' ? `Verification approved — ${feedback}` : `Verification rejected — ${feedback}`,
+    });
+  }
   Logger.audit('verification.reviewed', {
     actorId: reviewerId,
     verificationId: existing.id,
@@ -6389,7 +7187,7 @@ operationsRouter.patch('/operations/verifications/:id/review', ...requireModerat
       persona: existing.entityType === 'creator' ? 'creator' : 'seller',
       title: decision === 'approved' ? 'Verification approved' : 'Verification rejected',
       summary: feedback,
-      actionUrl: '/admin/brand-verification',
+      actionUrl: existing.entityType === 'creator' ? '/admin/creator-profile?tab=verification' : '/admin/brand-profile?tab=verification',
     }).catch((err) => Logger.error('notifyUser failed (verification reviewed)', { error: String(err) }));
   }
   res.json({

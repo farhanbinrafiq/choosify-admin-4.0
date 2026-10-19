@@ -24,9 +24,11 @@ import {
   partnerMarketplaceLocked,
 } from '../components/MarketplaceAccessLock';
 import { useNavAttention } from '../contexts/NavAttentionContext';
+import { AdminWorkspaceLayout } from '../components/Layout/AdminWorkspaceLayout';
 import './tokens.css';
 
 const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
+const OwnerProfilePage = lazy(() => import('../pages/admin/profiles/OwnerProfilePage'));
 
 /** Bump when public/cms-mirror/app.html behavior changes so the iframe never serves a stale 304. */
 const CMS_MIRROR_ASSET_VERSION = '20260906-remove-creator-economy';
@@ -95,7 +97,7 @@ function parseMirrorDeepLink(pathname: string, search: string): MirrorDeepLink |
  * - UserProfileDropdown
  * - Impersonation banner + Login As User confirmation
  */
-export const CmsMirrorHost: React.FC = () => {
+const CmsMirrorFrame: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, activeBrandId } = useAuth();
@@ -112,6 +114,18 @@ export const CmsMirrorHost: React.FC = () => {
   );
   const role = profile?.role;
   const canImpersonate = can('impersonate') && !impersonation.active;
+
+  // Staff inspecting a seller / creator get the real React 360° profile, never the
+  // legacy prototype profile inside the mirror (fixture data, "Request to Feature").
+  const isStaffViewer = Boolean(role) && role !== 'seller' && role !== 'creator' && role !== 'consumer';
+  useEffect(() => {
+    if (!isStaffViewer || !deepLink) return;
+    if (deepLink.kind === 'seller') {
+      navigate(`/admin/seller-profile?sellerId=${encodeURIComponent(deepLink.id)}`, { replace: true });
+    } else if (deepLink.kind === 'creator') {
+      navigate(`/admin/creator-review?creatorId=${encodeURIComponent(deepLink.id)}`, { replace: true });
+    }
+  }, [isStaffViewer, deepLink, navigate]);
 
   /** First-load / role-change gate: search stays non-interactive until iframe chrome is ready. */
   const [iframeReady, setIframeReady] = useState(false);
@@ -584,6 +598,33 @@ export const CmsMirrorHost: React.FC = () => {
       ) : null}
     </div>
   );
+};
+
+/**
+ * Seller / Creator OWN profile → the real React owner profile
+ * (pages/admin/profiles/OwnerProfilePage): the prototype self-profile in
+ * app.html shows a fabricated KYC checklist and documents. Every other
+ * /admin/* page (and staff deep links) still renders through the mirror frame.
+ */
+export const CmsMirrorHost: React.FC = () => {
+  const location = useLocation();
+  const { profile } = useAuth();
+  const ownPersona =
+    profile?.role === 'seller' && location.pathname === '/admin/brand-profile' && !/[?&](sellerId|userId)=/.test(location.search)
+      ? 'seller'
+      : profile?.role === 'creator' && location.pathname === '/admin/creator-profile'
+        ? 'creator'
+        : null;
+  if (ownPersona) {
+    return (
+      <AdminWorkspaceLayout>
+        <Suspense fallback={<AdminPageSkeleton variant="profile" />}>
+          <OwnerProfilePage persona={ownPersona} />
+        </Suspense>
+      </AdminWorkspaceLayout>
+    );
+  }
+  return <CmsMirrorFrame />;
 };
 
 export default CmsMirrorHost;

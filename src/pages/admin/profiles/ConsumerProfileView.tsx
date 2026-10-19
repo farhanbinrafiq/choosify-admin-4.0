@@ -1,75 +1,71 @@
 import React, { useCallback, useEffect, useMemo, useState, CSSProperties } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useRbac } from '../../../contexts/RbacContext';
 import { useImpersonation } from '../../../contexts/ImpersonationContext';
 import { Loader2, AlertTriangle, Phone, Mail, ArrowLeft, LogIn } from 'lucide-react';
 import { AdminMessageUserButton } from '../../../components/messaging/AdminMessageUserButton';
-import { ProfileMessagePopup } from '../../../components/messaging/ProfileMessagePopup';
-import { authApi } from '../../../services/authApi';
+import { authApi, type UserDetail } from '../../../services/authApi';
+import { catalogApi } from '../../../services/catalogApi';
+import { operationsApi, type OpsReview, type OpsStorefrontOrder, type ShopperSignalItem, type ShopperSignals } from '../../../services/operationsApi';
+import type { CatalogBrand } from '../../../types/catalog';
 import { Avatar } from '../../../components/shared/Avatar';
+import { personaCoverGradient } from '../../../components/admin/profile/personaTheme';
+import { AdminEditHistory, AdminEditModeStrip, AdminEditUserButton, useAdminEditUser } from '../../../components/admin/profile/AdminEditUser';
+import { OrderHistoryTable, ReviewsPanel } from '../../../components/admin/profile/ProfileSections';
+import { ProfileContactActions } from '../../../components/admin/profile/ProfileContactActions';
 
 // ============================================================================
-// Consumer Profile — the canonical /admin/consumers/:id surface.
+// Consumer Profile — the Super Admin 360° view at /admin/consumers/:id.
 //
-// Sprint 13 UI regression lock — PRESENTATION is a faithful reproduction of the
-// approved standalone `isCustomerDetail` section (design-reference/Choosify
-// Admin CMS (standalone).html, decoded lines 3489–3830): exact hex, px, grid
-// and DOM structure as inline styles. Sanctioned deviation: the accent uses the
-// canonical `--cms-accent` token, not the raw reference `#EF3C23`.
-//
-// FUNCTIONALITY: identity, role, CF-ID and lifecycle come from the real
-// GET /api/v1/auth/users/:id (server/authRouter.ts:1440). Impersonation
-// ("Login As User") and "Message" reuse the existing ImpersonationContext /
-// ContactInteractionContext. Routing/auth is unchanged — this component is
-// mounted by the same ProtectedRoute > RoleGuard > AdminLayout wrappers in
-// App.tsx that previously mounted UnifiedProfileShell for this path.
-//
-// The standalone prototype fills LTV, wallet, tickets, addresses, connected
-// accounts, sessions, followed brands/creators, saved items, search history and
-// the suspend toggle from its mock `Component.USERS` array. NONE of those have a
-// production data source for a consumer. Every such section keeps its approved
-// shape and renders an honest empty / disabled state — no prototype values are
-// reproduced. This is deliberately separate from UnifiedProfileShell so the
-// Seller / Creator / Brand / Order / Admin presentations are untouched.
+// VIEW ONLY. Every section reads a canonical source:
+//   Account Information → GET /auth/users/:id (identity, lifecycle, primary phone)
+//   Order History       → Order Console orders placed by this buyer (each opens /admin/orders/:orderId)
+//   Reviews & Score     → review store: reviews this consumer posted
+//   Saved Brands & Products, Followed Creators, Search History → shopper-signals
+//     record the Web storefront syncs while the shopper is signed in
+//   Followed Brands     → brand-follow store
+// The former prototype widgets (lifetime value, wallet, tickets, addresses,
+// connected accounts, sessions) have no server-side record, so they are not shown.
 // ============================================================================
 
 const ACCENT = 'var(--cms-accent)';
 const ACCENT_WASH = 'color-mix(in srgb, var(--cms-accent) 10%, transparent)';
 
-interface AccountDetail {
-  uid: string;
-  email: string;
-  displayName: string;
-  role: string;
-  choosifyUserId?: string | null;
-  avatarUrl?: string | null;
-  createdAt?: string;
-  profileStatus?: string;
-  identityVerified?: boolean;
-  marketplaceAccess?: boolean;
-  partnerApplicationStatus?: string | null;
-}
-
-const initialsFor = (name: string) =>
-  (name || '')
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() || '')
-    .join('') || 'U';
-
 const TABS: Array<{ key: string; label: string; icon: string }> = [
   { key: 'account', label: 'Account Information', icon: '⚙' },
   { key: 'orders', label: 'Order History', icon: '▤' },
   { key: 'reviews', label: 'Reviews & Score', icon: '⭐' },
-  { key: 'brands', label: 'Followed Brands', icon: '♦' },
-  { key: 'saved', label: 'Saved Items', icon: '📌' },
-  { key: 'creators', label: 'Followed Creators', icon: '🎞' },
-  { key: 'search', label: 'Search History', icon: '🔍' },
+  { key: 'saved', label: 'Saved Brands & Products', icon: '♡' },
+  { key: 'search', label: 'Search History', icon: '⌕' },
+  { key: 'brands', label: 'Followed Brands & Creators', icon: '♦' },
 ];
 
-const ORDER_PILLS = ['All', 'Pending', 'Confirmed', 'Processing', 'Dispatched', 'In Transit', 'Delivered', 'Cancelled', 'Returned', 'Exchanged'];
+const taka = (n: number) => `৳${Math.round(n).toLocaleString('en-US')}`;
+
+function SignalList({ title, items, empty, to, testId }: { title: string; items: ShopperSignalItem[]; empty: string; to?: (i: ShopperSignalItem) => string; testId: string }) {
+  return (
+    <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: 16 }} data-testid={testId}>
+      <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 2 }}>{title} ({items.length})</div>
+      <div style={{ fontSize: 10.5, color: '#9CA3AF', fontWeight: 600, marginBottom: 10 }}>Recorded from the storefront while signed in.</div>
+      {items.length === 0 ? (
+        <div style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 12, fontWeight: 600, fontStyle: 'italic', padding: '16px 0' }}>{empty}</div>
+      ) : (
+        items.map((i) => (
+          <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid #F1F3F5', fontSize: 11.5, fontWeight: 700 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 6, background: '#F4F7F9', overflow: 'hidden', flexShrink: 0 }}>
+              {i.image ? <img src={i.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+            </div>
+            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {to ? <Link to={to(i)} style={{ color: '#111827', textDecoration: 'none' }}>{i.label}</Link> : i.label}
+            </span>
+            <span style={{ color: '#9CA3AF', fontWeight: 600, fontSize: 10.5 }}>{new Date(i.at).toLocaleDateString()}</span>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
 
 export default function ConsumerProfileView() {
   const { id } = useParams<{ id: string }>();
@@ -79,12 +75,20 @@ export default function ConsumerProfileView() {
   const { profile } = useAuth();
   const { can } = useRbac();
   const { state: impersonation, openLoginAsConfirm } = useImpersonation();
-  const [showMessagePopup, setShowMessagePopup] = useState(false);
 
-  const [account, setAccount] = useState<AccountDetail | null>(null);
+  const [account, setAccount] = useState<UserDetail | null>(null);
+  const [orders, setOrders] = useState<OpsStorefrontOrder[]>([]);
+  const [reviews, setReviews] = useState<OpsReview[]>([]);
+  const [followed, setFollowed] = useState<CatalogBrand[]>([]);
+  const [followedIds, setFollowedIds] = useState<string[]>([]);
+  const [signals, setSignals] = useState<ShopperSignals | null>(null);
+  const [sectionErrors, setSectionErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState('account');
+  const [activeTab, setActiveTab] = useState(() => {
+    const t = searchParams.get('tab');
+    return t && TABS.some((x) => x.key === t) ? t : 'account';
+  });
 
   const load = useCallback(async () => {
     if (!uid) {
@@ -95,19 +99,29 @@ export default function ConsumerProfileView() {
     setLoading(true);
     setError(null);
     try {
-      // Was a raw inline fetch with a hand-read localStorage token and no
-      // 401 retry — the same reliability gap fixed in authApi.ts's request()
-      // (a long-lived tab's expired access token surfaced as a raw error
-      // instead of silently refreshing). Routed through the canonical
-      // client so this page gets the same silent-refresh-on-401 behavior as
-      // every other admin surface, plus avatarUrl.
-      const data = await authApi.getUserDetail(uid);
-      setAccount(data);
+      setAccount(await authApi.getUserDetail(uid));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load account detail.');
-    } finally {
       setLoading(false);
+      return;
     }
+    const errs: Record<string, string> = {};
+    await Promise.all([
+      operationsApi.listOrders({ buyerId: uid }).then(setOrders).catch((e) => (errs.orders = e instanceof Error ? e.message : 'Could not load orders.')),
+      operationsApi.listReviews({ userId: uid }).then(setReviews).catch((e) => (errs.reviews = e instanceof Error ? e.message : 'Could not load reviews.')),
+      operationsApi
+        .listUserFollowedBrandIds(uid)
+        .then(async (ids) => {
+          setFollowedIds(ids);
+          if (!ids.length) return setFollowed([]);
+          const all = await catalogApi.listBrands();
+          setFollowed(all.filter((b) => ids.includes(b.id)));
+        })
+        .catch((e) => (errs.brands = e instanceof Error ? e.message : 'Could not load followed brands.')),
+      operationsApi.getUserShopperSignals(uid).then(setSignals).catch((e) => (errs.signals = e instanceof Error ? e.message : 'Could not load saved items and searches.')),
+    ]);
+    setSectionErrors(errs);
+    setLoading(false);
   }, [uid]);
 
   useEffect(() => {
@@ -115,11 +129,15 @@ export default function ConsumerProfileView() {
   }, [load]);
 
   const name = account?.displayName || '(no name on file)';
-  const email = account?.email || '—';
+  const email = account?.email || '';
+  const phone = account?.phone || '';
   const cfId = account?.choosifyUserId || '—';
   const joined = account?.createdAt ? new Date(account.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
   const isSelf = Boolean(profile?.id && account?.uid && profile.id === account.uid);
   const showLoginAsUser = can('impersonate') && !impersonation.active && !isSelf && Boolean(account?.uid);
+  const edit = useAdminEditUser({ targetUserId: uid, targetRole: 'consumer', targetLabel: name });
+  const spent = useMemo(() => orders.filter((o) => o.status !== 'cancelled').reduce((s, o) => s + (Number(o.overallTotal) || 0), 0), [orders]);
+  const paidOrders = orders.filter((o) => o.status !== 'cancelled').length;
 
   const requestLoginAs = useCallback(() => {
     if (!account) return;
@@ -129,12 +147,11 @@ export default function ConsumerProfileView() {
       roleLabel: 'Consumer',
       choosifyUserId: account.choosifyUserId || undefined,
       email: account.email,
-      avatarUrl: '',
+      avatarUrl: account.avatarUrl || '',
     });
   }, [account, openLoginAsConfirm]);
 
-  // ?impersonate=1 auto-opens the Login As confirmation, matching the prior
-  // UnifiedProfileShell behaviour for this route.
+  // ?impersonate=1 auto-opens the Login As confirmation (existing deep-link behaviour).
   useEffect(() => {
     if (!showLoginAsUser) return;
     if (searchParams.get('impersonate') !== '1') return;
@@ -151,33 +168,27 @@ export default function ConsumerProfileView() {
     hBtn: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: '9px 14px', fontSize: '11.5px', fontWeight: 800, color: '#374151', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 },
     grid: { display: 'grid', gridTemplateColumns: 'minmax(0,260px) minmax(0,1fr)', gap: 16, alignItems: 'start' },
     card: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 10, overflow: 'hidden' },
-    cover: { height: 80, background: `linear-gradient(120deg,#FBCFE8 0%,#FDE68A 50%, ${ACCENT} 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+    cover: { height: 80, background: personaCoverGradient('consumer'), display: 'flex', alignItems: 'center', justifyContent: 'center' },
     coverLabel: { fontSize: 14, fontWeight: 800, letterSpacing: '0.15em', color: '#fff' },
     avatar: { width: 56, height: 56, borderRadius: '50%', background: '#fff', border: '1px solid #E8EDF2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16, marginTop: -42, marginBottom: 10, boxShadow: '0 2px 6px rgba(0,0,0,0.08)' },
     pName: { fontSize: '13.5px', fontWeight: 800 },
-    pEmail: { fontSize: 11, color: '#2563EB', fontWeight: 600, marginTop: 2 },
     kv: { display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 },
     kLabel: { fontSize: 9, fontWeight: 800, color: '#9CA3AF', letterSpacing: '0.02em' },
-    kValue: { fontSize: '11.5px', fontWeight: 700, marginTop: 2, color: '#111827' },
+    kValue: { fontSize: '11.5px', fontWeight: 700, marginTop: 2, color: '#111827', overflowWrap: 'anywhere' },
     kRow: { borderTop: '1px solid #F1F3F5', paddingTop: 8 },
-    btnRow: { display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' },
+    contact: { display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 },
+    contactLink: { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: '#2563EB', textDecoration: 'none', overflowWrap: 'anywhere' },
     panel: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: 16 },
     panelTitle: { fontSize: '12.5px', fontWeight: 800, marginBottom: 2 },
     panelSub: { fontSize: '10.5px', color: '#9CA3AF', fontWeight: 600, marginBottom: 12 },
-    statGrid: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 },
+    statGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 14 },
     statCard: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: 14 },
     statLabel: { fontSize: 9, fontWeight: 800, color: '#9CA3AF' },
-    statEmpty: { fontSize: 11, fontWeight: 600, color: '#9CA3AF', marginTop: 6 },
+    statValue: { fontSize: 18, fontWeight: 800, color: '#111827', marginTop: 6 },
     tabBar: { display: 'flex', gap: 16, background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: '0 16px', overflowX: 'auto' },
-    tab: { padding: '12px 4px', fontSize: '11.5px', fontWeight: 800, whiteSpace: 'nowrap', cursor: 'pointer', borderBottom: '2px solid transparent', color: '#6B7280' },
+    tab: { padding: '12px 4px', fontSize: '11.5px', fontWeight: 800, whiteSpace: 'nowrap', cursor: 'pointer', borderBottom: '2px solid transparent', color: '#6B7280', background: 'transparent', borderTop: 0, borderLeft: 0, borderRight: 0 },
     tabActive: { color: ACCENT, borderBottom: `2px solid ${ACCENT}` },
     emptyBox: { textAlign: 'center', color: '#9CA3AF', fontSize: 12, fontWeight: 600, fontStyle: 'italic', padding: '24px 0' },
-    sectionTitle: { fontSize: 12, fontWeight: 800, marginBottom: 10 },
-    commRow: { fontSize: '11.5px', fontWeight: 700, padding: '6px 0', borderTop: '1px solid #F1F3F5', display: 'flex', justifyContent: 'space-between' },
-    disBtn: { width: '100%', background: '#F9FAFB', border: '1px solid #E8EDF2', borderRadius: 7, padding: 9, fontSize: 11, fontWeight: 800, color: '#9CA3AF', cursor: 'not-allowed', marginTop: 10 },
-    pill: { padding: '6px 12px', borderRadius: 7, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap' },
-    toggle: { width: 38, height: 22, borderRadius: 11, background: '#D1D5DB', position: 'relative', flexShrink: 0, opacity: 0.4, cursor: 'not-allowed' },
-    toggleKnob: { width: 16, height: 16, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: 3 },
   }), []);
 
   if (loading) {
@@ -203,8 +214,6 @@ export default function ConsumerProfileView() {
     );
   }
 
-  const marketplaceActive = account.marketplaceAccess !== false;
-
   const kv = (label: string, value: React.ReactNode, mono = false, first = false) => (
     <div style={first ? undefined : S.kRow}>
       <div style={S.kLabel}>{label}</div>
@@ -214,218 +223,169 @@ export default function ConsumerProfileView() {
 
   return (
     <div style={{ color: '#111827' }}>
-      {/* Header */}
       <div style={S.headRow}>
         <div>
           <div style={S.h1}>Consumer Profile</div>
-          <div style={S.sub}>Client account registry standard logs</div>
+          <div style={S.sub}>Read-only 360° view of this shopper across Choosify</div>
         </div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-          {account?.uid ? <AdminMessageUserButton targetUserId={account.uid} /> : null}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }} data-testid="profile-header-actions">
+          {account.uid ? <AdminMessageUserButton targetUserId={account.uid} /> : null}
           {showLoginAsUser && (
             <button onClick={requestLoginAs} style={{ ...S.hBtn, borderColor: ACCENT, color: ACCENT, background: ACCENT_WASH }}>
               <LogIn size={13} /> Login As User
             </button>
           )}
+          <AdminEditUserButton state={edit} />
           <button onClick={() => navigate('/admin/consumers')} style={S.hBtn}>
             <ArrowLeft size={13} /> All Consumers
           </button>
         </div>
       </div>
 
-      <div style={S.grid} className="cpv-grid">
-        {/* ── Left column ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={S.card}>
-            <div style={S.cover}><span style={S.coverLabel}>CONSUMER</span></div>
-            <div style={{ padding: 16, position: 'relative' }}>
-              <Avatar src={account?.avatarUrl} name={name} size={56} style={S.avatar} />
-              <div style={S.pName}>{name}</div>
-              <div style={S.pEmail}>{email}</div>
+      <AdminEditModeStrip state={edit} />
 
+      <div style={S.grid} className="cpv-grid">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={S.card} data-testid="profile-identity">
+            <div style={S.cover} data-testid="consumer-cover"><span style={S.coverLabel}>CONSUMER</span></div>
+            <div style={{ padding: 16, position: 'relative' }}>
+              <Avatar src={account.avatarUrl} name={name} size={56} style={S.avatar} />
+              <div style={S.pName}>{name}</div>
+              <ProfileContactActions targetUserId={account.uid} targetName={name} email={email} phone={phone} />
               <div style={S.kv}>
                 {kv('ROLE', 'Consumer', false, true)}
                 {kv('CHOOSIFY USER ID', cfId, true)}
-                {kv('EMAIL ACCOUNT', email)}
                 {kv('JOINED', joined)}
-                {kv('PROFILE STATUS', account.profileStatus || '—')}
-                {kv('IDENTITY VERIFIED', typeof account.identityVerified === 'boolean' ? (account.identityVerified ? 'Yes' : 'No') : '—')}
-                {kv('GEOGRAPHY BASE', '—')}
-                {kv('PRIMARY PHONE', '—')}
-                {kv('CONNECTION STANDING', '—')}
-              </div>
-
-              <div style={S.btnRow}>
-                <button
-                  disabled
-                  title="No phone number on file"
-                  style={{ flex: 1, background: '#F3F4F6', color: '#9CA3AF', border: '1px solid #E8EDF2', borderRadius: 7, padding: '8px 0', fontSize: 11, fontWeight: 800, cursor: 'not-allowed', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}
-                >
-                  <Phone size={12} /> Call
-                </button>
-                <button
-                  onClick={() => setShowMessagePopup(true)}
-                  style={{ flex: 1, background: '#fff', border: '1px solid #E8EDF2', borderRadius: 7, padding: '8px 0', fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}
-                >
-                  <Mail size={12} /> Message
-                </button>
+                {kv('PROFILE STATUS', account.profileStatusPrimary || account.profileStatus || '—')}
               </div>
             </div>
           </div>
-          {/* RECENT EVENT TRAIL — reference renders it only when an event exists; none is available. */}
         </div>
 
-        {/* ── Right column ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
-          <input
-            disabled
-            placeholder="Search records — not available in this release"
-            style={{ width: '100%', boxSizing: 'border-box', height: 40, borderRadius: 8, border: '1px solid #E8EDF2', padding: '0 14px', fontSize: '12.5px', background: '#F9FAFB', color: '#9CA3AF', cursor: 'not-allowed' }}
-          />
-
           <div style={S.statGrid}>
-            <div style={S.statCard}>
-              <div style={S.statLabel}>TOTAL REVENUE LTV</div>
-              <div style={S.statEmpty}>No purchase analytics available</div>
-            </div>
-            <div style={S.statCard}>
-              <div style={S.statLabel}>SECURE WALLET STANDING</div>
-              <div style={S.statEmpty}>No wallet data available</div>
-            </div>
-            <div style={S.statCard}>
-              <div style={S.statLabel}>SUPPORT &amp; TICKETS LOG</div>
-              <div style={S.statEmpty}>No support ticket data available</div>
-            </div>
+            <div style={S.statCard}><div style={S.statLabel}>TOTAL ORDERS</div><div style={S.statValue}>{orders.length}</div><div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>{orders.filter((o) => o.status === 'completed').length} completed · {orders.filter((o) => o.status === 'cancelled').length} cancelled</div></div>
+            <div style={S.statCard}><div style={S.statLabel}>AVG ORDER VALUE</div><div style={S.statValue}>{paidOrders ? taka(spent / paidOrders) : '—'}</div><div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>Excludes cancelled orders</div></div>
+            <div style={S.statCard}><div style={S.statLabel}>SAVED ITEMS</div><div style={S.statValue}>{(signals?.savedProducts.length || 0) + (signals?.savedBrands.length || 0)}</div><div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>{signals?.savedProducts.length || 0} products · {signals?.savedBrands.length || 0} brands</div></div>
+            <div style={S.statCard}><div style={S.statLabel}>LIFETIME SPENT</div><div style={S.statValue}>{orders.length ? taka(spent) : '—'}</div><div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>Excludes cancelled orders</div></div>
+            <div style={S.statCard}><div style={S.statLabel}>REVIEWS POSTED</div><div style={S.statValue}>{reviews.length}</div></div>
+            <div style={S.statCard}><div style={S.statLabel}>FOLLOWED BRANDS</div><div style={S.statValue}>{followedIds.length}</div></div>
           </div>
 
-          <div style={S.tabBar}>
+          <div style={S.tabBar} role="tablist">
             {TABS.map((t) => (
-              <div
-                key={t.key}
-                onClick={() => setActiveTab(t.key)}
-                style={{ ...S.tab, ...(activeTab === t.key ? S.tabActive : {}) }}
-              >
+              <button key={t.key} type="button" role="tab" aria-selected={activeTab === t.key} data-tab={t.key} onClick={() => setActiveTab(t.key)} style={{ ...S.tab, ...(activeTab === t.key ? S.tabActive : {}) }}>
                 {t.icon} {t.label}
-              </div>
+              </button>
             ))}
           </div>
 
-          {/* ACCOUNT INFORMATION */}
           {activeTab === 'account' && (
             <>
               <div style={S.panel}>
-                <div style={S.panelTitle}>ASSOCIATED DELIVERY ADDRESSES</div>
-                <div style={S.panelSub}>Physical shipping address endpoints registered for cargo dispatch pipelines.</div>
-                <div style={S.emptyBox}>No delivery addresses on file.</div>
-              </div>
-
-              <div style={S.panel}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, gap: 12 }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 2 }}>MARKETPLACE ACCESS</div>
-                    <div style={{ fontSize: '10.5px', color: '#9CA3AF', fontWeight: 600 }}>
-                      Current account access for this consumer.
-                    </div>
-                  </div>
-                  {/* Read-only status. There is no consumer suspension operation, so no
-                      toggle is shown (the previous switch was a non-functional placeholder). */}
-                  <span style={{ fontSize: 11, fontWeight: 800, color: marketplaceActive ? '#16A34A' : '#9CA3AF' }}>
-                    {marketplaceActive ? 'ACTIVE' : 'INACTIVE'}
-                  </span>
-                </div>
-                <div style={{ fontSize: '11.5px', color: marketplaceActive ? '#16A34A' : '#6B7280', fontWeight: 700 }}>
-                  {marketplaceActive ? '✓ Account active — full marketplace access.' : 'Account access is limited.'}
+                <div style={S.panelTitle}>ACCOUNT</div>
+                <div style={S.panelSub}>From the auth service.</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 10 }}>
+                  {kv('EMAIL', email || '—', false, true)}
+                  {kv('PRIMARY PHONE', phone || 'Not added', false, true)}
+                  {kv('IDENTITY VERIFIED', typeof account.identityVerified === 'boolean' ? (account.identityVerified ? 'Yes' : 'No') : '—', false, true)}
+                  {kv('ACCOUNT ACCESS', account.marketplaceAccess === false ? 'Limited' : 'Active', false, true)}
                 </div>
               </div>
-
-              <div style={S.statGrid}>
-                <div style={S.panel}>
-                  <div style={S.sectionTitle}>COMMUNICATION &amp; SECURITY</div>
-                  <div style={S.commRow}><span>Email Notifications</span><span style={{ color: '#9CA3AF' }}>—</span></div>
-                  <div style={S.commRow}><span>SMS Alerts &amp; Broadcasts</span><span style={{ color: '#9CA3AF' }}>—</span></div>
-                  <div style={S.commRow}><span>Two-Factor Auth (2FA)</span><span style={{ color: '#9CA3AF' }}>—</span></div>
-                </div>
-                <div style={S.panel}>
-                  <div style={S.sectionTitle}>CONNECTED ACCOUNTS</div>
-                  <div style={S.emptyBox}>No connected accounts.</div>
-                </div>
-                <div style={S.panel}>
-                  <div style={S.sectionTitle}>ACTIVE SESSIONS SECURITY TRAIL</div>
-                  <div style={S.emptyBox}>No session data available.</div>
+              <div style={{ ...S.panel, background: '#F8FAFC' }}>
+                <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, lineHeight: 1.5 }}>
+                  Delivery addresses are saved on each order (see Order History), not on the account. Saved items, followed creators and
+                  search history are recorded from the storefront while the shopper is signed in; activity from before that, or while
+                  signed out, stays only in their browser.
+                  {edit.editing ? ' No consumer account fields can be edited by staff in this release.' : ''}
                 </div>
               </div>
+              <AdminEditHistory state={edit} />
             </>
           )}
 
-          {/* ORDER HISTORY */}
-          {activeTab === 'orders' && (
-            <>
-              <div style={{ display: 'flex', gap: 8, background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: 10, overflowX: 'auto' }}>
-                {ORDER_PILLS.map((label, i) => (
-                  <div key={label} style={{ ...S.pill, background: i === 0 ? ACCENT : 'transparent', color: i === 0 ? '#fff' : '#374151' }}>{label}</div>
-                ))}
-              </div>
-              <div style={{ ...S.card }}>
-                <div style={{ padding: '14px 16px', fontSize: 12, fontWeight: 800, borderBottom: '1px solid #F1F3F5' }}>ALL ASSOCIATED ORDERS FEED LOG</div>
-                <div style={S.emptyBox}>No orders placed yet.</div>
-              </div>
-            </>
-          )}
+          {activeTab === 'orders' &&
+            (sectionErrors.orders ? (
+              <div style={{ ...S.panel, color: '#DC2626', fontSize: 12, fontWeight: 700 }}>{sectionErrors.orders}</div>
+            ) : (
+              <OrderHistoryTable orders={orders} perspective="buyer" />
+            ))}
 
-          {/* REVIEWS & SCORE */}
-          {activeTab === 'reviews' && (
-            <div style={S.panel}>
-              <div style={S.panelTitle}>SUBMITTED PRODUCT &amp; BRAND REVIEWS</div>
-              <div style={S.panelSub}>Verified user rating allocations disbursed across the platform.</div>
-              <div style={S.emptyBox}>No reviews submitted yet.</div>
-            </div>
-          )}
+          {activeTab === 'reviews' && <ReviewsPanel direction="posted" reviews={reviews} error={sectionErrors.reviews} emptyText="This shopper has not posted any reviews." />}
 
-          {/* FOLLOWED BRANDS */}
-          {activeTab === 'brands' && (
-            <div style={S.panel}>
-              <div style={S.panelTitle}>FOLLOWED BRANDS</div>
-              <div style={S.panelSub}>Monitored merchant suppliers and channels followed by the consumer.</div>
-              <div style={S.emptyBox}>Not following any brands yet.</div>
-            </div>
-          )}
-
-          {/* SAVED ITEMS */}
           {activeTab === 'saved' && (
-            <div style={S.panel}>
-              <div style={S.panelTitle}>SAVED &amp; BOOKMARKED CATALOGS</div>
-              <div style={S.panelSub}>Consumer bookmarked items, promotions, and active discount campaigns.</div>
-              <div style={S.emptyBox}>No saved items yet.</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }} data-testid="consumer-saved">
+              {sectionErrors.signals ? <div style={{ ...S.panel, color: '#DC2626', fontSize: 12, fontWeight: 700 }}>{sectionErrors.signals}</div> : null}
+              <SignalList
+                title="SAVED PRODUCTS"
+                items={signals?.savedProducts || []}
+                empty="No saved products."
+                to={(i) => `/admin/products/${encodeURIComponent(i.id)}/preview`}
+                testId="consumer-saved-products"
+              />
+              <SignalList title="SAVED BRANDS" items={signals?.savedBrands || []} empty="No saved brands." testId="consumer-saved-brands" />
             </div>
           )}
 
-          {/* FOLLOWED CREATORS */}
-          {activeTab === 'creators' && (
-            <div style={S.panel}>
-              <div style={S.panelTitle}>FOLLOWED CREATORS</div>
-              <div style={S.panelSub}>Content advocates and creators followed by the consumer.</div>
-              <div style={S.emptyBox}>Not following any creators yet.</div>
-            </div>
-          )}
-
-          {/* SEARCH HISTORY */}
           {activeTab === 'search' && (
-            <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 12, fontWeight: 600, fontStyle: 'italic' }}>
-              No search history recorded yet.
+            <div style={S.panel} data-testid="consumer-search-history">
+              <div style={S.panelTitle}>SEARCH HISTORY</div>
+              <div style={S.panelSub}>Recent storefront searches while signed in (newest first, last 50).</div>
+              {sectionErrors.signals ? (
+                <div style={{ color: '#DC2626', fontSize: 12, fontWeight: 700 }}>{sectionErrors.signals}</div>
+              ) : !signals?.searches.length ? (
+                <div style={S.emptyBox}>No searches recorded.</div>
+              ) : (
+                signals.searches.map((s, i) => (
+                  <div key={`${s.q}-${i}`} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderTop: '1px solid #F1F3F5', fontSize: 11.5, fontWeight: 700 }}>
+                    <span>“{s.q}”</span>
+                    <span style={{ color: '#9CA3AF', fontWeight: 600 }}>{new Date(s.at).toLocaleString()}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {activeTab === 'brands' && (
+            <SignalList
+              title="FOLLOWED CREATORS"
+              items={signals?.followedCreators || []}
+              empty="Not following any creators."
+              to={(i) => `/admin/creator-review?creatorId=${encodeURIComponent(i.id)}`}
+              testId="consumer-followed-creators"
+            />
+          )}
+
+          {activeTab === 'brands' && (
+            <div style={S.panel} data-testid="consumer-followed-brands">
+              <div style={S.panelTitle}>FOLLOWED BRANDS</div>
+              <div style={S.panelSub}>From the brand-follow store.</div>
+              {sectionErrors.brands ? (
+                <div style={{ color: '#DC2626', fontSize: 12, fontWeight: 700 }}>{sectionErrors.brands}</div>
+              ) : followedIds.length === 0 ? (
+                <div style={S.emptyBox}>Not following any brands.</div>
+              ) : (
+                followed.map((b) => (
+                  <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '9px 0', borderTop: '1px solid #F1F3F5', fontSize: 11.5, fontWeight: 700 }}>
+                    <span>{b.name} <span style={{ color: '#9CA3AF', fontWeight: 600 }}>· {b.category}</span></span>
+                    {b.sellerId ? (
+                      <Link to={`/admin/seller-profile?sellerId=${encodeURIComponent(b.sellerId)}`} style={{ color: ACCENT, textDecoration: 'none', fontWeight: 800 }}>Seller profile →</Link>
+                    ) : (
+                      <span style={{ color: '#9CA3AF' }}>Community brand</span>
+                    )}
+                  </div>
+                ))
+              )}
+              {followedIds.length > followed.length ? (
+                <div style={{ fontSize: 10.5, color: '#9CA3AF', fontWeight: 600, marginTop: 6 }}>{followedIds.length - followed.length} followed brand(s) no longer exist in the catalog.</div>
+              ) : null}
             </div>
           )}
         </div>
       </div>
 
       <style>{`@media (max-width: 860px){ .cpv-grid{ grid-template-columns: minmax(0,1fr) !important; } }`}</style>
-
-      {showMessagePopup && account?.uid ? (
-        <ProfileMessagePopup
-          targetUserId={account.uid}
-          targetName={account.displayName || account.email}
-          onClose={() => setShowMessagePopup(false)}
-        />
-      ) : null}
+      {edit.dialog}
     </div>
   );
 }

@@ -79,17 +79,16 @@ export async function ensureCreatorWorkspace(
   }
 
   const name = (hints?.displayName || 'Creator').trim();
-  const handle = '@' + name.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 24);
   const created = normalizeCreatorInput({
     name,
-    handle,
+    handle: '',
     avatar: '',
     bio: '',
     score: 0,
-    bestFor: 'General',
+    bestFor: '',
     bestForTags: [],
-    platforms: ['YouTube'],
-    followers: { YouTube: '0' },
+    platforms: [],
+    followers: {},
     email: hints?.email || '',
     userId,
     verifiedStatus: false,

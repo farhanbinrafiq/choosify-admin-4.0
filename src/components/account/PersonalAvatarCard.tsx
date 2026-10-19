@@ -17,7 +17,10 @@ import type { ProfileImageAdjustResult } from '../media/ProfileImageAdjustModal'
  * Shares the same adjustment mechanism as UserProfileDropdown's avatar menu
  * (ProfileImageAdjustModal via AvatarCropModal) rather than a second cropper.
  */
-export function PersonalAvatarCard() {
+export function PersonalAvatarCard({ variant = 'card' }: {
+  /** 'card' = standalone settings card; 'header' = large photo + compact controls at the top of a profile card. */
+  variant?: 'card' | 'header';
+} = {}) {
   const { profile, updateAvatar } = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,11 +28,9 @@ export function PersonalAvatarCard() {
   const [cropSrc, setCropSrc] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  if (!profile) return null;
-
-  const avatarUrl = getAvatarUrl(profile);
-  const initials = getUserInitials(profile.displayName, profile.email);
-  const hasRealPhoto = Boolean(profile.avatar?.trim());
+  const avatarUrl = profile ? getAvatarUrl(profile) : '';
+  const initials = profile ? getUserInitials(profile.displayName, profile.email) : '';
+  const hasRealPhoto = Boolean(profile?.avatar?.trim());
 
   const handleFile = async (file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -68,9 +69,9 @@ export function PersonalAvatarCard() {
 
   const openCropEditor = useCallback(() => {
     if (!hasRealPhoto) return;
-    setCropSrc(profile.avatarOriginal || avatarUrl);
+    setCropSrc(profile?.avatarOriginal || avatarUrl);
     setCropOpen(true);
-  }, [avatarUrl, hasRealPhoto, profile.avatarOriginal]);
+  }, [avatarUrl, hasRealPhoto, profile?.avatarOriginal]);
 
   const onCropSave = useCallback(
     async (result: ProfileImageAdjustResult) => {
@@ -96,6 +97,74 @@ export function PersonalAvatarCard() {
     setCropSrc('');
   }, []);
 
+  if (!profile) return null;
+
+  const fileInput = (
+    <input
+      ref={fileInputRef}
+      type="file"
+      accept="image/png,image/jpeg,image/webp,image/gif"
+      className="hidden"
+      onChange={(event) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (file) void handleFile(file);
+      }}
+    />
+  );
+  const cropModal = (
+    <AvatarCropModal
+      open={cropOpen}
+      imageSrc={cropSrc}
+      initialCrop={cropSrc && cropSrc === profile.avatarOriginal ? profile.avatarCrop : null}
+      onCancel={onCropCancel}
+      onSave={onCropSave}
+    />
+  );
+
+  if (variant === 'header') {
+    const mini =
+      'px-2 py-1 bg-white border border-app-border hover:bg-slate-50 text-app-text-primary rounded-md font-bold cursor-pointer transition-colors text-[10.5px] disabled:opacity-60 inline-flex items-center gap-1';
+    return (
+      <div className="font-sans" data-testid="profile-photo-header">
+        <div className="relative w-[72px] h-[72px] -mt-11 rounded-full overflow-hidden border-[3px] border-white shadow bg-slate-900 flex items-center justify-center text-white text-sm font-black">
+          <span aria-hidden>{initials}</span>
+          <img
+            src={avatarUrl}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover"
+            onError={(event) => {
+              event.currentTarget.style.display = 'none';
+            }}
+          />
+          {busy ? (
+            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+              <Loader2 className="w-4 h-4 animate-spin text-white" aria-hidden />
+            </div>
+          ) : null}
+        </div>
+        {fileInput}
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          <button type="button" disabled={busy} onClick={() => fileInputRef.current?.click()} className={mini}>
+            <Camera className="w-3 h-3" aria-hidden /> {hasRealPhoto ? 'Change' : 'Upload photo'}
+          </button>
+          {hasRealPhoto && (
+            <button type="button" disabled={busy} onClick={openCropEditor} className={mini}>
+              <Pencil className="w-3 h-3" aria-hidden /> Adjust
+            </button>
+          )}
+          {hasRealPhoto && (
+            <button type="button" disabled={busy} onClick={() => void handleRemove()} className={`${mini} hover:text-rose-600`} aria-label="Remove profile photo">
+              <Trash2 className="w-3 h-3" aria-hidden /> Remove
+            </button>
+          )}
+        </div>
+        {error && <div className="text-[10px] text-rose-500 font-semibold mt-1">{error}</div>}
+        {cropModal}
+      </div>
+    );
+  }
+
   return (
     <div className="p-3.5 bg-white/5 border border-app-border rounded space-y-3 text-xs font-sans">
       <div>
@@ -104,7 +173,7 @@ export function PersonalAvatarCard() {
           Shown on your own account only — separate from your business/brand logo.
         </span>
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="relative w-12 h-12 rounded-full shrink-0 overflow-hidden border border-app-border bg-slate-900 flex items-center justify-center text-white text-[11px] font-black">
           <span aria-hidden>{initials}</span>
           <img
@@ -116,17 +185,7 @@ export function PersonalAvatarCard() {
             }}
           />
         </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/png,image/jpeg,image/webp,image/gif"
-          className="hidden"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = '';
-            if (file) void handleFile(file);
-          }}
-        />
+        {fileInput}
         <button
           type="button"
           disabled={busy}
@@ -160,13 +219,7 @@ export function PersonalAvatarCard() {
       {error && <div className="text-[10px] text-rose-400 font-semibold">{error}</div>}
       <div className="text-[9.5px] text-app-text-secondary">JPG, PNG, WebP, or GIF. Up to 2.5 MB.</div>
 
-      <AvatarCropModal
-        open={cropOpen}
-        imageSrc={cropSrc}
-        initialCrop={cropSrc && cropSrc === profile.avatarOriginal ? profile.avatarCrop : null}
-        onCancel={onCropCancel}
-        onSave={onCropSave}
-      />
+      {cropModal}
     </div>
   );
 }

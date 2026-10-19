@@ -100,13 +100,11 @@ async function openBrandIdentity(page: Page, brandId: string, brandName: string)
   return clicked && (await waitFor(page, 'pi-section'));
 }
 
-/** Open Creator Studio, switch the header View/Edit toggle to Edit, then the inline Identity editor. */
+/** Open Creator Studio (always in Studio mode — no View/Edit toggle), then the inline Identity editor. */
 async function openCreatorIdentity(page: Page, creatorId: string) {
   await page.goto(`${BASE}/admin/creator-studio/${encodeURIComponent(creatorId)}/edit`, { waitUntil: 'domcontentloaded', timeout: 60000 });
-  const editToggle = page.getByRole('button', { name: 'Edit', exact: true }).first();
-  await editToggle.waitFor({ timeout: 45000 });
-  await editToggle.click();
-  const pill = page.getByRole('button', { name: 'Identity', exact: true }).first();
+  // Shared Studio pill: visible "Identity", accessible name "Identity — Profile Identity" (25d949a).
+  const pill = page.getByRole('button', { name: /Profile Identity$/ }).first();
   await pill.waitFor({ timeout: 45000 });
   await pill.click();
   return waitFor(page, 'pi-section');

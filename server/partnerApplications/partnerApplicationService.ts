@@ -90,17 +90,16 @@ async function createCreatorDraft(params: {
   category: string;
 }): Promise<string> {
   const name = params.displayName.trim() || 'Creator';
-  const handle = '@' + name.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 24);
   const created = normalizeCreatorInput({
     name,
-    handle,
+    handle: '',
     avatar: '',
     bio: '',
     score: 0,
-    bestFor: params.category || 'General',
+    bestFor: params.category || '',
     bestForTags: [],
-    platforms: ['YouTube'],
-    followers: { YouTube: '0' },
+    platforms: [],
+    followers: {},
     email: params.email,
     userId: params.userId,
     verifiedStatus: false,

@@ -6,9 +6,10 @@ import type {
 import type { ProfileImageCropParams } from '../../../shared/media/profileImageCrop';
 import { isLocalPreviewUrl } from '../../lib/localPreview';
 
-/** A stored image URL, or undefined (left unchanged by PATCH) for empty / never-uploaded local previews. */
+/** A stored image URL; '' for a removed image (an explicit PATCH clear); undefined (left
+ *  unchanged by PATCH) only for a never-uploaded local preview. */
 const storableImage = (url: string | undefined): string | undefined =>
-  url && !isLocalPreviewUrl(url) ? url : undefined;
+  !url ? '' : isLocalPreviewUrl(url) ? undefined : url;
 
 export type CreatorEditorStatus = 'DRAFT' | 'LIVE' | 'ARCHIVED';
 
@@ -20,8 +21,10 @@ export type CreatorEditorStatus = 'DRAFT' | 'LIVE' | 'ARCHIVED';
  */
 export type CreatorEditSection =
   | 'cover'
+  | 'avatar'
   | 'identity'
   | 'social'
+  | 'expertise'
   | 'overview'
   | 'contact'
   | 'partnerships'
@@ -60,6 +63,10 @@ export interface CreatorEditorModel {
   phone: string;
   responseTime: string;
   preferredContact: string;
+  /** Creator-chosen extra contact methods (see CatalogCreator.customContacts). */
+  customContacts: Array<{ label: string; value: string }>;
+  /** Creator Overview sections after the bio (see CatalogCreator.overviewSections). */
+  overviewSections: Array<{ id: string; title: string; body: string }>;
   brandPartners: CreatorBrandPartner[];
   collabTypes: string[];
   socialLinks: {
@@ -100,11 +107,22 @@ export function normalizeTrustScore(score: number): number {
   return Math.round((score / 20) * 10) / 10;
 }
 
+/** "12.5K" / "1,200" / 300 → a number (same parsing as the storefront's listing ranking). */
+function parseCountLabel(raw: unknown): number {
+  if (typeof raw === 'number') return Number.isFinite(raw) && raw > 0 ? raw : 0;
+  const m = String(raw ?? '').replace(/,/g, '').trim().toUpperCase().match(/([\d.]+)\s*([KMB])?/);
+  if (!m) return 0;
+  const n = parseFloat(m[1]);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(n * (m[2] === 'K' ? 1e3 : m[2] === 'M' ? 1e6 : m[2] === 'B' ? 1e9 : 1));
+}
+
+/** Total followers across platforms, compact ("12.5K"), or '' when none are recorded. */
 function followerTotal(followers: CatalogCreator['followers'] | undefined): string {
   if (!followers || typeof followers !== 'object') return '';
-  const vals = Object.values(followers).filter(Boolean);
-  if (!vals.length) return '';
-  return String(vals[0]);
+  const total = Object.values(followers).reduce((sum, v) => sum + parseCountLabel(v), 0);
+  if (total <= 0) return '';
+  return new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(total);
 }
 
 export function createBlankCreatorModel(id = 'new'): CreatorEditorModel {
@@ -125,6 +143,8 @@ export function createBlankCreatorModel(id = 'new'): CreatorEditorModel {
     phone: '',
     responseTime: '',
     preferredContact: '',
+    customContacts: [],
+    overviewSections: [],
     brandPartners: [],
     collabTypes: [],
     socialLinks: {},
@@ -162,6 +182,12 @@ export function mapCatalogCreatorToEditor(creator: CatalogCreator): CreatorEdito
     phone: creator.phone || '',
     responseTime: creator.responseTime || '',
     preferredContact: creator.preferredContact || '',
+    customContacts: Array.isArray(creator.customContacts)
+      ? creator.customContacts.map((c) => ({ label: c.label, value: c.value }))
+      : [],
+    overviewSections: Array.isArray(creator.overviewSections)
+      ? creator.overviewSections.map((o) => ({ id: o.id, title: o.title, body: o.body }))
+      : [],
     brandPartners: Array.isArray(creator.brandPartners)
       ? creator.brandPartners.map((b) => ({
           name: b.name,
@@ -200,18 +226,26 @@ export function editorModelToCreatorPayload(model: CreatorEditorModel): Partial<
     handle: model.handle,
     avatar: storableImage(model.avatar),
     avatarOriginal: storableImage(model.avatarOriginal),
-    avatarCrop: model.avatarCrop,
+    // `null` clears the stored framing (avatar removed, or replaced without adjusting).
+    avatarCrop: (model.avatar ? model.avatarCrop ?? null : null) as CatalogCreator['avatarCrop'],
     coverImage: storableImage(model.coverImage),
-    role: model.title || undefined,
-    location: model.location || undefined,
-    bio: model.bio || undefined,
-    bestFor: model.bestFor || model.bestForTags[0] || undefined,
+    // Empty strings (not undefined) so clearing a field persists — see changedFields.
+    role: model.title.trim(),
+    location: model.location.trim(),
+    bio: model.bio,
+    bestFor: (model.bestFor || model.bestForTags[0] || '').trim(),
     bestForTags: model.bestForTags,
     platforms: model.platforms,
-    email: model.email || undefined,
-    phone: model.phone || undefined,
-    responseTime: model.responseTime || undefined,
-    preferredContact: model.preferredContact || undefined,
+    email: model.email.trim(),
+    phone: model.phone.trim(),
+    responseTime: model.responseTime.trim(),
+    preferredContact: model.preferredContact.trim(),
+    customContacts: (model.customContacts ?? [])
+      .map((c) => ({ label: (c.label || '').trim(), value: (c.value || '').trim() }))
+      .filter((c) => c.label || c.value),
+    overviewSections: (model.overviewSections ?? [])
+      .map((o) => ({ id: o.id, title: (o.title || '').trim(), body: (o.body || '').trim() }))
+      .filter((o) => o.title || o.body),
     brandPartners: model.brandPartners.map((b) => ({
       name: b.name,
       ...(b.color ? { color: b.color } : {}),
@@ -220,14 +254,14 @@ export function editorModelToCreatorPayload(model: CreatorEditorModel): Partial<
     })),
     collabTypes: model.collabTypes,
     socialLinks: {
-      facebook: model.socialLinks.facebook || undefined,
-      instagram: model.socialLinks.instagram || undefined,
-      youtube: model.socialLinks.youtube || undefined,
-      linkedin: model.socialLinks.linkedin || undefined,
-      tiktok: model.socialLinks.tiktok || undefined,
+      facebook: (model.socialLinks.facebook || '').trim(),
+      instagram: (model.socialLinks.instagram || '').trim(),
+      youtube: (model.socialLinks.youtube || '').trim(),
+      linkedin: (model.socialLinks.linkedin || '').trim(),
+      tiktok: (model.socialLinks.tiktok || '').trim(),
       custom: (model.socialLinks.custom ?? [])
         .map((c) => ({ label: (c.label || '').trim(), url: (c.url || '').trim() }))
-        .filter((c) => c.label && c.url),
+        .filter((c) => c.label || c.url),
     },
     featuredContent: model.featuredContent
       .map((f) => ({

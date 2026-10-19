@@ -15,6 +15,7 @@ import {
   revokeAllRefreshTokensForUser,
   revokeOtherRefreshTokensForUser,
   revokeRefreshToken,
+  hashRefreshToken,
   rotateRefreshToken,
   setRefreshTokenCookie,
   signAccessToken,
@@ -79,7 +80,7 @@ import { RegisterBodySchema } from './validation/auth/registerSchema';
 import { UpgradeToSellerBodySchema } from './validation/auth/upgradeToSellerSchema';
 import { loadAdminUserByEmail } from './operations/operationsDb';
 import { db } from './db/client';
-import { sellerProfiles, userIdentities, users } from './db/schema';
+import { refreshTokens, sellerProfiles, userIdentities, users } from './db/schema';
 import { normalizePrimaryPhone } from './lib/phone';
 import { hasRole } from './permissions/authorization';
 import { ROLES, toUserRole, type UserRole } from './permissions/roles';
@@ -88,7 +89,10 @@ import {
   publicLifecycleFields,
   resolvePartnerLifecycle,
 } from './partnerApplications/partnerLifecycle';
+import { partnerApplicationStore } from './partnerApplications/partnerApplicationStore';
+import { recordAccountActivity } from './accountActivity/accountActivity';
 import { accountStatusPayload } from './profileStatusFacts';
+import { cropFrameFields, type ProfileImageCropParams } from '../shared/media/profileImageCrop';
 
 export const authRouter = Router();
 
@@ -169,6 +173,7 @@ authRouter.post('/auth/login', validate({ body: LoginBodySchema }), async (req, 
         message: 'Incorrect password',
         metadata: { reason: 'wrong_password', userId: user.id },
       });
+      recordAccountActivity(req, { userId: user.id, type: 'sign_in_failed', category: 'sign_in', summary: 'Failed sign-in — wrong password', success: false });
       res.status(401).json({ error: 'Invalid email or password' });
       return;
     }
@@ -185,6 +190,7 @@ authRouter.post('/auth/login', validate({ body: LoginBodySchema }), async (req, 
       userId: user.id,
       metadata: { mode: 'password', role: user.role },
     });
+    recordAccountActivity(req, { userId: user.id, type: 'sign_in', category: 'sign_in', summary: 'Signed in with email and password' });
     operationalEvents.authenticationSuccess({
       requestId: req.requestId,
       path: req.originalUrl,
@@ -370,6 +376,7 @@ async function finalizeLoginSession(
   setRefreshTokenCookie(res, refreshToken);
 
   recordLogin(req, { userId: user.id, metadata: { mode, role: user.role } });
+  recordAccountActivity(req, { userId: user.id, type: 'sign_in', category: 'sign_in', summary: `Signed in with ${mode === 'google' ? 'Google' : mode === 'facebook' ? 'Facebook' : mode}` });
   operationalEvents.authenticationSuccess({
     requestId: req.requestId,
     path: req.originalUrl,
@@ -543,6 +550,7 @@ authRouter.post('/auth/verify-email', async (req, res) => {
     }
     await db.update(users).set({ emailVerified: true, updatedAt: new Date() }).where(eq(users.id, userId));
     Logger.audit('auth.email_verified', { userId, ip: req.ip });
+    recordAccountActivity(req, { userId, type: 'email_verified', category: 'security', summary: 'Email address verified' });
     res.json({ success: true });
   } catch (error) {
     Logger.warn('verify-email failed', { requestId: req.requestId, error: error instanceof Error ? error.message : String(error) });
@@ -642,7 +650,14 @@ authRouter.post('/auth/logout', async (req, res) => {
   try {
     const raw = readRefreshTokenCookie(req.headers.cookie);
     if (raw) {
+      const owner = await db
+        .select({ userId: refreshTokens.userId })
+        .from(refreshTokens)
+        .where(eq(refreshTokens.tokenHash, hashRefreshToken(raw)))
+        .limit(1)
+        .catch(() => []);
       await revokeRefreshToken(raw);
+      if (owner[0]?.userId) recordAccountActivity(req, { userId: owner[0].userId, type: 'sign_out', category: 'sign_in', summary: 'Signed out' });
     }
     clearRefreshTokenCookie(res);
     operationalEvents.logout({
@@ -895,6 +910,14 @@ authRouter.post('/auth/impersonate/start', ...requireAuth, async (req, res) => {
     reason,
   });
 
+  recordAccountActivity(req, {
+    userId: target.id,
+    type: 'login_as_started',
+    category: 'admin',
+    actor: 'staff',
+    summary: 'Choosify staff signed in to this account (Login As) for support',
+    staffNote: reason ? `Reason: ${reason}` : undefined,
+  });
   Logger.audit('ImpersonationStarted', {
     impersonationSessionId,
     adminUserId: actorUserId,
@@ -949,6 +972,14 @@ authRouter.post('/auth/impersonate/exit', ...requireAuth, async (req, res) => {
 
   const ended = endImpersonationSession(sessionId);
   const endedAt = ended?.endedAt || new Date().toISOString();
+  recordAccountActivity(req, {
+    userId: sess.targetUserId,
+    type: 'login_as_ended',
+    category: 'admin',
+    actor: 'staff',
+    summary: 'Choosify staff left this account (Login As ended)',
+    staffActorId: sess.adminUserId,
+  });
   Logger.audit('ImpersonationEnded', {
     impersonationSessionId: sessionId,
     adminUserId: sess.adminUserId,
@@ -1154,7 +1185,7 @@ authRouter.patch('/auth/profile', ...requireAuth, async (req, res) => {
     : undefined;
   const hasAvatarCrop = Object.prototype.hasOwnProperty.call(req.body || {}, 'avatarCrop');
   const avatarCropRaw = hasAvatarCrop ? req.body?.avatarCrop : undefined;
-  let avatarCrop: { scale: number; x: number; y: number; naturalW: number; naturalH: number } | null | undefined;
+  let avatarCrop: ProfileImageCropParams | null | undefined;
   if (hasAvatarCrop) {
     if (avatarCropRaw === null) {
       avatarCrop = null;
@@ -1171,6 +1202,7 @@ authRouter.patch('/auth/profile', ...requireAuth, async (req, res) => {
         y: avatarCropRaw.y,
         naturalW: avatarCropRaw.naturalW,
         naturalH: avatarCropRaw.naturalH,
+        ...cropFrameFields(avatarCropRaw),
       };
     } else {
       res.status(400).json({ success: false, error: 'avatarCrop must be null or { scale, x, y, naturalW, naturalH }' });
@@ -1298,6 +1330,7 @@ authRouter.patch('/auth/profile', ...requireAuth, async (req, res) => {
       });
 
       if (isAdmin && adminOverride && locked) {
+        recordAccountActivity(req, { userId: targetUserId, type: 'name_changed', category: 'account', actor: 'staff', summary: `Display name changed by Choosify staff to “${displayName}”` });
         Logger.audit('auth.profile_name_override', {
           actorId,
           targetUserId,
@@ -1305,6 +1338,7 @@ authRouter.patch('/auth/profile', ...requireAuth, async (req, res) => {
           newName: displayName,
         });
       } else {
+        recordAccountActivity(req, { userId: targetUserId, type: 'name_changed', category: 'account', actor: actorId === targetUserId ? 'self' : 'staff', summary: `Display name changed to “${displayName}”` });
         Logger.audit('auth.profile_name_change', {
           actorId,
           targetUserId,
@@ -1319,6 +1353,13 @@ authRouter.patch('/auth/profile', ...requireAuth, async (req, res) => {
       if (avatarOriginalUrl !== undefined) avatarPatch.avatarOriginalUrl = avatarOriginalUrl || null;
       if (avatarCrop !== undefined) avatarPatch.avatarCrop = avatarCrop;
       await db.update(users).set(avatarPatch).where(eq(users.id, targetUserId));
+      recordAccountActivity(req, {
+        userId: targetUserId,
+        type: 'photo_changed',
+        category: 'account',
+        actor: actorId === targetUserId ? 'self' : 'staff',
+        summary: avatarUrl === null || avatarUrl === '' ? 'Profile photo removed' : 'Profile photo updated',
+      });
       Logger.audit('auth.profile_avatar_update', {
         actorId,
         targetUserId,
@@ -1378,6 +1419,13 @@ authRouter.patch('/auth/profile', ...requireAuth, async (req, res) => {
         website: nextExtras?.website ?? extras?.website,
         bio: nextExtras?.bio ?? extras?.bio,
         phone: phone === null ? undefined : phone,
+      });
+      recordAccountActivity(req, {
+        userId: targetUserId,
+        type: 'phone_changed',
+        category: 'account',
+        actor: isAdmin && !isSelf ? 'staff' : 'self',
+        summary: phone === null ? 'Phone number removed' : 'Phone number updated',
       });
       Logger.audit('auth.profile_phone_update', {
         actorId,
@@ -1455,6 +1503,7 @@ authRouter.post('/auth/password-reset-request', async (req, res) => {
     if (user) {
       const { rawToken } = await issueAuthToken(user.id, 'password_reset');
 
+      recordAccountActivity(req, { userId: user.id, type: 'password_reset_requested', category: 'security', summary: 'Password reset link requested' });
       Logger.audit('auth.password_reset_requested', {
         userId: user.id,
         email: user.email,
@@ -1519,6 +1568,7 @@ authRouter.post('/auth/reset-password', async (req, res) => {
 
     const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     Logger.audit('auth.password_reset_completed', { userId, ip: req.ip });
+    recordAccountActivity(req, { userId, type: 'password_reset', category: 'security', summary: 'Password reset with an emailed link — all other sessions signed out' });
     if (rows[0]) {
       await sendPasswordChangedEmail(rows[0].email, { surface: resetSurfaceForRole(rows[0].role) });
     }
@@ -1564,6 +1614,7 @@ authRouter.post('/auth/sessions/revoke-others', ...requireAuth, async (req, res)
       return;
     }
     Logger.audit('auth.sessions.revoke_others', { userId, requestId: req.requestId, revoked: result.revoked });
+    recordAccountActivity(req, { userId, type: 'sessions_revoked', category: 'security', summary: `Signed out of all other devices (${result.revoked} session${result.revoked === 1 ? '' : 's'})` });
     res.json({ success: true, revoked: result.revoked });
   } catch (error) {
     Logger.warn('revoke other sessions failed', {
@@ -1613,6 +1664,7 @@ authRouter.post('/auth/change-password', ...requireAuth, async (req, res) => {
     const currentPasswordValid = await verifyPassword(user.passwordHash, currentPassword);
     if (!currentPasswordValid) {
       recordFailedAuthAttempt(req.ip, req.originalUrl);
+      recordAccountActivity(req, { userId, type: 'password_change_failed', category: 'security', summary: 'Password change failed — current password was wrong', success: false });
       res.status(401).json({ success: false, error: 'Current password is incorrect' });
       return;
     }
@@ -1635,6 +1687,7 @@ authRouter.post('/auth/change-password', ...requireAuth, async (req, res) => {
       bio: extras?.bio,
     });
 
+    recordAccountActivity(req, { userId, type: 'password_changed', category: 'security', summary: wasForced ? 'Password changed (required after a staff reset)' : 'Password changed' });
     Logger.audit(wasForced ? 'auth.forced_password_changed' : 'auth.password_changed', {
       userId,
       email: user.email,
@@ -1847,6 +1900,7 @@ authRouter.post('/auth/local-password/set', ...requireAuth, async (req, res) => 
     const accessToken = signAccessToken({ id: user.id, email: user.email, emailVerified: user.emailVerified });
 
     Logger.audit('auth.local_password_added', { userId: user.id, ip: req.ip });
+    recordAccountActivity(req, { userId: user.id, type: 'password_set', category: 'security', summary: 'Password added to the account' });
     publishEvent({
       eventName: 'LocalPasswordAdded',
       domain: 'Identity',
@@ -1915,6 +1969,7 @@ authRouter.post('/auth/admin/password-reset-assist', ...requireAdmin, async (req
         targetUserId: userId,
         mode: 'link',
       });
+      recordAccountActivity(req, { userId, type: 'staff_password_reset', category: 'admin', actor: 'staff', summary: 'Choosify staff issued a password reset link — a new password is required at next sign-in' });
       res.json({
         success: true,
         data: {
@@ -1946,6 +2001,7 @@ authRouter.post('/auth/admin/password-reset-assist', ...requireAdmin, async (req
       targetUserId: userId,
       mode: 'temp',
     });
+    recordAccountActivity(req, { userId, type: 'staff_password_reset', category: 'admin', actor: 'staff', summary: 'Choosify staff set a temporary password — a new password is required at next sign-in' });
 
     res.json({
       success: true,
@@ -2082,6 +2138,10 @@ authRouter.get('/auth/users/:userId', ...requireAdmin, async (req, res) => {
       role: user.role,
       email: user.email,
     });
+    const accountPhone = getUserProfileExtras(user.id)?.phone || '';
+    const applicationPhone = accountPhone
+      ? ''
+      : (await partnerApplicationStore.findForActor({ userId: user.id, email: user.email }).catch(() => null))?.phone?.trim() || '';
     res.json({
       success: true,
       data: {
@@ -2092,6 +2152,11 @@ authRouter.get('/auth/users/:userId', ...requireAdmin, async (req, res) => {
         choosifyUserId: user.choosifyUserId,
         avatarUrl: user.avatarUrl,
         createdAt: user.createdAt,
+        // Primary account phone (admin-only endpoint) — so staff can call the user.
+        // Falls back to the phone the user gave on their partner application
+        // (creator approval does not copy it anywhere else).
+        phone: accountPhone || applicationPhone || null,
+        phoneSource: accountPhone ? 'account' : applicationPhone ? 'partner_application' : null,
         ...status,
       },
     });

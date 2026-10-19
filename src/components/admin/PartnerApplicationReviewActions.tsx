@@ -73,7 +73,7 @@ export function PartnerApprovedNotice({
   const userId = application.provisionedUserId || application.existingUserId || '';
   const grantHref =
     application.applicantType === 'creator'
-      ? `/admin/creators/${encodeURIComponent(userId)}/marketplace-access`
+      ? `/admin/creator-review?creatorId=${encodeURIComponent(userId)}&tab=account`
       : `/admin/seller-profile?sellerId=${encodeURIComponent(userId)}`;
   return (
     <div className="aws-page-card p-4 flex flex-wrap items-center justify-between gap-3 border border-emerald-200 bg-emerald-50">

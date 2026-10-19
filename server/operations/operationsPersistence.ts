@@ -30,6 +30,13 @@ export function buildOperationsSnapshot(): OperationsSnapshot {
     verifications: operationsStore.listVerifications(),
     warrantyClaims: operationsStore.listWarrantyClaims(),
     disputes: operationsStore.listDisputes(),
+    adminEditSessions: operationsStore.listAdminEditSessions(),
+    marketplaceAccessEvents: operationsStore.listMarketplaceAccessEvents(),
+    payoutProfiles: operationsStore.listPayoutProfiles(),
+    payoutReminders: operationsStore.listPayoutReminders(),
+    shopperSignals: operationsStore.listShopperSignals(),
+    accountActivity: operationsStore.listAccountActivity(),
+    verificationDocRequests: operationsStore.listVerificationDocRequests(),
   };
 }
 

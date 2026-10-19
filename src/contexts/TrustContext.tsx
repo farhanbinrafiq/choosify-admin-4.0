@@ -85,12 +85,7 @@ export interface TrustAlert {
 // PHASE 3: BRAND VERIFICATION SYSTEM ENTITIES
 // ============================================================================
 
-export type DocumentType = 
-  | 'Trade License' 
-  | 'Business Registration' 
-  | 'Tax Certificate' 
-  | 'Brand Ownership Proof' 
-  | 'Identity Verification';
+export type DocumentType = import('../../shared/verification/verificationDocuments').VerificationDocumentType;
 
 export interface VerificationDocument {
   id: string;
@@ -466,7 +461,7 @@ export const TrustProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       .listVerifications()
       .then((rows) => {
         setVerificationRequests(
-          (rows as VerificationRequest[]).map((row) => ({
+          (rows as unknown as VerificationRequest[]).map((row) => ({
             ...row,
             entityType: row.entityType || 'brand',
             entityId: row.entityId || row.brand_id,

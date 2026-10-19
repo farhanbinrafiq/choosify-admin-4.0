@@ -175,11 +175,6 @@ export default function BrandVerification() {
   const [reviewActionLoading, setReviewActionLoading] = useState<'approved' | 'rejected' | 'request_info' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // Simulate a corporate brand claim draft
-  const [newBrandName, setNewBrandName] = useState('');
-  const [newBrandLogo, setNewBrandLogo] = useState('https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=100');
-  const [createLoading, setCreateLoading] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
 
   // Request trace mapping
   const selectedRequest = useMemo(() => {
@@ -211,38 +206,6 @@ export default function BrandVerification() {
       case 'approved': return <Check className="w-3.5 h-3.5 text-green-400" />;
       case 'rejected': return <X className="w-3.5 h-3.5 text-red-400" />;
       default: return <Clock className="w-3.5 h-3.5 text-yellow-500 animate-pulse" />;
-    }
-  };
-
-  // Launch simulated brand registration draft — real POST /operations/verifications
-  const triggerBrandCreation = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newBrandName.trim()) return;
-    const fakeBrandId = 'brand_' + newBrandName.toLowerCase().replace(/\s+/g, '_');
-    setCreateLoading(true);
-    setCreateError(null);
-    try {
-      const saved = await operationsApi.createVerification({
-        entityType: 'brand',
-        entityId: fakeBrandId,
-        entityName: newBrandName.trim(),
-        brand_id: fakeBrandId,
-        brand_name: newBrandName.trim(),
-        logo_url: newBrandLogo,
-        status: 'Draft',
-        documents: [
-          { id: `doc_u_${Date.now()}_1`, type: 'Trade License', name: 'Trade_License_Upload.pdf', doc_url: newBrandLogo || '#', status: 'pending' },
-          { id: `doc_u_${Date.now()}_2`, type: 'Business Registration', name: 'Registration_Cert.pdf', doc_url: newBrandLogo || '#', status: 'pending' },
-        ],
-      });
-      const created = applyUpdatedRow(saved);
-      setSelectedRequestId(created.id);
-      setNewBrandName('');
-      setActiveQueueTab('Draft');
-    } catch (err) {
-      setCreateError(err instanceof Error ? err.message : 'Failed to create draft verification.');
-    } finally {
-      setCreateLoading(false);
     }
   };
 
@@ -456,52 +419,11 @@ export default function BrandVerification() {
             </div>
           </div>
 
-          {/* SIMULATE CORPORATE APPLICATION INITIATION */}
-          <div className="bg-app-card border border-app-border rounded-[4px] p-5 shadow-2xl space-y-4">
-            <div className="border-b border-app-border pb-2">
-              <h3 className="text-xs font-bold text-app-text-primary uppercase tracking-wider flex items-center gap-1.5">
-                <FileSignature className="w-4 h-4 text-emerald-400" /> Initiate Brand Prospect Profile
-              </h3>
-              <p className="text-[10px] text-app-text-secondary">Simulate a local corporate brand submitting compliance credentials.</p>
-            </div>
-
-            <form onSubmit={triggerBrandCreation} className="space-y-4 text-xs font-mono">
-              <div className="space-y-1">
-                <label className="text-[9px] uppercase tracking-wider font-extrabold text-[#8E9BAE]">Brand Display Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Walton Mobile BD..."
-                  value={newBrandName}
-                  onChange={(e) => setNewBrandName(e.target.value)}
-                  className="w-full bg-white/[0.02] border border-app-border rounded-[3px] p-2 text-app-text-primary focus:outline-none focus:border-emerald-500/50"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[9px] uppercase tracking-wider font-extrabold text-[#8E9BAE]">Public Logo URL Asset</label>
-                <input
-                  type="text"
-                  value={newBrandLogo}
-                  onChange={(e) => setNewBrandLogo(e.target.value)}
-                  className="w-full bg-white/[0.02] border border-app-border rounded-[3px] p-2 text-app-text-primary font-mono focus:outline-none"
-                />
-              </div>
-
-              {createError && (
-                <p className="text-[10px] text-red-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> {createError}</p>
-              )}
-
-              <button
-                type="submit"
-                disabled={createLoading}
-                className="w-full bg-emerald-600 hover:bg-emerald-550 text-white font-bold py-2 rounded-[3px] cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
-              >
-                {createLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                {createLoading ? 'Assembling…' : 'Assemble Compliance Draft dossier'}
-              </button>
-            </form>
-          </div>
+          {/* Verification requests are created by sellers / creators themselves
+              (My Profile → Verification Center) with real uploaded documents. */}
+          <p className="text-[10px] text-app-text-secondary px-1">
+            Requests are submitted by sellers and creators from their own profile with real uploaded documents.
+          </p>
 
         </div>
 
