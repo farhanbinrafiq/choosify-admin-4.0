@@ -390,7 +390,8 @@ export async function submitPartnerApplication(input: PartnerApplyInput): Promis
       persona: 'staff',
       title: input.applicantType === 'seller' ? 'New Seller Application' : 'New Creator Application',
       summary: `${row.displayName} (${row.businessOrChannelName}) submitted a ${input.applicantType} application.`,
-      actionUrl: input.applicantType === 'seller' ? '/admin/brand-studio' : '/admin/creator-studio',
+      // Staff review queue (Requests tab), not the owner Studio.
+      actionUrl: input.applicantType === 'seller' ? '/admin/seller-management?filter=requests' : '/admin/creator-management?filter=requests',
       metadata: { applicationId: row.id, applicantType: input.applicantType },
     });
   } catch (error) {

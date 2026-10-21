@@ -195,8 +195,9 @@ function routeForCustomer(customerId: string) {
   return `/admin/consumers/${encodeURIComponent(customerId)}`;
 }
 
-function routeForOrder(orderId: string) {
-  return `/upe/order/${encodeURIComponent(orderId)}`;
+/** Order Hub detail; checkout orders are mirrored there under their order number. */
+function routeForOrder(orderNumber: string) {
+  return `/admin/platform-orders/${encodeURIComponent(orderNumber)}`;
 }
 
 function routeForCashbook(cashbookId: string) {
@@ -315,7 +316,7 @@ export async function searchDashboardForActor(params: {
         title: o.orderNumber.startsWith('#') ? o.orderNumber : `#${o.orderNumber}`,
         subtitle: formatOrderSubtitle(o),
         group: 'Orders',
-        route: routeForOrder(o.id),
+        route: routeForOrder(o.orderNumber || o.id),
         score: (o.orderNumber.toLowerCase() === orderNeedle ? 5000 : 0) + (o.invoiceReferenceId?.toLowerCase() === orderNeedle ? 4000 : 0) + 100,
         exactMatch:
           o.orderNumber.toLowerCase() === orderNeedle ||
@@ -686,7 +687,7 @@ async function resolveByReferenceIdForActor(params: {
       title: `Order ${order.orderNumber}`,
       subtitle: `${order.brandName} · ${order.status}`,
       group: 'Orders',
-      route: routeForOrder(order.id),
+      route: routeForOrder(order.orderNumber || order.id),
       exactMatch: true,
       score: 5_500_000,
     };

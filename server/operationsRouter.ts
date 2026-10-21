@@ -6301,6 +6301,11 @@ function sendClaimError(res: import('express').Response, error: unknown, fallbac
 
 const ownerDashboardTab = (type: string) => (type === 'creator' ? '/admin/creator-profile?tab=verification' : '/admin/brand-profile?tab=verification');
 
+/** Staff destination for a submitted verification: the creator's profile, or the brand Verification Center. */
+function staffVerificationUrl(type: string, entityId: string): string {
+  return type === 'creator' ? `/admin/creator-review?creatorId=${encodeURIComponent(entityId)}` : '/admin/brand-verification';
+}
+
 /** Notifications + email + activity once an ownership claim reaches Submitted. */
 async function afterClaimSubmitted(req: import('express').Request, claim: OpsVerificationRequest): Promise<void> {
   recordAccountActivity(req, {
@@ -6505,7 +6510,7 @@ operationsRouter.post('/operations/verifications', ...requireAuth, async (req, r
         persona: 'staff',
         title: entityType === 'brand' ? 'Seller Verification Submitted' : 'Creator Verification Submitted',
         summary: `${actorName} submitted a ${entityType} verification for "${entityName}".`,
-        actionUrl: `/upe/${entityType}/${encodeURIComponent(entityId)}`,
+        actionUrl: staffVerificationUrl(entityType, entityId),
         metadata: { verificationId: saved.id, entityType, entityId },
       });
     } catch (err) {
@@ -6988,7 +6993,7 @@ operationsRouter.post('/operations/verifications/:id/documents', ...requireAuth,
         persona: 'staff',
         title: 'Verification document added',
         summary: `${actor} added a ${type} to the ${existing.entityType || 'brand'} verification for "${existing.entityName || existing.brand_name}".`,
-        actionUrl: `/upe/${existing.entityType || 'brand'}/${encodeURIComponent(existing.entityId || existing.brand_id)}`,
+        actionUrl: staffVerificationUrl(existing.entityType || 'brand', existing.entityId || existing.brand_id),
         metadata: { verificationId: existing.id, entityType: existing.entityType, entityId: existing.entityId },
       });
     } catch (err) {

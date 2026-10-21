@@ -44,6 +44,17 @@ export function resolveNotificationPath(
     if (action.startsWith('/dashboard') || action.startsWith('/profile/')) {
       return `https://choosify.bd${action}`;
     }
+    // Staff alerts stored before their destinations were rebuilt still carry
+    // links that open the legacy shell: a new partner application pointed at
+    // the owner Studio, and a brand verification at the old /upe profile.
+    // Send staff to the current review pages instead.
+    if (!isPartnerRole) {
+      const meta = notification.metadata || {};
+      if (meta.applicationId && (action === '/admin/brand-studio' || action === '/admin/creator-studio')) {
+        return action === '/admin/brand-studio' ? '/admin/seller-management?filter=requests' : '/admin/creator-management?filter=requests';
+      }
+      if (/^\/upe\/brand\//i.test(action)) return '/admin/brand-verification';
+    }
     if (action.startsWith('/')) return action;
     try {
       const url = new URL(action, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
