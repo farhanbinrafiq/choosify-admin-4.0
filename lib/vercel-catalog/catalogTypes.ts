@@ -170,6 +170,20 @@ export interface CatalogBrand {
   sponsoredFlag: boolean;
   /** Owning seller user id when brand is seller-managed; omitted for platform/legacy rows. */
   sellerId?: string;
+  /**
+   * Community-profile provenance (server-controlled; never accepted from clients).
+   * origin 'community' = created by Choosify staff from public information, not by
+   * an owner. Absent on legacy records (interpreted from sellerId/userId).
+   */
+  origin?: 'community' | 'owner';
+  /** Staff user who created a community profile. */
+  createdByStaffId?: string;
+  /** When ownership was verified (claim approval, onboarding, or explicit staff assignment). */
+  ownershipVerifiedAt?: string;
+  /** How the current owner obtained ownership. */
+  ownershipSource?: 'claim' | 'seller_onboarding' | 'creator_onboarding' | 'admin_assigned';
+  /** Canonical Category Management id (the `category` text stays as the display label). */
+  categoryId?: string;
   /** Public storefront visibility. Seller drafts default false. */
   marketplaceAccess?: boolean;
   createdAt: string;
@@ -420,6 +434,17 @@ export type SiteConfig = {
   supportPhone?: string;
   /** Editorial CTA/banner strips -- Website Manager -> CTA & Banners. Not paid/sponsored placements (see CatalogPlacement). */
   ctaBanners?: CtaBannerItem[];
+  /**
+   * Community Claimable Profiles copy (editable, reviewable — not hard-coded
+   * legal text). Written only via PUT /catalog/site/community-profiles.
+   */
+  communityProfiles?: {
+    brandDisclaimer?: string;
+    creatorDisclaimer?: string;
+    claimReviewNotice?: string;
+    updatedAt?: string;
+    updatedBy?: string;
+  };
   /** Optional storefront auth-page (Login/Signup/Forgot/Reset/Seller-Signup) left-column visual -- Website Manager -> CTA & Banners -> Auth Page Visual. Unset renders the approved no-image fallback. */
   authVisual?: {
     storefrontImage?: string;

@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState, CSSProperties } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { profileReturnTarget } from '../../lib/profileReturn';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRbac } from '../../contexts/RbacContext';
 import { useImpersonation } from '../../contexts/ImpersonationContext';
 import { Loader2, AlertTriangle, ArrowLeft, LogIn, Phone, Mail } from 'lucide-react';
-import { AdminMessageUserButton } from '../../components/messaging/AdminMessageUserButton';
 import { catalogApi, type GuideManageRow } from '../../services/catalogApi';
 import { authApi, type UserDetail } from '../../services/authApi';
 import { operationsApi, type OpsReview, type OpsStorefrontOrder } from '../../services/operationsApi';
@@ -21,6 +21,8 @@ import { PayoutInfoPanel } from '../../components/admin/profile/PayoutInfoPanel'
 import { AccountActivityPanel } from '../../components/admin/profile/AccountActivityPanel';
 import { BrandPortfolioView } from '../../components/admin/profile/BrandPortfolioView';
 import { VerificationCenterPanel } from '../../components/admin/profile/VerificationCenterPanel';
+import { ClaimReviewSection } from '../../components/admin/claims/ClaimReviewSection';
+import { ApplicationReviewSection } from '../../components/admin/claims/ApplicationReviewSection';
 import { MarketplaceAccessSection } from '../../components/admin/profile/MarketplaceAccessSection';
 import { ProfileMessagePopup } from '../../components/messaging/ProfileMessagePopup';
 import { ProfileContactActions } from '../../components/admin/profile/ProfileContactActions';
@@ -65,6 +67,12 @@ const LIVE = new Set(['live', 'active', 'published']);
 export default function SellerProfile() {
   const [searchParams] = useSearchParams();
   const sellerId = searchParams.get('sellerId') || '';
+  /** Back to the exact management tab/list this profile was opened from. */
+  const backTo = profileReturnTarget(useLocation().state, 'seller');
+  /** Opened from the Ownership Claims queue: review this account's claim on top of its full profile. */
+  const claimId = searchParams.get('claimId') || '';
+  /** Opened from the Requests tab: review this account's Seller/Creator application on top of its full profile. */
+  const applicationId = searchParams.get('applicationId') || '';
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { can } = useRbac();
@@ -235,20 +243,21 @@ export default function SellerProfile() {
           <div style={S.sub}>Read-only 360° view of this seller across Choosify</div>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }} data-testid="profile-header-actions">
-          {sellerId ? <AdminMessageUserButton targetUserId={sellerId} /> : null}
           {showLoginAsUser && (
             <button onClick={requestLoginAs} style={{ ...S.hBtn, borderColor: ACCENT, color: ACCENT, background: ACCENT_WASH }}>
               <LogIn size={13} /> Login As User
             </button>
           )}
           <AdminEditUserButton state={edit} />
-          <button onClick={() => navigate('/admin/seller-management')} style={S.hBtn}>
-            <ArrowLeft size={13} /> All Sellers
+          <button onClick={() => navigate(backTo.href)} style={S.hBtn} data-testid="profile-back">
+            <ArrowLeft size={13} /> {backTo.label}
           </button>
         </div>
       </div>
 
       <AdminEditModeStrip state={edit} />
+      {claimId ? <ClaimReviewSection claimId={claimId} onDecided={() => void load()} /> : null}
+      {applicationId ? <ApplicationReviewSection applicationId={applicationId} onDecided={() => void load()} /> : null}
 
       <div style={S.grid} className="spv-grid">
         {/* Identity card — information only; actions live in the header */}

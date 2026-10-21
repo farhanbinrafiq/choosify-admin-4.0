@@ -403,7 +403,7 @@ async function main() {
 
     // ── 4. Ownership transfer keeps the handle ──
     {
-      const transfer = await call(`/catalog/brands/${B.t.id}`, SA.token, 'PATCH', { sellerId: u.sellerB.id });
+      const transfer = await call('/operations/ownership/assign', SA.token, 'POST', { entityType: 'brand', entityId: B.t.id, userId: u.sellerB.id, reason: 'Probe: explicit ownership transfer', replaceExistingOwner: true });
       check(is(transfer, 200) && transfer.body.data?.sellerId === u.sellerB.id, '4 Brand T transferred to seller B');
       check((await activeOf('brand', B.t.id)) === h('ht'), '4 the handle is unchanged after the transfer');
       check(find(await brandsAs(SELLER_B.token), B.t.id)?.publicHandle === h('ht'), '4 the new owner sees the Brand with its handle');
@@ -533,7 +533,7 @@ async function main() {
       check(pending.status === 201, '11b former owner has a legacy pending request', pending.body);
       const rid = String(pending.body.data?.id);
       const [xfer, appr] = await Promise.all([
-        call(`/catalog/brands/${B.cc.id}`, SA.token, 'PATCH', { sellerId: u.sellerB.id }),
+        call('/operations/ownership/assign', SA.token, 'POST', { entityType: 'brand', entityId: B.cc.id, userId: u.sellerB.id, reason: 'Probe: explicit ownership transfer', replaceExistingOwner: true }),
         call(`/public-handles/admin/requests/${rid}/approve`, SA.token, 'POST', {}),
       ]);
       const reqRow = (await q(`select status from public_handle_requests where id=$1`, [rid]))[0];
@@ -608,7 +608,7 @@ async function main() {
       await lockConn.query(`select pg_advisory_lock(hashtext($1))`, [`public_handles:request:${rid}`]);
       const approval = call(`/public-handles/admin/requests/${rid}/approve`, SA.token, 'POST', {});
       const blocked = await waitForBlocked();
-      const xfer = await call(`/catalog/brands/${B.r1.id}`, SA.token, 'PATCH', { sellerId: u.sellerB.id });
+      const xfer = await call('/operations/ownership/assign', SA.token, 'POST', { entityType: 'brand', entityId: B.r1.id, userId: u.sellerB.id, reason: 'Probe: explicit ownership transfer', replaceExistingOwner: true });
       await lockConn.query(`select pg_advisory_unlock(hashtext($1))`, [`public_handles:request:${rid}`]);
       const ap = await approval;
       check(blocked && is(xfer, 200), '13a the approval was waiting while the transfer completed', { blocked, xfer: xfer.status });
@@ -633,7 +633,7 @@ async function main() {
       await lockConn.query(`select id from public_handles where entity_type='brand' and entity_id=$1 and status='active' for update`, [B.r2.id]);
       const approval = call(`/public-handles/admin/requests/${rid}/approve`, SA.token, 'POST', {});
       const blocked = await waitForBlocked();
-      const xfer = await call(`/catalog/brands/${B.r2.id}`, SA.token, 'PATCH', { sellerId: u.sellerB.id });
+      const xfer = await call('/operations/ownership/assign', SA.token, 'POST', { entityType: 'brand', entityId: B.r2.id, userId: u.sellerB.id, reason: 'Probe: explicit ownership transfer', replaceExistingOwner: true });
       await lockConn.query('commit');
       const ap = await approval;
       check(blocked && is(xfer, 200), '13b the transfer completed while the approval held its ownership check', { blocked, xfer: xfer.status });

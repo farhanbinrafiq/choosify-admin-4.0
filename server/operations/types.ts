@@ -698,6 +698,8 @@ export type OpsVerificationStatus =
   | 'Submitted'
   | 'Under Review'
   | 'Approved'
+  | 'Withdrawn'
+  | 'Expired'
   | 'Rejected';
 export type OpsDocumentType = import('../../shared/verification/verificationDocuments').VerificationDocumentType;
 export type OpsDocumentStatus = 'pending' | 'approved' | 'rejected';
@@ -741,6 +743,19 @@ export interface OpsVerificationRequest {
   submitted_by: string;
   submitted_by_name?: string;
   status: OpsVerificationStatus;
+  /**
+   * owner_verification = the profile's own owner verifying their business;
+   * ownership_claim = someone claiming a COMMUNITY (ownerless) profile.
+   * Absent on legacy rows — derive with `verificationKindOf` (server/claims).
+   */
+  kind?: 'owner_verification' | 'ownership_claim';
+  /** Where an ownership claim started. */
+  claimSource?: 'storefront' | 'invitation' | 'onboarding';
+  /** Server-issued claim intent this claim was created from (ownership claims only). */
+  claimIntentId?: string;
+  /** Terminal-state bookkeeping (withdrawn / expired / superseded claims). */
+  closedAt?: string;
+  closedReason?: string;
   documents: OpsVerificationDocument[];
   reviews: OpsVerificationReview[];
   audit_trail: OpsVerificationAuditEntry[];
@@ -886,4 +901,42 @@ export interface OpsVerificationDocRequest {
   actorId: string;
   actorName?: string;
   at: string;
+}
+
+/**
+ * Server-issued, short-lived claim reference. Created when a visitor presses
+ * "Claim"; carried through sign-in / sign-up / partner onboarding by its id
+ * only. It proves nothing by itself — every use re-validates the target.
+ */
+export interface OpsClaimIntent {
+  id: string;
+  entityType: 'brand' | 'creator';
+  entityId: string;
+  createdAt: string;
+  expiresAt: string;
+  source: 'storefront' | 'invitation' | 'onboarding';
+  /** Bound on first authenticated use; afterwards only this account may use it. */
+  userId?: string;
+  /** Partner application started from this intent (onboarding path). */
+  applicationId?: string;
+  /** Ownership claim created from this intent (idempotency). */
+  claimId?: string;
+}
+
+/** Ownership / community-profile audit history (queryable; see /operations/audit-events). */
+export interface OpsAuditEvent {
+  id: string;
+  at: string;
+  action: string;
+  actorId: string;
+  actorName?: string;
+  actorRole?: string;
+  targetType: 'brand' | 'creator' | 'verification' | 'claim_intent';
+  targetId: string;
+  targetName?: string;
+  /** Related ids (claim id, claimant id, …) — never documents or secrets. */
+  refs?: Record<string, string>;
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+  note?: string;
 }

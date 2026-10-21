@@ -52,6 +52,8 @@ export interface OperationsSnapshot {
   shopperSignals?: import('./types').OpsShopperSignals[];
   accountActivity?: import('./types').OpsAccountActivity[];
   verificationDocRequests?: import('./types').OpsVerificationDocRequest[];
+  claimIntents?: import('./types').OpsClaimIntent[];
+  auditEvents?: import('./types').OpsAuditEvent[];
 }
 
 export interface OpsSellerOfferRow {

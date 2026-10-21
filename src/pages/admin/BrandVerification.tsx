@@ -119,7 +119,8 @@ export default function BrandVerification() {
     setListLoading(true);
     setListError(null);
     try {
-      const rows = await operationsApi.listVerifications();
+      // Owner verification only — ownership claims are reviewed in Seller/Creator Management → Ownership Claims.
+      const rows = await operationsApi.listVerifications({ kind: 'owner_verification' });
       setVerificationRequests(rows.map(normalizeRow));
     } catch (err) {
       setListError(err instanceof Error ? err.message : 'Failed to load verification requests.');

@@ -386,7 +386,9 @@ async function main() {
     // ════════ E5 ════════
     console.log('\n── E5: variant stock vs unrelated saves ──');
     {
-      const brand = data(await call('/catalog/brands', SA, 'POST', { name: `PE E5 Brand ${sfx}`, category: 'General' }), 'brand');
+      // An owned Brand: staff-created ownerless Brands are community profiles (no products).
+      const s5 = await mkUser('seller5', 'seller');
+      const brand = data(await call('/catalog/brands', SA, 'POST', { name: `PE E5 Brand ${sfx}`, category: 'General', sellerId: s5.id }), 'brand');
       brandIds.push(brand.id);
       const p = data(await call('/catalog/products', SA, 'POST', { title: `PE5 variants ${sfx}`, brandId: brand.id, brandName: brand.name, categoryId: cat, image: IMG, gallery: [IMG], price: 10, stock: 0, description: 'pe5' }), 'product');
       const vid = `v-pe5-${sfx}-m`;

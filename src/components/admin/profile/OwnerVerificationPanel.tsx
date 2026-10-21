@@ -9,6 +9,7 @@ import {
   verificationDocumentSpecs,
   type VerificationDocumentSpec,
 } from '../../../../shared/verification/verificationDocuments';
+import { getPublishedStorefrontUrl } from '../../../lib/storefrontUrls';
 
 /**
  * Owner-side Verification Center (Seller brands / Creator profile). Everything
@@ -49,6 +50,8 @@ const STATUS_COPY: Record<OpsVerification['status'], string> = {
   'Under Review': 'Under review — Choosify is checking your documents.',
   Approved: 'Verified — Choosify approved your documents.',
   Rejected: 'Not approved — see the reason below. Upload corrected documents to start a new request.',
+  Withdrawn: 'Withdrawn.',
+  Expired: 'Expired after a period of inactivity. Upload documents to start a new request.',
 };
 
 /** The latest "more information" request the owner has not answered yet. */
@@ -86,7 +89,8 @@ function EntityVerification({
     setError(null);
     try {
       const [all, requested] = await Promise.all([
-        operationsApi.listVerifications({ entityType, entityId: entity.id }),
+        // The owner's OWN verification only — ownership claims are listed separately.
+        operationsApi.listVerifications({ entityType, entityId: entity.id, kind: 'owner_verification' }),
         operationsApi.listVerificationDocumentRequests({ entityType, entityId: entity.id }).catch(() => [] as VerificationDocRequest[]),
       ]);
       setRows(all.sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at))));
@@ -103,7 +107,7 @@ function EntityVerification({
   }, [load]);
 
   const current = rows[0] || null;
-  const isOpen = Boolean(current && current.status !== 'Approved' && current.status !== 'Rejected');
+  const isOpen = Boolean(current && ['Draft', 'Submitted', 'Under Review'].includes(current.status));
   // After a rejection the slots start empty again: a new request is opened on the first upload.
   const docs = isOpen || current?.status === 'Approved' ? current?.documents || [] : [];
   const info = current ? openInfoRequest(current) : null;
@@ -336,14 +340,91 @@ export function OwnerVerificationPanel({
   avatarUrl?: string | null;
 }) {
   if (!entities.length) {
-    return <div style={{ ...panel, textAlign: 'center', fontSize: 12, fontWeight: 600, color: '#9CA3AF', fontStyle: 'italic' }}>{emptyText}</div>;
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <MyOwnershipClaims entityType={entityType} />
+        <div style={{ ...panel, textAlign: 'center', fontSize: 12, fontWeight: 600, color: '#9CA3AF', fontStyle: 'italic' }}>{emptyText}</div>
+      </div>
+    );
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }} data-testid="owner-verification-center">
+      <MyOwnershipClaims entityType={entityType} />
       {entities.map((e) => (
         <EntityVerification key={e.id} entityType={entityType} entity={e} avatarUrl={avatarUrl} />
       ))}
       <DocumentViewerHost />
+    </div>
+  );
+}
+
+/**
+ * The signed-in user's ownership CLAIMS on community profiles (kept apart from
+ * their own verification above). Documents are uploaded on the storefront
+ * claim page; here the claimant sees status and can withdraw an open claim.
+ */
+function MyOwnershipClaims({ entityType }: { entityType: 'brand' | 'creator' }) {
+  const [claims, setClaims] = useState<OpsVerification[]>([]);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    try {
+      const rows = await operationsApi.listVerifications({ entityType, kind: 'ownership_claim' });
+      setClaims(rows.sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at))));
+    } catch {
+      setClaims([]);
+    }
+  }, [entityType]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  if (!claims.length) return null;
+  const storefront = getPublishedStorefrontUrl();
+  const withdraw = async (c: OpsVerification) => {
+    if (!window.confirm(`Withdraw your ownership claim for ${c.entityName}?`)) return;
+    setBusy(c.id);
+    setMsg(null);
+    try {
+      await operationsApi.withdrawOwnershipClaim(c.id);
+      setMsg({ ok: true, text: 'Claim withdrawn.' });
+      await load();
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : 'Could not withdraw the claim.' });
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <div style={panel} data-testid="my-ownership-claims">
+      <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 8 }}>Your ownership claims</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {claims.map((c) => {
+          const open = ['Draft', 'Submitted', 'Under Review'].includes(c.status);
+          return (
+            <div key={c.id} style={row}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 800 }}>{c.entityName}</div>
+                <div style={{ fontSize: 10.5, color: '#6B7280', fontWeight: 600 }}>
+                  {c.documents.length} document{c.documents.length === 1 ? '' : 's'} · updated {new Date(c.updated_at).toLocaleDateString()}
+                  {c.closedReason ? ` · ${c.closedReason}` : ''}
+                </div>
+              </div>
+              <span style={{ ...badge, ...(TONE[c.status] || TONE.Draft) }}>{c.status}</span>
+              {open && c.claimIntentId ? (
+                <a href={`${storefront}/claim/${encodeURIComponent(c.claimIntentId)}`} target="_blank" rel="noreferrer" style={btn}>
+                  {c.status === 'Draft' ? 'Upload documents' : 'View claim'}
+                </a>
+              ) : null}
+              {open ? (
+                <button type="button" style={danger} disabled={busy === c.id} onClick={() => void withdraw(c)}>
+                  Withdraw
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+      {msg ? <div role={msg.ok ? 'status' : 'alert'} style={{ marginTop: 8, fontSize: 11.5, fontWeight: 700, color: msg.ok ? '#166534' : '#DC2626' }}>{msg.text}</div> : null}
     </div>
   );
 }

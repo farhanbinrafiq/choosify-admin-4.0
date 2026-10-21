@@ -39,6 +39,11 @@ export function isPartnerIdentityApiPath(path: string, method: string): boolean 
   if (/^\/api\/v1\/catalog\/creator\/[^/]+\/(versions|draft)$/.test(p)) return true;
   if (m === 'POST' && p.startsWith('/api/v1/catalog/media')) return true;
   if (p.startsWith('/api/v1/operations/verifications')) return true;
+  // Verification evidence: a seller/creator still under review (or an onboarding
+  // claimant) must be able to upload private verification / claim documents and
+  // read the document requests addressed to them.
+  if (m === 'POST' && p === '/api/v1/operations/media/upload-verification') return true;
+  if (m === 'GET' && p === '/api/v1/operations/verification-document-requests') return true;
   if (p.startsWith('/api/v1/operations/partner-applications')) return true;
   // Buying/messaging is a role-independent identity action, not a partner
   // commercial capability -- a person mid-review on a seller/creator

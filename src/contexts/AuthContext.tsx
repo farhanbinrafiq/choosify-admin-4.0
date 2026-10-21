@@ -97,7 +97,9 @@ interface AuthContextType {
     socialPrimary?: string;
     audienceSize?: string;
     notes?: string;
-  }) => Promise<{ applicationId: string; status: 'pending'; message: string }>;
+    /** Server-issued claim reference (community profile "Claim" button). */
+    claimIntentId?: string;
+  }) => Promise<{ applicationId: string; status: 'pending'; message: string; claimId?: string }>;
   /** @deprecated Direct seller self-registration is closed — use applyAsPartner. */
   registerSeller: (input: {
     email: string;
@@ -589,6 +591,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     socialPrimary?: string;
     audienceSize?: string;
     notes?: string;
+    claimIntentId?: string;
   }) => {
     console.info('[Auth] Partner application submit', {
       email: input.email.trim().toLowerCase(),
@@ -613,6 +616,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         socialPrimary: input.socialPrimary?.trim() || undefined,
         audienceSize: input.audienceSize?.trim() || undefined,
         notes: input.notes?.trim() || undefined,
+        claimIntentId: input.claimIntentId || undefined,
       }),
     });
 
@@ -624,6 +628,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       status?: 'pending';
       message?: string;
       accessGranted?: boolean;
+      claimId?: string;
     };
 
     if (!response.ok) {
@@ -644,6 +649,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return {
       applicationId: payload.applicationId || '',
       status: 'pending' as const,
+      ...(payload.claimId ? { claimId: payload.claimId } : {}),
       message:
         payload.message ||
         'Application received. You can sign in now. Marketplace features stay locked until Admin verifies your identity and enables Marketplace Access.',

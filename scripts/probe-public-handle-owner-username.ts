@@ -282,7 +282,7 @@ async function main() {
     check((await put(SELLER, 'brand', B5.id, h('b5ok'))).status === 200, '6 restored Brand can set it');
 
     // ── 7. Ownership transfer ──
-    check((await call(`/catalog/brands/${B5.id}`, SA, 'PATCH', { sellerId: uSeller2.id })).status === 200, '7 setup: Brand five transferred to another seller');
+    check((await call('/operations/ownership/assign', SA, 'POST', { entityType: 'brand', entityId: B5.id, userId: uSeller2.id, reason: 'Probe: explicit ownership transfer', replaceExistingOwner: true })).status === 200, '7 setup: Brand five transferred to another seller');
     check((await activeOf('brand', B5.id)) === h('b5ok'), '7 the username stays with the Brand after transfer');
     const oldOwner = await put(SELLER, 'brand', B5.id, h('b5old'));
     check(oldOwner.status === 403 && oldOwner.body.code === 'HANDLE_FORBIDDEN', '7 former owner can no longer change it', oldOwner.body);

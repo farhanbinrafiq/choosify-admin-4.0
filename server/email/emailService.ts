@@ -21,6 +21,7 @@ import {
   verificationCodeEmail,
   verifyEmail as verifyEmailTemplate,
   welcomeEmail,
+  ownershipClaimEmail,
 } from './templates';
 
 export type EmailMessage = {
@@ -224,5 +225,19 @@ export async function sendPasswordAddedEmail(to: string): Promise<void> {
     supportUrl: `mailto:${process.env.EMAIL_REPLY_TO?.trim() || 'support@choosify.bd'}`,
     when: new Date().toUTCString(),
   });
+  await sendEmail({ to, subject: t.subject, html: t.html, text: t.text });
+}
+
+/**
+ * Ownership-claim lifecycle email (received / more information / approved /
+ * not approved / withdrawn / expired). `dashboardPath` is a trusted, server-built
+ * path on the dashboard origin — never a client-supplied URL.
+ */
+export async function sendOwnershipClaimEmail(
+  to: string,
+  mail: { subject: string; heading: string; lines: string[]; ctaLabel?: string; dashboardPath?: string },
+): Promise<void> {
+  const ctaUrl = mail.dashboardPath ? `${dashboardBase()}${mail.dashboardPath.startsWith('/') ? '' : '/'}${mail.dashboardPath}` : undefined;
+  const t = ownershipClaimEmail({ subject: mail.subject, heading: mail.heading, lines: mail.lines, ctaLabel: mail.ctaLabel, ctaUrl });
   await sendEmail({ to, subject: t.subject, html: t.html, text: t.text });
 }

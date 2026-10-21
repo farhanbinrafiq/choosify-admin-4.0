@@ -289,6 +289,19 @@ export const normalizeCreatorInput = (payload: unknown, existing?: CatalogCreato
     blogs: Array.isArray(raw.blogs) ? (raw.blogs as CatalogCreator['blogs']) : existing?.blogs ?? [],
     status: statusRaw === 'draft' || statusRaw === 'archived' ? statusRaw : 'live',
     userId: toString(raw.userId, existing?.userId ?? '') || undefined,
+    // Provenance + claim label: server-controlled (routes strip them from client bodies).
+    origin: raw.origin === 'community' || raw.origin === 'owner' ? raw.origin : existing?.origin,
+    createdByStaffId: toString(raw.createdByStaffId, existing?.createdByStaffId ?? '') || undefined,
+    ownershipVerifiedAt: toString(raw.ownershipVerifiedAt, existing?.ownershipVerifiedAt ?? '') || undefined,
+    ownershipSource: (['claim', 'seller_onboarding', 'creator_onboarding', 'admin_assigned'] as const).includes(
+      raw.ownershipSource as never,
+    )
+      ? (raw.ownershipSource as CatalogCreator['ownershipSource'])
+      : existing?.ownershipSource,
+    claimStatus:
+      raw.claimStatus === 'community' || raw.claimStatus === 'pending' || raw.claimStatus === 'verified'
+        ? raw.claimStatus
+        : existing?.claimStatus,
     createdAt: existing?.createdAt ?? nowIso(),
     updatedAt: nowIso(),
   };

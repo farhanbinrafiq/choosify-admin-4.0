@@ -458,7 +458,8 @@ export const TrustProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const refreshVerifications = useCallback(() => {
     operationsApi
-      .listVerifications()
+      // Owner verification only — ownership claims have their own queue.
+      .listVerifications({ kind: 'owner_verification' })
       .then((rows) => {
         setVerificationRequests(
           (rows as unknown as VerificationRequest[]).map((row) => ({

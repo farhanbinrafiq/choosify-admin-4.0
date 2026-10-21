@@ -625,12 +625,48 @@ export interface OpsVerification {
   logo_url: string;
   submitted_by: string;
   submitted_by_name?: string;
-  status: 'Draft' | 'Submitted' | 'Under Review' | 'Approved' | 'Rejected';
+  status: 'Draft' | 'Submitted' | 'Under Review' | 'Approved' | 'Rejected' | 'Withdrawn' | 'Expired';
+  /** owner_verification = the owner verifying their own profile; ownership_claim = claiming a community profile. */
+  kind?: 'owner_verification' | 'ownership_claim';
+  claimSource?: 'storefront' | 'invitation' | 'onboarding';
+  claimIntentId?: string;
+  closedAt?: string;
+  closedReason?: string;
   documents: import('../contexts/TrustContext').VerificationDocument[];
   reviews: import('../contexts/TrustContext').VerificationReview[];
   audit_trail: { timestamp: string; action: string; actor: string; details: string }[];
   created_at: string;
   updated_at: string;
+}
+
+export interface CommunityDuplicate {
+  id: string;
+  name: string;
+  slug: string;
+  matchedOn: Array<'name' | 'website' | 'social'>;
+  owned: boolean;
+}
+
+export interface CommunityProfileInput {
+  entityType: 'brand' | 'creator';
+  name: string;
+  categoryId?: string;
+  description?: string;
+  logo?: string;
+  coverImage?: string;
+  website?: string;
+  socialLinks?: Record<string, string>;
+  location?: string;
+  publish?: boolean;
+  acknowledgeDuplicates?: boolean;
+}
+
+export interface CommunityProfileCopy {
+  brandDisclaimer: string;
+  creatorDisclaimer: string;
+  claimReviewNotice: string;
+  updatedAt: string | null;
+  isDefault: boolean;
 }
 
 /** Real Seller/Creator onboarding application — GET /operations/partner-applications. */
@@ -647,6 +683,16 @@ export interface OpsPartnerApplication {
   catalogEntityId?: string;
   existingUserId?: string;
   resubmissionRequested?: boolean;
+  phone?: string;
+  website?: string;
+  niche?: string;
+  contentFocus?: string;
+  socialPrimary?: string;
+  audienceSize?: string;
+  notes?: string;
+  adminNotes?: string;
+  reviewNote?: string;
+  reviewedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -1384,13 +1430,45 @@ export const operationsApi = {
     return result.data;
   },
 
-  listVerifications: async (params?: { status?: string; entityType?: string; entityId?: string }) => {
+  listVerifications: async (params?: {
+    status?: string;
+    entityType?: string;
+    entityId?: string;
+    kind?: 'owner_verification' | 'ownership_claim';
+  }) => {
     const qs = new URLSearchParams();
     if (params?.status) qs.set('status', params.status);
+    if (params?.kind) qs.set('kind', params.kind);
     if (params?.entityType) qs.set('entityType', params.entityType);
     if (params?.entityId) qs.set('entityId', params.entityId);
     const suffix = qs.toString() ? `?${qs}` : '';
     const result = await request<{ data: OpsVerification[] }>(`/operations/verifications${suffix}`);
+    return result.data;
+  },
+
+  // ── Community Claimable Profiles ──────────────────────────────────────
+  /** Possible duplicates (warnings only) before creating a community profile. */
+  findCommunityDuplicates: async (params: { entityType: 'brand' | 'creator'; name: string; website?: string; socialLinks?: Record<string, string> }) => {
+    const qs = new URLSearchParams({ entityType: params.entityType, name: params.name });
+    if (params.website) qs.set('website', params.website);
+    for (const [k, v] of Object.entries(params.socialLinks || {})) if (v) qs.set(k, v);
+    const result = await request<{ data: CommunityDuplicate[] }>(`/catalog/community-profiles/duplicates?${qs}`);
+    return result.data;
+  },
+  createCommunityProfile: async (input: CommunityProfileInput) => {
+    const result = await request<{ data: { id: string; name: string; slug: string } }>('/catalog/community-profiles', 'POST', input);
+    return result.data;
+  },
+  getCommunityProfileCopy: async () => {
+    const result = await request<{ data: CommunityProfileCopy }>('/catalog/site/community-profiles');
+    return result.data;
+  },
+  updateCommunityProfileCopy: async (copy: Pick<CommunityProfileCopy, 'brandDisclaimer' | 'creatorDisclaimer' | 'claimReviewNotice'>) => {
+    const result = await request<{ data: CommunityProfileCopy }>('/catalog/site/community-profiles', 'PUT', copy);
+    return result.data;
+  },
+  withdrawOwnershipClaim: async (id: string, reason?: string) => {
+    const result = await request<{ data: OpsVerification }>(`/operations/verifications/${encodeURIComponent(id)}/withdraw`, 'POST', { reason });
     return result.data;
   },
 
@@ -1409,6 +1487,26 @@ export const operationsApi = {
       `/operations/partner-applications/${encodeURIComponent(id)}/approve`,
       'POST',
       { note },
+    );
+    return result.application;
+  },
+
+  /** POST /operations/partner-applications/:id/resubmit (requireAdmin) — stays pending; asks the applicant for changes. */
+  requestPartnerResubmission: async (id: string, note: string) => {
+    const result = await request<{ success: boolean; application: OpsPartnerApplication }>(
+      `/operations/partner-applications/${encodeURIComponent(id)}/resubmit`,
+      'POST',
+      { note },
+    );
+    return result.application;
+  },
+
+  /** PATCH /operations/partner-applications/:id/notes (requireAdmin) — internal notes; keeps the application pending. */
+  savePartnerApplicationNotes: async (id: string, adminNotes: string) => {
+    const result = await request<{ success: boolean; application: OpsPartnerApplication }>(
+      `/operations/partner-applications/${encodeURIComponent(id)}/notes`,
+      'PATCH',
+      { adminNotes },
     );
     return result.application;
   },
@@ -1490,7 +1588,7 @@ export const operationsApi = {
   },
   reviewVerification: async (
     id: string,
-    payload: { status: 'approved' | 'rejected' | 'request_info'; feedback: string; reviewer_name?: string },
+    payload: { status: 'approved' | 'rejected' | 'request_info' | 'under_review'; feedback: string; reviewer_name?: string },
   ) => {
     const result = await request<{ data: unknown; catalogSideEffect?: unknown }>(
       `/operations/verifications/${encodeURIComponent(id)}/review`,

@@ -13,6 +13,7 @@ export const VERIFICATION_DOCUMENT_TYPES = [
   'National ID (Back)',
   'Business Registration',
   'Payout Account KYC',
+  'Account Ownership Proof',
   // Legacy / optional types still accepted on older records.
   'Brand Ownership Proof',
   'Identity Verification',
@@ -55,16 +56,59 @@ export const CREATOR_VERIFICATION_DOCUMENTS: VerificationDocumentSpec[] = [
   { type: 'Tax Certificate', label: 'TIN Certificate', hint: 'If you have one', required: false },
 ];
 
-export function verificationDocumentSpecs(entityType: 'brand' | 'creator' | string | undefined): VerificationDocumentSpec[] {
+/**
+ * Ownership CLAIM evidence (claiming a community profile someone else created) —
+ * proves the claimant represents the brand / is the creator. Different from the
+ * owner's own seller/creator verification above.
+ */
+export const BRAND_CLAIM_DOCUMENTS: VerificationDocumentSpec[] = [
+  { type: 'National ID (Front)', label: 'Your National ID — Front', hint: 'NID front page of the person claiming', required: true },
+  { type: 'National ID (Back)', label: 'Your National ID — Back', hint: 'NID back page', required: true },
+  { type: 'Trade License', label: 'Trade License', hint: 'Trade license of the business that owns or represents the brand', required: true },
+  {
+    type: 'Brand Ownership Proof',
+    label: 'Brand Ownership / Authorisation Proof',
+    hint: 'Trademark certificate, or a signed authorisation letter from the brand owner naming you',
+    required: true,
+  },
+  { type: 'Business Registration', label: 'BIN / VAT Business Registration', hint: 'If the business has one', required: false },
+];
+
+export const CREATOR_CLAIM_DOCUMENTS: VerificationDocumentSpec[] = [
+  { type: 'National ID (Front)', label: 'Your National ID — Front', hint: 'NID front page', required: true },
+  { type: 'National ID (Back)', label: 'Your National ID — Back', hint: 'NID back page', required: true },
+  {
+    type: 'Account Ownership Proof',
+    label: 'Channel / Account Ownership Proof',
+    hint: 'Screenshot of your logged-in creator dashboard (YouTube Studio, Meta Business Suite…) showing the channel name',
+    required: true,
+  },
+];
+
+export type VerificationKind = 'owner_verification' | 'ownership_claim';
+
+export function verificationDocumentSpecs(
+  entityType: 'brand' | 'creator' | string | undefined,
+  kind: VerificationKind | string | undefined = 'owner_verification',
+): VerificationDocumentSpec[] {
+  if (kind === 'ownership_claim') return entityType === 'creator' ? CREATOR_CLAIM_DOCUMENTS : BRAND_CLAIM_DOCUMENTS;
   return entityType === 'creator' ? CREATOR_VERIFICATION_DOCUMENTS : SELLER_VERIFICATION_DOCUMENTS;
 }
 
-export function verificationDocumentLabel(entityType: string | undefined, type: string): string {
-  return verificationDocumentSpecs(entityType).find((s) => s.type === type)?.label || type;
+export function verificationDocumentLabel(entityType: string | undefined, type: string, kind?: VerificationKind | string): string {
+  return (
+    verificationDocumentSpecs(entityType, kind).find((s) => s.type === type)?.label ||
+    verificationDocumentSpecs(entityType).find((s) => s.type === type)?.label ||
+    type
+  );
 }
 
 /** Required document types with no file on the request. */
-export function missingRequiredDocuments(entityType: string | undefined, documents: Array<{ type: string }>): VerificationDocumentSpec[] {
+export function missingRequiredDocuments(
+  entityType: string | undefined,
+  documents: Array<{ type: string }>,
+  kind?: VerificationKind | string,
+): VerificationDocumentSpec[] {
   const have = new Set(documents.map((d) => d.type));
-  return verificationDocumentSpecs(entityType).filter((s) => s.required && !have.has(s.type));
+  return verificationDocumentSpecs(entityType, kind).filter((s) => s.required && !have.has(s.type));
 }

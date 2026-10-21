@@ -37,6 +37,8 @@ export function buildOperationsSnapshot(): OperationsSnapshot {
     shopperSignals: operationsStore.listShopperSignals(),
     accountActivity: operationsStore.listAccountActivity(),
     verificationDocRequests: operationsStore.listVerificationDocRequests(),
+    claimIntents: operationsStore.listClaimIntents(),
+    auditEvents: operationsStore.listAuditEvents({ limit: 20000 }),
   };
 }
 

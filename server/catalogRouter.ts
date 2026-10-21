@@ -1,5 +1,8 @@
 import { Router } from 'express';
 import { recordAccountActivity } from './accountActivity/accountActivity';
+import { recordAudit, withPublicOwnership } from './claims/ownershipClaims';
+import { brandProfileIsDiscoverable, createCommunityProfile, findCommunityDuplicates, isCommunityOwnerlessBrand, type CommunityProfileInput } from './claims/communityProfiles';
+import { ClaimError } from './claims/ownershipClaims';
 import { Logger } from './lib/logger';
 import { detectBrandablePlatform } from '../src/lib/creatorReviewPlatform';
 import { resolveFacebookShareUrl } from './lib/facebookShareResolver';
@@ -293,19 +296,45 @@ function userIsCreatorRole(req: {
  * locked without cms:edit. Marketplace Access mutations require the admin-only
  * PATCH .../marketplace-access endpoint.
  */
+/**
+ * Ownership + provenance are server-controlled for EVERY role: the owner changes
+ * only through claim approval or the explicit staff assignment
+ * (claims/ownershipClaims). The claim label follows the claim workflow.
+ */
+const SERVER_CONTROLLED_OWNERSHIP_FIELDS = ['origin', 'createdByStaffId', 'ownershipVerifiedAt', 'ownershipSource', 'claimStatus'] as const;
+function stripServerControlledOwnership(body: unknown, ownerField: 'sellerId' | 'userId', keepOwner = false): Record<string, unknown> {
+  const out = { ...((body && typeof body === 'object' ? body : {}) as Record<string, unknown>) };
+  for (const k of SERVER_CONTROLLED_OWNERSHIP_FIELDS) delete out[k];
+  if (!keepOwner) delete out[ownerField];
+  return out;
+}
+
+/** Unowned COMMUNITY brands are discovery profiles, not merchant workspaces: no promo codes / FAQ / store data edits. */
+function keepCommunityMerchantFields(existing: CatalogBrand, normalized: CatalogBrand): CatalogBrand {
+  if (!isCommunityOwnerlessBrand(existing)) return normalized;
+  return { ...normalized, promoCodes: existing.promoCodes, faq: existing.faq, stores: existing.stores };
+}
+
 function preserveBrandPrivilegedFieldsOnUpdate(
   req: Request,
   existing: CatalogBrand,
   normalized: CatalogBrand,
 ): CatalogBrand {
+  const ownership = {
+    sellerId: existing.sellerId,
+    origin: existing.origin,
+    createdByStaffId: existing.createdByStaffId,
+    ownershipVerifiedAt: existing.ownershipVerifiedAt,
+    ownershipSource: existing.ownershipSource,
+    claimStatus: existing.claimStatus,
+  };
   if (hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions)) {
-    return normalized;
+    return keepCommunityMerchantFields(existing, { ...normalized, ...ownership });
   }
   return {
     ...normalized,
-    sellerId: existing.sellerId,
+    ...ownership,
     verifiedStatus: existing.verifiedStatus,
-    claimStatus: existing.claimStatus,
     featuredFlag: existing.featuredFlag,
     sponsoredFlag: existing.sponsoredFlag,
     followers: existing.followers,
@@ -397,7 +426,7 @@ async function scopeBrandsForRequest(req: Request, brands: CatalogBrand[]): Prom
   if (userIsSellerRole(req) && req.userId) {
     return brands.filter((b) => b.sellerId === req.userId);
   }
-  return brands.filter(brandIsMarketplaceVisible);
+  return brands.filter((b) => brandProfileIsDiscoverable(b, brandIsMarketplaceVisible));
 }
 
 async function scopeProductsForRequest(req: Request, products: CatalogProduct[]) {
@@ -549,11 +578,25 @@ function forbidUnlessOwnsProduct(
 }
 
 /** Sellers must own the TARGET brand when brandId changes (or on create). */
+async function rejectCommunityBrandTarget(res: Response, brandId: string): Promise<boolean> {
+  if (!brandId) return false;
+  const brand = await catalogStore.getBrand(brandId).catch(() => null);
+  if (brand && isCommunityOwnerlessBrand(brand)) {
+    res.status(409).json({
+      error: 'This is an unclaimed community brand profile. Products and offers can only be added after a verified owner claims it.',
+      code: 'COMMUNITY_PROFILE_NOT_MERCHANT',
+    });
+    return true;
+  }
+  return false;
+}
+
 async function assertSellerOwnsTargetBrand(
   req: Request,
   res: Response,
   brandId: string,
 ): Promise<boolean> {
+  if (await rejectCommunityBrandTarget(res, brandId)) return false;
   if (userIsPlatformAdmin(req)) return true;
   if (!userIsSellerRole(req) || !req.userId) return true;
   if (!brandId || !(await sellerOwnsBrand(req.userId, brandId))) {
@@ -1657,6 +1700,7 @@ catalogRouter.post('/catalog/services', ...requireProductCreate, async (req, res
   try {
     const existingSlugs = (await listServices()).map((s) => s.slug);
     let normalized = normalizeServiceInput(req.body, undefined, { existingSlugs });
+    if (await rejectCommunityBrandTarget(res, normalized.brandId)) return;
     if (userIsSellerRole(req) && req.userId && !userIsPlatformAdmin(req)) {
       normalized = { ...normalized, sellerId: req.userId };
       if (!(await assertSellerOwnsTargetBrand(req, res, normalized.brandId))) return;
@@ -2009,7 +2053,7 @@ catalogRouter.get('/catalog/brands', softAuthenticateRequest, async (req, res) =
     }
     // Follower counts come from real follows only (server/follows), never a stored figure.
     brands = brands.map((b) => ({ ...b, followers: brandFollowerCount(b.id), viewCount: viewCount('brand', b.id) }));
-    res.json({ data: await withPublicHandles('brand', brands) });
+    res.json({ data: await withPublicHandles('brand', withPublicOwnership('brand', brands)) });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list brands' });
   }
@@ -2272,20 +2316,26 @@ catalogRouter.post('/catalog/workspace/creator/customers/:customerId/report', ..
 catalogRouter.post('/catalog/brands', ...requireBrandStudioBrandWrite, async (req, res) => {
   try {
     const context = await buildBrandNormalizeContext();
+    const isStaffCreate = hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions);
+    const clean = stripServerControlledOwnership(req.body, 'sellerId', isStaffCreate);
+    const staffOwner = isStaffCreate ? String(clean.sellerId || '').trim() : '';
     const payload =
-      userIsSellerRole(req) &&
-      req.userId &&
-      !hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions)
+      userIsSellerRole(req) && req.userId && !isStaffCreate
         ? {
-            ...req.body,
+            ...clean,
             sellerId: req.userId,
             // New Seller brands start without Marketplace Access — Admin grants later.
             marketplaceAccess: false,
             marketplaceStatus: 'not_granted',
             claimStatus: 'pending',
             verifiedStatus: false,
+            origin: 'owner',
           }
-        : req.body;
+        : staffOwner
+          ? // Staff minting a brand FOR an existing seller (explicit admin assignment at creation).
+            { ...clean, origin: 'owner', ownershipSource: 'admin_assigned' }
+          : // Staff creating a brand with no owner = a COMMUNITY profile (claimable, no merchant access).
+            { ...clean, sellerId: undefined, origin: 'community', createdByStaffId: req.userId, claimStatus: 'community', verifiedStatus: false };
     const normalized = normalizeBrandInput(payload, undefined, context);
     const withRef = {
       ...normalized,
@@ -2294,6 +2344,9 @@ catalogRouter.post('/catalog/brands', ...requireBrandStudioBrandWrite, async (re
         normalized.brandReferenceId,
     };
     const saved = await catalogStore.upsertBrand(withRef);
+    if (saved.origin === 'community') {
+      recordAudit(req, { action: 'community_profile_created', targetType: 'brand', targetId: saved.id, targetName: saved.name, refs: { via: 'brand_studio' } });
+    }
     publishEvent({
       eventName: 'BrandCreated',
       domain: 'Marketplace',
@@ -2323,7 +2376,7 @@ catalogRouter.put('/catalog/brands/:id', ...requireBrandStudioBrandWrite, locked
     const normalized = preserveBrandPrivilegedFieldsOnUpdate(
       req,
       existing,
-      normalizeBrandInput({ ...req.body, id: req.params.id }, existing, context),
+      normalizeBrandInput({ ...stripServerControlledOwnership(req.body, 'sellerId'), id: req.params.id }, existing, context),
     );
     await assertSlugChangeAllowed({
       entityType: 'brand',
@@ -2370,7 +2423,7 @@ catalogRouter.patch('/catalog/brands/:id', ...requireBrandStudioBrandWrite, lock
     const normalized = preserveBrandPrivilegedFieldsOnUpdate(
       req,
       existing,
-      normalizeBrandInput({ ...existing, ...req.body, id: req.params.id }, existing, context),
+      normalizeBrandInput({ ...existing, ...stripServerControlledOwnership(req.body, 'sellerId'), id: req.params.id }, existing, context),
     );
     await assertSlugChangeAllowed({
       entityType: 'brand',
@@ -2518,7 +2571,9 @@ catalogRouter.patch(
   requirePartnerEntitlement,
   requireMarketplaceAccess,
   requireAnyPermission([PERMISSIONS.CMS_EDIT]),
-  async (req, res) => {
+  // Same record lock as Brand Studio + claim approval, so a concurrent ownership
+  // transition can never be overwritten by this whole-record write.
+  lockedHandler((req) => [recordKey('brand', req.params.id)], async (req, res) => {
     try {
       const existing = await catalogStore.getBrand(req.params.id);
       if (!existing) {
@@ -2604,7 +2659,7 @@ catalogRouter.patch(
     } catch (error) {
       sendCatalogWriteError(res, error, 'Invalid marketplace access transition');
     }
-  },
+  }),
 );
 
 catalogRouter.delete('/catalog/brands/:id', ...requireCmsWrite, async (req, res) => {
@@ -2807,6 +2862,98 @@ catalogRouter.delete('/catalog/deals-banners/:id', ...requireCmsWrite, async (re
   }
 });
 
+// ---------------------------------------------------------------------------
+// Community Claimable Profiles — staff creation + duplicate warnings, and the
+// editable community-profile copy (disclaimer / review notice).
+// ---------------------------------------------------------------------------
+
+/** Defaults used until staff edit the copy — neutral clarification, not legal advice. */
+export const COMMUNITY_PROFILE_COPY_DEFAULTS = {
+  brandDisclaimer:
+    'This community profile was created by Choosify from publicly available information to help people discover brands. It has not been claimed or verified by an authorised representative of this brand, and Choosify does not represent itself as the owner of, or officially affiliated with, the brand.',
+  creatorDisclaimer:
+    'This community profile was created by Choosify from publicly available information to help people discover creators. It has not been claimed or verified by the creator, and Choosify does not represent itself as the creator or as officially affiliated with them.',
+  claimReviewNotice:
+    'Your ownership claim is under verification. Reviews are typically completed within 48 hours; a Choosify support representative may contact you if more information is needed.',
+};
+
+catalogRouter.get('/catalog/site/community-profiles', async (_req, res) => {
+  const stored = (await catalogStore.getSiteConfig())?.communityProfiles || {};
+  res.json({
+    success: true,
+    data: {
+      brandDisclaimer: stored.brandDisclaimer || COMMUNITY_PROFILE_COPY_DEFAULTS.brandDisclaimer,
+      creatorDisclaimer: stored.creatorDisclaimer || COMMUNITY_PROFILE_COPY_DEFAULTS.creatorDisclaimer,
+      claimReviewNotice: stored.claimReviewNotice || COMMUNITY_PROFILE_COPY_DEFAULTS.claimReviewNotice,
+      updatedAt: stored.updatedAt || null,
+      isDefault: !stored.updatedAt,
+    },
+  });
+});
+
+catalogRouter.put('/catalog/site/community-profiles', ...requireCmsWrite, async (req, res) => {
+  const pick = (k: 'brandDisclaimer' | 'creatorDisclaimer' | 'claimReviewNotice') => {
+    const v = typeof req.body?.[k] === 'string' ? req.body[k].trim() : '';
+    if (v.length > 1200) throw new Error(`${k} is too long (max 1200 characters)`);
+    return v;
+  };
+  try {
+    const existing = await catalogStore.getSiteConfig();
+    const next = {
+      brandDisclaimer: pick('brandDisclaimer'),
+      creatorDisclaimer: pick('creatorDisclaimer'),
+      claimReviewNotice: pick('claimReviewNotice'),
+      updatedAt: new Date().toISOString(),
+      updatedBy: req.userId,
+    };
+    const saved = await catalogStore.upsertSiteConfig({ ...existing, communityProfiles: next, updatedAt: next.updatedAt });
+    recordAudit(req, { action: 'community_copy_updated', targetType: 'brand', targetId: 'site:community-profiles', note: 'Community profile disclaimer / review notice edited' });
+    res.json({ success: true, data: saved.communityProfiles });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid community profile copy' });
+  }
+});
+
+/** Possible duplicates before creating a community profile (warnings only). */
+catalogRouter.get('/catalog/community-profiles/duplicates', ...requireCmsWrite, async (req, res) => {
+  const type = req.query.entityType === 'creator' ? 'creator' : req.query.entityType === 'brand' ? 'brand' : null;
+  if (!type) {
+    res.status(400).json({ error: 'entityType must be brand or creator' });
+    return;
+  }
+  const q = (k: string) => (typeof req.query[k] === 'string' ? (req.query[k] as string) : '');
+  const socialLinks: Record<string, string> = {};
+  for (const k of ['facebook', 'instagram', 'youtube', 'tiktok', 'linkedin']) if (q(k)) socialLinks[k] = q(k);
+  res.json({ success: true, data: await findCommunityDuplicates({ type, name: q('name'), website: q('website'), socialLinks }) });
+});
+
+/** Create a community Brand / Creator profile (staff). No owner, no seller/creator account, no Marketplace Access. */
+catalogRouter.post('/catalog/community-profiles', ...requireCmsWrite, async (req, res) => {
+  const type = req.body?.entityType === 'creator' ? 'creator' : req.body?.entityType === 'brand' ? 'brand' : null;
+  if (!type) {
+    res.status(400).json({ error: 'entityType must be brand or creator' });
+    return;
+  }
+  try {
+    const result = await createCommunityProfile(req, { ...(req.body as CommunityProfileInput), type });
+    if (!result.created) {
+      res.status(409).json({
+        error: 'Possible duplicate profiles found. Review them, then confirm to create anyway.',
+        code: 'POSSIBLE_DUPLICATES',
+        duplicates: result.duplicates,
+      });
+      return;
+    }
+    res.status(201).json({ success: true, data: result.created, duplicates: result.duplicates });
+  } catch (error) {
+    if (error instanceof ClaimError) {
+      res.status(error.status).json({ error: error.message, code: error.code });
+      return;
+    }
+    sendCatalogWriteError(res, error, 'Invalid community profile');
+  }
+});
+
 catalogRouter.get('/catalog/site', softAuthenticateRequest, async (req, res) => {
   try {
     // Curation internals (raw pins, editor metadata, audit trail) are only
@@ -2919,7 +3066,7 @@ catalogRouter.get('/catalog/creators', softAuthenticateRequest, async (req, res)
     const creators = await scopeCreatorsForRequest(req, await catalogStore.listCreators());
     const status = typeof req.query.status === 'string' ? req.query.status : '';
     const filtered = status ? creators.filter((c) => c.status === status) : creators;
-    res.json({ data: await withPublicHandles('creator', filtered) });
+    res.json({ data: await withPublicHandles('creator', withPublicOwnership('creator', filtered)) });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list creators' });
   }
@@ -2931,9 +3078,27 @@ const requireCreatorStudioWriteMw = [authenticateRequest, requirePartnerEntitlem
 catalogRouter.put('/catalog/creators/:id', ...requireCreatorStudioWriteMw, lockedHandler((req) => [recordKey('creator', req.params.id)], async (req, res) => {
   try {
     const existing = await catalogStore.getCreator(req.params.id);
-    const scoped = scopeCreatorSelfWrite(req, existing, req.body as Record<string, unknown>);
+    const isStaffWrite = hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions);
+    // Ownership/provenance are server-controlled. On CREATE staff may name an owner
+    // (explicit admin assignment); on UPDATE the owner never changes here.
+    const cleanBody = stripServerControlledOwnership(req.body, 'userId', !existing && isStaffWrite);
+    const scoped = scopeCreatorSelfWrite(req, existing, cleanBody);
     const payload = stripPendingCreatorPublish(req, existing, scoped);
-    const normalized = normalizeCreatorInput({ ...payload, id: req.params.id }, existing || undefined);
+    const provenance: Record<string, unknown> = existing
+      ? {
+          userId: existing.userId,
+          origin: existing.origin,
+          createdByStaffId: existing.createdByStaffId,
+          ownershipVerifiedAt: existing.ownershipVerifiedAt,
+          ownershipSource: existing.ownershipSource,
+          claimStatus: existing.claimStatus,
+        }
+      : isStaffWrite && !String(payload.userId || '').trim()
+        ? { userId: undefined, origin: 'community', createdByStaffId: req.userId, claimStatus: 'community', verifiedStatus: false }
+        : isStaffWrite
+          ? { origin: 'owner', ownershipSource: 'admin_assigned' }
+          : { origin: 'owner' };
+    const normalized = normalizeCreatorInput({ ...payload, ...provenance, id: req.params.id }, existing || undefined);
     if (!existing || normalized.slug !== existing.slug) {
       if (existing) {
         await assertSlugChangeAllowed({
@@ -2962,9 +3127,22 @@ catalogRouter.patch('/catalog/creators/:id', ...requireCreatorStudioWriteMw, loc
       res.status(404).json({ error: 'Creator not found' });
       return;
     }
-    const scoped = scopeCreatorSelfWrite(req, existing, req.body as Record<string, unknown>);
+    const scoped = scopeCreatorSelfWrite(req, existing, stripServerControlledOwnership(req.body, 'userId'));
     const payload = stripPendingCreatorPublish(req, existing, scoped);
-    const normalized = normalizeCreatorInput({ ...existing, ...payload, id: req.params.id }, existing);
+    const normalized = normalizeCreatorInput(
+      {
+        ...existing,
+        ...payload,
+        userId: existing.userId,
+        origin: existing.origin,
+        createdByStaffId: existing.createdByStaffId,
+        ownershipVerifiedAt: existing.ownershipVerifiedAt,
+        ownershipSource: existing.ownershipSource,
+        claimStatus: existing.claimStatus,
+        id: req.params.id,
+      },
+      existing,
+    );
     if (normalized.slug !== existing.slug) {
       await assertSlugChangeAllowed({
         entityType: 'creator',

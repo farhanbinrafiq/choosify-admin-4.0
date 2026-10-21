@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { profileReturnState } from '../../lib/profileReturn';
 import { Search, Loader2, AlertCircle, ShieldCheck, ExternalLink } from 'lucide-react';
 import { catalogApi } from '../../services/catalogApi';
 import { authApi, type UserDirectoryEntry } from '../../services/authApi';
@@ -9,6 +10,9 @@ import type { CatalogBrand } from '../../types/catalog';
 import { DataTable, DataTableColumn } from '../../components/ui/DataTable';
 import { Avatar } from '../../components/shared/Avatar';
 import { PartnerApplicationReviewActions, PartnerApprovedNotice } from '../../components/admin/PartnerApplicationReviewActions';
+import { OwnershipClaimsQueue } from '../../components/admin/claims/OwnershipClaimsQueue';
+import { PartnerRequestsTable } from '../../components/admin/claims/PartnerRequestsTable';
+import { CommunityProfilesPanel } from '../../components/admin/claims/CommunityProfilesPanel';
 
 /**
  * Super Admin Seller Management — real React replacement for the legacy
@@ -21,7 +25,9 @@ import { PartnerApplicationReviewActions, PartnerApprovedNotice } from '../../co
  *    bulk -- avoids one request per seller).
  *  - Requests: `GET /operations/partner-applications?status=pending` (applicantType==='seller'),
  *    reviewed here via POST .../:id/approve|reject (moved out of Feature Access).
- *  - Ownership Claims: `GET /operations/verifications?entityType=brand&status=pending`.
+ *  - Ownership Claims: `GET /operations/verifications?entityType=brand&kind=ownership_claim`
+ *    (claims on community profiles only — owners' own verification is not mixed in).
+ *  - Community Profiles: brands with `origin==='community'` (staff-created discovery profiles).
  *  - Verified: `CatalogBrand.verifiedStatus` / `claimStatus==='verified'`.
  *  - Active Sellers: verified && brand.status==='live'-equivalent && marketplaceAccess && !suspended
  *    (see isActiveSeller below -- documented, not invented).
@@ -39,6 +45,7 @@ type SellerFilter =
   | 'verified'
   | 'requests'
   | 'claims'
+  | 'community'
   | 'active'
   | 'suspended'
   | 'inactive'
@@ -65,6 +72,7 @@ const FILTER_TABS: { key: SellerFilter; label: string }[] = [
   { key: 'verified', label: 'Verified Sellers' },
   { key: 'requests', label: 'Requests' },
   { key: 'claims', label: 'Ownership Claims' },
+  { key: 'community', label: 'Community Profiles' },
   { key: 'active', label: 'Active Sellers' },
   { key: 'flagged', label: 'Flagged' },
   { key: 'inactive', label: 'Inactive' },
@@ -82,11 +90,14 @@ export default function SellerManagement() {
   const [requests, setRequests] = useState<OpsPartnerApplication[]>([]);
   const [justApproved, setJustApproved] = useState<OpsPartnerApplication | null>(null);
   const [claims, setClaims] = useState<OpsVerification[]>([]);
+  /** Refreshed by the claims queue after a review, so the tab count stays current. */
+  const [openClaimCount, setOpenClaimCount] = useState<number | null>(null);
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const navigate = useNavigate();
+  const location = useLocation();
   const PAGE_SIZE = 20;
 
   useEffect(() => {
@@ -99,7 +110,7 @@ export default function SellerManagement() {
           catalogApi.listBrands(),
           authApi.getUsersDirectory(),
           operationsApi.listPartnerApplications('pending'),
-          operationsApi.listVerifications({ entityType: 'brand', status: 'pending' }),
+          operationsApi.listVerifications({ entityType: 'brand', kind: 'ownership_claim', status: 'open' }),
           moderationApi.listReports({ status: 'open' }),
           moderationApi.listReports({ status: 'investigating' }),
         ]);
@@ -194,13 +205,14 @@ export default function SellerManagement() {
       all: sellers.length,
       verified: sellers.filter((s) => s.verified).length,
       requests: requests.length,
-      claims: claims.length,
+      claims: openClaimCount ?? claims.length,
+      community: brands.filter((b) => b.origin === 'community' && !b.sellerId).length,
       active: sellers.filter((s) => s.active).length,
       flagged: sellers.filter((s) => s.flagged).length,
       inactive: sellers.filter((s) => s.inactive).length,
       suspended: sellers.filter((s) => s.suspended).length,
     }),
-    [sellers, requests, claims],
+    [sellers, requests, claims, brands, openClaimCount],
   );
 
   const filtered = useMemo(() => {
@@ -252,11 +264,12 @@ export default function SellerManagement() {
     // Real Seller Profile page (src/pages/admin/SellerProfile.tsx) -- replaces the
     // legacy CmsMirrorHost destination, which was driven by a hardcoded fixture with
     // no real seller ids and rendered permanently blank.
-    navigate(`/admin/seller-profile?sellerId=${encodeURIComponent(seller.sellerId)}`);
+    navigate(`/admin/seller-profile?sellerId=${encodeURIComponent(seller.sellerId)}`, profileReturnState(location));
   };
 
   const isRequestsView = filter === 'requests';
   const isClaimsView = filter === 'claims';
+  const isCommunityView = filter === 'community';
 
   // Reviewed applications leave the pending list; approval shows the separate
   // Marketplace Access next step.
@@ -405,7 +418,7 @@ export default function SellerManagement() {
       </div>
 
       {/* Search + sort */}
-      <div className="aws-page-card p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className={`aws-page-card p-4 flex-col md:flex-row items-center justify-between gap-4 ${isClaimsView || isCommunityView ? 'hidden' : 'flex'}`}>
         <div className="w-full md:w-96 bg-[#F8F9FB] border border-app-border rounded-xl flex items-center px-3.5 gap-2.5">
           <Search className="w-4 h-4 text-app-text-secondary" />
           <input
@@ -436,92 +449,14 @@ export default function SellerManagement() {
       {justApproved && <PartnerApprovedNotice application={justApproved} onDismiss={() => setJustApproved(null)} />}
 
       {isRequestsView ? (
-        <div className="aws-page-card overflow-hidden">
-          {requests.length === 0 ? (
-            <p className="p-10 text-center text-xs text-app-text-secondary">No pending seller requests.</p>
-          ) : (
-            <div className="divide-y divide-app-border">
-              {requests.map((r) => {
-                const targetSellerId = r.provisionedUserId || r.existingUserId;
-                const content = (
-                  <>
-                    <div>
-                      <div className="text-xs font-bold">{r.displayName}</div>
-                      <div className="text-[10.5px] text-app-text-secondary">{r.businessOrChannelName} · {r.email}</div>
-                    </div>
-                    <span className="text-[9px] font-black uppercase px-2 py-1 rounded bg-amber-500/10 text-amber-600 shrink-0">
-                      {r.resubmissionRequested ? 'Resubmission requested' : 'Under review'}
-                    </span>
-                  </>
-                );
-                return (
-                  <div key={r.id} data-testid="partner-application-row" className="p-4 flex items-center justify-between gap-3">
-                    {targetSellerId ? (
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/admin/seller-profile?sellerId=${encodeURIComponent(targetSellerId)}`)}
-                        className="flex-1 flex items-center justify-between gap-3 text-left hover:opacity-80 transition-opacity"
-                      >
-                        {content}
-                      </button>
-                    ) : (
-                      <div
-                        className="flex-1 flex items-center justify-between gap-3"
-                        title="No provisioned seller account yet — not linked to a profile"
-                      >
-                        {content}
-                      </div>
-                    )}
-                    <PartnerApplicationReviewActions application={r} onReviewed={onApplicationReviewed} />
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        <PartnerRequestsTable applicantType="seller" requests={requests} usersById={usersById} onReviewed={onApplicationReviewed} />
       ) : isClaimsView ? (
-        <div className="aws-page-card overflow-hidden">
-          {claims.length === 0 ? (
-            <p className="p-10 text-center text-xs text-app-text-secondary">No pending ownership claims.</p>
-          ) : (
-            <div className="divide-y divide-app-border">
-              {claims.map((c) => {
-                const brand = brands.find((b) => b.id === (c.entityId || c.brand_id));
-                const content = (
-                  <>
-                    <div>
-                      <div className="text-xs font-bold">{brand?.name || c.entityId}</div>
-                      <div className="text-[10.5px] text-app-text-secondary">
-                        {brand?.brandReferenceId || '—'} · submitted {c.created_at?.slice(0, 10) || '—'}
-                      </div>
-                    </div>
-                    <span className="text-[9px] font-black uppercase px-2 py-1 rounded bg-amber-500/10 text-amber-600 shrink-0">
-                      {c.status}
-                    </span>
-                  </>
-                );
-                return brand?.sellerId ? (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => navigate(`/admin/seller-profile?sellerId=${encodeURIComponent(brand.sellerId as string)}`)}
-                    className="w-full p-4 flex items-center justify-between gap-3 text-left hover:bg-app-accent/5 transition-colors"
-                  >
-                    {content}
-                  </button>
-                ) : (
-                  <div
-                    key={c.id}
-                    className="p-4 flex items-center justify-between gap-3"
-                    title="No linked seller account — not linked to a profile"
-                  >
-                    {content}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        <OwnershipClaimsQueue
+          entityType="brand"
+          onCountChange={setOpenClaimCount}
+        />
+      ) : isCommunityView ? (
+        <CommunityProfilesPanel entityType="brand" />
       ) : (
         <div className="aws-page-card overflow-hidden">
           <DataTable

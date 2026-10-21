@@ -24,7 +24,7 @@ export function PhotoVerificationBadge({
     let alive = true;
     const ids = new Set(entityIds);
     operationsApi
-      .listVerifications({ entityType })
+      .listVerifications({ entityType, kind: 'owner_verification' })
       .then((rows) => {
         if (!alive) return;
         const latest = rows

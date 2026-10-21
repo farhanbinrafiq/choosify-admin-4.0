@@ -78,6 +78,7 @@ partnerApplicationRouter.post('/auth/partner-apply', async (req, res) => {
       socialPrimary: body.socialPrimary ? String(body.socialPrimary) : undefined,
       audienceSize: body.audienceSize ? String(body.audienceSize) : undefined,
       notes: body.notes ? String(body.notes) : undefined,
+      claimIntentId: body.claimIntentId ? String(body.claimIntentId) : undefined,
     });
     Logger.info('partner application submitted', {
       requestId: req.requestId,
@@ -91,6 +92,7 @@ partnerApplicationRouter.post('/auth/partner-apply', async (req, res) => {
       status: result.status,
       message: result.message,
       accessGranted: false,
+      ...((result as { claimId?: string }).claimId ? { claimId: (result as { claimId?: string }).claimId } : {}),
     });
   } catch (error) {
     const status = (error as Error & { status?: number }).status || 500;

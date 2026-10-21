@@ -85,6 +85,23 @@ export interface CatalogCreator {
   status: 'draft' | 'live' | 'archived';
   /** Owning creator user id — creator workspace is scoped to this. */
   userId?: string;
+  /**
+   * Community-profile provenance (server-controlled; never accepted from clients).
+   * origin 'community' = created by Choosify staff from public information, not by
+   * an owner. Absent on legacy records (interpreted from sellerId/userId).
+   */
+  origin?: 'community' | 'owner';
+  /** Staff user who created a community profile. */
+  createdByStaffId?: string;
+  /** When ownership was verified (claim approval, onboarding, or explicit staff assignment). */
+  ownershipVerifiedAt?: string;
+  /** How the current owner obtained ownership. */
+  ownershipSource?: 'claim' | 'seller_onboarding' | 'creator_onboarding' | 'admin_assigned';
+  /**
+   * Community/claim label for creators (mirrors brands). Ownership itself is
+   * decided by userId — this is only the displayed lifecycle label.
+   */
+  claimStatus?: 'community' | 'pending' | 'verified';
   createdAt: string;
   updatedAt: string;
 }

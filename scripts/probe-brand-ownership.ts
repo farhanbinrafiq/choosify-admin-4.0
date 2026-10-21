@@ -365,7 +365,9 @@ async function main() {
   });
   assert(verifySubmitRes.status === 201, 'Brand verification submission', verifySubmitRes.status);
 
-  // 11/12: Brand claim submission (SellerB claims SellerA's Brand2) + claim approval assigns ownership.
+  // 11/12: Community Claimable Profiles invariant — a claim can NEVER take over an
+  // OWNED brand (disputes go through the separate staff ownership assignment).
+  // Claims on community profiles are covered end to end by the claims probes.
   const brand2Id = brand2.brand!.id;
   const claimSubmitRes = await fetch(`${base}/operations/verifications`, {
     method: 'POST',
@@ -375,52 +377,33 @@ async function main() {
       entityId: brand2Id,
       entityName: brand2.brand!.name ?? 'Probe Brand Two',
       status: 'Submitted',
-      documents: [{ type: 'trade_license', name: 'License', doc_url: 'https://example.com/doc.pdf' }],
+      documents: [],
     }),
   });
-  const claimSubmitBody = (await json(claimSubmitRes)) as { data?: { id: string } };
-  assert(claimSubmitRes.status === 201, 'Brand ownership claim submission', claimSubmitRes.status);
-
-  const claimApproveRes = await fetch(`${base}/operations/verifications/${claimSubmitBody.data?.id}/review`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${moderator.token}` },
-    body: JSON.stringify({ status: 'approved', feedback: 'Documents verified' }),
-  });
-  assert(claimApproveRes.status === 200, 'Claim approval request succeeds', claimApproveRes.status);
-  const brand2AfterApproval = await listBrands(admin.token);
-  const brand2Row = brand2AfterApproval.brands.find((b) => b.id === brand2Id);
+  const claimSubmitBody = (await json(claimSubmitRes)) as { code?: string };
   assert(
-    brand2Row?.sellerId === sellerBUid,
-    'Claim approval assigns ownership to the claiming Seller',
-    brand2Row,
+    claimSubmitRes.status === 409 && claimSubmitBody.code === 'PROFILE_ALREADY_OWNED',
+    'Ownership claim on an already-owned Brand is refused (409 PROFILE_ALREADY_OWNED)',
+    { status: claimSubmitRes.status, body: claimSubmitBody },
   );
+  const brand2AfterClaim = await listBrands(admin.token);
+  const brand2Row = brand2AfterClaim.brands.find((b) => b.id === brand2Id);
+  assert(brand2Row?.sellerId === sellerAUid, 'A refused claim leaves the existing owner unchanged', brand2Row);
 
-  // 13: Claim rejection does not assign/retain ownership for the rejected claimant.
+  // 13: A non-owner's claim on another owned Brand is also refused; ownership stays with the owner.
   const brand3 = await createBrand(sellerAToken, `Probe Brand Three ${RUN_ID}`);
   const brand3Id = brand3.brand!.id;
   const rejectClaimSubmitRes = await fetch(`${base}/operations/verifications`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sellerBToken}` },
-    body: JSON.stringify({
-      entityType: 'brand',
-      entityId: brand3Id,
-      entityName: brand3.brand!.name ?? 'Probe Brand Three',
-      status: 'Submitted',
-      documents: [{ type: 'trade_license', name: 'License', doc_url: 'https://example.com/doc.pdf' }],
-    }),
+    body: JSON.stringify({ entityType: 'brand', entityId: brand3Id, status: 'Draft', documents: [] }),
   });
-  const rejectClaimBody = (await json(rejectClaimSubmitRes)) as { data?: { id: string } };
-  const claimRejectRes = await fetch(`${base}/operations/verifications/${rejectClaimBody.data?.id}/review`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${moderator.token}` },
-    body: JSON.stringify({ status: 'rejected', feedback: 'Documents insufficient' }),
-  });
-  assert(claimRejectRes.status === 200, 'Claim rejection request succeeds', claimRejectRes.status);
-  const brand3AfterRejection = await listBrands(admin.token);
-  const brand3Row = brand3AfterRejection.brands.find((b) => b.id === brand3Id);
+  assert(rejectClaimSubmitRes.status === 409, 'Draft claim on an owned Brand is refused too', rejectClaimSubmitRes.status);
+  const brand3AfterClaim = await listBrands(admin.token);
+  const brand3Row = brand3AfterClaim.brands.find((b) => b.id === brand3Id);
   assert(
     brand3Row?.sellerId === sellerAUid && brand3Row?.sellerId !== sellerBUid,
-    'Claim rejection does not assign or retain ownership for the rejected claimant',
+    'Owned Brand keeps its owner after refused claims',
     brand3Row,
   );
 

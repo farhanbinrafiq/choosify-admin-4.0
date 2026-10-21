@@ -439,8 +439,8 @@ async function main() {
     const r5 = await seed(u.sellerA.id, 'brand', B.a.id, h('pa4'));
     const r5id = String(r5.body.data?.id);
     check(is(r5, 201), '8 a legacy request by the former owner exists before the transfer');
-    const transfer = await call(`/catalog/brands/${B.a.id}`, SA.token, 'PATCH', { sellerId: u.sellerB.id });
-    check(transfer.status === 200 && transfer.body.data?.sellerId === u.sellerB.id, '8 Brand A transferred to seller B (catalog sellerId)', { status: transfer.status, sellerId: transfer.body.data?.sellerId });
+    const transfer = await call('/operations/ownership/assign', SA.token, 'POST', { entityType: 'brand', entityId: B.a.id, userId: u.sellerB.id, reason: 'Probe: explicit ownership transfer', replaceExistingOwner: true });
+    check(transfer.status === 200 && transfer.body.data?.sellerId === u.sellerB.id, '8 Brand A transferred to seller B (explicit ownership assignment)', { status: transfer.status, sellerId: transfer.body.data?.sellerId });
     check((await activeOf('brand', B.a.id)) === h('pa3'), '8 transfer leaves the Brand handle unchanged');
     {
       const before = (await q(`select count(*)::int n from public_handles where entity_id=$1`, [B.a.id]))[0].n;

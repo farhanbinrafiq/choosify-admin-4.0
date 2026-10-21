@@ -959,6 +959,8 @@ export const normalizeSiteInput = (payload: unknown, existing?: SiteConfig): Sit
     storefrontCuration: existing?.storefrontCuration,
     assuranceStrips: existing?.assuranceStrips,
     storefrontCurationAudit: existing?.storefrontCurationAudit,
+    // Community-profile copy has its own endpoint; a full-site save carries it forward.
+    communityProfiles: existing?.communityProfiles,
     updatedAt: nowIso(),
   };
 };

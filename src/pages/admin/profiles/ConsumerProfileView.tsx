@@ -4,7 +4,6 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { useRbac } from '../../../contexts/RbacContext';
 import { useImpersonation } from '../../../contexts/ImpersonationContext';
 import { Loader2, AlertTriangle, Phone, Mail, ArrowLeft, LogIn } from 'lucide-react';
-import { AdminMessageUserButton } from '../../../components/messaging/AdminMessageUserButton';
 import { authApi, type UserDetail } from '../../../services/authApi';
 import { catalogApi } from '../../../services/catalogApi';
 import { operationsApi, type OpsReview, type OpsStorefrontOrder, type ShopperSignalItem, type ShopperSignals } from '../../../services/operationsApi';
@@ -229,7 +228,6 @@ export default function ConsumerProfileView() {
           <div style={S.sub}>Read-only 360° view of this shopper across Choosify</div>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }} data-testid="profile-header-actions">
-          {account.uid ? <AdminMessageUserButton targetUserId={account.uid} /> : null}
           {showLoginAsUser && (
             <button onClick={requestLoginAs} style={{ ...S.hBtn, borderColor: ACCENT, color: ACCENT, background: ACCENT_WASH }}>
               <LogIn size={13} /> Login As User

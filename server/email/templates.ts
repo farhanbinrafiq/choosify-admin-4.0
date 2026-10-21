@@ -264,3 +264,21 @@ export function orderDeliveredEmail(input: OrderEmailInput): RenderedEmail {
     ]),
   };
 }
+
+// ── Ownership claims (Community Claimable Profiles) ───────────────────────
+
+const escapeHtml = (v: string): string =>
+  v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+/** Plain informational claim email; every line is escaped (brand names / staff feedback are user data). */
+export function ownershipClaimEmail(input: { subject: string; heading: string; lines: string[]; ctaLabel?: string; ctaUrl?: string }): RenderedEmail {
+  const body = [
+    ...input.lines.map((l) => paragraph(escapeHtml(l))),
+    ...(input.ctaLabel && input.ctaUrl ? [emailButton(input.ctaLabel, input.ctaUrl)] : []),
+  ].join('\n');
+  return {
+    subject: input.subject,
+    html: renderEmailShell({ preheader: input.lines[0] || input.heading, heading: escapeHtml(input.heading), bodyHtml: body }),
+    text: toPlainText([...input.lines, ...(input.ctaLabel && input.ctaUrl ? [`${input.ctaLabel}: ${input.ctaUrl}`] : []), '— Choosify']),
+  };
+}

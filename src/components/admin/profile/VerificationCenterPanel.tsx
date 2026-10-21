@@ -8,6 +8,7 @@ import {
   missingRequiredDocuments,
   verificationDocumentLabel,
   verificationDocumentSpecs,
+  type VerificationKind,
 } from '../../../../shared/verification/verificationDocuments';
 
 /**
@@ -119,6 +120,8 @@ const STATUS_TONE: Record<string, React.CSSProperties> = {
   'Under Review': { background: '#FEF3C7', color: '#92400E' },
   Submitted: { background: '#EEF2FF', color: '#3730A3' },
   Draft: { background: '#F1F5F9', color: '#475569' },
+  Withdrawn: { background: '#F1F5F9', color: '#64748B' },
+  Expired: { background: '#F1F5F9', color: '#64748B' },
   approved: { background: '#DCFCE7', color: '#166534' },
   rejected: { background: '#FEE2E2', color: '#991B1B' },
   pending: { background: '#FEF3C7', color: '#92400E' },
@@ -131,8 +134,11 @@ export function VerificationCenterPanel({
   entities,
   emptyHint,
   onRequestDocuments,
+  kind = 'owner_verification',
 }: {
   entityType: 'brand' | 'creator';
+  /** Owner verification (default) or ownership claims — never mixed in one list. */
+  kind?: VerificationKind;
   entities: Array<{ id: string; name: string }>;
   emptyHint: string;
   /** Opens a message to the owner (no verification exists yet to attach a request to). */
@@ -154,7 +160,7 @@ export function VerificationCenterPanel({
     setError(null);
     try {
       const [all, asks] = await Promise.all([
-        operationsApi.listVerifications({ entityType }),
+        operationsApi.listVerifications({ entityType, kind }),
         operationsApi.listVerificationDocumentRequests({ entityType }).catch(() => [] as VerificationDocRequest[]),
       ]);
       const set = new Set(entities.map((e) => e.id));
@@ -167,7 +173,7 @@ export function VerificationCenterPanel({
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entityType, ids]);
+  }, [entityType, ids, kind]);
 
   useEffect(() => {
     void load();
@@ -181,7 +187,8 @@ export function VerificationCenterPanel({
   if (error) {
     return <div style={{ ...wrap, padding: 20, color: '#DC2626', fontSize: 12, fontWeight: 700 }}>{error}</div>;
   }
-  const withoutRequest = entities.filter((e) => !rows.some((v) => v.entityId === e.id));
+  // Placeholder cards ("not submitted yet") only make sense for the owner's own verification.
+  const withoutRequest = kind === 'owner_verification' ? entities.filter((e) => !rows.some((v) => v.entityId === e.id)) : [];
   const askedFor = (entityId: string) => requests.filter((q) => q.entityId === entityId);
 
   return (
@@ -195,6 +202,7 @@ export function VerificationCenterPanel({
           entityName={entities.find((e) => e.id === v.entityId)?.name || v.entityName}
           canReview={canReview && v.submitted_by !== profile?.id}
           asks={askedFor(v.entityId)}
+          kind={kind}
           onChanged={load}
         />
       ))}
@@ -217,7 +225,7 @@ export function VerificationCenterPanel({
   );
 }
 
-function VerificationRequestCard({
+export function VerificationRequestCard({
   v,
   entityType,
   entityId,
@@ -227,7 +235,9 @@ function VerificationRequestCard({
   emptyHint,
   onMessageOwner,
   onChanged,
+  kind = 'owner_verification',
 }: {
+  kind?: VerificationKind;
   /** null = the owner has not started a verification request yet. */
   v: OpsVerification | null;
   entityType: 'brand' | 'creator';
@@ -244,26 +254,49 @@ function VerificationRequestCard({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const open = Boolean(v && (v.status === 'Submitted' || v.status === 'Under Review'));
-  const closed = Boolean(v && (v.status === 'Approved' || v.status === 'Rejected'));
-  const specs = verificationDocumentSpecs(entityType);
-  const missing = missingRequiredDocuments(entityType, docs);
+  const closed = Boolean(v && !['Draft', 'Submitted', 'Under Review'].includes(v.status));
+  const isClaim = kind === 'ownership_claim';
+  const who = isClaim ? 'claimant' : 'owner';
+  const specs = verificationDocumentSpecs(entityType, kind);
+  const missing = missingRequiredDocuments(entityType, docs, kind);
   const rejectedDocs = docs.filter((d) => d.status === 'rejected');
   const extraDocs = docs.filter((d) => !specs.some((s) => s.type === d.type));
   /** Latest time Choosify asked for each document type. */
   const lastAsked = new Map<string, string>();
   for (const q of asks) for (const t of q.docTypes) if (!lastAsked.has(t) || lastAsked.get(t)! < q.at) lastAsked.set(t, q.at);
-  const canAsk = canReview && !closed;
+  // Owner verification: the doc-request endpoint notifies the profile OWNER.
+  // Claims have no owner yet, so the request goes to the CLAIMANT as a
+  // "request more information" (notification + email + shown on their claim page).
+  const canAsk = canReview && !closed && (!isClaim || v?.status !== 'Draft');
   const ask = (types: string[], what: string) =>
-    act(() => operationsApi.requestVerificationDocuments({ entityType, entityId, docTypes: types }), `Asked the owner to upload ${what}. They were notified.`);
+    isClaim
+      ? act(
+          () =>
+            operationsApi.reviewVerification(v!.id, {
+              status: 'request_info',
+              feedback: `Please upload: ${types.map((t) => verificationDocumentLabel(entityType, t, kind)).join(', ')}.${feedback.trim() ? ` ${feedback.trim()}` : ''}`,
+            }),
+          `Asked the claimant to upload ${what}. They were notified by email and on their claim page.`,
+        )
+      : act(() => operationsApi.requestVerificationDocuments({ entityType, entityId, docTypes: types }), `Asked the owner to upload ${what}. They were notified.`);
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
-  const approveBlocked = missing.length > 0 || rejectedDocs.length > 0;
+  // A claim transfers ownership: the server also requires every document individually approved.
+  const unreviewedDocs = isClaim ? docs.filter((d) => d.status === 'pending') : [];
+  const approveBlocked = missing.length > 0 || rejectedDocs.length > 0 || unreviewedDocs.length > 0;
+  const approveBlockedReason = missing.length
+    ? `Approve is locked: ${missing.length} required document${missing.length === 1 ? '' : 's'} missing.`
+    : rejectedDocs.length
+      ? `Approve is locked: ${rejectedDocs.length} document${rejectedDocs.length === 1 ? '' : 's'} rejected.`
+      : unreviewedDocs.length
+        ? `Approve is locked until each document is verified (${unreviewedDocs.length} still pending) — use “Verify all” or Approve on each document.`
+        : '';
 
   /** Pre-fills the owner feedback with what is missing / must be replaced. */
   const draftInfoRequest = () => {
     const parts: string[] = [];
     if (missing.length) parts.push(`Please upload: ${missing.map((m) => m.label).join(', ')}.`);
-    if (rejectedDocs.length) parts.push(`Please replace: ${rejectedDocs.map((d) => `${verificationDocumentLabel(entityType, d.type)}${d.notes ? ` (${d.notes})` : ''}`).join(', ')}.`);
+    if (rejectedDocs.length) parts.push(`Please replace: ${rejectedDocs.map((d) => `${verificationDocumentLabel(entityType, d.type, kind)}${d.notes ? ` (${d.notes})` : ''}`).join(', ')}.`);
     setFeedback(parts.join(' ') || feedback);
   };
 
@@ -312,7 +345,7 @@ function VerificationRequestCard({
         </div>
         {[...specs.map((sp) => ({ sp, d: docs.find((x) => x.type === sp.type) })), ...extraDocs.map((d) => ({ sp: null, d }))].map(({ sp, d }) => {
           const key = d?.id || sp?.type || '';
-          const label = sp ? sp.label : verificationDocumentLabel(entityType, d?.type || '');
+          const label = sp ? sp.label : verificationDocumentLabel(entityType, d?.type || '', kind);
           const askedAt = sp ? lastAsked.get(sp.type) : undefined;
           return (
             <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid #F5F6F8', flexWrap: 'wrap' }} data-testid={d ? 'verification-document' : 'verification-document-missing'}>
@@ -390,7 +423,7 @@ function VerificationRequestCard({
           );
         })}
         {v?.status === 'Draft' ? (
-          <div style={{ fontSize: 10.5, color: '#6B7280', fontWeight: 600, marginTop: 6 }}>The owner has not submitted this request yet — it can be reviewed once they submit it.</div>
+          <div style={{ fontSize: 10.5, color: '#6B7280', fontWeight: 600, marginTop: 6 }}>The {who} has not submitted this request yet — it can be reviewed once they submit it.</div>
         ) : null}
       </div>
 
@@ -411,11 +444,12 @@ function VerificationRequestCard({
             <div style={{ fontSize: 10.5, fontWeight: 700, color: '#92400E', marginBottom: 6 }}>
               Approval needs every required document uploaded and none rejected.
               {missing.length ? ` Missing: ${missing.map((m) => m.label).join(', ')}.` : ''}
-              {rejectedDocs.length ? ` Rejected: ${rejectedDocs.map((d) => verificationDocumentLabel(v.entityType, d.type)).join(', ')}.` : ''}
-              {' '}Use “Request more information” to ask the owner again.
+              {rejectedDocs.length ? ` Rejected: ${rejectedDocs.map((d) => verificationDocumentLabel(v.entityType, d.type, kind)).join(', ')}.` : ''}
+              {unreviewedDocs.length ? ` Approve each document first (${unreviewedDocs.length} not reviewed).` : ''}
+              {' '}Use “Request more information” to ask the {who} again.
             </div>
           ) : null}
-          <label htmlFor={`vf-${v.id}`} style={{ fontSize: 9, fontWeight: 800, color: '#6B7280', display: 'block', marginBottom: 4 }}>FEEDBACK TO THE OWNER (REQUIRED FOR ANY DECISION)</label>
+          <label htmlFor={`vf-${v.id}`} style={{ fontSize: 9, fontWeight: 800, color: '#6B7280', display: 'block', marginBottom: 4 }}>FEEDBACK TO THE {who.toUpperCase()} (REQUIRED FOR ANY DECISION)</label>
           <textarea
             id={`vf-${v.id}`}
             value={feedback}
@@ -430,24 +464,57 @@ function VerificationRequestCard({
               type="button"
               style={{ ...btn, background: '#166534', color: '#fff', borderColor: '#166534', opacity: approveBlocked ? 0.5 : 1 }}
               disabled={busy || !feedback.trim() || approveBlocked}
-              title={approveBlocked ? 'All required documents must be uploaded and none rejected before approving.' : undefined}
-              onClick={() => void act(() => operationsApi.reviewVerification(v.id, { status: 'approved', feedback: feedback.trim() }), 'Verification approved.')}
+              title={approveBlocked ? approveBlockedReason : !feedback.trim() ? 'Write the feedback first.' : undefined}
+              onClick={() => void act(() => operationsApi.reviewVerification(v.id, { status: 'approved', feedback: feedback.trim() }), isClaim ? 'Claim approved — ownership transferred to the claimant.' : 'Verification approved.')}
               data-testid="verification-approve"
             >
               Approve
             </button>
+            {unreviewedDocs.length > 0 && !missing.length && !rejectedDocs.length ? (
+              <button
+                type="button"
+                style={{ ...btn, color: '#166534', borderColor: '#86EFAC' }}
+                disabled={busy}
+                title="Mark every uploaded document verified after checking them (View / Download above)"
+                onClick={() =>
+                  void act(async () => {
+                    for (const d of unreviewedDocs) await operationsApi.updateVerificationDocument(v.id, d.id, { status: 'approved' });
+                  }, `All ${unreviewedDocs.length} documents verified — you can approve now.`)
+                }
+                data-testid="verification-verify-all"
+              >
+                Verify all {unreviewedDocs.length} documents
+              </button>
+            ) : null}
             {missing.length || rejectedDocs.length ? (
               <button type="button" style={btn} disabled={busy} onClick={draftInfoRequest} data-testid="verification-draft-missing">
                 Fill in what’s missing / wrong
               </button>
             ) : null}
-            <button type="button" style={{ ...btn, color: '#92400E', borderColor: '#FCD34D' }} disabled={busy || !feedback.trim()} onClick={() => void act(() => operationsApi.reviewVerification(v.id, { status: 'request_info', feedback: feedback.trim() }), 'More information requested from the owner.')} data-testid="verification-request-info">
+            {v.status === 'Submitted' ? (
+              <button
+                type="button"
+                style={{ ...btn, color: '#3730A3', borderColor: '#C7D2FE' }}
+                disabled={busy}
+                title="Take this request into review (no message is sent)"
+                onClick={() => void act(() => operationsApi.reviewVerification(v.id, { status: 'under_review', feedback: '' }), 'Marked pending — under review.')}
+                data-testid="verification-mark-pending"
+              >
+                Mark pending (under review)
+              </button>
+            ) : null}
+            <button type="button" style={{ ...btn, color: '#92400E', borderColor: '#FCD34D' }} disabled={busy || !feedback.trim()} onClick={() => void act(() => operationsApi.reviewVerification(v.id, { status: 'request_info', feedback: feedback.trim() }), `More information requested from the ${who}.`)} data-testid="verification-request-info">
               Request more information
             </button>
-            <button type="button" style={{ ...btn, color: '#991B1B', borderColor: '#FCA5A5' }} disabled={busy || !feedback.trim()} onClick={() => void act(() => operationsApi.reviewVerification(v.id, { status: 'rejected', feedback: feedback.trim() }), 'Verification rejected.')}>
+            <button type="button" style={{ ...btn, color: '#991B1B', borderColor: '#FCA5A5' }} disabled={busy || !feedback.trim()} onClick={() => void act(() => operationsApi.reviewVerification(v.id, { status: 'rejected', feedback: feedback.trim() }), isClaim ? 'Claim rejected — the profile is claimable again.' : 'Verification rejected.')}>
               Reject
             </button>
           </div>
+          {approveBlocked ? (
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: '#6B7280', marginTop: 6 }} data-testid="verification-approve-locked">
+              {approveBlockedReason}
+            </div>
+          ) : null}
         </div>
       ) : null}
       {msg ? <div role={msg.ok ? 'status' : 'alert'} style={{ padding: '8px 16px', fontSize: 11.5, fontWeight: 700, color: msg.ok ? '#166534' : '#DC2626' }}>{msg.text}</div> : null}

@@ -376,6 +376,8 @@ const state: {
   shopperSignals: import('./types').OpsShopperSignals[];
   accountActivity: import('./types').OpsAccountActivity[];
   verificationDocRequests: import('./types').OpsVerificationDocRequest[];
+  claimIntents: import('./types').OpsClaimIntent[];
+  auditEvents: import('./types').OpsAuditEvent[];
 } = {
   orders: [],
   coupons: defaultCoupons(),
@@ -399,6 +401,8 @@ const state: {
   shopperSignals: [],
   accountActivity: [],
   verificationDocRequests: [],
+  claimIntents: [],
+  auditEvents: [],
   featureFlags: {
     creator_hub: true,
     compare_tool: true,
@@ -464,6 +468,8 @@ export const operationsStore = {
     if (snapshot.shopperSignals) state.shopperSignals = snapshot.shopperSignals;
     if (snapshot.accountActivity) state.accountActivity = snapshot.accountActivity;
     if (snapshot.verificationDocRequests) state.verificationDocRequests = snapshot.verificationDocRequests;
+    if (snapshot.claimIntents) state.claimIntents = snapshot.claimIntents;
+    if (snapshot.auditEvents) state.auditEvents = snapshot.auditEvents;
   },
 
   listCouponUsage: () => [...state.couponUsage],
@@ -1065,6 +1071,42 @@ export const operationsStore = {
     return event;
   },
 
+  listClaimIntents: () => state.claimIntents.slice(),
+  getClaimIntent: (id: string) => state.claimIntents.find((i) => i.id === id) || null,
+  findClaimIntentByApplication: (applicationId: string) => state.claimIntents.find((i) => i.applicationId === applicationId) || null,
+  addClaimIntent: (intent: import('./types').OpsClaimIntent) => {
+    // Keep the collection bounded: drop intents expired more than 7 days ago that never became a claim.
+    const cutoff = Date.now() - 7 * 86_400_000;
+    state.claimIntents = state.claimIntents.filter((i) => i.claimId || i.applicationId || Date.parse(i.expiresAt) > cutoff);
+    state.claimIntents.push(intent);
+    touch();
+    return intent;
+  },
+  updateClaimIntent: (id: string, patch: Partial<import('./types').OpsClaimIntent>) => {
+    const idx = state.claimIntents.findIndex((i) => i.id === id);
+    if (idx < 0) return null;
+    state.claimIntents[idx] = { ...state.claimIntents[idx], ...patch };
+    touch();
+    return state.claimIntents[idx];
+  },
+  /** Audit events (newest first). */
+  listAuditEvents: (filter?: { targetType?: string; targetId?: string; action?: string; limit?: number }) =>
+    state.auditEvents
+      .filter(
+        (e) =>
+          (!filter?.targetType || e.targetType === filter.targetType) &&
+          (!filter?.targetId || e.targetId === filter.targetId) &&
+          (!filter?.action || e.action === filter.action),
+      )
+      .slice()
+      .sort((a, b) => (a.at < b.at ? 1 : -1))
+      .slice(0, filter?.limit ?? 500),
+  addAuditEvent: (event: import('./types').OpsAuditEvent) => {
+    state.auditEvents.push(event);
+    if (state.auditEvents.length > 20000) state.auditEvents = state.auditEvents.slice(-20000);
+    touch();
+    return event;
+  },
   /** Staff document requests (newest first). */
   listVerificationDocRequests: (filter?: { entityType?: string; entityId?: string }) =>
     state.verificationDocRequests

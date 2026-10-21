@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState, CSSProperties } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { profileReturnTarget } from '../../lib/profileReturn';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRbac } from '../../contexts/RbacContext';
 import { useImpersonation } from '../../contexts/ImpersonationContext';
 import { Loader2, AlertTriangle, ArrowLeft, LogIn, Phone, Mail } from 'lucide-react';
-import { AdminMessageUserButton } from '../../components/messaging/AdminMessageUserButton';
 import { catalogApi, type GuideManageRow } from '../../services/catalogApi';
 import { authApi, type UserDetail } from '../../services/authApi';
 import { operationsApi, type OpsReview } from '../../services/operationsApi';
@@ -21,6 +21,8 @@ import { MarketplaceStatusBadge, PhotoVerificationBadge } from '../../components
 import { PayoutInfoPanel } from '../../components/admin/profile/PayoutInfoPanel';
 import { AccountActivityPanel } from '../../components/admin/profile/AccountActivityPanel';
 import { VerificationCenterPanel } from '../../components/admin/profile/VerificationCenterPanel';
+import { ClaimReviewSection } from '../../components/admin/claims/ClaimReviewSection';
+import { ApplicationReviewSection } from '../../components/admin/claims/ApplicationReviewSection';
 import { MarketplaceAccessSection } from '../../components/admin/profile/MarketplaceAccessSection';
 import { ProfileMessagePopup } from '../../components/messaging/ProfileMessagePopup';
 import { ProfileContactActions } from '../../components/admin/profile/ProfileContactActions';
@@ -63,6 +65,12 @@ const GUIDE_TONE: Record<string, CSSProperties> = {
 export default function CreatorProfile() {
   const [searchParams] = useSearchParams();
   const creatorId = searchParams.get('creatorId') || '';
+  /** Back to the exact management tab/list this profile was opened from. */
+  const backTo = profileReturnTarget(useLocation().state, 'creator');
+  /** Opened from the Ownership Claims queue: review this account's claim on top of its full profile. */
+  const claimId = searchParams.get('claimId') || '';
+  /** Opened from the Requests tab: review this account's Seller/Creator application on top of its full profile. */
+  const applicationId = searchParams.get('applicationId') || '';
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { can } = useRbac();
@@ -225,19 +233,20 @@ export default function CreatorProfile() {
             <div style={S.sub}>Account only — this creator has not set up Creator Studio yet</div>
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }} data-testid="profile-header-actions">
-            <AdminMessageUserButton targetUserId={targetUserId} />
             {showLoginAsUser && (
               <button onClick={requestLoginAs} style={{ ...S.hBtn, borderColor: ACCENT, color: ACCENT, background: ACCENT_WASH }}>
                 <LogIn size={13} /> Login As User
               </button>
             )}
             <AdminEditUserButton state={edit} />
-            <button onClick={() => navigate('/admin/creator-management')} style={S.hBtn}>
-              <ArrowLeft size={13} /> All Creators
+            <button onClick={() => navigate(backTo.href)} style={S.hBtn} data-testid="profile-back">
+              <ArrowLeft size={13} /> {backTo.label}
             </button>
           </div>
         </div>
         <AdminEditModeStrip state={edit} />
+        {claimId ? <ClaimReviewSection claimId={claimId} onDecided={() => void load()} /> : null}
+        {applicationId ? <ApplicationReviewSection applicationId={applicationId} onDecided={() => void load()} /> : null}
         <div style={S.grid} className="cprv-grid">
           <div style={S.card} data-testid="profile-identity">
             <div style={S.cover}><span style={S.coverLabel}>CREATOR</span></div>
@@ -277,20 +286,21 @@ export default function CreatorProfile() {
           <div style={S.sub}>Read-only 360° view of this creator across Choosify</div>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }} data-testid="profile-header-actions">
-          {targetUserId ? <AdminMessageUserButton targetUserId={targetUserId} /> : null}
           {showLoginAsUser && (
             <button onClick={requestLoginAs} style={{ ...S.hBtn, borderColor: ACCENT, color: ACCENT, background: ACCENT_WASH }}>
               <LogIn size={13} /> Login As User
             </button>
           )}
           <AdminEditUserButton state={edit} />
-          <button onClick={() => navigate('/admin/creator-management')} style={S.hBtn}>
-            <ArrowLeft size={13} /> All Creators
+          <button onClick={() => navigate(backTo.href)} style={S.hBtn} data-testid="profile-back">
+            <ArrowLeft size={13} /> {backTo.label}
           </button>
         </div>
       </div>
 
       <AdminEditModeStrip state={edit} />
+      {claimId ? <ClaimReviewSection claimId={claimId} onDecided={() => void load()} /> : null}
+      {applicationId ? <ApplicationReviewSection applicationId={applicationId} onDecided={() => void load()} /> : null}
 
       <div style={S.grid} className="cprv-grid">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

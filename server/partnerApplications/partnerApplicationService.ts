@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { operationsStore } from '../operations/operationsStore';
+import { scheduleOperationsPersist } from '../operations/operationsPersistence';
+import { ClaimError, createOwnershipClaim, loadEntity, ownerOf, publicOwnership, activeOwnershipClaims, type ClaimEntityType } from '../claims/ownershipClaims';
 import { eq } from 'drizzle-orm';
 import { catalogStore } from '../../lib/vercel-catalog/catalogStore';
 import { normalizeCreatorInput } from '../../lib/vercel-catalog/catalogEditorialContract';
@@ -33,6 +36,12 @@ export type PartnerApplyInput = {
   socialPrimary?: string;
   audienceSize?: string;
   notes?: string;
+  /**
+   * Server-issued claim reference from a community profile's "Claim" button.
+   * When valid, onboarding attaches the applicant to THAT profile (as a Draft
+   * ownership claim) instead of creating a new Brand / Creator.
+   */
+  claimIntentId?: string;
 };
 
 function appendHistory(
@@ -65,6 +74,8 @@ async function createSellerIdentityBrand(params: {
     marketplaceStatus: 'not_granted',
     claimStatus: 'pending',
     verifiedStatus: false,
+    origin: 'owner',
+    ownershipSource: 'seller_onboarding',
     overview: {
       email: params.email,
       phone: params.phone,
@@ -102,6 +113,8 @@ async function createCreatorDraft(params: {
     followers: {},
     email: params.email,
     userId: params.userId,
+    origin: 'owner',
+    ownershipSource: 'creator_onboarding',
     verifiedStatus: false,
     featuredFlag: false,
     videos: [],
@@ -119,6 +132,8 @@ async function provisionPartnerUser(params: {
   app: PartnerApplication;
   passwordHash: string;
   existingUserId?: string;
+  /** Claim onboarding: the applicant will claim an EXISTING community profile — do not create a new one. */
+  skipCatalogEntity?: boolean;
 }): Promise<{ userId: string; catalogEntityId: string }> {
   const role = params.app.applicantType === 'creator' ? ROLES.CREATOR : ROLES.SELLER;
   const now = new Date();
@@ -209,7 +224,7 @@ async function provisionPartnerUser(params: {
   }
 
   let catalogEntityId = params.app.catalogEntityId || '';
-  if (!catalogEntityId) {
+  if (!catalogEntityId && !params.skipCatalogEntity) {
     if (role === ROLES.SELLER) {
       const owned = (await catalogStore.listBrands()).find((b) => b.sellerId === userId);
       catalogEntityId =
@@ -287,6 +302,9 @@ export async function submitPartnerApplication(input: PartnerApplyInput): Promis
     }
   }
 
+  // Claim onboarding: validate the server-issued claim reference BEFORE anything is created.
+  const claimTarget = input.claimIntentId ? await validateOnboardingClaimIntent(input.claimIntentId, input.applicantType, existingUserId) : null;
+
   if (await partnerApplicationStore.findPendingByEmail(email)) {
     const err = new Error('A pending partner application already exists for this email.');
     (err as Error & { status?: number; code?: string }).status = 409;
@@ -326,7 +344,36 @@ export async function submitPartnerApplication(input: PartnerApplyInput): Promis
     app: row,
     passwordHash,
     existingUserId,
+    skipCatalogEntity: Boolean(claimTarget),
   });
+
+  let claimId: string | undefined;
+  if (claimTarget) {
+    // Attach to the EXISTING community profile as a Draft ownership claim. This
+    // never grants ownership — staff still verify the claim's documents.
+    operationsStore.updateClaimIntent(claimTarget.intentId, { applicationId: row.id, userId: provisioned.userId });
+    scheduleOperationsPersist();
+    try {
+      const { claim } = await createOwnershipClaim({
+        req: null,
+        type: claimTarget.type,
+        entityId: claimTarget.entityId,
+        claimant: {
+          id: provisioned.userId,
+          role: input.applicantType === 'creator' ? 'creator' : 'seller',
+          displayName: input.displayName.trim(),
+        },
+        source: 'onboarding',
+        intentId: claimTarget.intentId,
+        submit: false,
+      });
+      claimId = claim.id;
+    } catch (error) {
+      // The account still exists (no duplicate profile was created); the claimant
+      // can restart the claim from the profile page. Report it, do not hide it.
+      console.error('[PartnerApplications] Claim onboarding could not open the ownership claim:', error);
+    }
+  }
 
   await partnerApplicationStore.update(row.id, {
     provisionedUserId: provisioned.userId,
@@ -354,9 +401,37 @@ export async function submitPartnerApplication(input: PartnerApplyInput): Promis
     applicationId: row.id,
     status: 'pending',
     provisionedUserId: provisioned.userId,
-    message:
-      'Application received. You can sign in now. Marketplace features stay locked until Admin verifies your identity and enables Marketplace Access.',
+    ...(claimId ? { claimId } : {}),
+    message: claimId
+      ? 'Application received. Sign in to upload the documents for your ownership claim. You will not control the profile until Choosify verifies the claim.'
+      : 'Application received. You can sign in now. Marketplace features stay locked until Admin verifies your identity and enables Marketplace Access.',
   };
+}
+
+/** Validate a claim reference for partner onboarding (type match, not expired, unbound or bound to this account, target still claimable). */
+async function validateOnboardingClaimIntent(
+  intentId: string,
+  applicantType: PartnerApplicantType,
+  existingUserId: string | undefined,
+): Promise<{ intentId: string; type: ClaimEntityType; entityId: string }> {
+  const fail = (code: string, message: string, status = 400): never => {
+    throw Object.assign(new Error(message), { status, code });
+  };
+  const intent = operationsStore.getClaimIntent(String(intentId));
+  if (!intent) return fail('CLAIM_INTENT_NOT_FOUND', 'This claim link is not valid. Start again from the profile page.', 404);
+  const expectedType: ClaimEntityType = applicantType === 'creator' ? 'creator' : 'brand';
+  if (intent.entityType !== expectedType) {
+    return fail('CLAIM_PERSONA_MISMATCH', intent.entityType === 'brand' ? 'Brand claims need a Seller application.' : 'Creator profile claims need a Creator application.');
+  }
+  if (Date.parse(intent.expiresAt) < Date.now()) return fail('CLAIM_INTENT_EXPIRED', 'This claim link has expired. Start again from the profile page.', 410);
+  if (intent.applicationId || intent.claimId) return fail('CLAIM_INTENT_USED', 'This claim link was already used.', 409);
+  if (intent.userId && intent.userId !== existingUserId) return fail('CLAIM_INTENT_OTHER_ACCOUNT', 'This claim link belongs to a different account.', 403);
+  const entity = await loadEntity(intent.entityType, intent.entityId);
+  if (!entity) return fail('PROFILE_NOT_FOUND', 'The profile for this claim no longer exists.', 404);
+  const state = publicOwnership(intent.entityType, entity, activeOwnershipClaims(intent.entityType, entity.id, ownerOf(intent.entityType, entity)).length > 0);
+  if (!state.claimable) return fail('NOT_CLAIMABLE', 'This profile can no longer be claimed.', 409);
+  void ClaimError;
+  return { intentId: intent.id, type: intent.entityType, entityId: entity.id };
 }
 
 async function markIdentityVerified(app: PartnerApplication): Promise<void> {

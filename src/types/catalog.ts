@@ -172,6 +172,22 @@ export interface CatalogBrand {
   /** Owning seller user id when brand is seller-managed; omitted for platform/legacy rows. */
   sellerId?: string;
   /**
+   * Community-profile provenance (server-controlled; never accepted from clients).
+   * origin 'community' = created by Choosify staff from public information, not by
+   * an owner. Absent on legacy records (interpreted from sellerId/userId).
+   */
+  origin?: 'community' | 'owner';
+  /** Server-computed public ownership state (present on GET list responses; never written). */
+  ownership?: { state: 'owned_verified' | 'owned' | 'claim_pending' | 'community' | 'unavailable'; claimable: boolean };
+  /** Staff user who created a community profile. */
+  createdByStaffId?: string;
+  /** When ownership was verified (claim approval, onboarding, or explicit staff assignment). */
+  ownershipVerifiedAt?: string;
+  /** How the current owner obtained ownership. */
+  ownershipSource?: 'claim' | 'seller_onboarding' | 'creator_onboarding' | 'admin_assigned';
+  /** Canonical Category Management id (the `category` text stays as the display label). */
+  categoryId?: string;
+  /**
    * Public storefront visibility. Seller drafts default false until Marketplace Access is ON.
    * Seeded / platform brands default true. Kept in sync with marketplaceStatus:
    * true for 'granted'/'restored', false for every other status.
@@ -503,6 +519,17 @@ export interface SiteConfig {
   websiteAssets?: SiteWebsiteAssets;
   /** Editorial CTA/banner strips — Website Manager → CTA & Banners. Not paid/sponsored placements (see CatalogPlacement). */
   ctaBanners?: CtaBannerItem[];
+  /**
+   * Community Claimable Profiles copy (editable, reviewable — not hard-coded
+   * legal text). Written only via PUT /catalog/site/community-profiles.
+   */
+  communityProfiles?: {
+    brandDisclaimer?: string;
+    creatorDisclaimer?: string;
+    claimReviewNotice?: string;
+    updatedAt?: string;
+    updatedBy?: string;
+  };
   /** Optional storefront auth-page (Login/Signup/Forgot/Reset/Seller-Signup) left-column visual — Website Manager → CTA & Banners → Auth Page Visual. Unset renders the approved no-image fallback. */
   authVisual?: {
     storefrontImage?: string;
@@ -663,6 +690,25 @@ export interface CatalogCreator {
   status: 'draft' | 'live' | 'archived';
   /** Owning creator user id — creator workspace is scoped to this. */
   userId?: string;
+  /**
+   * Community-profile provenance (server-controlled; never accepted from clients).
+   * origin 'community' = created by Choosify staff from public information, not by
+   * an owner. Absent on legacy records (interpreted from sellerId/userId).
+   */
+  origin?: 'community' | 'owner';
+  /** Server-computed public ownership state (present on GET list responses; never written). */
+  ownership?: { state: 'owned_verified' | 'owned' | 'claim_pending' | 'community' | 'unavailable'; claimable: boolean };
+  /** Staff user who created a community profile. */
+  createdByStaffId?: string;
+  /** When ownership was verified (claim approval, onboarding, or explicit staff assignment). */
+  ownershipVerifiedAt?: string;
+  /** How the current owner obtained ownership. */
+  ownershipSource?: 'claim' | 'seller_onboarding' | 'creator_onboarding' | 'admin_assigned';
+  /**
+   * Community/claim label for creators (mirrors brands). Ownership itself is
+   * decided by userId — this is only the displayed lifecycle label.
+   */
+  claimStatus?: 'community' | 'pending' | 'verified';
   createdAt: string;
   updatedAt: string;
 }

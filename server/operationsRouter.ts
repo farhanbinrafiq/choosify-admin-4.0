@@ -93,11 +93,37 @@ import { batchAccountPrimaryLabels } from './profileStatusFacts';
 import { Logger } from './lib/logger';
 import { randomUUID } from 'crypto';
 import { ownerView, recordAccountActivity } from './accountActivity/accountActivity';
+import { recordKey, withRecordLocks } from './catalog/recordLock';
+import type { CatalogBrand } from '../src/types/catalog';
+import {
+  ACTIVE_VERIFICATION_STATUSES,
+  ClaimError,
+  approveOwnershipClaim,
+  assignOwnerExplicitly,
+  closeOwnershipClaim,
+  createClaimIntent,
+  createOwnershipClaim,
+  emailUser,
+  expireStaleClaims,
+  isPrivateUploadUrl,
+  loadClaimant,
+  loadEntity,
+  ownerOf,
+  publicOwnership,
+  activeOwnershipClaims,
+  requiredRoleFor,
+  resolveClaimIntent,
+  recordAudit,
+  roleCanClaim,
+  verificationKindOf,
+  type ClaimEntityType,
+} from './claims/ownershipClaims';
 import {
   PROFILE_PHOTO_DOCUMENT,
   VERIFICATION_DOCUMENT_TYPES,
   missingRequiredDocuments,
   verificationDocumentLabel,
+  verificationDocumentSpecs,
 } from '../shared/verification/verificationDocuments';
 import { createNotification } from './communication/notificationService';
 import { notifyRoles, notifyUser } from './communication/systemNotify';
@@ -687,86 +713,51 @@ function userCanViewVerification(
   return Boolean(req.userId && row.submitted_by === req.userId);
 }
 
+/**
+ * OWNER-VERIFICATION decision side effect. Ownership is never changed here:
+ * an owner verification can only (un)verify the profile's CURRENT owner.
+ * Ownership claims go through claims/ownershipClaims.approveOwnershipClaim.
+ */
 async function applyEntityVerificationSideEffect(
   row: OpsVerificationRequest,
   decision: 'approved' | 'rejected',
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const type = row.entityType === 'creator' ? 'creator' : 'brand';
   try {
-    if (row.entityType === 'brand') {
-      const existing = await catalogStore.getBrand(row.entityId);
-      if (!existing) {
-        return { ok: false, error: `Brand ${row.entityId} not found in catalog` };
+    return await withRecordLocks([`claim:${type}:${row.entityId}`, recordKey(type, row.entityId)], async () => {
+      const existing = await loadEntity(type, row.entityId);
+      if (!existing) return { ok: false as const, error: `${type === 'brand' ? 'Brand' : 'Creator'} ${row.entityId} not found in catalog` };
+      if (ownerOf(type, existing) !== row.submitted_by) {
+        return { ok: false as const, error: 'This request was not filed by the profile\'s current owner, so it cannot change verification. Ownership claims use the claim workflow.' };
       }
-      if (decision === 'approved') {
-        // NOTE: approving a claim CAN legitimately reassign sellerId away
-        // from a brand's current owner — that is an intentional, existing,
-        // tested ownership-dispute-resolution workflow (a different seller
-        // proves genuine ownership and Super Admin approves their claim).
-        // The safeguard against an unwanted takeover is the human review
-        // itself (moderator role + feedback required, self-approval
-        // blocked) plus the re-review guard above, not a blanket refusal
-        // here.
+      const now = new Date().toISOString();
+      if (type === 'brand') {
+        const b = existing as CatalogBrand;
         const normalized = normalizeBrandInput(
-          {
-            ...existing,
-            claimStatus: 'verified',
-            verifiedStatus: true,
-            sellerId: row.submitted_by || existing.sellerId,
-          },
-          existing,
+          decision === 'approved'
+            ? { ...b, claimStatus: 'verified', verifiedStatus: true, ownershipVerifiedAt: b.ownershipVerifiedAt || now }
+            : { ...b, verifiedStatus: false },
+          b,
         );
-        await catalogStore.upsertBrand(normalized);
+        await catalogStore.upsertBrand({ ...normalized, slug: b.slug });
       } else {
-        const otherOwner =
-          Boolean(existing.sellerId) && existing.sellerId !== row.submitted_by;
-        const normalized = normalizeBrandInput(
-          {
-            ...existing,
-            claimStatus: otherOwner && existing.verifiedStatus ? 'verified' : 'community',
-            verifiedStatus: otherOwner ? Boolean(existing.verifiedStatus) : false,
-            sellerId: otherOwner ? existing.sellerId : existing.sellerId,
-          },
-          existing,
+        const c = existing as import('../lib/vercel-catalog/catalogEditorialTypes').CatalogCreator;
+        const normalized = normalizeCreatorInput(
+          decision === 'approved'
+            ? { ...c, claimStatus: 'verified', verifiedStatus: true, ownershipVerifiedAt: c.ownershipVerifiedAt || now }
+            : { ...c, verifiedStatus: false },
+          c,
         );
-        await catalogStore.upsertBrand(normalized);
+        await catalogStore.upsertCreator({ ...normalized, slug: c.slug });
       }
-      return { ok: true };
-    }
-
-    const existing = await catalogStore.getCreator(row.entityId);
-    if (!existing) {
-      return { ok: false, error: `Creator ${row.entityId} not found in catalog` };
-    }
-    const otherOwner = Boolean(existing.userId) && existing.userId !== row.submitted_by;
-    const normalized = normalizeCreatorInput(
-      {
-        ...existing,
-        verifiedStatus:
-          decision === 'approved' ? true : otherOwner ? Boolean(existing.verifiedStatus) : false,
-        userId: decision === 'approved' ? row.submitted_by || existing.userId : existing.userId,
-      },
-      existing,
-    );
-    await catalogStore.upsertCreator(normalized);
-    return { ok: true };
+      return { ok: true as const };
+    });
   } catch (error) {
     return {
       ok: false,
       error: error instanceof Error ? error.message : 'Failed to update catalog entity',
     };
   }
-}
-
-async function markEntityClaimPending(row: {
-  entityType: 'brand' | 'creator';
-  entityId: string;
-}): Promise<void> {
-  if (row.entityType !== 'brand') return;
-  const existing = await catalogStore.getBrand(row.entityId);
-  if (!existing) return;
-  if (existing.claimStatus === 'verified') return;
-  const normalized = normalizeBrandInput({ ...existing, claimStatus: 'pending' }, existing);
-  await catalogStore.upsertBrand(normalized);
 }
 
 /** List returns: buyer may only query own buyerId; seller/admin may query by sellerId or list broadly if staff. */
@@ -6299,6 +6290,76 @@ operationsRouter.post('/operations/media/upload-verification', ...requireAuth, a
   }
 });
 
+function sendClaimError(res: import('express').Response, error: unknown, fallback = 'Request failed'): void {
+  if (error instanceof ClaimError) {
+    res.status(error.status).json({ error: error.message, code: error.code, ...(error.details || {}) });
+    return;
+  }
+  Logger.error('ownership claim route failed', { error: error instanceof Error ? error.message : String(error) });
+  res.status(500).json({ error: fallback });
+}
+
+const ownerDashboardTab = (type: string) => (type === 'creator' ? '/admin/creator-profile?tab=verification' : '/admin/brand-profile?tab=verification');
+
+/** Notifications + email + activity once an ownership claim reaches Submitted. */
+async function afterClaimSubmitted(req: import('express').Request, claim: OpsVerificationRequest): Promise<void> {
+  recordAccountActivity(req, {
+    userId: claim.submitted_by,
+    type: 'ownership_claim_submitted',
+    category: 'verification',
+    summary: `Ownership claim submitted for ${claim.entityName}`,
+  });
+  try {
+    await notifyRoles(['admin', 'super_admin', 'moderator'], {
+      type: 'system_alert',
+      category: 'admin',
+      eventKey: 'staff.verification_submitted',
+      persona: 'staff',
+      title: 'Ownership claim needs review',
+      summary: `${claim.submitted_by_name || 'A user'} claimed the ${claim.entityType} "${claim.entityName}".`,
+      actionUrl: claim.entityType === 'creator' ? '/admin/creator-management?filter=claims' : '/admin/seller-management?filter=claims',
+      metadata: { verificationId: claim.id, entityType: claim.entityType, entityId: claim.entityId },
+    });
+    await notifyUser(claim.submitted_by, {
+      type: COMMUNICATION_TYPES.MODERATION_UPDATE,
+      category: 'seller',
+      eventKey: 'verification.update',
+      persona: claim.entityType === 'creator' ? 'creator' : 'seller',
+      title: 'Ownership claim received',
+      summary: `We received your claim for ${claim.entityName}. It is under verification — typically within 48 hours.`,
+      actionUrl: ownerDashboardTab(claim.entityType),
+    });
+  } catch (err) {
+    Logger.error('ownership claim notify failed', { error: String(err) });
+  }
+  void emailUser(claim.submitted_by, {
+    subject: `Ownership claim received — ${claim.entityName}`,
+    heading: 'Ownership claim received',
+    lines: [
+      `We received your claim for ${claim.entityName}.`,
+      'Choosify will review your documents — typically within 48 hours. We may ask you for more information.',
+      'You will not get control of the profile until the claim is approved.',
+    ],
+    ctaLabel: 'View verification status',
+    dashboardPath: ownerDashboardTab(claim.entityType),
+  });
+}
+
+/**
+ * Claim requests are closed for document changes once they leave Draft /
+ * Submitted / Under Review (Approved, Rejected, Withdrawn, Expired). Returns
+ * true when it already answered the request.
+ */
+async function refuseClosedClaimDocumentChange(existing: OpsVerificationRequest, res: import('express').Response): Promise<boolean> {
+  const type: ClaimEntityType = existing.entityType === 'creator' ? 'creator' : 'brand';
+  const kind = verificationKindOf(existing, ownerOf(type, await loadEntity(type, existing.entityId)));
+  if (kind === 'ownership_claim' && !ACTIVE_VERIFICATION_STATUSES.has(existing.status)) {
+    res.status(409).json({ error: `This ownership claim is ${existing.status.toLowerCase()} and can no longer be changed. Start a new claim from the profile page.`, code: 'CLAIM_CLOSED' });
+    return true;
+  }
+  return false;
+}
+
 operationsRouter.post('/operations/verifications', ...requireAuth, async (req, res) => {
   const body = req.body as {
     entityType?: string;
@@ -6311,13 +6372,14 @@ operationsRouter.post('/operations/verifications', ...requireAuth, async (req, r
     submitted_by_name?: string;
     status?: string;
     documents?: OpsVerificationDocument[];
+    claimIntentId?: string;
+    claimSource?: string;
   };
 
-  const entityType = body.entityType === 'creator' ? 'creator' : 'brand';
+  const entityType: ClaimEntityType = body.entityType === 'creator' ? 'creator' : 'brand';
   const entityId = String(body.entityId || body.brand_id || '').trim();
-  const entityName = String(body.entityName || body.brand_name || '').trim();
-  if (!entityId || !entityName) {
-    res.status(400).json({ error: 'entityId/entityName (or brand_id/brand_name) are required' });
+  if (!entityId) {
+    res.status(400).json({ error: 'entityId (or brand_id) is required' });
     return;
   }
 
@@ -6327,6 +6389,47 @@ operationsRouter.post('/operations/verifications', ...requireAuth, async (req, r
     return;
   }
 
+  const entity = await loadEntity(entityType, entityId);
+  if (!entity) {
+    res.status(404).json({ error: 'This profile does not exist.', code: 'PROFILE_NOT_FOUND' });
+    return;
+  }
+  const owner = ownerOf(entityType, entity);
+  const entityName = String((entity as { name?: string }).name || body.entityName || body.brand_name || entityId);
+
+  // ── Not the owner → this is an OWNERSHIP CLAIM (community profiles only). ──
+  if (owner !== req.userId) {
+    if (userCanManageVerifications(req)) {
+      res.status(403).json({ error: 'Choosify staff cannot file ownership claims. Use the explicit ownership assignment workflow.', code: 'STAFF_CANNOT_CLAIM' });
+      return;
+    }
+    try {
+      const { claim, reused } = await createOwnershipClaim({
+        req,
+        type: entityType,
+        entityId,
+        claimant: {
+          id: req.userId!,
+          role: String(req.userRole || ''),
+          displayName: body.submitted_by_name?.trim() || req.user?.displayName || '',
+        },
+        source: body.claimSource === 'invitation' ? 'invitation' : 'storefront',
+        intentId: body.claimIntentId ? String(body.claimIntentId) : undefined,
+        documents: body.documents,
+        submit: body.status !== 'Draft',
+      });
+      if (!reused && claim.status === 'Submitted') await afterClaimSubmitted(req, claim);
+      else if (!reused) {
+        recordAccountActivity(req, { userId: claim.submitted_by, type: 'ownership_claim_started', category: 'verification', summary: `Ownership claim started for ${claim.entityName}` });
+      }
+      res.status(reused ? 200 : 201).json({ success: true, data: claim, reused });
+    } catch (error) {
+      sendClaimError(res, error, 'Unable to create ownership claim');
+    }
+    return;
+  }
+
+  // ── The owner verifying their own profile (owner_verification). ──
   const documents = Array.isArray(body.documents) ? body.documents : [];
   for (const doc of documents) {
     if (!doc?.type || !doc?.name || !doc?.doc_url) {
@@ -6334,15 +6437,13 @@ operationsRouter.post('/operations/verifications', ...requireAuth, async (req, r
       return;
     }
   }
-
-  const activeClaim = operationsStore.listVerifications({ entityType, entityId }).find((row) => {
-    const s = String(row.status || '');
-    return s === 'Submitted' || s === 'Under Review' || s === 'Draft';
-  });
-  if (activeClaim) {
+  const activeOwnerRequest = operationsStore
+    .listVerifications({ entityType, entityId })
+    .find((row) => ACTIVE_VERIFICATION_STATUSES.has(row.status) && verificationKindOf(row, owner) === 'owner_verification');
+  if (activeOwnerRequest) {
     res.status(409).json({
-      error: 'An active ownership claim already exists for this profile',
-      existingVerificationId: activeClaim.id,
+      error: 'You already have an open verification request for this profile',
+      existingVerificationId: activeOwnerRequest.id,
     });
     return;
   }
@@ -6354,17 +6455,18 @@ operationsRouter.post('/operations/verifications', ...requireAuth, async (req, r
       ? body.status
       : 'Submitted';
 
-  const actorName = body.submitted_by_name?.trim() || req.user?.displayName || req.userId || 'Claimant';
+  const actorName = body.submitted_by_name?.trim() || req.user?.displayName || req.userId || 'Owner';
   const saved = operationsStore.createVerification({
     entityType,
     entityId,
     entityName,
-    brand_id: entityType === 'brand' ? entityId : body.brand_id || entityId,
-    brand_name: entityType === 'brand' ? entityName : body.brand_name || entityName,
+    brand_id: entityId,
+    brand_name: entityName,
     logo_url: body.logo_url || '',
     submitted_by: req.userId!,
     submitted_by_name: actorName,
     status,
+    kind: 'owner_verification',
     documents: documents.map((doc, index) => ({
       id: doc.id || `doc_${Date.now()}_${index}`,
       type: doc.type,
@@ -6379,26 +6481,15 @@ operationsRouter.post('/operations/verifications', ...requireAuth, async (req, r
         timestamp: new Date().toISOString(),
         action: status === 'Draft' ? 'Draft Created' : 'Request Submitted',
         actor: actorName,
-        details:
-          status === 'Draft'
-            ? 'Initialized a draft verification dossier'
-            : 'Claim documents submitted for administrative review',
+        details: status === 'Draft' ? 'Initialized a draft verification dossier' : 'Verification documents submitted for review',
       },
     ],
   });
 
   if (status === 'Submitted' || status === 'Under Review') {
-    try {
-      await markEntityClaimPending(saved);
-    } catch (err) {
-      console.warn('[Verification] Failed to mark claim pending on catalog entity:', err);
-    }
-
     if (entityType === 'brand') {
-      const existingBrand = await catalogStore.getBrand(entityId).catch(() => null);
-      const isOwnershipClaim = !existingBrand || existingBrand.sellerId !== req.userId;
       publishEvent({
-        eventName: isOwnershipClaim ? 'BrandClaimSubmitted' : 'BrandVerificationSubmitted',
+        eventName: 'BrandVerificationSubmitted',
         domain: 'Marketplace',
         producer: 'operationsRouter',
         aggregateId: entityId,
@@ -6406,20 +6497,19 @@ operationsRouter.post('/operations/verifications', ...requireAuth, async (req, r
         payload: { verificationId: saved.id, entityId, entityName },
       });
     }
-
     try {
       await notifyRoles(['admin', 'super_admin', 'moderator'], {
         type: 'system_alert',
         category: 'admin',
         eventKey: 'staff.verification_submitted',
         persona: 'staff',
-        title: entityType === 'brand' ? 'Ownership Claim Submitted' : 'Creator Verification Submitted',
+        title: entityType === 'brand' ? 'Seller Verification Submitted' : 'Creator Verification Submitted',
         summary: `${actorName} submitted a ${entityType} verification for "${entityName}".`,
         actionUrl: `/upe/${entityType}/${encodeURIComponent(entityId)}`,
         metadata: { verificationId: saved.id, entityType, entityId },
       });
     } catch (err) {
-      console.error('[Verification] Failed to notify admins of claim submission:', err);
+      console.error('[Verification] Failed to notify admins of verification submission:', err);
     }
   }
 
@@ -6427,12 +6517,39 @@ operationsRouter.post('/operations/verifications', ...requireAuth, async (req, r
   res.status(201).json({ success: true, data: saved });
 });
 
-operationsRouter.get('/operations/verifications', ...requireAuth, (req, res) => {
-  const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+/** Current owner of every brand / creator (for deriving `kind` on legacy rows). */
+async function ownerLookup(): Promise<(type: string, id: string) => string> {
+  const [brands, creators] = await Promise.all([catalogStore.listBrands(), catalogStore.listCreators()]);
+  const b = new Map(brands.map((x) => [x.id, x.sellerId || '']));
+  const c = new Map(creators.map((x) => [x.id, x.userId || '']));
+  return (type, id) => (type === 'creator' ? c.get(id) : b.get(id)) || '';
+}
+
+const withKind = (row: OpsVerificationRequest, ownerOfRow: (type: string, id: string) => string) => ({
+  ...row,
+  kind: verificationKindOf(row, ownerOfRow(row.entityType, row.entityId)),
+});
+
+operationsRouter.get('/operations/verifications', ...requireAuth, async (req, res) => {
+  const statusQ = typeof req.query.status === 'string' ? req.query.status.trim() : '';
+  const kindQ = typeof req.query.kind === 'string' ? req.query.kind.trim() : '';
   const entityType = typeof req.query.entityType === 'string' ? req.query.entityType : undefined;
   const entityId = typeof req.query.entityId === 'string' ? req.query.entityId : undefined;
+  await expireStaleClaims().catch(() => []);
 
-  const redactForOwner = (rows: ReturnType<typeof operationsStore.listVerifications>) =>
+  // status=pending → awaiting staff (Submitted / Under Review); status=open → any active state.
+  const statusSet = statusQ
+    ? new Set(
+        (statusQ.toLowerCase() === 'pending'
+          ? ['submitted', 'under review']
+          : statusQ.toLowerCase() === 'open'
+            ? ['draft', 'submitted', 'under review']
+            : statusQ.split(',')
+        ).map((x) => x.trim().toLowerCase()),
+      )
+    : null;
+
+  const redactForOwner = (rows: OpsVerificationRequest[]) =>
     rows.map((row) => ({
       ...row,
       documents: (row.documents || []).map((doc) => ({
@@ -6449,27 +6566,19 @@ operationsRouter.get('/operations/verifications', ...requireAuth, (req, res) => 
       })),
     }));
 
-  if (userCanManageVerifications(req)) {
-    res.json({
-      data: operationsStore.listVerifications({ status, entityType, entityId }),
-    });
-    return;
-  }
-
-  // Regular users: only their own submissions; redact internal admin comments.
-  res.json({
-    data: redactForOwner(
-      operationsStore.listVerifications({
-        submittedBy: req.userId,
-        status,
-        entityType,
-        entityId,
-      }),
-    ),
-  });
+  const staff = userCanManageVerifications(req);
+  const base = staff
+    ? operationsStore.listVerifications({ entityType, entityId })
+    : operationsStore.listVerifications({ submittedBy: req.userId, entityType, entityId });
+  const ownerOfRow = await ownerLookup();
+  const rows = base
+    .filter((r) => !statusSet || statusSet.has(String(r.status).toLowerCase()))
+    .map((r) => withKind(r, ownerOfRow))
+    .filter((r) => !kindQ || r.kind === kindQ);
+  res.json({ data: staff ? rows : redactForOwner(rows) });
 });
 
-operationsRouter.get('/operations/verifications/:id', ...requireAuth, (req, res) => {
+operationsRouter.get('/operations/verifications/:id', ...requireAuth, async (req, res) => {
   const row = operationsStore.getVerification(req.params.id);
   if (!row) {
     res.status(404).json({ error: 'Verification request not found' });
@@ -6479,13 +6588,14 @@ operationsRouter.get('/operations/verifications/:id', ...requireAuth, (req, res)
     res.status(403).json({ error: 'Not authorized to view this verification request' });
     return;
   }
+  const ownerOfRow = await ownerLookup();
   if (userCanManageVerifications(req)) {
-    res.json({ data: row });
+    res.json({ data: withKind(row, ownerOfRow) });
     return;
   }
   res.json({
     data: {
-      ...row,
+      ...withKind(row, ownerOfRow),
       documents: (row.documents || []).map((doc) => ({
         ...doc,
         notes: doc.status === 'rejected' ? doc.notes : undefined,
@@ -6515,8 +6625,15 @@ operationsRouter.patch('/operations/verifications/:id/submit', ...requireAuth, a
     res.status(400).json({ error: `Cannot submit from status ${existing.status}` });
     return;
   }
-  if (await isOwnerVerification(existing)) {
-    const missing = missingDocsMessage(existing);
+  const submitEntity = await loadEntity(existing.entityType === 'creator' ? 'creator' : 'brand', existing.entityId);
+  const submitOwner = ownerOf(existing.entityType === 'creator' ? 'creator' : 'brand', submitEntity);
+  const submitKind = verificationKindOf(existing, submitOwner);
+  if (submitKind === 'ownership_claim' && submitOwner) {
+    res.status(409).json({ error: 'This profile already has an owner, so the claim cannot be submitted.', code: 'PROFILE_ALREADY_OWNED' });
+    return;
+  }
+  {
+    const missing = missingDocsMessage(existing, submitKind);
     if (missing) {
       res.status(400).json({ error: `Upload every required document before submitting. Missing: ${missing}`, code: 'VERIFICATION_DOCUMENTS_MISSING' });
       return;
@@ -6535,12 +6652,20 @@ operationsRouter.patch('/operations/verifications/:id/submit', ...requireAuth, a
       },
     ],
   });
-  try {
-    if (saved) await markEntityClaimPending(saved);
-  } catch (err) {
-    console.warn('[Verification] mark pending failed:', err);
+  if (submitKind === 'ownership_claim' && saved) {
+    if (existing.status === 'Draft') {
+      recordAudit(req, {
+        action: 'claim_submitted',
+        targetType: existing.entityType === 'creator' ? 'creator' : 'brand',
+        targetId: existing.entityId,
+        targetName: existing.entityName,
+        refs: { claimId: existing.id, ...(existing.claimSource ? { source: existing.claimSource } : {}) },
+      });
+    }
+    await afterClaimSubmitted(req, saved);
+  } else {
+    recordAccountActivity(req, { userId: existing.submitted_by, type: 'verification_submitted', category: 'verification', summary: `Verification submitted for review (${existing.entityName || existing.brand_name})` });
   }
-  recordAccountActivity(req, { userId: existing.submitted_by, type: 'verification_submitted', category: 'verification', summary: `Verification submitted for review (${existing.entityName || existing.brand_name})` });
   scheduleOperationsPersist();
   res.json({ success: true, data: saved });
 });
@@ -6548,7 +6673,7 @@ operationsRouter.patch('/operations/verifications/:id/submit', ...requireAuth, a
 operationsRouter.patch(
   '/operations/verifications/:id/document/:docId',
   ...requireModerator,
-  (req, res) => {
+  async (req, res) => {
     if (!userCanManageVerifications(req)) {
       res.status(403).json({ error: 'Not authorized to audit verification documents' });
       return;
@@ -6558,6 +6683,7 @@ operationsRouter.patch(
       res.status(404).json({ error: 'Verification request not found' });
       return;
     }
+    if (await refuseClosedClaimDocumentChange(existing, res)) return;
     const status = req.body?.status === 'rejected' ? 'rejected' : req.body?.status === 'approved' ? 'approved' : '';
     if (!status) {
       res.status(400).json({ error: 'status must be approved or rejected' });
@@ -6638,12 +6764,16 @@ operationsRouter.patch(
 operationsRouter.put(
   '/operations/verifications/:id/document/:docId/replace',
   ...requireAuth,
-  (req, res) => {
+  async (req, res) => {
     const existing = operationsStore.getVerification(req.params.id);
     if (!existing) {
       res.status(404).json({ error: 'Verification request not found' });
       return;
     }
+    if (await refuseClosedClaimDocumentChange(existing, res)) return;
+    const replaceType: ClaimEntityType = existing.entityType === 'creator' ? 'creator' : 'brand';
+    const replacingClaimDoc =
+      verificationKindOf(existing, ownerOf(replaceType, await loadEntity(replaceType, existing.entityId))) === 'ownership_claim';
     const isOwner = Boolean(req.userId && existing.submitted_by === req.userId);
     const isAdmin = userCanManageVerifications(req);
     if (!isOwner && !isAdmin) {
@@ -6653,6 +6783,10 @@ operationsRouter.put(
     const docUrl = typeof req.body?.doc_url === 'string' ? req.body.doc_url.trim() : '';
     if (!docUrl) {
       res.status(400).json({ error: 'doc_url is required' });
+      return;
+    }
+    if (replacingClaimDoc && !docUrl.includes('/catalog/media/private/')) {
+      res.status(400).json({ error: 'doc_url must be a private verification upload (POST /operations/media/upload-verification)', code: 'DOCUMENT_NOT_PRIVATE_UPLOAD' });
       return;
     }
     const name =
@@ -6672,7 +6806,11 @@ operationsRouter.put(
     }
     // Replacing a document invalidates prior approval — Admin must re-review.
     let nextOverall = existing.status;
-    if (existing.status === 'Approved' || existing.status === 'Rejected') {
+    if (replacingClaimDoc) {
+      // Claims never auto-submit or reopen here: a Draft claim is submitted only
+      // through /submit (document + ownership gates); closed claims were refused above.
+      nextOverall = existing.status;
+    } else if (existing.status === 'Approved' || existing.status === 'Rejected') {
       nextOverall = 'Under Review';
     } else if (existing.status === 'Draft') {
       nextOverall = 'Submitted';
@@ -6714,12 +6852,13 @@ operationsRouter.put(
  * file uploaded by mistake. Documents Choosify already approved stay; closed
  * requests cannot change.
  */
-operationsRouter.delete('/operations/verifications/:id/document/:docId', ...requireAuth, (req, res) => {
+operationsRouter.delete('/operations/verifications/:id/document/:docId', ...requireAuth, async (req, res) => {
   const existing = operationsStore.getVerification(req.params.id);
   if (!existing) {
     res.status(404).json({ error: 'Verification request not found' });
     return;
   }
+  if (await refuseClosedClaimDocumentChange(existing, res)) return;
   const isOwner = Boolean(req.userId && existing.submitted_by === req.userId);
   const isAdmin = userCanManageVerifications(req);
   if (!isOwner && !isAdmin) {
@@ -6766,19 +6905,8 @@ operationsRouter.delete('/operations/verifications/:id/document/:docId', ...requ
 
 const VERIFICATION_DOC_TYPES: readonly OpsVerificationDocument['type'][] = VERIFICATION_DOCUMENT_TYPES;
 
-/**
- * Owner verification (seller verifying their OWN brand, or a creator) — as
- * opposed to an ownership claim on someone else's brand, which keeps its own
- * evidence rules. Only owner verifications must carry the full required set.
- */
-async function isOwnerVerification(row: OpsVerificationRequest): Promise<boolean> {
-  if (row.entityType === 'creator') return true;
-  const brand = await catalogStore.getBrand(row.entityId || row.brand_id).catch(() => null);
-  return Boolean(brand && brand.sellerId === row.submitted_by);
-}
-
-function missingDocsMessage(row: OpsVerificationRequest): string | null {
-  const missing = missingRequiredDocuments(row.entityType, row.documents || []);
+function missingDocsMessage(row: OpsVerificationRequest, kind?: string): string | null {
+  const missing = missingRequiredDocuments(row.entityType, row.documents || [], kind);
   return missing.length ? missing.map((m) => m.label).join(', ') : null;
 }
 
@@ -6799,7 +6927,7 @@ operationsRouter.post('/operations/verifications/:id/documents', ...requireAuth,
     res.status(403).json({ error: 'Not authorized to add documents to this verification request' });
     return;
   }
-  if (existing.status === 'Approved' || existing.status === 'Rejected') {
+  if (!ACTIVE_VERIFICATION_STATUSES.has(existing.status)) {
     res.status(409).json({ error: `This request is already ${existing.status.toLowerCase()}. Start a new verification request instead.` });
     return;
   }
@@ -6975,9 +7103,10 @@ operationsRouter.post('/operations/verification-document-requests', ...requireAu
     at: new Date().toISOString(),
   });
   // Mirror onto the open request's audit trail so both sides see it in the history.
+  // Mirror only onto the OWNER's own verification — never onto someone's ownership claim.
   const open = operationsStore
     .listVerifications({ entityType, entityId })
-    .filter((v) => v.status !== 'Approved' && v.status !== 'Rejected')
+    .filter((v) => ACTIVE_VERIFICATION_STATUSES.has(v.status) && verificationKindOf(v, subject.ownerUserId || '') === 'owner_verification')
     .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)))[0];
   if (open) {
     operationsStore.updateVerification(open.id, {
@@ -7025,6 +7154,242 @@ operationsRouter.get('/operations/verification-document-requests', ...requireAut
   res.json({ success: true, data: mine.map(({ actorId: _a, actorName: _n, ...rest }) => rest) });
 });
 
+// ---------------------------------------------------------------------------
+// Community Claimable Profiles — intents, withdrawal, document reuse, public
+// ownership state, explicit staff assignment, audit history.
+// ---------------------------------------------------------------------------
+
+const claimTypeOf = (v: unknown): ClaimEntityType | null => (v === 'brand' || v === 'creator' ? v : null);
+
+/** Start a claim: returns a short-lived, server-issued claim reference (anyone may start one). */
+operationsRouter.post('/operations/claim-intents', softAuthenticateRequest, async (req, res) => {
+  const type = claimTypeOf(req.body?.entityType);
+  const entityId = String(req.body?.entityId || '').trim();
+  if (!type || !entityId) {
+    res.status(400).json({ error: 'entityType (brand|creator) and entityId are required' });
+    return;
+  }
+  try {
+    // Bound to the viewer only when that account can claim; otherwise it stays open
+    // for the right account type (sign-in / partner application).
+    const bindTo = req.userId && roleCanClaim(type, String(req.userRole || '')) ? req.userId : undefined;
+    const { intent, ownership } = await createClaimIntent({ type, entityId, source: req.body?.source === 'invitation' ? 'invitation' : 'storefront', userId: bindTo });
+    res.status(201).json({ success: true, data: { id: intent.id, entityType: intent.entityType, entityId: intent.entityId, expiresAt: intent.expiresAt, ownership } });
+  } catch (error) {
+    sendClaimError(res, error, 'Unable to start claim');
+  }
+});
+
+/** Resolve a claim reference after sign-in / sign-up: target, current ownership, the viewer's eligibility and claim. */
+operationsRouter.get('/operations/claim-intents/:id', softAuthenticateRequest, async (req, res) => {
+  try {
+    const { intent, entity } = await resolveClaimIntent(req.params.id, req.userId, String(req.userRole || ''));
+    const type = intent.entityType;
+    const owner = ownerOf(type, entity);
+    const open = activeOwnershipClaims(type, entity.id, owner);
+    const myClaim =
+      (req.userId && (intent.claimId ? operationsStore.getVerification(intent.claimId) : null)) ||
+      (req.userId ? operationsStore.listVerifications({ entityType: type, entityId: entity.id, submittedBy: req.userId }).find((r) => verificationKindOf(r, owner) === 'ownership_claim') : null) ||
+      null;
+    const ownership = publicOwnership(type, entity, open.length > 0);
+    const role = String(req.userRole || '');
+    const isStaff = userCanManageVerifications(req);
+    const e = entity as unknown as Record<string, unknown>;
+    res.json({
+      success: true,
+      data: {
+        intent: { id: intent.id, entityType: type, entityId: intent.entityId, expiresAt: intent.expiresAt, source: intent.source },
+        target: {
+          id: entity.id,
+          name: String(e.name || ''),
+          slug: String(e.slug || ''),
+          image: String((type === 'brand' ? e.logo : e.avatar) || ''),
+          category: String(e.category || ''),
+        },
+        ownership,
+        viewer: {
+          authenticated: Boolean(req.userId),
+          role: role || null,
+          requiredRole: requiredRoleFor(type),
+          eligible: Boolean(req.userId) && !isStaff && roleCanClaim(type, role),
+          isOwner: Boolean(req.userId && owner === req.userId),
+          isStaff,
+        },
+        // What a claim must include — the same list the submit + approval gates use.
+        requiredDocuments: verificationDocumentSpecs(type, 'ownership_claim'),
+        myClaim: myClaim && myClaim.submitted_by === req.userId
+          ? {
+              id: myClaim.id,
+              status: myClaim.status,
+              created_at: myClaim.created_at,
+              updated_at: myClaim.updated_at,
+              closedReason: myClaim.closedReason || null,
+              documents: (myClaim.documents || []).map((d) => ({ id: d.id, type: d.type, name: d.name, status: d.status, notes: d.notes || null })),
+              // The claimant's own claim history (no staff names).
+              history: [...(myClaim.audit_trail || [])]
+                .sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)))
+                .slice(0, 30)
+                .map((e) => ({ at: e.timestamp, action: e.action, details: e.details || '' })),
+              latestFeedback:
+                [...(myClaim.audit_trail || [])]
+                  .reverse()
+                  .find((e) => e.action === 'Additional Information Requested' || /reject/i.test(e.action))?.details ||
+                [...(myClaim.reviews || [])].reverse().find((r) => r.feedback)?.feedback ||
+                null,
+            }
+          : null,
+      },
+    });
+  } catch (error) {
+    sendClaimError(res, error, 'Unable to load claim');
+  }
+});
+
+/** Public, authoritative ownership state for one profile (no claimant details). */
+operationsRouter.get('/operations/ownership/:entityType/:entityId', softAuthenticateRequest, async (req, res) => {
+  const type = claimTypeOf(req.params.entityType);
+  if (!type) {
+    res.status(400).json({ error: 'entityType must be brand or creator' });
+    return;
+  }
+  await expireStaleClaims().catch(() => []);
+  const entity = await loadEntity(type, req.params.entityId);
+  if (!entity) {
+    res.status(404).json({ error: 'Profile not found' });
+    return;
+  }
+  const owner = ownerOf(type, entity);
+  res.json({ success: true, data: publicOwnership(type, entity, activeOwnershipClaims(type, entity.id, owner).length > 0) });
+});
+
+/** Claimant withdraws their own open ownership claim. History is kept. */
+operationsRouter.post('/operations/verifications/:id/withdraw', ...requireAuth, async (req, res) => {
+  const row = operationsStore.getVerification(req.params.id);
+  if (!row) {
+    res.status(404).json({ error: 'Verification request not found' });
+    return;
+  }
+  if (row.submitted_by !== req.userId) {
+    res.status(403).json({ error: 'Only the person who filed the claim can withdraw it' });
+    return;
+  }
+  const type: ClaimEntityType = row.entityType === 'creator' ? 'creator' : 'brand';
+  if (verificationKindOf(row, ownerOf(type, await loadEntity(type, row.entityId))) !== 'ownership_claim') {
+    res.status(400).json({ error: 'Only ownership claims can be withdrawn', code: 'NOT_A_CLAIM' });
+    return;
+  }
+  try {
+    const closed = await closeOwnershipClaim({ req, claimId: row.id, status: 'Withdrawn', actorName: req.user?.displayName || req.userId!, feedback: String(req.body?.reason || '').slice(0, 300) || undefined });
+    recordAccountActivity(req, { userId: row.submitted_by, type: 'ownership_claim_withdrawn', category: 'verification', summary: `Ownership claim for ${row.entityName} withdrawn` });
+    void emailUser(row.submitted_by, {
+      subject: `Ownership claim withdrawn — ${row.entityName}`,
+      heading: 'Claim withdrawn',
+      lines: [`You withdrew your ownership claim for ${row.entityName}. You can start a new claim from the profile page at any time.`],
+    });
+    res.json({ success: true, data: closed });
+  } catch (error) {
+    sendClaimError(res, error, 'Unable to withdraw claim');
+  }
+});
+
+/**
+ * Claimant reuses documents Choosify ALREADY APPROVED on their own earlier
+ * requests, for claim-required types the claim does not have yet. Copies keep
+ * the private file and come in as `pending` — staff still review them for this
+ * claim (approval on another request is evidence, not automatic acceptance).
+ */
+operationsRouter.post('/operations/verifications/:id/reuse-documents', ...requireAuth, async (req, res) => {
+  const row = operationsStore.getVerification(req.params.id);
+  if (!row) {
+    res.status(404).json({ error: 'Verification request not found' });
+    return;
+  }
+  if (row.submitted_by !== req.userId) {
+    res.status(403).json({ error: 'Only the claimant can reuse their documents' });
+    return;
+  }
+  if (!ACTIVE_VERIFICATION_STATUSES.has(row.status) || row.kind !== 'ownership_claim') {
+    res.status(409).json({ error: 'Documents can only be reused on an open ownership claim', code: 'CLAIM_CLOSED' });
+    return;
+  }
+  const needed = new Set(missingRequiredDocuments(row.entityType, row.documents || [], 'ownership_claim').map((m) => m.type));
+  const reusable: OpsVerificationDocument[] = [];
+  for (const other of operationsStore.listVerifications({ submittedBy: req.userId })) {
+    if (other.id === row.id) continue;
+    for (const d of other.documents || []) {
+      if (d.status !== 'approved' || !needed.has(d.type) || !isPrivateUploadUrl(d.doc_url)) continue;
+      needed.delete(d.type);
+      reusable.push({ id: `doc_${randomUUID()}`, type: d.type, name: `${d.name} (reused from an earlier verification)`, doc_url: d.doc_url, status: 'pending' });
+    }
+  }
+  if (!reusable.length) {
+    res.json({ success: true, data: row, reused: 0 });
+    return;
+  }
+  const now = new Date().toISOString();
+  const saved = operationsStore.updateVerification(row.id, {
+    documents: [...(row.documents || []), ...reusable],
+    audit_trail: [...row.audit_trail, { timestamp: now, action: 'Documents Reused', actor: req.user?.displayName || req.userId!, details: `Reused previously approved: ${reusable.map((d) => d.type).join(', ')}` }],
+  });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved, reused: reusable.length });
+});
+
+/**
+ * The explicit, separate ownership workflow (disputes / staff onboarding):
+ * Super Admin assigns — or, with replaceExistingOwner + a reason, replaces —
+ * a profile's owner. Never part of claim approval. Does not grant Marketplace Access.
+ */
+operationsRouter.post('/operations/ownership/assign', ...requireAuth, async (req, res) => {
+  if (!hasRole(req.userRole, ROLES.SUPER_ADMIN) || req.realActorUserId) {
+    res.status(403).json({ error: 'Only a Super Admin can assign profile ownership' });
+    return;
+  }
+  const type = claimTypeOf(req.body?.entityType);
+  const entityId = String(req.body?.entityId || '').trim();
+  const userId = String(req.body?.userId || '').trim();
+  const reason = String(req.body?.reason || '').trim();
+  if (!type || !entityId || !userId) {
+    res.status(400).json({ error: 'entityType, entityId and userId are required' });
+    return;
+  }
+  if (reason.length < 10) {
+    res.status(400).json({ error: 'A reason of at least 10 characters is required', code: 'REASON_REQUIRED' });
+    return;
+  }
+  try {
+    const result = await assignOwnerExplicitly({ req, type, entityId, userId, reason, replaceExistingOwner: req.body?.replaceExistingOwner === true });
+    for (const c of result.closedClaims) {
+      notifyUser(c.submitted_by, {
+        type: COMMUNICATION_TYPES.MODERATION_UPDATE,
+        category: 'seller',
+        eventKey: 'verification.update',
+        persona: type === 'creator' ? 'creator' : 'seller',
+        title: 'Ownership claim closed',
+        summary: `Ownership of ${c.entityName} was resolved by Choosify.`,
+        actionUrl: ownerDashboardTab(type),
+      }).catch(() => undefined);
+    }
+    recordAccountActivity(req, { userId, type: 'ownership_assigned', category: 'admin', actor: 'staff', summary: `Choosify staff made you the owner of ${(result.entity as { name?: string }).name}`, staffNote: reason });
+    res.json({ success: true, data: result.entity, previousOwner: result.previousOwner || null });
+  } catch (error) {
+    sendClaimError(res, error, 'Unable to assign ownership');
+  }
+});
+
+/** Queryable ownership / community-profile audit history (staff). */
+operationsRouter.get('/operations/audit-events', ...requireAuth, (req, res) => {
+  if (!userCanManageVerifications(req) && !hasRole(req.userRole, ROLES.SUPPORT_AGENT)) {
+    res.status(403).json({ error: 'Not authorized to view audit history' });
+    return;
+  }
+  const q = (k: string) => (typeof req.query[k] === 'string' ? (req.query[k] as string) : undefined);
+  res.json({
+    success: true,
+    data: operationsStore.listAuditEvents({ targetType: q('targetType'), targetId: q('targetId'), action: q('action'), limit: Math.min(500, Number(q('limit')) || 200) }),
+  });
+});
+
 operationsRouter.patch('/operations/verifications/:id/review', ...requireModerator, async (req, res) => {
   if (!userCanManageVerifications(req)) {
     res.status(403).json({ error: 'Not authorized to review verification requests' });
@@ -7039,12 +7404,34 @@ operationsRouter.patch('/operations/verifications/:id/review', ...requireModerat
     res.status(403).json({ error: 'Cannot approve or reject your own verification request' });
     return;
   }
-  if (existing.status === 'Approved' || existing.status === 'Rejected') {
+  if (!ACTIVE_VERIFICATION_STATUSES.has(existing.status)) {
     res.status(409).json({ error: `This verification request was already ${existing.status.toLowerCase()} and cannot be reviewed again.` });
     return;
   }
   const rawStatus = String(req.body?.status || '').toLowerCase().replace(/[\s-]+/g, '_');
+  const reviewType: ClaimEntityType = existing.entityType === 'creator' ? 'creator' : 'brand';
+  const reviewEntity = await loadEntity(reviewType, existing.entityId);
+  const reviewKind = verificationKindOf(existing, ownerOf(reviewType, reviewEntity));
   const feedback = String(req.body?.feedback || req.body?.adminComment || '').trim();
+  // "Mark pending": a reviewer takes the request into review. No message to the
+  // claimant/owner (nothing is asked of them); recorded in the audit trail.
+  if (rawStatus === 'under_review' && !feedback) {
+    if (existing.status === 'Draft') {
+      res.status(409).json({ error: 'This request has not been submitted yet, so it cannot be marked as under review.', code: 'NOT_SUBMITTED' });
+      return;
+    }
+    const actor = req.user?.displayName || req.userId || 'Administrative Auditor';
+    const saved = operationsStore.updateVerification(req.params.id, {
+      status: 'Under Review',
+      audit_trail: [...existing.audit_trail, { timestamp: new Date().toISOString(), action: 'Review Started', actor, details: 'Marked pending — under review' }],
+    });
+    scheduleOperationsPersist();
+    if (reviewKind === 'ownership_claim') {
+      recordAudit(req, { action: 'claim_review_started', targetType: reviewType, targetId: existing.entityId, targetName: existing.entityName, refs: { claimId: existing.id } });
+    }
+    res.json({ success: true, data: saved });
+    return;
+  }
   if (rawStatus === 'under_review' || rawStatus === 'request_info' || rawStatus === 'resubmit') {
     if (!feedback) {
       res.status(400).json({ error: 'feedback is required' });
@@ -7081,6 +7468,16 @@ operationsRouter.patch('/operations/verifications/:id/review', ...requireModerat
         summary: feedback,
         actionUrl: existing.entityType === 'creator' ? '/admin/creator-profile?tab=verification' : '/admin/brand-profile?tab=verification',
       }).catch((err) => Logger.error('notifyUser failed (verification info requested)', { error: String(err) }));
+      void emailUser(existing.submitted_by, {
+        subject: `More information needed — ${existing.entityName}`,
+        heading: 'More information needed',
+        lines: [`Choosify needs more information to verify ${existing.entityName}:`, feedback],
+        ctaLabel: 'Upload requested documents',
+        dashboardPath: ownerDashboardTab(existing.entityType),
+      });
+    }
+    if (reviewKind === 'ownership_claim') {
+      recordAudit(req, { action: 'claim_info_requested', targetType: reviewType, targetId: existing.entityId, targetName: existing.entityName, refs: { claimId: existing.id }, note: feedback });
     }
     res.json({ success: true, data: saved });
     return;
@@ -7095,6 +7492,71 @@ operationsRouter.patch('/operations/verifications/:id/review', ...requireModerat
     return;
   }
 
+  // ── Ownership claims: atomic, owner-protecting transitions. ──
+  if (reviewKind === 'ownership_claim') {
+    const reviewerName = String(req.body?.reviewer_name || '').trim() || req.user?.displayName || req.userId!;
+    try {
+      if (decision === 'approved') {
+        const result = await approveOwnershipClaim({ req, claimId: existing.id, reviewerId: req.userId!, reviewerName, feedback });
+        recordAccountActivity(req, { userId: existing.submitted_by, type: 'ownership_claim_approved', category: 'verification', actor: 'staff', summary: `Ownership of ${existing.entityName} verified — you now manage this profile` });
+        notifyUser(existing.submitted_by, {
+          type: COMMUNICATION_TYPES.MODERATION_UPDATE,
+          category: 'seller',
+          eventKey: 'verification.update',
+          persona: reviewType === 'creator' ? 'creator' : 'seller',
+          title: 'Ownership verified',
+          summary: `You are now the verified owner of ${existing.entityName}.`,
+          actionUrl: reviewType === 'creator' ? '/admin/creator-studio' : `/admin/brand-studio/${encodeURIComponent(existing.entityId)}/edit`,
+        }).catch((err) => Logger.error('notifyUser failed (claim approved)', { error: String(err) }));
+        void emailUser(existing.submitted_by, {
+          subject: `Ownership verified — ${existing.entityName}`,
+          heading: 'Ownership verified',
+          lines: [
+            `Your claim for ${existing.entityName} was approved. You can now manage the profile in ${reviewType === 'creator' ? 'Creator Studio' : 'Brand Studio'}.`,
+            'Marketplace Access (selling) is reviewed separately by Choosify.',
+          ],
+          ctaLabel: reviewType === 'creator' ? 'Open Creator Studio' : 'Open Brand Studio',
+          dashboardPath: reviewType === 'creator' ? '/admin/creator-studio' : `/admin/brand-studio/${encodeURIComponent(existing.entityId)}/edit`,
+        });
+        for (const other of result.superseded) {
+          notifyUser(other.submitted_by, {
+            type: COMMUNICATION_TYPES.MODERATION_UPDATE,
+            category: 'seller',
+            eventKey: 'verification.update',
+            persona: reviewType === 'creator' ? 'creator' : 'seller',
+            title: 'Ownership claim closed',
+            summary: `Ownership of ${other.entityName} was verified for another applicant.`,
+            actionUrl: ownerDashboardTab(other.entityType),
+          }).catch(() => undefined);
+        }
+        res.json({ success: true, data: result.claim, catalogSideEffect: { entityType: reviewType, entityId: existing.entityId, decision, applied: true } });
+      } else {
+        const closed = await closeOwnershipClaim({ req, claimId: existing.id, status: 'Rejected', actorName: reviewerName, feedback, reviewerId: req.userId! });
+        recordAccountActivity(req, { userId: existing.submitted_by, type: 'ownership_claim_rejected', category: 'verification', actor: 'staff', summary: `Ownership claim for ${existing.entityName} not approved — ${feedback}` });
+        notifyUser(existing.submitted_by, {
+          type: COMMUNICATION_TYPES.MODERATION_UPDATE,
+          category: 'seller',
+          eventKey: 'verification.update',
+          persona: reviewType === 'creator' ? 'creator' : 'seller',
+          title: 'Ownership claim not approved',
+          summary: feedback,
+          actionUrl: ownerDashboardTab(reviewType),
+        }).catch((err) => Logger.error('notifyUser failed (claim rejected)', { error: String(err) }));
+        void emailUser(existing.submitted_by, {
+          subject: `Ownership claim not approved — ${existing.entityName}`,
+          heading: 'Claim not approved',
+          lines: [`Your claim for ${existing.entityName} was not approved.`, `Reason: ${feedback}`],
+          ctaLabel: 'View details',
+          dashboardPath: ownerDashboardTab(reviewType),
+        });
+        res.json({ success: true, data: closed, catalogSideEffect: { entityType: reviewType, entityId: existing.entityId, decision, applied: true } });
+      }
+    } catch (error) {
+      sendClaimError(res, error, 'Unable to review ownership claim');
+    }
+    return;
+  }
+
   const brandBeforeDecision =
     existing.entityType === 'brand'
       ? await catalogStore.getBrand(existing.entityId).catch(() => null)
@@ -7102,8 +7564,8 @@ operationsRouter.patch('/operations/verifications/:id/review', ...requireModerat
   const wasOwnershipClaim = Boolean(
     brandBeforeDecision && brandBeforeDecision.sellerId !== existing.submitted_by,
   );
-  if (decision === 'approved' && !wasOwnershipClaim && (await isOwnerVerification(existing))) {
-    const missing = missingDocsMessage(existing);
+  if (decision === 'approved') {
+    const missing = missingDocsMessage(existing, 'owner_verification');
     const rejectedDocs = (existing.documents || []).filter((d) => d.status === 'rejected');
     if (missing || rejectedDocs.length) {
       res.status(400).json({

@@ -268,6 +268,11 @@ const brandSchema = z.object({
   sponsoredFlag: z.boolean(),
   /** Owning seller user id when brand is seller-managed; omitted for platform/legacy rows. */
   sellerId: z.string().optional(),
+  origin: z.enum(['community', 'owner']).optional(),
+  createdByStaffId: z.string().optional(),
+  ownershipVerifiedAt: z.string().optional(),
+  ownershipSource: z.enum(['claim', 'seller_onboarding', 'creator_onboarding', 'admin_assigned']).optional(),
+  categoryId: z.string().optional(),
   /** Public storefront visibility. Seller drafts default false. */
   marketplaceAccess: z.boolean().optional(),
   /** ES-005 Marketplace Access lifecycle state; marketplaceAccess is kept in sync with it. */
@@ -621,6 +626,17 @@ export const normalizeBrandInput = (
     featuredFlag: toBoolean(raw.featuredFlag, existing?.featuredFlag ?? false),
     sponsoredFlag: toBoolean(raw.sponsoredFlag, existing?.sponsoredFlag ?? false),
     sellerId: toString(raw.sellerId, existing?.sellerId ?? '') || undefined,
+    // Provenance: routes strip these from client bodies (server-controlled), so
+    // here they only carry server-set values or the stored ones.
+    origin: raw.origin === 'community' || raw.origin === 'owner' ? raw.origin : existing?.origin,
+    createdByStaffId: toString(raw.createdByStaffId, existing?.createdByStaffId ?? '') || undefined,
+    ownershipVerifiedAt: toString(raw.ownershipVerifiedAt, existing?.ownershipVerifiedAt ?? '') || undefined,
+    ownershipSource: (['claim', 'seller_onboarding', 'creator_onboarding', 'admin_assigned'] as const).includes(
+      raw.ownershipSource as never,
+    )
+      ? (raw.ownershipSource as CatalogBrand['ownershipSource'])
+      : existing?.ownershipSource,
+    categoryId: toString(raw.categoryId, existing?.categoryId ?? '') || undefined,
     marketplaceAccess:
       typeof raw.marketplaceAccess === 'boolean'
         ? raw.marketplaceAccess

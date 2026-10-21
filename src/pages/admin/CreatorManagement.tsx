@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { profileReturnState } from '../../lib/profileReturn';
 import { Search, Loader2, AlertCircle, ShieldCheck, ExternalLink } from 'lucide-react';
 import { catalogApi } from '../../services/catalogApi';
 import { authApi, type UserDirectoryEntry } from '../../services/authApi';
@@ -9,6 +10,9 @@ import type { CatalogCreator } from '../../types/catalog';
 import { DataTable, DataTableColumn } from '../../components/ui/DataTable';
 import { Avatar } from '../../components/shared/Avatar';
 import { PartnerApplicationReviewActions, PartnerApprovedNotice } from '../../components/admin/PartnerApplicationReviewActions';
+import { OwnershipClaimsQueue } from '../../components/admin/claims/OwnershipClaimsQueue';
+import { PartnerRequestsTable } from '../../components/admin/claims/PartnerRequestsTable';
+import { CommunityProfilesPanel } from '../../components/admin/claims/CommunityProfilesPanel';
 
 /**
  * Super Admin Creator Management — real React replacement for the legacy
@@ -19,7 +23,9 @@ import { PartnerApplicationReviewActions, PartnerApprovedNotice } from '../../co
  *  - Identity (CF ID / email): `GET /auth/users/directory`, matched on `CatalogCreator.userId`.
  *  - Requests: `GET /operations/partner-applications?status=pending` (applicantType==='creator'),
  *    reviewed here via POST .../:id/approve|reject (moved out of Feature Access).
- *  - Ownership Claims: `GET /operations/verifications?entityType=creator&status=pending`.
+ *  - Ownership Claims: `GET /operations/verifications?entityType=creator&kind=ownership_claim`
+ *    (claims on community profiles only — owners' own verification is not mixed in).
+ *  - Community Profiles: creators with `origin==='community'` (staff-created discovery profiles).
  *  - Pending Review / Active Creators / Inactive: `CatalogCreator.status` --
  *    'draft' -> Pending Review, 'live' -> Active Creators, 'archived' -> Inactive.
  *    This is the ONLY real lifecycle enum on the creator model.
@@ -32,7 +38,7 @@ import { PartnerApplicationReviewActions, PartnerApprovedNotice } from '../../co
  *    permanently stuck at 0. Not reintroduced here.
  */
 
-type CreatorFilter = 'all' | 'pending' | 'requests' | 'claims' | 'active' | 'flagged' | 'inactive';
+type CreatorFilter = 'all' | 'pending' | 'requests' | 'claims' | 'community' | 'active' | 'flagged' | 'inactive';
 
 interface CreatorRow {
   id: string;
@@ -53,6 +59,7 @@ const FILTER_TABS: { key: CreatorFilter; label: string }[] = [
   { key: 'pending', label: 'Pending Review' },
   { key: 'requests', label: 'Requests' },
   { key: 'claims', label: 'Ownership Claims' },
+  { key: 'community', label: 'Community Profiles' },
   { key: 'active', label: 'Active Creators' },
   { key: 'flagged', label: 'Flagged' },
   { key: 'inactive', label: 'Inactive' },
@@ -69,11 +76,14 @@ export default function CreatorManagement() {
   const [requests, setRequests] = useState<OpsPartnerApplication[]>([]);
   const [justApproved, setJustApproved] = useState<OpsPartnerApplication | null>(null);
   const [claims, setClaims] = useState<OpsVerification[]>([]);
+  /** Refreshed by the claims queue after a review, so the tab count stays current. */
+  const [openClaimCount, setOpenClaimCount] = useState<number | null>(null);
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const navigate = useNavigate();
+  const location = useLocation();
   const PAGE_SIZE = 20;
 
   useEffect(() => {
@@ -86,7 +96,7 @@ export default function CreatorManagement() {
           catalogApi.listCreators(),
           authApi.getUsersDirectory(),
           operationsApi.listPartnerApplications('pending'),
-          operationsApi.listVerifications({ entityType: 'creator', status: 'pending' }),
+          operationsApi.listVerifications({ entityType: 'creator', kind: 'ownership_claim', status: 'open' }),
           moderationApi.listReports({ status: 'open' }),
           moderationApi.listReports({ status: 'investigating' }),
         ]);
@@ -146,12 +156,13 @@ export default function CreatorManagement() {
       all: rows.length,
       pending: rows.filter((r) => r.status === 'draft').length,
       requests: requests.length,
-      claims: claims.length,
+      claims: openClaimCount ?? claims.length,
+      community: creators.filter((c) => c.origin === 'community' && !c.userId).length,
       active: rows.filter((r) => r.status === 'live').length,
       flagged: rows.filter((r) => r.flagged).length,
       inactive: rows.filter((r) => r.status === 'archived').length,
     }),
-    [rows, requests, claims],
+    [rows, requests, claims, creators, openClaimCount],
   );
 
   const filtered = useMemo(() => {
@@ -191,11 +202,12 @@ export default function CreatorManagement() {
     // Real Creator Profile page (src/pages/admin/CreatorProfile.tsx) -- replaces the
     // legacy CmsMirrorHost destination, which was driven by a hardcoded fixture with
     // no real creator ids and rendered permanently blank.
-    navigate(`/admin/creator-review?creatorId=${encodeURIComponent(creator.id)}`);
+    navigate(`/admin/creator-review?creatorId=${encodeURIComponent(creator.id)}`, profileReturnState(location));
   };
 
   const isRequestsView = filter === 'requests';
   const isClaimsView = filter === 'claims';
+  const isCommunityView = filter === 'community';
 
   // Reviewed applications leave the pending list; approval shows the separate
   // Marketplace Access next step.
@@ -318,7 +330,7 @@ export default function CreatorManagement() {
         ))}
       </div>
 
-      <div className="aws-page-card p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className={`aws-page-card p-4 flex-col md:flex-row items-center justify-between gap-4 ${isClaimsView || isCommunityView ? 'hidden' : 'flex'}`}>
         <div className="w-full md:w-96 bg-[#F8F9FB] border border-app-border rounded-xl flex items-center px-3.5 gap-2.5">
           <Search className="w-4 h-4 text-app-text-secondary" />
           <input
@@ -349,92 +361,11 @@ export default function CreatorManagement() {
       {justApproved && <PartnerApprovedNotice application={justApproved} onDismiss={() => setJustApproved(null)} />}
 
       {isRequestsView ? (
-        <div className="aws-page-card overflow-hidden">
-          {requests.length === 0 ? (
-            <p className="p-10 text-center text-xs text-app-text-secondary">No pending creator requests.</p>
-          ) : (
-            <div className="divide-y divide-app-border">
-              {requests.map((r) => {
-                const targetCreatorId = r.catalogEntityId;
-                const content = (
-                  <>
-                    <div>
-                      <div className="text-xs font-bold">{r.displayName}</div>
-                      <div className="text-[10.5px] text-app-text-secondary">{r.businessOrChannelName} · {r.email}</div>
-                    </div>
-                    <span className="text-[9px] font-black uppercase px-2 py-1 rounded bg-amber-500/10 text-amber-600 shrink-0">
-                      {r.resubmissionRequested ? 'Resubmission requested' : 'Under review'}
-                    </span>
-                  </>
-                );
-                return (
-                  <div key={r.id} data-testid="partner-application-row" className="p-4 flex items-center justify-between gap-3">
-                    {targetCreatorId ? (
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/admin/creator-review?creatorId=${encodeURIComponent(targetCreatorId)}`)}
-                        className="flex-1 flex items-center justify-between gap-3 text-left hover:opacity-80 transition-opacity"
-                      >
-                        {content}
-                      </button>
-                    ) : (
-                      <div
-                        className="flex-1 flex items-center justify-between gap-3"
-                        title="No provisioned creator record yet — not linked to a profile"
-                      >
-                        {content}
-                      </div>
-                    )}
-                    <PartnerApplicationReviewActions application={r} onReviewed={onApplicationReviewed} />
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        <PartnerRequestsTable applicantType="creator" requests={requests} usersById={usersById} onReviewed={onApplicationReviewed} />
       ) : isClaimsView ? (
-        <div className="aws-page-card overflow-hidden">
-          {claims.length === 0 ? (
-            <p className="p-10 text-center text-xs text-app-text-secondary">No pending ownership claims.</p>
-          ) : (
-            <div className="divide-y divide-app-border">
-              {claims.map((c) => {
-                const creator = creators.find((cr) => cr.id === c.entityId);
-                const content = (
-                  <>
-                    <div>
-                      <div className="text-xs font-bold">{creator?.name || c.entityId}</div>
-                      <div className="text-[10.5px] text-app-text-secondary">
-                        submitted {c.created_at?.slice(0, 10) || '—'}
-                      </div>
-                    </div>
-                    <span className="text-[9px] font-black uppercase px-2 py-1 rounded bg-amber-500/10 text-amber-600 shrink-0">
-                      {c.status}
-                    </span>
-                  </>
-                );
-                return creator ? (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => navigate(`/admin/creator-review?creatorId=${encodeURIComponent(creator.id)}`)}
-                    className="w-full p-4 flex items-center justify-between gap-3 text-left hover:bg-app-accent/5 transition-colors"
-                  >
-                    {content}
-                  </button>
-                ) : (
-                  <div
-                    key={c.id}
-                    className="p-4 flex items-center justify-between gap-3"
-                    title="No linked creator record — not linked to a profile"
-                  >
-                    {content}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        <OwnershipClaimsQueue entityType="creator" onCountChange={setOpenClaimCount} />
+      ) : isCommunityView ? (
+        <CommunityProfilesPanel entityType="creator" />
       ) : (
         <div className="aws-page-card overflow-hidden">
           <DataTable

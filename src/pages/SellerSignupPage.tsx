@@ -1,10 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Lock, Mail, Sparkles, Store } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { ChoosifyLogo } from '../components/common/ChoosifyLogo';
 import { AdminAuthShell, AdminAuthTrustRow } from '../components/auth/AdminAuthShell';
 import { getCanonicalAdminCategories } from '../lib/storefrontCategories';
+import { getPublishedStorefrontUrl } from '../lib/storefrontUrls';
 
 const STOREFRONT_TERMS_URL = 'https://choosify.bd/terms';
 
@@ -74,6 +75,10 @@ export default function SellerSignupPage() {
   const [searchParams] = useSearchParams();
   const prefillEmail = searchParams.get('email')?.trim() || '';
   const typeParam = searchParams.get('type')?.trim().toLowerCase();
+  // Claim onboarding: a server-issued reference from a community profile's "Claim" button.
+  const claimIntentId = searchParams.get('claim')?.trim() || '';
+  const [claimTarget, setClaimTarget] = useState<{ name: string; entityType: 'brand' | 'creator' } | null>(null);
+  const [claimProblem, setClaimProblem] = useState('');
 
   const { applyAsPartner, categories } = useAuth();
   const navigate = useNavigate();
@@ -101,6 +106,37 @@ export default function SellerSignupPage() {
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!claimIntentId) return;
+    let cancelled = false;
+    const apiBase = ((import.meta as ImportMeta & { env?: Record<string, string> }).env?.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '');
+    fetch(`${apiBase}/operations/claim-intents/${encodeURIComponent(claimIntentId)}`)
+      .then(async (r) => {
+        const body = (await r.json().catch(() => ({}))) as {
+          error?: string;
+          data?: { target?: { name?: string }; intent?: { entityType?: 'brand' | 'creator' }; ownership?: { claimable?: boolean } };
+        };
+        if (cancelled) return;
+        if (!r.ok || !body.data?.intent) {
+          setClaimProblem(body.error || 'This claim link is no longer valid. Start again from the profile page.');
+          return;
+        }
+        if (!body.data.ownership?.claimable) {
+          setClaimProblem('This profile can no longer be claimed.');
+          return;
+        }
+        const entityType = body.data.intent.entityType === 'creator' ? 'creator' : 'brand';
+        setClaimTarget({ name: body.data.target?.name || 'this profile', entityType });
+        setApplicantType(entityType === 'creator' ? 'creator' : 'seller');
+      })
+      .catch(() => {
+        if (!cancelled) setClaimProblem('Unable to load the claim. Check your connection and try again.');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [claimIntentId]);
 
   const categoryOptions = useMemo(() => {
     const source = (categories?.length ? categories : getCanonicalAdminCategories()).filter(
@@ -189,7 +225,19 @@ export default function SellerSignupPage() {
         socialPrimary: applicantType === 'creator' ? socialPrimary.trim() || undefined : undefined,
         audienceSize: applicantType === 'creator' ? audienceSize.trim() || undefined : undefined,
         notes: notes.trim() || undefined,
+        claimIntentId: claimTarget ? claimIntentId : undefined,
       });
+      if (result.claimId) {
+        // Continue the claim on the storefront: sign in, then upload the claim documents.
+        setInfo(result.message);
+        const next = `/claim/${encodeURIComponent(claimIntentId)}`;
+        window.setTimeout(() => {
+          window.location.assign(
+            `${getPublishedStorefrontUrl()}/login?next=${encodeURIComponent(next)}&email=${encodeURIComponent(email.trim().toLowerCase())}`,
+          );
+        }, 2200);
+        return;
+      }
       setInfo(
         result.message ||
           'Application received. You can sign in now. Marketplace features stay locked until Admin verifies your identity and enables Marketplace Access.',
@@ -299,6 +347,24 @@ export default function SellerSignupPage() {
               <span className="text-[12.5px] font-bold text-[#6B7280]">Partner application</span>
             </div>
 
+            {claimIntentId && (claimTarget || claimProblem) && (
+              <div
+                data-testid="signup-claim-banner"
+                className={`mb-4 rounded-lg border px-3.5 py-3 text-[12px] font-semibold leading-relaxed ${
+                  claimTarget ? 'border-[#E8EDF2] bg-[#F8FAFC] text-[#374151]' : 'border-red-200 bg-red-50 text-red-700'
+                }`}
+              >
+                {claimTarget ? (
+                  <>
+                    You are applying to claim <strong>{claimTarget.name}</strong>. Submitting creates your{' '}
+                    {claimTarget.entityType === 'creator' ? 'Creator' : 'Seller'} account and a draft ownership claim —
+                    you will not control the profile until Choosify verifies your documents.
+                  </>
+                ) : (
+                  claimProblem
+                )}
+              </div>
+            )}
             <form onSubmit={(e) => void handleSubmit(e)}>
               <FormSection title="Account type" first>
                 <label className={fieldLabel}>APPLY AS</label>
@@ -306,6 +372,7 @@ export default function SellerSignupPage() {
                   value={applicantType}
                   onChange={(e) => setApplicantType(e.target.value as ApplicantType)}
                   className={selectClass}
+                  disabled={Boolean(claimTarget)}
                   required
                 >
                   <option value="seller">Seller / Brand</option>
