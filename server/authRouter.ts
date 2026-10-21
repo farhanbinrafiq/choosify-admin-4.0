@@ -58,6 +58,7 @@ import {
   PROFILE_NAME_LOCK_MS,
   upsertUserProfileExtras,
 } from './auth/userProfileExtras';
+import { parseAccountUsername } from './auth/accountUsername';
 import { AUTH_ERROR_CODES, sendAuthError } from './auth/authErrors';
 import { recordLogin } from './analytics/eventHooks';
 import { recordFailedAuthAttempt } from './lib/abuseProtection';
@@ -1147,12 +1148,14 @@ authRouter.patch('/auth/profile', ...requireAuth, async (req, res) => {
   const hasDisplayName = Object.prototype.hasOwnProperty.call(req.body || {}, 'displayName');
   const displayName = hasDisplayName ? String(req.body?.displayName || '').trim() : undefined;
   const hasUsername = Object.prototype.hasOwnProperty.call(req.body || {}, 'username');
-  const username = hasUsername
-    ? String(req.body?.username || '')
-        .trim()
-        .replace(/^@/, '')
-        .slice(0, 64)
-    : undefined;
+  // Validated before any write, for self and staff-on-behalf alike, so a
+  // rejected request changes nothing and records no activity or audit event.
+  const usernameResult = hasUsername ? parseAccountUsername(req.body?.username) : undefined;
+  if (usernameResult && !usernameResult.ok) {
+    res.status(400).json({ success: false, error: usernameResult.error, code: 'INVALID_USERNAME' });
+    return;
+  }
+  const username = usernameResult?.ok ? usernameResult.value : undefined;
   const hasWebsite = Object.prototype.hasOwnProperty.call(req.body || {}, 'website');
   const website = hasWebsite
     ? String(req.body?.website || '')
@@ -1411,13 +1414,10 @@ authRouter.patch('/auth/profile', ...requireAuth, async (req, res) => {
       // phone === null  -> clear;  phone === '<e164>' -> set. Preserves every
       // other extras field. Historical order/invoice/shipment phone snapshots
       // are separate records and are never touched here.
+      // The upsert merges, so only the phone is written here — re-passing the
+      // pre-request username/website/bio would undo a clear sent in the same request.
       nextExtras = upsertUserProfileExtras({
         userId: targetUserId,
-        lastNameChangedAt: nextExtras?.lastNameChangedAt || extras?.lastNameChangedAt,
-        changeNextLogin: extras?.changeNextLogin,
-        username: nextExtras?.username ?? extras?.username,
-        website: nextExtras?.website ?? extras?.website,
-        bio: nextExtras?.bio ?? extras?.bio,
         phone: phone === null ? undefined : phone,
       });
       recordAccountActivity(req, {

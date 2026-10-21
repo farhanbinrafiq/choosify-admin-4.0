@@ -15,6 +15,7 @@
     "db:migrate": "drizzle-kit migrate",
     "smoke": "tsx scripts/smoke-test.ts",
     "test:auth": "tsx scripts/probe-dev-login-isolation.ts && tsx scripts/probe-tier1-roles.ts && tsx scripts/probe-auth-regression.ts",
+    "test:account-username": "tsx scripts/probe-account-username.ts",
     "test:brands": "tsx scripts/probe-brand-ownership.ts",
     "test:products": "tsx scripts/probe-product-inventory.ts",
     "test:product-studio-load": "tsx scripts/probe-product-studio-load.ts",

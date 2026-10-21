@@ -14,6 +14,7 @@ import { Avatar } from '../../components/shared/Avatar';
 import { AccountEntitlementsPanel } from '../../components/admin/EntitlementAccessPanels';
 import { SellerBrandHandles, canViewPublicHandles, publicProfileUrl } from '../../components/admin/PublicHandlePanels';
 import { personaCoverGradient } from '../../components/admin/profile/personaTheme';
+import { AccountDetailsSection } from '../../components/admin/profile/AccountDetailsEditor';
 import { AdminEditHistory, AdminEditModeStrip, AdminEditUserButton, useAdminEditUser } from '../../components/admin/profile/AdminEditUser';
 import { AdsDealsPanel, GuideListingsTable, OrderHistoryTable, ProductListingsTable, ReviewsPanel, SellerEarningsPanel } from '../../components/admin/profile/ProfileSections';
 import { MarketplaceStatusBadge, PhotoVerificationBadge } from '../../components/admin/profile/PhotoVerificationBadge';
@@ -97,13 +98,14 @@ export default function SellerProfile() {
   const [posted, setPosted] = useState<OpsReview[]>([]);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  // quiet: refresh in place (no full-page skeleton), e.g. after an inline field save.
+  const load = useCallback(async (quiet = false) => {
     if (!sellerId) {
       setError('No sellerId in the URL.');
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!quiet) setLoading(true);
     setError(null);
     try {
       const [allBrands, detail] = await Promise.all([catalogApi.listBrands(), authApi.getUserDetail(sellerId).catch(() => null)]);
@@ -306,6 +308,15 @@ export default function SellerProfile() {
 
           {activeTab === 'account' && (
             <>
+              {edit.editing && sellerId ? (
+                <AccountDetailsSection
+                  userId={sellerId}
+                  canOverrideNameLock={['super_admin', 'admin'].includes(String(profile?.role || ''))}
+                  onSaved={() => void load(true)}
+                  panelStyle={S.panel}
+                  titleStyle={S.panelTitle}
+                />
+              ) : null}
               <div style={S.panel} data-testid="account-lifecycle">
                 <div style={S.panelTitle}>ACCOUNT</div>
                 <div style={S.panelSub}>Seller account lifecycle from the auth service.</div>

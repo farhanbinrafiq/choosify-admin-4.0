@@ -78,6 +78,8 @@ interface AuthContextType {
    *  adjustment parameters, so a later "Edit" can resume against the real original
    *  instead of re-cropping an already-cropped image. Omit `meta` to leave them as-is
    *  (e.g. a plain Replace upload that hasn't been through the crop editor yet). */
+  /** Merge server-confirmed account detail changes (display name / username) into the signed-in profile. */
+  applyProfileUpdate: (patch: { displayName?: string; username?: string }) => void;
   updateAvatar: (
     avatarUrl: string | null,
     meta?: { originalUrl?: string | null; crop?: ProfileImageCropParams | null },
@@ -248,6 +250,7 @@ const AuthContext = createContext<AuthContextType>({
   changePassword: async () => {},
   clearMustChangePassword: () => {},
   updateAvatar: async () => {},
+  applyProfileUpdate: () => {},
   applyAsPartner: async () => ({
     applicationId: '',
     status: 'pending' as const,
@@ -509,6 +512,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearMustChangePassword = () => {
     setProfile((prev) => (prev ? { ...prev, changeNextLogin: false } : prev));
+  };
+
+  const applyProfileUpdate = (patch: { displayName?: string; username?: string }) => {
+    setProfile((prev) => (prev ? { ...prev, ...patch } : prev));
   };
 
   const updateAvatar = async (
@@ -926,6 +933,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       changePassword,
       clearMustChangePassword,
       updateAvatar,
+      applyProfileUpdate,
       applyAsPartner,
       registerSeller,
       logout,

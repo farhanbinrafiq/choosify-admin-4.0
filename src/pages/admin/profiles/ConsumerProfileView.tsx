@@ -10,6 +10,7 @@ import { operationsApi, type OpsReview, type OpsStorefrontOrder, type ShopperSig
 import type { CatalogBrand } from '../../../types/catalog';
 import { Avatar } from '../../../components/shared/Avatar';
 import { personaCoverGradient } from '../../../components/admin/profile/personaTheme';
+import { AccountDetailsSection } from '../../../components/admin/profile/AccountDetailsEditor';
 import { AdminEditHistory, AdminEditModeStrip, AdminEditUserButton, useAdminEditUser } from '../../../components/admin/profile/AdminEditUser';
 import { OrderHistoryTable, ReviewsPanel } from '../../../components/admin/profile/ProfileSections';
 import { ProfileContactActions } from '../../../components/admin/profile/ProfileContactActions';
@@ -89,13 +90,14 @@ export default function ConsumerProfileView() {
     return t && TABS.some((x) => x.key === t) ? t : 'account';
   });
 
-  const load = useCallback(async () => {
+  // quiet: refresh in place (no full-page skeleton), e.g. after an inline field save.
+  const load = useCallback(async (quiet = false) => {
     if (!uid) {
       setError('No account id in the URL.');
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!quiet) setLoading(true);
     setError(null);
     try {
       setAccount(await authApi.getUserDetail(uid));
@@ -280,6 +282,15 @@ export default function ConsumerProfileView() {
 
           {activeTab === 'account' && (
             <>
+              {edit.editing && account.uid ? (
+                <AccountDetailsSection
+                  userId={account.uid}
+                  canOverrideNameLock={['super_admin', 'admin'].includes(String(profile?.role || ''))}
+                  onSaved={() => void load(true)}
+                  panelStyle={S.panel}
+                  titleStyle={S.panelTitle}
+                />
+              ) : null}
               <div style={S.panel}>
                 <div style={S.panelTitle}>ACCOUNT</div>
                 <div style={S.panelSub}>From the auth service.</div>
@@ -295,7 +306,7 @@ export default function ConsumerProfileView() {
                   Delivery addresses are saved on each order (see Order History), not on the account. Saved items, followed creators and
                   search history are recorded from the storefront while the shopper is signed in; activity from before that, or while
                   signed out, stays only in their browser.
-                  {edit.editing ? ' No consumer account fields can be edited by staff in this release.' : ''}
+                  {edit.editing ? ' Display name and phone can be edited in Account Details above; email changes stay with the account owner.' : ''}
                 </div>
               </div>
               <AdminEditHistory state={edit} />

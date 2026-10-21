@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { KeyRound, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { formatRoleLabel, getAvatarUrl, getUserInitials } from '../../../lib/userDisplay';
+import { EditableAccountField, useAccountDetails } from '../../../components/admin/profile/AccountDetailsEditor';
+import type { AccountDetailsPatch } from '../../../services/profileApi';
 import ChangePasswordForm from '../../../components/account/ChangePasswordForm';
 
 /**
@@ -86,8 +88,9 @@ const SETTINGS_ROLES = new Set([
 ]);
 
 export default function MyProfilePage() {
-  const { profile } = useAuth();
+  const { profile, applyProfileUpdate } = useAuth();
   const [tab, setTab] = useState<TabKey>('account');
+  const account = useAccountDetails();
 
   if (!profile) return null; // ProtectedRoute already guards this route
 
@@ -106,6 +109,13 @@ export default function MyProfilePage() {
     ? `@${profile.username.replace(/^@/, '')}`
     : `@${displayName.toLowerCase().replace(/\s+/g, '_').slice(0, 24)}`;
   const cfId = profile.choosifyUserId || '—';
+  const onAccountSaved = (saved: AccountDetailsPatch) => {
+    applyProfileUpdate({
+      ...(saved.displayName !== undefined ? { displayName: saved.displayName } : {}),
+      ...(saved.username !== undefined ? { username: saved.username } : {}),
+    });
+    void account.reload();
+  };
 
   return (
     <div className="space-y-5 pb-10">
@@ -190,15 +200,22 @@ export default function MyProfilePage() {
               <div>
                 <div className="text-[13px] font-extrabold text-app-text-primary mb-3">Account Information</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Field label="DISPLAY NAME" value={displayName} />
-                  <Field label="USERNAME" value={handle} />
+                  <EditableAccountField field="displayName" label="DISPLAY NAME" value={profile.displayName} onSaved={onAccountSaved} />
+                  <EditableAccountField field="username" label="USERNAME" value={profile.username} display={handle} onSaved={onAccountSaved} />
                   <Field label="EMAIL" value={email} />
+                  <EditableAccountField
+                    field="phone"
+                    label="PHONE"
+                    value={account.details?.phone}
+                    emptyText={account.details ? 'Not added' : '…'}
+                    onSaved={onAccountSaved}
+                  />
                   <Field label="ROLE" value={roleLabel} />
                 </div>
               </div>
               <p className="text-[11px] text-app-text-secondary leading-relaxed">
-                Profile photo is managed from the avatar menu in the top bar. Role and Choosify User ID are not
-                self-editable.
+                Profile photo is managed from the avatar menu in the top bar. Email, role and Choosify User ID are
+                not self-editable.
               </p>
             </div>
           )}

@@ -11,6 +11,8 @@ import { OwnerVerificationPanel } from '../../../components/admin/profile/OwnerV
 import { MarketplaceAccessSection } from '../../../components/admin/profile/MarketplaceAccessSection';
 import { MarketplaceStatusBadge, PhotoVerificationBadge } from '../../../components/admin/profile/PhotoVerificationBadge';
 import { personaCoverGradient } from '../../../components/admin/profile/personaTheme';
+import { EditableAccountField } from '../../../components/admin/profile/AccountDetailsEditor';
+import type { AccountDetailsPatch } from '../../../services/profileApi';
 import { AccountActivityPanel } from '../../../components/admin/profile/AccountActivityPanel';
 
 /**
@@ -54,7 +56,7 @@ const S: Record<string, React.CSSProperties> = {
 };
 
 export default function OwnerProfilePage({ persona }: { persona: Persona }) {
-  const { profile } = useAuth();
+  const { profile, applyProfileUpdate } = useAuth();
   const uid = profile?.id || '';
   const [tab, setTab] = useState(() => {
     const t = new URLSearchParams(window.location.search).get('tab');
@@ -113,6 +115,14 @@ export default function OwnerProfilePage({ persona }: { persona: Persona }) {
     </div>
   );
 
+  const onAccountSaved = (saved: AccountDetailsPatch) => {
+    applyProfileUpdate({
+      ...(saved.displayName !== undefined ? { displayName: saved.displayName } : {}),
+      ...(saved.username !== undefined ? { username: saved.username } : {}),
+    });
+    if (saved.phone !== undefined) void load();
+  };
+
   return (
     <div style={{ color: '#111827' }} data-testid={`owner-profile-${persona}`}>
       <div style={{ marginBottom: 14 }}>
@@ -142,8 +152,17 @@ export default function OwnerProfilePage({ persona }: { persona: Persona }) {
                 ) : null}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+                <EditableAccountField field="displayName" label="DISPLAY NAME" value={profile.displayName} divider onSaved={onAccountSaved} />
+                <EditableAccountField
+                  field="username"
+                  label="USERNAME"
+                  value={profile.username}
+                  display={profile.username ? `@${profile.username.replace(/^@/, '')}` : undefined}
+                  divider
+                  onSaved={onAccountSaved}
+                />
                 {kv('EMAIL', profile.email || '—')}
-                {kv('PHONE', phone || <span style={{ color: '#9CA3AF' }}>Not added — <Link to="/admin/settings" style={S.link}>add in Settings</Link></span>)}
+                <EditableAccountField field="phone" label="PHONE" value={phone} divider onSaved={onAccountSaved} />
                 {kv('CHOOSIFY USER ID', <span style={{ fontFamily: 'monospace' }}>{profile.choosifyUserId || '—'}</span>)}
                 {kv('MARKETPLACE ACCESS', profile.marketplaceAccess ? 'Active' : 'Not active')}
                 {persona === 'seller' ? kv('BRANDS', brands.map((b) => b.name).join(', ') || '—') : kv('CREATOR PROFILE', creator?.name || 'Not set up yet')}

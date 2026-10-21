@@ -15,6 +15,7 @@ import { EntityHandlePanel, canViewPublicHandles, publicProfileUrl } from '../..
 import { CreatorProfilePresentation } from '../../components/creator-profile';
 import { mapCatalogCreatorToEditor } from './creatorEditorModel';
 import { personaCoverGradient } from '../../components/admin/profile/personaTheme';
+import { AccountDetailsSection } from '../../components/admin/profile/AccountDetailsEditor';
 import { AdminEditHistory, AdminEditModeStrip, AdminEditUserButton, useAdminEditUser } from '../../components/admin/profile/AdminEditUser';
 import { AdsDealsPanel, ReviewsPanel, UnavailablePanel } from '../../components/admin/profile/ProfileSections';
 import { MarketplaceStatusBadge, PhotoVerificationBadge } from '../../components/admin/profile/PhotoVerificationBadge';
@@ -91,13 +92,14 @@ export default function CreatorProfile() {
   const [posted, setPosted] = useState<OpsReview[]>([]);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  // quiet: refresh in place (no full-page skeleton), e.g. after an inline field save.
+  const load = useCallback(async (quiet = false) => {
     if (!creatorId) {
       setError('No creatorId in the URL.');
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!quiet) setLoading(true);
     setError(null);
     try {
       const allCreators = await catalogApi.listCreators();
@@ -346,6 +348,15 @@ export default function CreatorProfile() {
 
           {activeTab === 'account' && (
             <>
+              {edit.editing && targetUserId ? (
+                <AccountDetailsSection
+                  userId={targetUserId}
+                  canOverrideNameLock={['super_admin', 'admin'].includes(String(profile?.role || ''))}
+                  onSaved={() => void load(true)}
+                  panelStyle={S.panel}
+                  titleStyle={S.panelTitle}
+                />
+              ) : null}
               <div style={S.panel}>
                 <div style={S.panelTitle}>ACCOUNT INFORMATION</div>
                 <div style={S.panelSub}>From the creator catalog record and the linked login account.</div>
