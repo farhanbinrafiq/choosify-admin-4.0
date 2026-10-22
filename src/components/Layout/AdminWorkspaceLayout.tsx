@@ -1,5 +1,5 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigationType } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useImpersonation } from '../../contexts/ImpersonationContext';
 import { useEntitlements } from '../../contexts/EntitlementsContext';
@@ -120,8 +120,14 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
   // any other scroll container — `block: 'nearest'` is a no-op if the item
   // is already visible, and otherwise scrolls only the minimum needed.
   const activeNavItemRef = useRef<HTMLAnchorElement | null>(null);
+  const navigationType = useNavigationType();
   useEffect(() => {
+    // A page opened from the menu (or any link) starts at its top instead of
+    // inheriting the previous page's scroll; Back/Forward (POP) keeps the
+    // position the browser restores.
+    if (navigationType !== 'POP') window.scrollTo(0, 0);
     activeNavItemRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
   // Close the off-canvas mobile nav on every navigation so it never stays

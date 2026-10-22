@@ -20,6 +20,7 @@ import { formatRoleLabel, getMyProfilePath } from '../lib/userDisplay';
 import { getLivePreviewStorefrontUrl, getPublishedStorefrontUrl } from '../lib/storefrontUrls';
 import {
   MARKETPLACE_PENDING_ALLOWED_PAGE_KEYS,
+  MarketplaceAccessGate,
   MarketplaceAccessLockPanel,
   partnerMarketplaceLocked,
 } from '../components/MarketplaceAccessLock';
@@ -29,6 +30,11 @@ import './tokens.css';
 
 const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
 const OwnerProfilePage = lazy(() => import('../pages/admin/profiles/OwnerProfilePage'));
+const OwnerBrandStudioHome = lazy(() => import('../pages/admin/OwnerBrandStudioHome'));
+const OwnerCreatorStudioHome = lazy(() => import('../pages/admin/OwnerCreatorStudioHome'));
+const MyEarningsPage = lazy(() => import('../pages/admin/MyEarningsPage'));
+const NotificationsPage = lazy(() => import('../pages/admin/NotificationsPage'));
+const FeesAdjustments = lazy(() => import('../pages/admin/FeesAdjustments'));
 
 /** Bump when public/cms-mirror/app.html behavior changes so the iframe never serves a stale 304. */
 const CMS_MIRROR_ASSET_VERSION = '20260906-remove-creator-economy';
@@ -620,6 +626,40 @@ export const CmsMirrorHost: React.FC = () => {
       <AdminWorkspaceLayout>
         <Suspense fallback={<AdminPageSkeleton variant="profile" />}>
           <OwnerProfilePage persona={ownPersona} />
+        </Suspense>
+      </AdminWorkspaceLayout>
+    );
+  }
+  // Seller / Creator own Studio home and My Earnings, and everyone's
+  // Notifications inbox and Fees & Adjustments → React pages. The App routes
+  // only reach here for the Studio cases they don't handle (no brand, several
+  // brands, Marketplace Access pending); the other pages have no route.
+  const isPartner = profile?.role === 'seller' || profile?.role === 'creator';
+  const ownerPage =
+    profile?.role === 'seller' && location.pathname === '/admin/brand-studio'
+      ? 'brand-studio'
+      : profile?.role === 'creator' && location.pathname === '/admin/creator-studio'
+        ? 'creator-studio'
+        : isPartner && location.pathname === '/admin/my-earnings'
+          ? 'my-earnings'
+          : location.pathname === '/admin/notifications'
+            ? 'notifications'
+            : location.pathname === '/admin/fees-adjustments'
+              ? 'fees-adjustments'
+              : null;
+  if (ownerPage) {
+    return (
+      <AdminWorkspaceLayout>
+        <Suspense fallback={<AdminPageSkeleton variant={ownerPage === 'my-earnings' ? 'dashboard' : 'generic'} />}>
+          {ownerPage === 'brand-studio' ? (
+            <OwnerBrandStudioHome />
+          ) : ownerPage === 'creator-studio' ? (
+            <OwnerCreatorStudioHome />
+          ) : ownerPage === 'notifications' ? (
+            <NotificationsPage />
+          ) : (
+            <MarketplaceAccessGate>{ownerPage === 'my-earnings' ? <MyEarningsPage /> : <FeesAdjustments />}</MarketplaceAccessGate>
+          )}
         </Suspense>
       </AdminWorkspaceLayout>
     );
