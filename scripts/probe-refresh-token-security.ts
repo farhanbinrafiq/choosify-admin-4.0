@@ -88,6 +88,7 @@ async function main() {
   const replay = await refresh(r1);
   mark('A2 reusing rotated R1 is rejected (401)', replay.status === 401, replay.status);
   mark('A3 the rejected reuse issues no new refresh cookie', !replay.cookie, 'cookie issued');
+  mark('A3a a rotated token is refused with code AUTH_INVALID_TOKEN', replay.body.code === 'AUTH_INVALID_TOKEN', JSON.stringify(replay.body));
   // A revoked token's 401 must not clear the cookie: in a lost race it can land after the
   // winner's new cookie and would sign the browser out. Unknown tokens still clear it.
   mark('A3b the 401 for a rotated token does not clear the browser cookie', !replay.clears, 'cleared');
@@ -102,6 +103,7 @@ async function main() {
   mark('B1 logout returns 200 and clears the refresh cookie', out.status === 200 && out.clears, `${out.status} clears=${out.clears}`);
   const afterLogout = await refresh(sB.refresh);
   mark('B2 refresh with the logged-out token is rejected (401) immediately', afterLogout.status === 401, afterLogout.status);
+  mark('B2a a logged-out token is refused with code AUTH_INVALID_TOKEN', afterLogout.body.code === 'AUTH_INVALID_TOKEN', JSON.stringify(afterLogout.body));
   mark('B3 no live refresh tokens remain after logout', (await liveTokens(b.uid)) === 0, await liveTokens(b.uid));
   const again = await login(b.email);
   const fresh = await refresh(again.refresh);
@@ -123,10 +125,14 @@ async function main() {
   const d = await newAccount('d');
   const rawExpired = randomBytes(32).toString('base64url');
   await db.insert(refreshTokens).values({ userId: d.uid, tokenHash: hashRefreshToken(rawExpired), expiresAt: new Date(Date.now() - 60_000) });
-  mark('D1 expired refresh token is rejected (401)', (await refresh(rawExpired)).status === 401);
-  mark('D2 missing refresh cookie is rejected (401)', (await refresh(null)).status === 401);
+  const expired = await refresh(rawExpired);
+  mark('D1 expired refresh token is rejected (401, AUTH_INVALID_TOKEN)', expired.status === 401 && expired.body.code === 'AUTH_INVALID_TOKEN', JSON.stringify(expired.body));
+  const missing = await refresh(null);
+  mark('D2 missing refresh cookie is rejected (401, AUTH_MISSING_TOKEN)', missing.status === 401 && missing.body.code === 'AUTH_MISSING_TOKEN', JSON.stringify(missing.body));
+  mark('D2b missing-token message text is unchanged', missing.body.error === 'Missing refresh token', JSON.stringify(missing.body));
   const unknownTok = await refresh('not-a-real-token');
   mark('D3 random/invalid token is rejected (401) and its cookie cleared', unknownTok.status === 401 && unknownTok.clears, `${unknownTok.status} clears=${unknownTok.clears}`);
+  mark('D3a unknown token uses code AUTH_INVALID_TOKEN with the unchanged message', unknownTok.body.code === 'AUTH_INVALID_TOKEN' && unknownTok.body.error === 'Invalid or expired refresh token', JSON.stringify(unknownTok.body));
   const sD = await login(d.email);
   const tampered = sD.refresh.slice(0, -1) + (sD.refresh.endsWith('A') ? 'B' : 'A');
   mark('D4 tampered token (one character changed) is rejected (401)', (await refresh(tampered)).status === 401);

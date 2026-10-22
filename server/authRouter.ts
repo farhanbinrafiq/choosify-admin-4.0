@@ -620,7 +620,7 @@ authRouter.post('/auth/refresh', async (req, res) => {
         message: 'Missing refresh token',
         metadata: { reason: 'refresh_missing' },
       });
-      res.status(401).json({ error: 'Missing refresh token' });
+      res.status(401).json({ error: 'Missing refresh token', code: AUTH_ERROR_CODES.MISSING_TOKEN });
       return;
     }
 
@@ -640,7 +640,7 @@ authRouter.post('/auth/refresh', async (req, res) => {
         message: 'Invalid or expired refresh token',
         metadata: { reason: failure === 'unknown' ? 'refresh_invalid' : `refresh_${failure}` },
       });
-      res.status(401).json({ error: 'Invalid or expired refresh token' });
+      res.status(401).json({ error: 'Invalid or expired refresh token', code: AUTH_ERROR_CODES.INVALID_TOKEN });
       return;
     }
 
