@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import argon2 from 'argon2';
 import jwt from 'jsonwebtoken';
-import { and, eq, gt, isNotNull, isNull, ne } from 'drizzle-orm';
+import { and, eq, gt, isNull, ne } from 'drizzle-orm';
 import type { Response } from 'express';
 import { db } from '../db/client';
 import { refreshTokens, users } from '../db/schema';
@@ -9,8 +9,9 @@ import { refreshTokens, users } from '../db/schema';
 const ACCESS_TTL = '15m';
 const REFRESH_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 const REFRESH_COOKIE = 'choosify_refresh';
-/** A refresh token rotated this recently may still be presented once by a concurrent request. */
-const ROTATION_GRACE_MS = 30_000;
+
+/** db itself or a transaction handle — anything that can insert a refresh token row. */
+type RefreshTokenWriter = Pick<typeof db, 'insert'>;
 
 export type AccessTokenClaims = {
   uid: string;
@@ -83,11 +84,11 @@ export function isExpiredJwtError(error: unknown): boolean {
   );
 }
 
-export async function issueRefreshToken(userId: string): Promise<string> {
+export async function issueRefreshToken(userId: string, writer: RefreshTokenWriter = db): Promise<string> {
   const raw = randomBytes(32).toString('base64url');
   const tokenHash = hashRefreshToken(raw);
   const expiresAt = new Date(Date.now() + REFRESH_TTL_MS);
-  await db.insert(refreshTokens).values({
+  await writer.insert(refreshTokens).values({
     userId,
     tokenHash,
     expiresAt,
@@ -134,56 +135,56 @@ export async function rotateRefreshToken(rawToken: string): Promise<{
   refreshToken: string;
 } | null> {
   const tokenHash = hashRefreshToken(rawToken);
-  const rows = await db
-    .select()
-    .from(refreshTokens)
-    .where(
-      and(
-        eq(refreshTokens.tokenHash, tokenHash),
-        isNull(refreshTokens.revokedAt),
-        gt(refreshTokens.expiresAt, new Date()),
-      ),
-    )
-    .limit(1);
-
-  let row = rows[0];
-  if (row) {
-    await db
+  // One-time use, atomically: the single UPDATE claims the token only while it
+  // is still unrevoked and unexpired. A concurrent request presenting the same
+  // token waits on the row lock, re-checks `revoked_at IS NULL` after the first
+  // commits and claims nothing — so a token can rotate at most once, and a
+  // revoked token (rotated, logged out, password changed) never refreshes again.
+  // Claiming the old token and inserting its successor share one transaction.
+  // Losing a race is handled by the clients, which retry once with the cookie
+  // the winning request has just set.
+  return db.transaction(async (tx) => {
+    const [row] = await tx
       .update(refreshTokens)
       .set({ revokedAt: new Date() })
-      .where(eq(refreshTokens.id, row.id));
-  } else {
-    // Two requests (or two tabs) that hit a 401 together refresh with the same
-    // cookie; the first rotates it. Accept that just-rotated token for a short
-    // grace window and give the late caller its own fresh pair, instead of
-    // failing and wiping the session ("expired token" on every later save).
-    const recent = await db
-      .select()
-      .from(refreshTokens)
       .where(
         and(
           eq(refreshTokens.tokenHash, tokenHash),
-          isNotNull(refreshTokens.revokedAt),
-          gt(refreshTokens.revokedAt, new Date(Date.now() - ROTATION_GRACE_MS)),
+          isNull(refreshTokens.revokedAt),
           gt(refreshTokens.expiresAt, new Date()),
         ),
       )
-      .limit(1);
-    row = recent[0];
+      .returning({ userId: refreshTokens.userId });
     if (!row) return null;
-  }
 
-  const userRows = await db.select().from(users).where(eq(users.id, row.userId)).limit(1);
-  const user = userRows[0];
-  if (!user) return null;
+    const [user] = await tx.select().from(users).where(eq(users.id, row.userId)).limit(1);
+    if (!user) return null;
 
-  const accessToken = signAccessToken({
-    id: user.id,
-    email: user.email,
-    emailVerified: user.emailVerified,
+    const accessToken = signAccessToken({
+      id: user.id,
+      email: user.email,
+      emailVerified: user.emailVerified,
+    });
+    const refreshToken = await issueRefreshToken(user.id, tx);
+    return { userId: user.id, accessToken, refreshToken };
   });
-  const refreshToken = await issueRefreshToken(user.id);
-  return { userId: user.id, accessToken, refreshToken };
+}
+
+/**
+ * Why a refresh was refused, for operational logging only (never returned to
+ * the client, never includes the token): 'revoked' covers a rotated token
+ * presented again (reuse/replay or a lost concurrent race), logout and
+ * password-change revocation.
+ */
+export async function classifyRefreshFailure(rawToken: string): Promise<'unknown' | 'revoked' | 'expired'> {
+  const [row] = await db
+    .select({ revokedAt: refreshTokens.revokedAt, expiresAt: refreshTokens.expiresAt })
+    .from(refreshTokens)
+    .where(eq(refreshTokens.tokenHash, hashRefreshToken(rawToken)))
+    .limit(1);
+  if (!row) return 'unknown';
+  if (row.revokedAt) return 'revoked';
+  return row.expiresAt <= new Date() ? 'expired' : 'unknown';
 }
 
 export async function revokeRefreshToken(rawToken: string): Promise<void> {

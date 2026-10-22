@@ -34,10 +34,15 @@ export function refreshAccessToken(): Promise<string | null> {
 async function doRefreshAccessToken(): Promise<string | null> {
   console.info('[Auth] 401 received — attempting token refresh');
   try {
-    const response = await fetch(`${API_BASE}/auth/refresh`, {
-      method: 'POST',
-      credentials: 'include',
-    });
+    const post = () => fetch(`${API_BASE}/auth/refresh`, { method: 'POST', credentials: 'include' });
+    let response = await post();
+    // Refresh tokens are one-time use. Another tab sharing this cookie may have
+    // just rotated it; by now the browser holds the winner's new cookie, so one
+    // short retry recovers instead of signing the user out.
+    if (response.status === 401) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      response = await post();
+    }
     if (!response.ok) {
       console.warn('[Auth] Refresh failed', { status: response.status });
       return null;

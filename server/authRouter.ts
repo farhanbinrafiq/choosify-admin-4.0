@@ -7,6 +7,7 @@ import {
   resolveAuthenticatedUserFromToken,
 } from './auth/authProfile';
 import {
+  classifyRefreshFailure,
   clearRefreshTokenCookie,
   hashPassword,
   issueRefreshToken,
@@ -625,12 +626,19 @@ authRouter.post('/auth/refresh', async (req, res) => {
 
     const rotated = await rotateRefreshToken(raw);
     if (!rotated) {
-      clearRefreshTokenCookie(res);
+      // Reason code only (revoked = reused after rotation, lost concurrent race,
+      // logged out or password reset); the token itself is never logged.
+      const failure = await classifyRefreshFailure(raw).catch(() => 'unknown' as const);
+      // A revoked token is most often one another tab just rotated. This 401 can
+      // reach the browser after the winner set the new cookie, so clearing the
+      // cookie here would sign that browser out. A dead cookie left in place is
+      // harmless: it can never refresh again, and logout clears it explicitly.
+      if (failure !== 'revoked') clearRefreshTokenCookie(res);
       operationalEvents.authenticationFailure({
         requestId: req.requestId,
         path: req.originalUrl,
         message: 'Invalid or expired refresh token',
-        metadata: { reason: 'refresh_invalid_or_expired' },
+        metadata: { reason: failure === 'unknown' ? 'refresh_invalid' : `refresh_${failure}` },
       });
       res.status(401).json({ error: 'Invalid or expired refresh token' });
       return;
@@ -1675,6 +1683,13 @@ authRouter.post('/auth/change-password', ...requireAuth, async (req, res) => {
       .update(users)
       .set({ passwordHash: newPasswordHash, updatedAt: now })
       .where(eq(users.id, userId));
+
+    // Other sessions end; the one making the change (its refresh cookie) stays
+    // signed in. When the request carries no live session of this user, every
+    // session is revoked — there is no current one to keep.
+    const keepRaw = readRefreshTokenCookie(req.headers.cookie);
+    const keptCurrent = keepRaw ? await revokeOtherRefreshTokensForUser(userId, keepRaw) : null;
+    if (!keptCurrent) await revokeAllRefreshTokensForUser(userId);
 
     const extras = getUserProfileExtras(userId);
     const wasForced = extras?.changeNextLogin === true;
