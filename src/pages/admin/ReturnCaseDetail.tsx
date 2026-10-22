@@ -124,7 +124,7 @@ export default function ReturnCaseDetail() {
   if (!ret) {
     return (
       <div className="p-6 max-w-3xl mx-auto">
-        <button onClick={() => navigate('/admin/returns')} className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 mb-4">
+        <button onClick={() => navigate('/admin/returns')} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm hover:bg-slate-50 hover:text-slate-800 mb-4">
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Returns & Refunds
         </button>
         <div className="border border-dashed border-rose-200 bg-rose-50 rounded-xl p-6 text-sm text-rose-600">Case not found.</div>
@@ -151,7 +151,7 @@ export default function ReturnCaseDetail() {
         </div>
       )}
 
-      <button onClick={() => navigate('/admin/returns')} className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 mb-4">
+      <button onClick={() => navigate('/admin/returns')} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm hover:bg-slate-50 hover:text-slate-800 mb-4">
         <ArrowLeft className="w-3.5 h-3.5" /> Back to Returns & Refunds
       </button>
 

@@ -140,14 +140,15 @@
   --font-heading: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
-  /* Global border radius overrides for standard cards/content (5px) */
+  /* Border radius scale (modern SaaS): controls 6–12px, cards 16px.
+     Was a flat 5px for every size. */
   --radius-card: var(--radius-card);
-  --radius: 5px;
-  --radius-md: 5px;
-  --radius-lg: 5px;
-  --radius-xl: 5px;
-  --radius-2xl: 5px;
-  --radius-3xl: 5px;
+  --radius: 8px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 20px;
 
   /* Theme Colors Map to CSS Variables */
   --color-app-bg: var(--color-app-bg);
@@ -1100,12 +1101,14 @@ html:not(.dark) main [class*="bg-orange-500/5"] {
 
 /* ============================================
    CHOOSIFY — GLOBAL BORDER RADIUS STANDARDIZATION
-   Standardizes all cards and containers to 5px.
+   Modern SaaS scale: cards and large containers 16px, medium boxes 12px
+   (was a flat 5px for everything).
    ============================================ */
 
 /*
-  We enforce the 5px border radius on cards, modal containers,
-  dashboard layouts, tables, and standard content boxes.
+  We enforce the card radius (16px) on cards, modal containers,
+  dashboard layouts, tables, and standard content boxes; rounded-xl
+  boxes get 12px.
   
   Exclusions are made for:
   - Intentionally circular elements or badges (like rounded-full, avatars, icons)
@@ -1118,17 +1121,49 @@ html:not(.dark) main [class*="bg-orange-500/5"] {
 [class*="bg-app-card"],
 .bg-card,
 [class*="card"] {
-  border-radius: 5px !important;
+  border-radius: 16px !important;
 }
 
 /* Target elements with large rounding classes but exclude specific components */
-[class*="rounded-xl"]:not(button, .btn, [role="button"], [class*="Avatar"], [class*="avatar"], span, img, svg, [class*="Badge"], .badge),
+[class*="rounded-xl"]:not(button, .btn, [role="button"], [class*="Avatar"], [class*="avatar"], span, img, svg, [class*="Badge"], .badge) {
+  border-radius: 12px !important;
+}
+
 [class*="rounded-2xl"]:not(button, .btn, [role="button"], [class*="Avatar"], [class*="avatar"], span, img, svg, [class*="Badge"], .badge),
 [class*="rounded-3xl"]:not(button, .btn, [role="button"], [class*="Avatar"], [class*="avatar"], span, img, svg, [class*="Badge"], .badge),
 [class*="rounded-[1."]:not(button, .btn, [role="button"], [class*="Avatar"], [class*="avatar"], span, img, svg, [class*="Badge"], .badge),
 [class*="rounded-[2."]:not(button, .btn, [role="button"], [class*="Avatar"], [class*="avatar"], span, img, svg, [class*="Badge"], .badge),
 [class*="rounded-[3."]:not(button, .btn, [role="button"], [class*="Avatar"], [class*="avatar"], span, img, svg, [class*="Badge"], .badge) {
-  border-radius: 5px !important;
+  border-radius: 16px !important;
+}
+
+/* Large white bordered panels built with small rounding utilities (filter
+   bars, table wrappers, padded content panels) get the 16px card radius too.
+   Small chips and controls keep the smaller scale (they carry no padding /
+   overflow / shadow class). */
+main div[class*="bg-white"][class*="border"]:is([class*="rounded-lg"], [class*="rounded-md"], [class*="rounded-xl"], [class*="rounded-[5px]"], [class*="rounded-[6px]"], [class*="rounded-[8px]"], [class*="rounded-[10px]"]):is([class*="overflow-hidden"], [class*="overflow-x-auto"], [class*="shadow"], [class~="p-3.5"], [class~="p-4"], [class~="p-5"], [class~="p-6"], [class~="p-8"], [class~="p-10"], [class~="px-4"], [class~="px-5"], [class~="px-6"]),
+main div[class*="border-dashed"][class*="rounded-xl"]:is([class~="p-6"], [class~="p-8"], [class~="p-10"]) {
+  border-radius: 16px !important;
+}
+
+/* Inline-styled white card panels (style objects such as S.card / S.panel /
+   S.statCard in older pages): white surface + the standard #E8EDF2 card border
+   (or the 4px accent-left variant) + a small radius -> the 16px card radius.
+   Inputs / buttons are not divs; dashed or differently coloured boxes do not match. */
+main div[style*="background: rgb(255, 255, 255)"]:is([style*="border-radius: 5px"], [style*="border-radius: 6px"], [style*="border-radius: 7px"], [style*="border-radius: 8px"], [style*="border-radius: 10px"]):is([style*="border: 1px solid rgb(232, 237, 242)"], [style*="border-width: 1px 1px 1px 4px"]) {
+  border-radius: 16px !important;
+}
+
+/* Flat, clean surfaces: cards, panels, tiles and boxes inside the workspace
+   carry no decorative shadow (borders separate them). Floating UI — dropdowns,
+   menus, dialogs, tooltips, popovers, toasts and anything absolutely / fixed
+   positioned — keeps its elevation so it stays readable over content. */
+.admin-workspace__content :is([class*="shadow"], [style*="box-shadow"], .glass-card, .aws-page-card, .dash-kpi-tile):not([role="dialog"], [role="menu"], [role="listbox"], [role="tooltip"], [role="alertdialog"], [class*="absolute"], [class*="fixed"], [class*="sticky"], [style*="position: absolute"], [style*="position: fixed"], [class*="dropdown"], [class*="Dropdown"], [class*="popover"], [class*="Popover"], [class*="modal"], [class*="Modal"], [class*="tooltip"], [class*="Tooltip"], [class*="toast"], [class*="recharts"], [class*="z-40"], [class*="z-50"]) {
+  box-shadow: none !important;
+}
+
+.admin-workspace__content .aws-page-card {
+  box-shadow: none !important;
 }
 
 /* ============================================================

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckCheck, ChevronRight, RefreshCw } from 'lucide-react';
+import { Bell, BellRing, CheckCheck, ChevronRight, MailOpen, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   listMyNotifications,
@@ -103,9 +103,9 @@ export default function NotificationsPage() {
       }
     >
       <KpiPanel cols={3}>
-        <KpiTile label="All notifications" value={dash(summary?.total)} sub="In your inbox" />
-        <KpiTile label="Unread" value={dash(summary?.unread)} sub="Waiting for you" />
-        <KpiTile label="Read" value={dash(summary?.read)} sub="Already opened" />
+        <KpiTile label="All notifications" value={dash(summary?.total)} sub="In your inbox" icon={Bell} tone="orange" />
+        <KpiTile label="Unread" value={dash(summary?.unread)} sub="Waiting for you" icon={BellRing} tone="blue" />
+        <KpiTile label="Read" value={dash(summary?.read)} sub="Already opened" icon={MailOpen} tone="green" />
       </KpiPanel>
 
       <ContentCard>

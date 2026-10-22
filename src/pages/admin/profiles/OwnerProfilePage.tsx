@@ -45,13 +45,13 @@ const TABS: Record<Persona, Array<{ key: string; label: string }>> = {
 
 const S: Record<string, React.CSSProperties> = {
   grid: { display: 'grid', gridTemplateColumns: 'minmax(0,280px) minmax(0,1fr)', gap: 16, alignItems: 'start' },
-  card: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 10, overflow: 'hidden' },
+  card: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 16, overflow: 'hidden' },
   kLabel: { fontSize: 9, fontWeight: 800, color: '#9CA3AF' },
   kValue: { fontSize: 11.5, fontWeight: 700, marginTop: 2, color: '#111827', overflowWrap: 'anywhere' },
-  tabBar: { display: 'flex', gap: 16, background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: '0 16px', overflowX: 'auto' },
+  tabBar: { display: 'flex', gap: 16, background: '#fff', border: '1px solid #E8EDF2', borderRadius: 14, padding: '0 16px', overflowX: 'auto' },
   tab: { padding: '12px 4px', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', cursor: 'pointer', borderBottom: '2px solid transparent', color: '#6B7280', background: 'transparent', borderTop: 0, borderLeft: 0, borderRight: 0 },
   tabActive: { color: 'var(--cms-accent)', borderBottom: '2px solid var(--cms-accent)' },
-  panel: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: 16 },
+  panel: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 16, padding: 16 },
   link: { color: 'var(--cms-accent)', fontWeight: 800, textDecoration: 'none', fontSize: 11.5 },
 };
 

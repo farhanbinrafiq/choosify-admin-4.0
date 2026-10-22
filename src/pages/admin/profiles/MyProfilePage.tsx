@@ -171,7 +171,7 @@ export default function MyProfilePage() {
         </div>
 
         <div className="min-w-0">
-          <div className="flex gap-1 border-b border-app-border mb-4 flex-wrap">
+          <div className="flex gap-1 bg-white border border-[#E2E8F0] rounded-[14px] px-3 mb-4 flex-wrap overflow-hidden">
             {tabs.map((t) => (
               <button
                 key={t.key}

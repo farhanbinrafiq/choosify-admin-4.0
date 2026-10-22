@@ -61,7 +61,7 @@ export function ApplicationReviewSection({ applicationId, onDecided }: { applica
     }
   };
 
-  const box: React.CSSProperties = { background: '#fff', border: '2px solid var(--cms-accent)', borderRadius: 10, padding: 16, marginBottom: 16 };
+  const box: React.CSSProperties = { background: '#fff', border: '2px solid var(--cms-accent)', borderRadius: 16, padding: 16, marginBottom: 16 };
   if (error) return <div style={{ ...box, color: '#DC2626', fontSize: 12, fontWeight: 700 }}>{error}</div>;
   if (!app) {
     return (

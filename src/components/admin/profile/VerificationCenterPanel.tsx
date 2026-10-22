@@ -179,7 +179,7 @@ export function VerificationCenterPanel({
     void load();
   }, [load]);
 
-  const wrap: React.CSSProperties = { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, overflow: 'hidden' };
+  const wrap: React.CSSProperties = { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 16, overflow: 'hidden' };
 
   if (loading) {
     return <div style={{ ...wrap, padding: 24, textAlign: 'center' }}><Loader2 size={16} className="animate-spin" /></div>;
@@ -316,7 +316,7 @@ export function VerificationRequestCard({
   };
 
   return (
-    <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, overflow: 'hidden' }} data-testid="verification-request">
+    <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 16, overflow: 'hidden' }} data-testid="verification-request">
       <div style={{ padding: '14px 16px', borderBottom: '1px solid #F1F3F5', display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: 12.5, fontWeight: 800 }}>{entityName}</div>

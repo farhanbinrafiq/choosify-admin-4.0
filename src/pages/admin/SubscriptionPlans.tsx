@@ -405,7 +405,7 @@ function PlanEditorView({ planId, onBack }: { planId: string; onBack: () => void
 
 function BackBar({ onBack }: { onBack: () => void }) {
   return (
-    <button onClick={onBack} className="inline-flex items-center gap-1.5 text-[12px] font-extrabold text-app-text-secondary hover:text-app-text-primary">
+    <button onClick={onBack} className="inline-flex items-center gap-1.5 rounded-lg border border-app-border bg-white px-3 py-1.5 text-[12px] font-extrabold text-app-text-secondary shadow-sm hover:bg-slate-50 hover:text-app-text-primary">
       <ChevronLeft className="w-4 h-4" /> Back to Subscription Plans
     </button>
   );

@@ -16,7 +16,7 @@ export default function AccountComingSoon({ title, description }: AccountComingS
     <div className="max-w-2xl mx-auto">
       <Link
         to="/admin/dashboard"
-        className="inline-flex items-center gap-2 text-[12px] font-bold text-app-text-secondary hover:text-app-accent transition-colors mb-6"
+        className="inline-flex items-center gap-2 rounded-lg border border-app-border bg-white px-3 py-1.5 text-[12px] font-bold text-app-text-secondary shadow-sm hover:bg-slate-50 hover:text-app-accent transition-colors mb-6"
       >
         <ArrowLeft className="w-3.5 h-3.5" />
         Back to dashboard

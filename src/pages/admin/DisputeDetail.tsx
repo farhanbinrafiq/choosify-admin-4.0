@@ -112,7 +112,7 @@ export default function DisputeDetail() {
 
   return (
     <div className="mx-auto max-w-[1000px] px-4 py-5 md:px-6">
-      <button type="button" onClick={() => navigate('/admin/disputes')} className="mb-3 inline-flex items-center gap-1 text-[11px] font-bold text-[#6B7280] hover:text-[#111827]">
+      <button type="button" onClick={() => navigate('/admin/disputes')} className="mb-3 inline-flex items-center gap-1 rounded-lg border border-[#E8EDF2] bg-white px-3 py-1.5 text-[11px] font-bold text-[#374151] shadow-sm hover:bg-slate-50 hover:text-[#111827]">
         <ArrowLeft className="h-3.5 w-3.5" /> Back to Disputes
       </button>
 

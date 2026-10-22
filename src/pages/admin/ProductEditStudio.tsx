@@ -197,7 +197,7 @@ const S: Record<string, CSSProperties> = {
   ghostBtn: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: '9px 14px', fontSize: '11.5px', fontWeight: 700, color: '#374151', cursor: 'pointer' },
   accentBtn: { background: ACCENT, border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: '11.5px', fontWeight: 800, color: '#fff', cursor: 'pointer' },
   editLink: { background: 'none', border: '1px solid #E8EDF2', borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 800, color: ACCENT, cursor: 'pointer', letterSpacing: '0.02em' },
-  card: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 10, padding: 22, marginBottom: 16 },
+  card: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 16, padding: 22, marginBottom: 16 },
   cardEditing: { borderColor: ACCENT, boxShadow: `0 0 0 3px ${ACCENT_WASH}` },
   secHead: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, gap: 12 },
   secKicker: { fontSize: 10, fontWeight: 800, color: '#9CA3AF', letterSpacing: '0.05em' },

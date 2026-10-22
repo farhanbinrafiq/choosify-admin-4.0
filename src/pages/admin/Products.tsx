@@ -642,7 +642,7 @@ export default function ProductsPage() {
     sub: { fontSize: 12, color: '#374151', marginTop: 2 },
     addBtn: { background: ACCENT, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 },
     statGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 14, marginBottom: 18 },
-    statCard: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 5, padding: 16 },
+    statCard: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 16, padding: 16 },
     statNum: { fontSize: 22, fontWeight: 800, color: '#111827' },
     statLabel: { fontSize: 10, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 4 },
     statSub: { fontSize: '9.5px', fontWeight: 600, color: ACCENT, marginTop: 6 },
@@ -650,11 +650,11 @@ export default function ProductsPage() {
     glassCard: { background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', border: '1px solid rgba(255,255,255,0.4)', borderTop: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 8px 20px rgba(17,24,39,0.08)', borderRadius: 16, padding: 18 },
     glassTitle: { fontSize: 11, fontWeight: 800, color: ACCENT, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 },
     glassEmpty: { fontSize: '11.5px', color: '#9CA3AF', fontWeight: 600, fontStyle: 'italic', lineHeight: 1.5 },
-    tabBar: { display: 'flex', gap: 6, background: '#fff', border: '1px solid #E8EDF2', borderRadius: 10, padding: 8, marginBottom: 12, overflowX: 'auto' },
+    tabBar: { display: 'flex', gap: 6, background: '#fff', border: '1px solid #E8EDF2', borderRadius: 14, padding: 8, marginBottom: 12, overflowX: 'auto' },
     tab: { padding: '9px 16px', borderRadius: 8, fontSize: '11.5px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', color: '#374151' },
     tabActive: { background: ACCENT, color: '#fff' },
     filterRow: { display: 'flex', gap: 10, background: '#fff', border: '1px solid #E8EDF2', borderRadius: 5, padding: 10, marginBottom: 12, flexWrap: 'wrap' },
-    search: { flex: 1, minWidth: 220, height: 38, boxSizing: 'border-box', borderRadius: 8, border: '1px solid #E8EDF2', padding: '0 14px 0 36px', fontSize: '12.5px', outline: 'none', background: '#fff' },
+    search: { flex: 1, width: '100%', minWidth: 220, height: 38, boxSizing: 'border-box', borderRadius: 8, border: '1px solid #E8EDF2', padding: '0 14px 0 36px', fontSize: '12.5px', outline: 'none', background: '#fff' },
     select: { height: 38, boxSizing: 'border-box', borderRadius: 8, border: '1px solid #E8EDF2', padding: '0 12px', fontSize: 12, color: '#111827', background: '#fff', outline: 'none', cursor: 'pointer' },
     bulkBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F7F8FA', border: '1px solid #E5E7EB', color: '#172033', borderRadius: 8, padding: '12px 16px', marginBottom: 12, flexWrap: 'wrap', gap: 10 },
     bulkChip: { background: ACCENT_WASH, color: ACCENT, padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 800 },
@@ -668,7 +668,7 @@ export default function ProductsPage() {
     catPill: { fontSize: 10, fontWeight: 700, color: '#374151', background: '#F1F3F5', padding: '4px 10px', borderRadius: 6, textTransform: 'uppercase', whiteSpace: 'nowrap' },
     actionCol: { display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 2 },
     actionCap: { fontSize: 8, fontWeight: 800, color: '#9CA3AF', letterSpacing: '0.04em' },
-    panel: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 10, padding: '14px 16px' },
+    panel: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 16, padding: '14px 16px' },
   };
 
   const bulkBtn = (bg: string): CSSProperties => ({ background: bg, color: '#fff', border: 'none', borderRadius: 6, padding: '7px 12px', fontSize: 10, fontWeight: 800, cursor: 'pointer', textTransform: 'uppercase' });

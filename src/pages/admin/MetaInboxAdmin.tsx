@@ -437,7 +437,7 @@ export default function MetaInboxAdmin() {
         {/* Customer context */}
         {selected && (
           <div className={`w-full lg:w-[280px] shrink-0 border-l border-[#E8EDF2] flex-col min-h-0 overflow-y-auto p-4 gap-4 ${mobilePane === 'context' ? 'flex' : 'hidden lg:flex'}`}>
-            <button type="button" onClick={() => setMobilePane('thread')} className="lg:hidden flex items-center gap-1.5 text-[11px] font-bold text-[#1A1A2E]">
+            <button type="button" onClick={() => setMobilePane('thread')} className="lg:hidden flex self-start items-center gap-1.5 rounded-lg border border-[#E8EDF2] bg-white px-3 py-1.5 text-[11px] font-bold text-[#1A1A2E] shadow-sm hover:bg-slate-50">
               <ArrowLeft size={14} /> Back to thread
             </button>
 

@@ -3,6 +3,9 @@ import { Link } from 'react-router-dom';
 import {
   AreaChart,
   Area,
+  ComposedChart,
+  Line,
+  Legend,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -45,10 +48,15 @@ export function DashShell({
 }) {
   return (
     <div className="space-y-6 pb-10">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-app-text-primary tracking-tight">{title}</h1>
-          {subtitle ? <p className="text-app-text-secondary text-sm mt-0.5">{subtitle}</p> : null}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="min-w-0">
+          <h1
+            className="text-[26px] sm:text-[30px] font-extrabold tracking-tight leading-tight text-[#000435] m-0"
+            style={{ fontFamily: 'var(--font-heading)' }}
+          >
+            {title}
+          </h1>
+          {subtitle ? <p className="text-[#64748B] text-[15px] mt-1.5 mb-0">{subtitle}</p> : null}
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}
       </div>
@@ -65,16 +73,17 @@ export function RangeToggle({
   onChange: (r: RangeKey) => void;
 }) {
   return (
-    <div className="flex bg-slate-100 p-1 rounded-xl border border-app-border">
+    <div className="flex bg-white p-1 rounded-xl border border-[#E2E8F0] shadow-[0_1px_2px_rgba(15,23,42,0.04)]" role="group" aria-label="Date range">
       {(['7d', '30d', '90d'] as RangeKey[]).map((t) => (
         <button
           key={t}
           type="button"
           onClick={() => onChange(t)}
-          className={`px-4 py-1.5 text-[10px] font-bold rounded-lg transition-all ${
+          aria-pressed={value === t}
+          className={`px-4 py-2 text-[12px] font-bold rounded-lg transition-all ${
             value === t
-              ? 'bg-app-accent text-white'
-              : 'text-app-text-secondary hover:text-app-text-primary'
+              ? 'bg-[#F96500] text-white shadow-sm'
+              : 'text-[#000435] hover:bg-[#F8FAFC]'
           }`}
         >
           {t.toUpperCase()}
@@ -85,15 +94,12 @@ export function RangeToggle({
 }
 
 /**
- * Panel that hosts the KPI tile row.
- * Dashboard Design System: light-gray panel with white tiles inside --
- * both the default and `branded` (Platform Command Center) variants use the
- * same light surface. `branded` keeps only a very subtle orange-tinted
- * accent (not a large saturated gradient) to mark it as the primary panel.
+ * KPI card row — a plain responsive grid; the cards sit directly on the page
+ * (4 columns wide desktop, 2 on tablet, 1–2 on mobile). `branded` is kept for
+ * API compatibility and no longer changes the surface.
  */
 export function KpiPanel({
   cols = 4,
-  branded = false,
   children,
 }: {
   cols?: 2 | 3 | 4;
@@ -101,59 +107,65 @@ export function KpiPanel({
   children: React.ReactNode;
 }) {
   const grid =
-    cols === 2
-      ? 'md:grid-cols-2'
-      : cols === 3
-        ? 'md:grid-cols-2 lg:grid-cols-3'
-        : 'md:grid-cols-2 lg:grid-cols-4';
-  return (
-    <div
-      className={`rounded-[20px] p-5${branded ? ' dash-kpi-panel--branded' : ''}`}
-      style={
-        branded
-          ? { background: 'linear-gradient(120deg, #FFF7F2 0%, #F7F8FA 100%)' }
-          : { background: 'var(--color-app-bg)' }
-      }
-    >
-      <div className={`grid grid-cols-1 ${grid} gap-5`}>{children}</div>
-    </div>
-  );
+    cols === 2 ? 'sm:grid-cols-2' : cols === 3 ? 'sm:grid-cols-2 xl:grid-cols-3' : 'sm:grid-cols-2 xl:grid-cols-4';
+  return <div className={`grid grid-cols-1 ${grid} gap-4 lg:gap-5`}>{children}</div>;
 }
 
-/** Dark-glass KPI tile. `to` makes the whole tile a router link. */
+export type KpiTone = 'orange' | 'blue' | 'green' | 'purple' | 'neutral';
+const KPI_TONES: Record<KpiTone, { card: string; chip: string; icon: string }> = {
+  orange: { card: 'bg-[#FFF7F2] border-[#FDE3D1]', chip: 'bg-[#FFE4D1]', icon: 'text-[#F96500]' },
+  blue: { card: 'bg-white border-[#E2E8F0]', chip: 'bg-[#E8F0FE]', icon: 'text-[#3B82F6]' },
+  green: { card: 'bg-white border-[#E2E8F0]', chip: 'bg-[#E7F6EC]', icon: 'text-[#16A34A]' },
+  purple: { card: 'bg-white border-[#E2E8F0]', chip: 'bg-[#EFEAFE]', icon: 'text-[#7C3AED]' },
+  neutral: { card: 'bg-white border-[#E2E8F0]', chip: 'bg-[#F1F5F9]', icon: 'text-[#64748B]' },
+};
+
+/** KPI card. `to` makes the whole card a router link; `icon` / `tone` are optional. */
 export function KpiTile({
   label,
   value,
   sub,
   to,
+  icon: Icon,
+  tone = 'neutral',
 }: {
   label: string;
   value: string;
   sub?: string;
   to?: string;
+  icon?: React.ComponentType<{ className?: string }>;
+  tone?: KpiTone;
 }) {
+  const t = KPI_TONES[tone];
   const body = (
-    <div className="dash-kpi-tile rounded-[18px] p-5 group transition-all relative overflow-hidden h-full">
-      <div className="dash-kpi-label text-[11px] uppercase tracking-[0.15em] font-bold mb-3">
-        {label}
-      </div>
-      <div
-        className="dash-kpi-value text-[28px] font-extrabold tracking-tight mb-2 leading-none"
-        style={{ fontFamily: 'var(--font-heading)' }}
-      >
-        {value}
-      </div>
-      <div className="dash-kpi-sub text-[11px] font-medium flex items-center gap-1 min-h-[16px]">
-        {sub}
-        {to ? (
-          <ArrowUpRight className="w-3.5 h-3.5 text-app-accent opacity-0 group-hover:opacity-100 transition-opacity" />
-        ) : null}
+    <div
+      className={`group h-full rounded-2xl border p-5 flex items-start gap-4 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-all ${t.card} ${to ? 'hover:shadow-[0_6px_18px_rgba(15,23,42,0.08)] hover:-translate-y-px' : ''}`}
+    >
+      {Icon ? (
+        <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${t.chip}`}>
+          <Icon className={`w-5 h-5 ${t.icon}`} />
+        </div>
+      ) : null}
+      <div className="min-w-0 flex-1">
+        <div className="text-[11.5px] uppercase tracking-[0.08em] font-bold text-[#475569] mb-2">{label}</div>
+        <div
+          className="text-[28px] sm:text-[30px] font-extrabold tracking-tight leading-none text-[#000435] mb-2.5 truncate"
+          style={{ fontFamily: 'var(--font-heading)' }}
+        >
+          {value}
+        </div>
+        <div className="text-[12px] text-[#64748B] font-medium flex items-center gap-1 min-h-[16px]">
+          <span className="truncate">{sub}</span>
+          {to ? (
+            <ArrowUpRight className="w-3.5 h-3.5 text-[#F96500] shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+          ) : null}
+        </div>
       </div>
     </div>
   );
   if (!to) return body;
   return (
-    <Link to={to} className="block">
+    <Link to={to} className="block no-underline">
       {body}
     </Link>
   );
@@ -172,7 +184,7 @@ export function ContentCard({
 }) {
   return (
     <div
-      className={`bg-app-card border border-app-border rounded-2xl p-6 shadow-sm ${className ?? ''}`}
+      className={`bg-white border border-[#E2E8F0] rounded-2xl p-5 sm:p-6 shadow-[0_1px_3px_rgba(15,23,42,0.05)] ${className ?? ''}`}
     >
       {title || aside ? (
         <div className="flex items-center justify-between mb-4">
@@ -404,6 +416,134 @@ export function TrendChart({
           {emptyMessage}
         </div>
       )}
+    </div>
+  );
+}
+
+export type DualTrendPoint = { date: string; label: string; revenue: number; orders: number };
+
+/**
+ * Revenue (area, left axis) + order count (line, right axis) over the selected
+ * range. Separate axes because the two scales differ by orders of magnitude.
+ * Real series only: loading and "no data" states replace the chart, never a
+ * fabricated line.
+ */
+export function DualTrendChart({
+  data,
+  loading = false,
+  emptyMessage,
+  revenueLabel = 'GMV / Revenue (৳)',
+  ordersLabel = 'Orders',
+}: {
+  data: DualTrendPoint[];
+  loading?: boolean;
+  emptyMessage: string;
+  revenueLabel?: string;
+  ordersLabel?: string;
+}) {
+  const hasData = data.some((d) => d.revenue > 0 || d.orders > 0);
+  const box = 'h-[300px] sm:h-[340px] flex items-center justify-center text-[#64748B] text-sm';
+  if (loading) return <div className={box}>Loading trend…</div>;
+  if (!hasData) return <div className={box}>{emptyMessage}</div>;
+  const money = (n: number) => `৳ ${Math.round(n).toLocaleString()}`;
+  const compact = (n: number) => (n >= 1000 ? `${Number((n / 1000).toFixed(1))}k` : String(n));
+  // Round axis maximum (1 / 2 / 2.5 / 5 × 10^k) so ticks land on readable numbers.
+  const niceMax = (max: number) => {
+    if (!(max > 0)) return 1;
+    const pow = 10 ** Math.floor(Math.log10(max));
+    const step = [1, 2, 2.5, 5, 10].find((m) => m * pow >= max) ?? 10;
+    return step * pow;
+  };
+  const revMax = niceMax(Math.max(...data.map((d) => d.revenue)));
+  const ordMax = Math.max(4, Math.ceil(niceMax(Math.max(...data.map((d) => d.orders)))));
+  const fullDate = (iso?: string) => {
+    if (!iso) return '';
+    const d = new Date(`${iso}T00:00:00`);
+    return Number.isNaN(d.getTime())
+      ? iso
+      : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+  return (
+    <div className="h-[300px] sm:h-[340px] -mx-2" data-testid="dual-trend-chart">
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={data} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
+          <defs>
+            <linearGradient id="dashGmvFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#F96500" stopOpacity={0.22} />
+              <stop offset="100%" stopColor="#F96500" stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="4 4" stroke="#E2E8F0" />
+          <XAxis dataKey="label" stroke="#64748B" fontSize={11} tickLine={false} axisLine={false} minTickGap={18} dy={6} />
+          <YAxis
+            yAxisId="rev"
+            stroke="#64748B"
+            fontSize={11}
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={compact}
+            domain={[0, revMax]}
+            tickCount={5}
+            width={48}
+          />
+          <YAxis
+            yAxisId="ord"
+            orientation="right"
+            stroke="#64748B"
+            fontSize={11}
+            tickLine={false}
+            axisLine={false}
+            allowDecimals={false}
+            domain={[0, ordMax]}
+            width={32}
+          />
+          <Tooltip
+            labelFormatter={(label, payload) =>
+              fullDate((payload?.[0]?.payload as DualTrendPoint | undefined)?.date) || String(label)
+            }
+            formatter={(v: number | string, name: string) =>
+              name === revenueLabel ? [money(Number(v)), name] : [Number(v).toLocaleString(), name]
+            }
+            contentStyle={{
+              background: '#fff',
+              border: '1px solid #E2E8F0',
+              borderRadius: 12,
+              boxShadow: '0 8px 24px rgba(15,23,42,0.08)',
+              fontSize: 12,
+            }}
+            labelStyle={{ color: '#000435', fontWeight: 700, marginBottom: 4 }}
+          />
+          <Legend
+            verticalAlign="top"
+            align="right"
+            iconType="circle"
+            iconSize={9}
+            height={32}
+            wrapperStyle={{ fontSize: 12, color: '#000435' }}
+          />
+          <Area
+            yAxisId="rev"
+            type="monotoneX"
+            dataKey="revenue"
+            name={revenueLabel}
+            stroke="#F96500"
+            strokeWidth={2.5}
+            fill="url(#dashGmvFill)"
+            dot={{ r: 3, fill: '#F96500', strokeWidth: 0 }}
+            activeDot={{ r: 5 }}
+          />
+          <Line
+            yAxisId="ord"
+            type="monotoneX"
+            dataKey="orders"
+            name={ordersLabel}
+            stroke="#3B82F6"
+            strokeWidth={2.5}
+            dot={{ r: 3, fill: '#3B82F6', strokeWidth: 0 }}
+            activeDot={{ r: 5 }}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
     </div>
   );
 }

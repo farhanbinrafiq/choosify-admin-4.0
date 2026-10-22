@@ -18,7 +18,7 @@ import type { GuideManageRow } from '../../../services/catalogApi';
  */
 
 const C = {
-  panel: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, overflow: 'hidden' } as React.CSSProperties,
+  panel: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 16, overflow: 'hidden' } as React.CSSProperties,
   head: { padding: '14px 16px', borderBottom: '1px solid #F1F3F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' } as React.CSSProperties,
   title: { fontSize: 12, fontWeight: 800, color: '#111827' } as React.CSSProperties,
   sub: { fontSize: '10.5px', color: '#9CA3AF', fontWeight: 600, marginTop: 2 } as React.CSSProperties,

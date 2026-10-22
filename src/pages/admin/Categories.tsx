@@ -385,7 +385,7 @@ export default function CategoriesPage() {
     btnRow: { display: 'flex', gap: 10, flexWrap: 'wrap' },
     btn: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: '9px 16px', fontSize: '11.5px', fontWeight: 800, color: '#111827', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 },
     btnAccent: { background: ACCENT_WASH, border: `1px solid ${ACCENT}`, borderRadius: 8, padding: '9px 16px', fontSize: '11.5px', fontWeight: 800, color: ACCENT, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 },
-    card: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 10 },
+    card: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 16 },
     hierHeadRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
     hierLabel: { fontSize: 11, fontWeight: 800, color: '#9CA3AF', letterSpacing: '0.05em' },
     addLink: { fontSize: '11.5px', fontWeight: 800, color: ACCENT, cursor: 'pointer', background: 'none', border: 0, padding: 0 },

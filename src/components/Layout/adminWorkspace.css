@@ -527,7 +527,7 @@
 .admin-workspace__content .aws-page-card {
   background: var(--cms-surface, #fff);
   border: 1px solid var(--cms-border, #e8edf2);
-  border-radius: 18px;
+  border-radius: 16px;
   box-shadow: 0 1px 2px rgba(24, 21, 76, 0.04);
 }
 
@@ -637,4 +637,227 @@
     padding: 0 !important;
     background: #ffffff !important;
   }
+}
+
+/* ==========================================================================
+ * SaaS command-center refresh (dashboard redesign).
+ * Scoped design tokens for the workspace shell; the global app accent is
+ * untouched. Switch --cw-orange to #EF3C23 to use the logo orange instead.
+ * ======================================================================== */
+.admin-workspace {
+  --cw-orange: #F96500;
+  --cw-navy: #000435;
+  --cw-bg: #F0F8FF; /* Alice blue: main background behind cards */
+  --cw-peach: #FFF0E8;
+  --cw-peach-soft: #FFF7F2;
+  --cw-muted: #64748B;
+  --cw-border: #E2E8F0;
+  background: var(--cw-bg);
+}
+
+.admin-workspace__topbar {
+  border-bottom-color: var(--cw-border);
+}
+
+.admin-workspace__topbar-title {
+  color: var(--cw-navy);
+}
+
+.admin-workspace__topbar-subtitle {
+  color: var(--cw-muted);
+}
+
+.admin-workspace__sidebar {
+  border-right-color: var(--cw-border);
+}
+
+.admin-workspace__nav-group {
+  margin-bottom: 18px;
+}
+
+.admin-workspace__nav-group-title {
+  color: var(--cw-muted);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  padding: 0 12px;
+  margin-bottom: 8px;
+}
+
+.admin-workspace__nav-item {
+  position: relative;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 10px;
+}
+
+.admin-workspace__nav-item:hover {
+  background: var(--cw-peach-soft);
+}
+
+.admin-workspace__nav-item--active,
+.admin-workspace__nav-item--active:hover {
+  background: var(--cw-peach);
+}
+
+/* Narrow orange indicator flush with the item's left edge. */
+.admin-workspace__nav-bar {
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  height: auto;
+  border-radius: 0 3px 3px 0;
+}
+
+.admin-workspace__nav-item--active .admin-workspace__nav-bar {
+  background: var(--cw-orange);
+}
+
+.admin-workspace__nav-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--cw-orange);
+  stroke-width: 1.9;
+}
+
+.admin-workspace__nav-label {
+  color: var(--cw-navy);
+  font-weight: 500;
+  font-size: 13.5px;
+}
+
+.admin-workspace__nav-item--active .admin-workspace__nav-label {
+  color: var(--cw-orange);
+  font-weight: 700;
+}
+
+.admin-workspace__nav-item--locked .admin-workspace__nav-label {
+  color: var(--cw-muted);
+}
+
+.admin-workspace__nav-attention {
+  background: var(--cw-orange);
+}
+
+.admin-workspace__nav-tag {
+  color: var(--cw-orange);
+}
+
+/* Wider sidebar so long labels (e.g. "Seller Management Studio") fit beside the icons. */
+.admin-workspace {
+  --cms-sidebar-width: 268px;
+}
+
+/* Phone header: the page title has no room next to search + actions (the page heading shows it). */
+@media (max-width: 639px) {
+  .admin-workspace__topbar-title-block {
+    display: none;
+  }
+}
+
+/* Main background behind every page's cards: Alice blue. */
+.admin-workspace__main,
+.admin-workspace__content {
+  background: var(--cw-bg);
+}
+
+/* Search fields: Alice blue fill (placeholder text stays grey and readable).
+   Covers the header search, the sidebar menu filter and page search boxes —
+   the input itself and the wrapper box that holds its icon. */
+.admin-workspace :is(input[type="search"], input[placeholder^="Search" i]) {
+  background-color: var(--cw-bg) !important;
+}
+.admin-workspace :is(div, label, form):has(> input[placeholder^="Search" i][class*="bg-transparent"]):has(> svg) {
+  background-color: var(--cw-bg) !important;
+}
+
+/* Header search pill (GlobalSearchShell): fill the whole pill, up to the Search button. */
+.admin-workspace .global-search-shell__pill,
+.admin-workspace form:has(> .global-search-shell__pill) {
+  background-color: var(--cw-bg) !important;
+}
+
+/* Dropdowns (native selects, e.g. "Name: A → Z"): same Alice blue field and option list.
+   The highlighted option colour is drawn by the browser and cannot be restyled. */
+.admin-workspace__content :is(div, form):is(:has(> :is(div, label, form) > input[placeholder^="Search" i]), :has(> input[placeholder^="Search" i])) select {
+  background-color: var(--cw-bg) !important;
+}
+.admin-workspace__content :is(div, form):is(:has(> :is(div, label, form) > input[placeholder^="Search" i]), :has(> input[placeholder^="Search" i])) select option {
+  background-color: var(--cw-bg);
+  color: var(--cw-navy);
+}
+
+/* Fields must stay visible when they sit directly on the Alice-blue page
+   background: a clear border on content-area search boxes and dropdowns.
+   Icon + input search boxes get it on the wrapper (no double outline). */
+.admin-workspace__content :is(div, form):is(:has(> :is(div, label, form) > input[placeholder^="Search" i]), :has(> input[placeholder^="Search" i])) select,
+.admin-workspace__content :is(div, label, form):not(:has(> svg)) > :is(input[type="search"], input[placeholder^="Search" i]),
+.admin-workspace__content :is(div, label, form):has(> input[placeholder^="Search" i][class*="bg-transparent"]):has(> svg) {
+  border: 1px solid #CBD5E1 !important;
+}
+.admin-workspace__content :is(div, label, form):has(> input[placeholder^="Search" i][class*="bg-transparent"]):has(> svg):focus-within,
+.admin-workspace__content :is(div, form):is(:has(> :is(div, label, form) > input[placeholder^="Search" i]), :has(> input[placeholder^="Search" i])) select:focus {
+  border-color: var(--cw-orange) !important;
+}
+
+/* Search inputs that draw their own border (icon positioned inside them):
+   same visible border colour. Fields + dropdowns get the rounded control radius. */
+.admin-workspace__content :is(input[type="search"], input[placeholder^="Search" i]) {
+  border-color: #CBD5E1 !important;
+}
+.admin-workspace__content :is(div, form):is(:has(> :is(div, label, form) > input[placeholder^="Search" i]), :has(> input[placeholder^="Search" i])) select,
+.admin-workspace__content :is(input[type="search"], input[placeholder^="Search" i]),
+.admin-workspace__content :is(div, label, form):has(> input[placeholder^="Search" i][class*="bg-transparent"]):has(> svg) {
+  border-radius: 12px !important;
+}
+
+/* Toolbar rows (search + sort/filters) that sit directly on the Alice-blue page
+   get the same white rounded card as the other list pages; their fields keep
+   the Alice-blue fill inside it. Rows already in / acting as a card are untouched. */
+.admin-workspace__content div:has(> :is(div, label, form) > input[placeholder^="Search" i]):not(.aws-page-card, [class*="bg-white"], [class*="card"], [style*="background: rgb(255, 255, 255)"]):not(:is(.aws-page-card, [class*="bg-white"], [class*="bg-app-card"], [class*="card"], [class*="Card"], [style*="background: rgb(255, 255, 255)"]) *) {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 16px;
+  padding: 16px;
+}
+
+/* ---- Tab rows / menus sitting on the bare page background get a white card ---- */
+/* Underline tab bars (Finance, Payouts, Feature Access …). */
+.admin-workspace__content div[class*="border-b"][class*="overflow-x-auto"]:has(> button[class*="border-b-2"]):not(:is(.aws-page-card, [class*="bg-white"], [class*="card"], [style*="background: rgb(255, 255, 255)"]) *) {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0 !important;
+  border-radius: 14px;
+  padding: 0 12px;
+}
+/* Pill filter rows (Ads Manager, Moderation, Disputes, Trust & Assurance …). */
+.admin-workspace__content div[class*="flex-wrap"]:has(> button[class*="rounded-full"] + button[class*="rounded-full"]):not(:is(.aws-page-card, [class*="bg-white"], [class*="card"], [style*="background: rgb(255, 255, 255)"]) *) {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 16px;
+  padding: 10px 12px;
+}
+/* Side / stacked menus (Settings …). */
+.admin-workspace__content div[class*="md:flex-col"]:has(> button[class*="rounded-lg"] + button[class*="rounded-lg"]):not(:is(.aws-page-card, [class*="bg-white"], [class*="card"], [style*="background: rgb(255, 255, 255)"]) *) {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 16px;
+  padding: 8px;
+}
+/* Quick-link rows (Trust Center "Go to …" links). */
+.admin-workspace__content div[class*="flex-wrap"]:has(> a + a + a):not(:is(.aws-page-card, [class*="bg-white"], [class*="card"], [style*="background: rgb(255, 255, 255)"]) *) {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 16px;
+  padding: 12px 14px;
+}
+
+/* ---- All input fields: Alice-blue fill (text inputs, textareas, dropdowns) ---- */
+.admin-workspace__content :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="submit"], [type="button"], [type="image"], [type="reset"]), textarea, select) {
+  background-color: var(--cw-bg) !important;
+}
+.admin-workspace__content select option {
+  background-color: var(--cw-bg);
+  color: var(--cw-navy);
 }

@@ -13,6 +13,9 @@ import {
   Star,
   RotateCcw,
   BadgeCheck,
+  BarChart3,
+  ShoppingCart,
+  Tag,
 } from 'lucide-react';
 import { operationsApi, type AnalyticsSummary } from '../../../services/operationsApi';
 import { catalogApi } from '../../../services/catalogApi';
@@ -27,7 +30,7 @@ import {
   MiniStat,
   ActionRowList,
   QuickActionGrid,
-  TrendChart,
+  DualTrendChart,
   RANGE_LABEL,
   type RangeKey,
   type ActionItem,
@@ -115,14 +118,30 @@ export default function AdminHomeDashboard() {
   }, [range]);
 
   const orders = analytics?.orders;
-  const trend = useMemo(
-    () =>
-      (Array.isArray(analytics?.daily) ? analytics!.daily : []).slice(-14).map((row) => ({
-        name: String(row?.date ?? '').slice(5),
-        value: Number(row?.revenue || 0),
-      })),
-    [analytics],
-  );
+  // The whole selected range (7 / 30 / 90 days) from /operations/analytics daily[].
+  // daily[] lists only days that had activity; a day it omits had zero orders,
+  // so the range is filled with real zero days (nothing is estimated).
+  const trend = useMemo(() => {
+    if (!analytics) return [];
+    const byDate = new Map(
+      (Array.isArray(analytics.daily) ? analytics.daily : []).map((row) => [String(row?.date ?? ''), row]),
+    );
+    const days = range === '7d' ? 7 : range === '90d' ? 90 : 30;
+    const end = new Date(analytics.generatedAt || Date.now());
+    const out: Array<{ date: string; label: string; revenue: number; orders: number }> = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate() - i));
+      const iso = d.toISOString().slice(0, 10);
+      const row = byDate.get(iso);
+      out.push({
+        date: iso,
+        label: d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', timeZone: 'UTC' }),
+        revenue: Number(row?.revenue || 0),
+        orders: Number(row?.orders || 0),
+      });
+    }
+    return out;
+  }, [analytics, range]);
 
   const dash = (v: string) => (loading ? '…' : v);
   const money = (n?: number) => `৳ ${Number(n || 0).toLocaleString()}`;
@@ -175,15 +194,16 @@ export default function AdminHomeDashboard() {
             target="_blank"
             rel="noopener noreferrer"
             title="View live site"
-            className="p-2.5 bg-app-card border border-app-border rounded-xl text-app-text-secondary hover:text-app-accent hover:border-app-accent/40 transition-all"
+            aria-label="View live site"
+            className="h-[42px] w-[42px] inline-flex items-center justify-center bg-white border border-[#E2E8F0] rounded-xl text-[#64748B] hover:text-[#F96500] hover:border-[#F96500]/40 transition-all"
           >
             <ExternalLink className="w-4 h-4" />
           </a>
           <Link
             to="/admin/website-cms"
-            className="px-4 py-2.5 bg-white border border-app-accent text-app-accent rounded-xl font-bold text-xs flex items-center gap-2 hover:bg-app-accent/10 transition-all"
+            className="h-[42px] px-4 bg-white border-[1.5px] border-[#F96500] text-[#000435] rounded-xl font-bold text-[13px] inline-flex items-center gap-2 hover:bg-[#FFF0E8] transition-all no-underline"
           >
-            <LayoutTemplate className="w-4 h-4" /> Website Manager
+            <LayoutTemplate className="w-4 h-4 text-[#F96500]" /> Website Manager
           </Link>
         </>
       }
@@ -194,40 +214,65 @@ export default function AdminHomeDashboard() {
           value={dash(orders ? money(orders.revenue) : '—')}
           sub={orders ? `${orders.total} orders · ${RANGE_LABEL[range]}` : 'Storefront checkout'}
           to="/admin/orders"
+          icon={BarChart3}
+          tone="orange"
         />
         <KpiTile
           label="Orders"
           value={dash(orders ? String(orders.total) : '—')}
           sub={orders ? `${orders.cod} COD · ${RANGE_LABEL[range]}` : 'Checkout pipeline'}
           to="/admin/orders"
+          icon={ShoppingCart}
+          tone="blue"
         />
         <KpiTile
           label="Active Brands"
           value={dash(snap ? String(snap.brands) : '—')}
           sub={`${snap?.products ?? 0} products listed`}
           to="/admin/brand-studio"
+          icon={Tag}
+          tone="green"
         />
         <KpiTile
           label="Customers"
           value={dash(snap && snap.consumers !== null ? String(snap.consumers) : '—')}
           sub={`${snap?.liveCreators ?? 0} live creators`}
           to="/admin/consumers"
+          icon={Users}
+          tone="purple"
         />
       </KpiPanel>
 
       <ContentCard>
-        <div className="mb-4">
-          <h3 className="text-lg font-bold text-app-text-primary tracking-tight m-0">
-            Platform GMV &amp; Orders Trend
-          </h3>
-          <p className="text-[11px] text-app-text-secondary uppercase font-bold tracking-widest mt-1">
-            {RANGE_LABEL[range]} · all storefront checkout
-          </p>
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-2">
+          <div className="min-w-0">
+            <h3
+              className="text-[20px] font-extrabold text-[#000435] tracking-tight m-0"
+              style={{ fontFamily: 'var(--font-heading)' }}
+            >
+              Platform GMV &amp; Orders Trend
+            </h3>
+            <p className="text-[11px] text-[#64748B] uppercase font-bold tracking-[0.12em] mt-1.5 mb-0">
+              {RANGE_LABEL[range]} · All storefront checkout
+            </p>
+          </div>
+          {/* Same range as the page toggle — one source of truth. */}
+          <select
+            value={range}
+            onChange={(e) => setRange(e.target.value as RangeKey)}
+            aria-label="Trend range"
+            className="h-[38px] px-3 pr-8 bg-white border border-[#E2E8F0] rounded-xl text-[13px] font-semibold text-[#000435] cursor-pointer"
+          >
+            {(Object.keys(RANGE_LABEL) as RangeKey[]).map((k) => (
+              <option key={k} value={k}>
+                {RANGE_LABEL[k]}
+              </option>
+            ))}
+          </select>
         </div>
-        <TrendChart
+        <DualTrendChart
           data={trend}
-          seriesLabel="Revenue (৳)"
-          valuePrefix="৳ "
+          loading={loading}
           emptyMessage="No platform orders in this period yet."
         />
       </ContentCard>

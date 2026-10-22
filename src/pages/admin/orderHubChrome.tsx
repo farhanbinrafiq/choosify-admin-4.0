@@ -38,7 +38,7 @@ export const S = {
   card: {
     background: '#fff',
     border: '1px solid #E8EDF2',
-    borderRadius: 10,
+    borderRadius: 16,
   } as CSSProperties,
   microLabel: {
     fontSize: 9.5,

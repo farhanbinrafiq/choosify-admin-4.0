@@ -40,7 +40,7 @@ const badge: React.CSSProperties = { padding: '2px 8px', borderRadius: 6, fontSi
 const btn: React.CSSProperties = { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 7, padding: '6px 10px', fontSize: 11, fontWeight: 800, cursor: 'pointer', color: '#374151', display: 'inline-flex', alignItems: 'center', gap: 5 };
 const danger: React.CSSProperties = { ...btn, color: '#B91C1C', borderColor: '#FECACA' };
 const primary: React.CSSProperties = { ...btn, background: 'var(--cms-accent, #E8462A)', borderColor: 'var(--cms-accent, #E8462A)', color: '#fff' };
-const panel: React.CSSProperties = { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: 16 };
+const panel: React.CSSProperties = { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 16, padding: 16 };
 const row: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', background: '#F8FAFC', borderRadius: 8, flexWrap: 'wrap' };
 const thumb: React.CSSProperties = { width: 44, height: 44, borderRadius: 8, border: '1px dashed #CBD5E1', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8', flexShrink: 0, overflow: 'hidden', background: '#fff' };
 

@@ -21,6 +21,7 @@ import {
   getUserInitials,
 } from '../../lib/userDisplay';
 import './adminWorkspace.css';
+import { navIconFor } from './navIcons';
 
 export type AdminWorkspaceLayoutProps = {
   children: React.ReactNode;
@@ -216,6 +217,7 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
                 const attention = navAttention[item.key];
                 const attentionCount = attention && attention.count > 0 ? attention.count : 0;
                 const locked = item.lock === 'marketplace';
+                const NavIcon = navIconFor(item.key, item.path);
                 return (
                   <Link
                     key={item.key}
@@ -227,6 +229,7 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
                     title={locked ? 'Marketplace Access Pending' : undefined}
                   >
                     <span className="admin-workspace__nav-bar" aria-hidden />
+                    <NavIcon className="admin-workspace__nav-icon" aria-hidden />
                     <span className="admin-workspace__nav-label">{item.label}</span>
                     {attentionCount > 0 ? (
                       <span

@@ -187,7 +187,7 @@ export default function WarrantyClaimDetail() {
   if (error || !claim) {
     return (
       <div className="p-6 max-w-3xl mx-auto">
-        <Link to="/admin/warranty-claims" className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 mb-4">
+        <Link to="/admin/warranty-claims" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm hover:bg-slate-50 hover:text-slate-800 mb-4">
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Warranty Claims
         </Link>
         <div className="border border-dashed border-rose-200 bg-rose-50 rounded-xl p-6 text-sm text-rose-600">{error || 'Claim not found.'}</div>
@@ -203,7 +203,7 @@ export default function WarrantyClaimDetail() {
         <div className="fixed top-4 right-4 z-50 bg-slate-900 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-lg">{toast}</div>
       )}
 
-      <button onClick={() => navigate('/admin/warranty-claims')} className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 mb-4">
+      <button onClick={() => navigate('/admin/warranty-claims')} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm hover:bg-slate-50 hover:text-slate-800 mb-4">
         <ArrowLeft className="w-3.5 h-3.5" /> Back to Warranty Claims
       </button>
 
