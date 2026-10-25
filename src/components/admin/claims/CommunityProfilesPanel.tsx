@@ -392,20 +392,26 @@ function CommunityProfileDialog({
 
   const canSubmit = name.trim().length >= 2 && (!isBrand || categoryId) && !busy && uploading === 0;
   const uploadImage = isBrand ? uploadBrandImage : uploadCreatorImage;
+  // A click outside never closes the form; × / Cancel ask first when something was entered.
+  const snapshot = JSON.stringify([name, categoryId, description, logo, coverImage, website, location, cleanSocials, tags]);
+  const [initialSnapshot] = useState(snapshot);
+  const requestClose = () => {
+    if (snapshot !== initialSnapshot && !window.confirm('Discard the information you entered? It will not be saved.')) return;
+    onClose();
+  };
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-label={`${editing ? 'Edit' : 'Create'} community ${entityType}`}
       className="fixed inset-0 z-[1000] bg-slate-900/50 flex items-start sm:items-center justify-center p-4 overflow-y-auto"
-      onClick={onClose}
     >
       <div className="bg-white rounded-xl w-full max-w-[560px] shadow-xl" onClick={(e) => e.stopPropagation()} data-testid="community-create-dialog">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-app-border">
           <div className="text-sm font-black">
             {editing ? `Edit ${editing.name}` : `Create community ${isBrand ? 'brand' : 'creator'} profile`}
           </div>
-          <button type="button" onClick={onClose} aria-label="Close">
+          <button type="button" onClick={requestClose} aria-label="Close" data-testid="community-create-close">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -512,7 +518,7 @@ function CommunityProfileDialog({
           {error && <div className="text-[11.5px] font-bold text-red-600" role="alert">{error}</div>}
         </div>
         <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-app-border">
-          <button type="button" onClick={onClose} className="px-3.5 py-2 rounded-lg border border-app-border text-[11px] font-bold">
+          <button type="button" onClick={requestClose} className="px-3.5 py-2 rounded-lg border border-app-border text-[11px] font-bold">
             Cancel
           </button>
           <button
@@ -780,7 +786,6 @@ function DeleteCommunityProfileDialog({
       aria-modal="true"
       aria-label={`Delete ${row.name}`}
       className="fixed inset-0 z-[1000] bg-slate-900/50 flex items-start sm:items-center justify-center p-4 overflow-y-auto"
-      onClick={onClose}
     >
       <div className="bg-white rounded-xl w-full max-w-[440px] shadow-xl" onClick={(e) => e.stopPropagation()} data-testid="community-delete-dialog">
         <div className="px-5 py-4 space-y-3">
