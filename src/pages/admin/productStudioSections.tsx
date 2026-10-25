@@ -2222,7 +2222,7 @@ function CreatorThumbField({
           <input
             ref={fileRef}
             type="file"
-            accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+            accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,image/avif"
             style={{ display: 'none' }}
             onChange={(e) => void pick(e.target.files?.[0])}
           />

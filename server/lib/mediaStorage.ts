@@ -70,6 +70,7 @@ const IMAGE_MIME_TO_EXTENSION: Record<string, string> = {
   'image/png': '.png',
   'image/webp': '.webp',
   'image/gif': '.gif',
+  'image/avif': '.avif',
 };
 
 const VIDEO_MIME_TO_EXTENSION: Record<string, string> = {

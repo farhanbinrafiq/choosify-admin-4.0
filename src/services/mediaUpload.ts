@@ -110,10 +110,10 @@ async function uploadViaCatalogApi(file: File, folder: string): Promise<string> 
 }
 
 async function uploadImage(original: File, folder = 'choosify/products'): Promise<string> {
-  const allowed = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']);
+  const allowed = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/avif']);
   const mime = (original.type || '').toLowerCase();
   if (!allowed.has(mime)) {
-    throw new Error('Unsupported image type. Use JPG, PNG, WEBP, or GIF.');
+    throw new Error('Unsupported image type. Use JPG, PNG, WEBP, GIF, or AVIF.');
   }
   // Large photos are shrunk in the browser first so they fit the server's upload limit.
   const file = await prepareImageForUpload(original);

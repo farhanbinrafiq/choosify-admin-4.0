@@ -4,9 +4,11 @@ const ALLOWED_MIME_TYPES = new Set([
   'image/png',
   'image/webp',
   'image/gif',
+  // AVIF (e.g. photos saved from Facebook) — re-encoded to WebP by processImage like every other image.
+  'image/avif',
 ]);
 
-const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
+const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif']);
 
 const DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
 

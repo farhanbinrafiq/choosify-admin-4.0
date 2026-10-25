@@ -609,7 +609,7 @@ export default function AdsVisualBuilder() {
                           Poster image (optional)
                           <input
                             type="file"
-                            accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                            accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,image/avif"
                             className="hidden"
                             onChange={(e) => void uploadCreative(e.target.files?.[0] || null, 'poster')}
                           />
@@ -662,7 +662,7 @@ export default function AdsVisualBuilder() {
                     Upload logo
                     <input
                       type="file"
-                      accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                      accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,image/avif"
                       className="hidden"
                       onChange={(e) => void uploadCreative(e.target.files?.[0] || null, 'logo')}
                     />

@@ -659,6 +659,8 @@ export interface CommunityProfileInput {
   website?: string;
   socialLinks?: Record<string, string>;
   location?: string;
+  /** "Best for #tags". */
+  tags?: string[];
   publish?: boolean;
   acknowledgeDuplicates?: boolean;
 }

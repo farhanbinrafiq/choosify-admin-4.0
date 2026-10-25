@@ -132,7 +132,7 @@ export function UserProfileDropdown({ variant = 'header', className = '', light 
       event.target.value = '';
       if (!file) return;
       if (!file.type.startsWith('image/')) {
-        window.alert('Please choose an image file (JPG, PNG, WebP, or GIF).');
+        window.alert('Please choose an image file (JPG, PNG, WebP, GIF, or AVIF).');
         return;
       }
       if (file.size > 2_500_000) {
@@ -296,7 +296,7 @@ export function UserProfileDropdown({ variant = 'header', className = '', light 
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif"
+        accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
         className="hidden"
         onChange={onAvatarFileChange}
       />

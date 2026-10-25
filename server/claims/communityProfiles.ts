@@ -113,6 +113,8 @@ export type CommunityProfileInput = {
   website?: string;
   socialLinks?: Record<string, unknown>;
   location?: string;
+  /** "Best for #tags" — brand overview.tags / creator bestForTags. */
+  tags?: unknown;
   publish?: boolean;
   acknowledgeDuplicates?: boolean;
 };
@@ -127,6 +129,16 @@ function cleanSocialLinks(raw: Record<string, unknown> | undefined): Record<stri
     out[k] = v;
   }
   return out;
+}
+
+/** Trimmed, "#"-free, de-duplicated tags (max 15, 40 chars each). */
+function cleanTags(raw: unknown): string[] {
+  const out: string[] = [];
+  for (const t of Array.isArray(raw) ? raw : []) {
+    const v = String(t ?? '').replace(/\s+/g, ' ').trim().replace(/^#+/, '').trim().slice(0, 40);
+    if (v && !out.some((o) => o.toLowerCase() === v.toLowerCase())) out.push(v);
+  }
+  return out.slice(0, 15);
 }
 
 const httpUrl = (v: string | undefined, field: string): string => {
@@ -176,7 +188,7 @@ export async function createCommunityProfile(
         website,
         socialLinks,
         story: String(input.overview || '').trim(),
-        overview: input.location ? { address: String(input.location).trim() } : {},
+        overview: { ...(input.location ? { address: String(input.location).trim() } : {}), tags: cleanTags(input.tags) },
         followers: 0,
         ratings: 0,
         featuredFlag: false,
@@ -211,6 +223,7 @@ export async function createCommunityProfile(
     coverImage: httpUrl(input.coverImage, 'Cover image'),
     socialLinks,
     location: String(input.location || '').trim() || undefined,
+    bestForTags: cleanTags(input.tags),
     status: input.publish === false ? 'draft' : 'live',
     followers: {},
     score: 0,
@@ -277,6 +290,8 @@ export async function updateCommunityProfile(
         },
         brand,
       );
+      // The brand normalizer keeps the old tags when given an empty list, so set the edited list explicitly.
+      if (sent('tags')) next.overview = { ...(next.overview || {}), tags: cleanTags(input.tags) } as typeof next.overview;
       saved = await catalogStore.upsertBrand({ ...next, slug: brand.slug, sellerId: undefined });
     } else {
       const creator = existing as CatalogCreator;
@@ -289,6 +304,7 @@ export async function updateCommunityProfile(
           coverImage: sent('coverImage') ? httpUrl(input.coverImage, 'Cover image') : creator.coverImage,
           socialLinks,
           location: sent('location') ? String(input.location || '').trim() || undefined : creator.location,
+          bestForTags: sent('tags') ? cleanTags(input.tags) : creator.bestForTags,
         },
         creator,
       );

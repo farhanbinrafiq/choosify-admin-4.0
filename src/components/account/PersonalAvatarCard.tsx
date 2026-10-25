@@ -34,7 +34,7 @@ export function PersonalAvatarCard({ variant = 'card' }: {
 
   const handleFile = async (file: File) => {
     if (!file.type.startsWith('image/')) {
-      setError('Please choose an image file (JPG, PNG, WebP, or GIF).');
+      setError('Please choose an image file (JPG, PNG, WebP, GIF, or AVIF).');
       return;
     }
     if (file.size > 2_500_000) {
@@ -103,7 +103,7 @@ export function PersonalAvatarCard({ variant = 'card' }: {
     <input
       ref={fileInputRef}
       type="file"
-      accept="image/png,image/jpeg,image/webp,image/gif"
+      accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
       className="hidden"
       onChange={(event) => {
         const file = event.target.files?.[0];
@@ -217,7 +217,7 @@ export function PersonalAvatarCard({ variant = 'card' }: {
         )}
       </div>
       {error && <div className="text-[10px] text-rose-400 font-semibold">{error}</div>}
-      <div className="text-[9.5px] text-app-text-secondary">JPG, PNG, WebP, or GIF. Up to 2.5 MB.</div>
+      <div className="text-[9.5px] text-app-text-secondary">JPG, PNG, WebP, GIF, or AVIF. Up to 2.5 MB.</div>
 
       {cropModal}
     </div>

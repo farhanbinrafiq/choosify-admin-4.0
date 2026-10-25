@@ -10,6 +10,7 @@ import {
 import type { CatalogBrand, CatalogCategory, CatalogCreator } from '../../../types/catalog';
 import { getPublishedStorefrontUrl } from '../../../lib/storefrontUrls';
 import { uploadBrandImage, uploadCreatorImage } from '../../../services/mediaUpload';
+import { TagPillInput } from '../ListInputs';
 
 /**
  * Community profiles — public-information discovery profiles staff create for
@@ -43,6 +44,8 @@ type CommunityProfileFields = {
   website: string;
   location: string;
   socials: Record<string, string>;
+  /** "Best for #tags" (brand overview.tags / creator bestForTags). */
+  tags: string[];
 };
 
 const STATE_LABEL: Record<string, [string, string]> = {
@@ -69,6 +72,7 @@ function profileFieldsOf(entityType: 'brand' | 'creator', r: CatalogBrand | Cata
       website: String(b.website || ''),
       location: String((b.overview as { address?: string } | undefined)?.address || ''),
       socials,
+      tags: Array.isArray(b.overview?.tags) ? b.overview!.tags!.map(String) : [],
     };
   }
   const c = r as CatalogCreator;
@@ -82,6 +86,7 @@ function profileFieldsOf(entityType: 'brand' | 'creator', r: CatalogBrand | Cata
     website: '',
     location: String(c.location || ''),
     socials,
+    tags: Array.isArray(c.bestForTags) ? c.bestForTags.map(String) : [],
   };
 }
 const input = 'w-full bg-white border border-app-border rounded-lg px-3 py-2 text-xs outline-none focus:border-app-accent';
@@ -323,6 +328,7 @@ function CommunityProfileDialog({
   const [website, setWebsite] = useState(editing?.website || '');
   const [location, setLocation] = useState(editing?.location || '');
   const [socials, setSocials] = useState<Record<string, string>>(editing?.socials || {});
+  const [tags, setTags] = useState<string[]>(editing?.tags || []);
   const [uploading, setUploading] = useState(0);
   const [duplicates, setDuplicates] = useState<CommunityDuplicate[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -351,6 +357,7 @@ function CommunityProfileDialog({
           website: website.trim(),
           location: location.trim(),
           socialLinks: cleanSocials,
+          tags,
         });
         onSaved(saved.name, saved.slug);
         return;
@@ -372,6 +379,7 @@ function CommunityProfileDialog({
         website: website.trim(),
         location: location.trim(),
         socialLinks: cleanSocials,
+        tags,
         acknowledgeDuplicates: Boolean(duplicates?.length),
       });
       onSaved(created.name, created.slug);
@@ -458,6 +466,18 @@ function CommunityProfileDialog({
               <label className={label} htmlFor="cp-loc">Location</label>
               <input id="cp-loc" className={input} value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Dhaka, Bangladesh" />
             </div>
+          </div>
+          <div data-testid="cp-tags">
+            <div className={label}>Best for #tags</div>
+            <TagPillInput
+              className="w-full bg-white border border-app-border rounded-lg text-xs"
+              values={tags}
+              onChange={(next) => setTags(next.slice(0, 15))}
+              prefix="#"
+              stripHash
+              maxLength={40}
+              placeholder="Type a tag and press Enter — e.g. Art, Painting"
+            />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {SOCIALS.map((k) => (
@@ -568,7 +588,7 @@ function ImageUploadField({
       <input
         id={id}
         type="file"
-        accept="image/jpeg,image/png,image/webp,image/gif"
+        accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
         className="hidden"
         disabled={busy}
         onChange={(e) => {
@@ -636,7 +656,7 @@ function CommunityProfileViewCard({
           {p.coverImage && <img src={p.coverImage} alt="" className="h-full w-full object-cover" />}
         </div>
         <div className="px-5 pb-5">
-          <div className="-mt-10 flex items-end gap-3">
+          <div className="relative z-10 -mt-10 flex items-end gap-3">
             <div className={`h-20 w-20 shrink-0 overflow-hidden border-4 border-white bg-slate-100 shadow ${entityType === 'creator' ? 'rounded-full' : 'rounded-xl'}`}>
               {p.logo ? (
                 <img src={p.logo} alt="" className="h-full w-full object-cover" />
@@ -679,6 +699,20 @@ function CommunityProfileViewCard({
                   <span className="text-app-text-secondary">Not added</span>
                 )}
               </div>
+            </div>
+            <div data-testid="community-view-tags">
+              <div className={label}>Best for #tags</div>
+              {p.tags.length ? (
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  {p.tags.map((t) => (
+                    <span key={t} className="text-[11px] font-black uppercase tracking-wide text-[#8A00C4]">
+                      #{t}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-app-text-secondary">Not added</span>
+              )}
             </div>
             <div>
               <div className={label}>Social links</div>
