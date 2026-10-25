@@ -121,7 +121,10 @@ import {
 import {
   PROFILE_PHOTO_DOCUMENT,
   VERIFICATION_DOCUMENT_TYPES,
+  claimantDetailsProblem,
+  missingClaimDocuments,
   missingRequiredDocuments,
+  type ClaimantDetails,
   verificationDocumentLabel,
   verificationDocumentSpecs,
 } from '../shared/verification/verificationDocuments';
@@ -6379,6 +6382,7 @@ operationsRouter.post('/operations/verifications', ...requireAuth, async (req, r
     documents?: OpsVerificationDocument[];
     claimIntentId?: string;
     claimSource?: string;
+    claimantDetails?: unknown;
   };
 
   const entityType: ClaimEntityType = body.entityType === 'creator' ? 'creator' : 'brand';
@@ -6422,6 +6426,7 @@ operationsRouter.post('/operations/verifications', ...requireAuth, async (req, r
         intentId: body.claimIntentId ? String(body.claimIntentId) : undefined,
         documents: body.documents,
         submit: body.status !== 'Draft',
+        claimantDetails: normalizeClaimantDetails(body.claimantDetails),
       });
       if (!reused && claim.status === 'Submitted') await afterClaimSubmitted(req, claim);
       else if (!reused) {
@@ -6616,6 +6621,66 @@ operationsRouter.get('/operations/verifications/:id', ...requireAuth, async (req
 });
 
 /** Submitter or admin may move Draft → Submitted (and into Under Review queue). */
+function normalizeClaimantDetails(raw: unknown): ClaimantDetails | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const d = raw as Record<string, unknown>;
+  const text = (k: string, max: number) => String(d[k] ?? '').trim().slice(0, max);
+  return {
+    relationship: d.relationship === 'representative' ? 'representative' : d.relationship === 'owner' ? 'owner' : ('' as ClaimantDetails['relationship']),
+    roleTitle: text('roleTitle', 80),
+    fullName: text('fullName', 120),
+    phone: text('phone', 30),
+    email: text('email', 160).toLowerCase(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * The claimant saves who they are (owner / representative, role, name, phone,
+ * official email) on their own open ownership claim. Required before submit.
+ */
+operationsRouter.patch('/operations/verifications/:id/claimant-details', ...requireAuth, async (req, res) => {
+  const existing = operationsStore.getVerification(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Verification request not found' });
+    return;
+  }
+  if (!req.userId || existing.submitted_by !== req.userId) {
+    res.status(403).json({ error: 'Only the claimant can update these details' });
+    return;
+  }
+  const entity = await loadEntity(existing.entityType === 'creator' ? 'creator' : 'brand', existing.entityId);
+  const owner = ownerOf(existing.entityType === 'creator' ? 'creator' : 'brand', entity);
+  if (verificationKindOf(existing, owner) !== 'ownership_claim') {
+    res.status(409).json({ error: 'Claimant details belong to ownership claims only', code: 'NOT_OWNERSHIP_CLAIM' });
+    return;
+  }
+  if (!ACTIVE_VERIFICATION_STATUSES.has(existing.status)) {
+    res.status(409).json({ error: `This claim is ${existing.status.toLowerCase()}.`, code: 'VERIFICATION_CLOSED' });
+    return;
+  }
+  const details = normalizeClaimantDetails(req.body);
+  const problem = claimantDetailsProblem(details);
+  if (!details || problem) {
+    res.status(400).json({ error: problem || 'Claimant details are required', code: 'INVALID_CLAIMANT_DETAILS' });
+    return;
+  }
+  const saved = operationsStore.updateVerification(existing.id, {
+    claimantDetails: details,
+    audit_trail: [
+      ...existing.audit_trail,
+      {
+        timestamp: details.updatedAt!,
+        action: existing.claimantDetails ? 'Claimant Details Updated' : 'Claimant Details Added',
+        actor: req.user?.displayName || req.userId,
+        details: `${details.fullName} — ${details.relationship === 'owner' ? 'Owner' : 'Representative'} (${details.roleTitle})`,
+      },
+    ],
+  });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved });
+});
+
 operationsRouter.patch('/operations/verifications/:id/submit', ...requireAuth, async (req, res) => {
   const existing = operationsStore.getVerification(req.params.id);
   if (!existing) {
@@ -6636,6 +6701,13 @@ operationsRouter.patch('/operations/verifications/:id/submit', ...requireAuth, a
   if (submitKind === 'ownership_claim' && submitOwner) {
     res.status(409).json({ error: 'This profile already has an owner, so the claim cannot be submitted.', code: 'PROFILE_ALREADY_OWNED' });
     return;
+  }
+  if (submitKind === 'ownership_claim') {
+    const detailsProblem = claimantDetailsProblem(existing.claimantDetails);
+    if (detailsProblem) {
+      res.status(400).json({ error: `Add your details before submitting: ${detailsProblem}`, code: 'CLAIMANT_DETAILS_MISSING' });
+      return;
+    }
   }
   {
     const missing = missingDocsMessage(existing, submitKind);
@@ -6689,6 +6761,15 @@ operationsRouter.patch(
       return;
     }
     if (await refuseClosedClaimDocumentChange(existing, res)) return;
+    // A finished request is changed only through Revoke (POST .../revoke), which
+    // also removes the verified badge and reopens the request for the owner.
+    if (!ACTIVE_VERIFICATION_STATUSES.has(existing.status)) {
+      res.status(409).json({
+        error: `This verification request is ${existing.status.toLowerCase()}. Revoke the approval to reopen it before changing documents.`,
+        code: 'VERIFICATION_CLOSED',
+      });
+      return;
+    }
     const status = req.body?.status === 'rejected' ? 'rejected' : req.body?.status === 'approved' ? 'approved' : '';
     if (!status) {
       res.status(400).json({ error: 'status must be approved or rejected' });
@@ -6715,7 +6796,9 @@ operationsRouter.patch(
       return;
     }
     const withAudit = operationsStore.updateVerification(req.params.id, {
-      status: saved.status === 'Draft' || saved.status === 'Submitted' ? 'Under Review' : saved.status,
+      // Reviewing a document of a draft keeps it a draft: the owner is still
+      // uploading and submits the whole request when it is complete.
+      status: saved.status === 'Submitted' ? 'Under Review' : saved.status,
       audit_trail: [
         ...saved.audit_trail,
         {
@@ -6911,7 +6994,10 @@ operationsRouter.delete('/operations/verifications/:id/document/:docId', ...requ
 const VERIFICATION_DOC_TYPES: readonly OpsVerificationDocument['type'][] = VERIFICATION_DOCUMENT_TYPES;
 
 function missingDocsMessage(row: OpsVerificationRequest, kind?: string): string | null {
-  const missing = missingRequiredDocuments(row.entityType, row.documents || [], kind);
+  const missing =
+    kind === 'ownership_claim'
+      ? missingClaimDocuments(row.entityType, row.documents || [], row.claimantDetails?.relationship)
+      : missingRequiredDocuments(row.entityType, row.documents || [], kind);
   return missing.length ? missing.map((m) => m.label).join(', ') : null;
 }
 
@@ -7229,6 +7315,7 @@ operationsRouter.get('/operations/claim-intents/:id', softAuthenticateRequest, a
               created_at: myClaim.created_at,
               updated_at: myClaim.updated_at,
               closedReason: myClaim.closedReason || null,
+              claimantDetails: myClaim.claimantDetails || null,
               documents: (myClaim.documents || []).map((d) => ({ id: d.id, type: d.type, name: d.name, status: d.status, notes: d.notes || null })),
               // The claimant's own claim history (no staff names).
               history: [...(myClaim.audit_trail || [])]
@@ -7393,6 +7480,123 @@ operationsRouter.get('/operations/audit-events', ...requireAuth, (req, res) => {
     success: true,
     data: operationsStore.listAuditEvents({ targetType: q('targetType'), targetId: q('targetId'), action: q('action'), limit: Math.min(500, Number(q('limit')) || 200) }),
   });
+});
+
+/**
+ * Revoke an approved OWNER verification (Admin / Super Admin): the profile loses
+ * its verified badge, the chosen documents are rejected with the reason, and the
+ * request reopens as "more information needed" so the owner can re-upload.
+ * Ownership and Marketplace Access are not changed. Ownership claims are not
+ * revocable here — replacing an owner uses the ownership-dispute workflow.
+ */
+operationsRouter.post('/operations/verifications/:id/revoke', ...requireModerator, async (req, res) => {
+  const role = req.userRole;
+  if (!role || !(hasRole(role, ROLES.ADMIN) || hasRole(role, ROLES.SUPER_ADMIN))) {
+    res.status(403).json({ error: 'Only an Admin or Super Admin can revoke a verification', code: 'REVOKE_NOT_ALLOWED' });
+    return;
+  }
+  const existing = operationsStore.getVerification(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Verification request not found' });
+    return;
+  }
+  if (req.userId && existing.submitted_by === req.userId) {
+    res.status(403).json({ error: 'Cannot revoke your own verification' });
+    return;
+  }
+  if (existing.status !== 'Approved') {
+    res.status(409).json({ error: `Only an approved verification can be revoked (this one is ${existing.status.toLowerCase()}).`, code: 'NOT_APPROVED' });
+    return;
+  }
+  const type: ClaimEntityType = existing.entityType === 'creator' ? 'creator' : 'brand';
+  const owner = ownerOf(type, await loadEntity(type, existing.entityId));
+  if (verificationKindOf(existing, owner) !== 'owner_verification') {
+    res.status(409).json({ error: 'Ownership claims cannot be revoked here — use the ownership-dispute workflow.', code: 'NOT_OWNER_VERIFICATION' });
+    return;
+  }
+  const reason = String(req.body?.reason || '').trim();
+  if (reason.length < 10) {
+    res.status(400).json({ error: 'Give a reason of at least 10 characters — the owner sees it.', code: 'REASON_REQUIRED' });
+    return;
+  }
+  const requested: unknown[] = Array.isArray(req.body?.documentIds) ? req.body.documentIds : [];
+  const docIds = [...new Set(requested.map((d) => String(d)))];
+  const unknownDoc = docIds.find((id) => !(existing.documents || []).some((d) => d.id === id));
+  if (unknownDoc) {
+    res.status(400).json({ error: 'A selected document is not part of this verification request', code: 'UNKNOWN_DOCUMENT' });
+    return;
+  }
+  const otherOpen = operationsStore
+    .listVerifications({ entityType: existing.entityType, entityId: existing.entityId })
+    .find((row) => row.id !== existing.id && ACTIVE_VERIFICATION_STATUSES.has(row.status) && verificationKindOf(row, owner) === 'owner_verification');
+  if (otherOpen) {
+    res.status(409).json({ error: 'The owner already has another open verification request for this profile — review that one instead.', code: 'OTHER_REQUEST_OPEN' });
+    return;
+  }
+
+  // Badge first: if the catalog update fails, nothing else has changed.
+  const sideEffect = await applyEntityVerificationSideEffect(existing, 'rejected');
+  if (sideEffect.ok === false) {
+    res.status(409).json({ error: sideEffect.error });
+    return;
+  }
+  for (const docId of docIds) operationsStore.updateVerificationDocument(existing.id, docId, { status: 'rejected', notes: reason });
+  const actor = req.user?.displayName || req.userId || 'Administrative Auditor';
+  const labels = docIds.map((id) => {
+    const d = (existing.documents || []).find((x) => x.id === id);
+    return d ? verificationDocumentLabel(existing.entityType, d.type) : id;
+  });
+  const current = operationsStore.getVerification(existing.id) || existing;
+  const saved = operationsStore.updateVerification(existing.id, {
+    status: 'Under Review',
+    audit_trail: [
+      ...current.audit_trail,
+      {
+        timestamp: new Date().toISOString(),
+        action: 'Approval Revoked',
+        actor,
+        details: `${reason}${labels.length ? ` Documents to replace: ${labels.join(', ')}.` : ''} Verified badge removed; request reopened.`,
+      },
+    ],
+  });
+  scheduleOperationsPersist();
+  if (existing.submitted_by) {
+    recordAccountActivity(req, {
+      userId: existing.submitted_by,
+      type: 'verification_revoked',
+      category: 'verification',
+      actor: 'staff',
+      summary: `Verification of ${existing.entityName} revoked by Choosify — ${reason}`,
+    });
+    notifyUser(existing.submitted_by, {
+      type: COMMUNICATION_TYPES.MODERATION_UPDATE,
+      category: 'seller',
+      eventKey: 'verification.update',
+      persona: existing.entityType === 'creator' ? 'creator' : 'seller',
+      title: 'Verification needs attention again',
+      summary: reason,
+      actionUrl: ownerDashboardTab(existing.entityType),
+    }).catch((err) => Logger.error('notifyUser failed (verification revoked)', { error: String(err) }));
+    void emailUser(existing.submitted_by, {
+      subject: `Verification needs attention — ${existing.entityName}`,
+      heading: 'Your verification was reopened',
+      lines: [
+        `Choosify reopened the verification of ${existing.entityName} and removed its verified badge until it is approved again:`,
+        reason,
+        ...(labels.length ? [`Please upload again: ${labels.join(', ')}.`] : []),
+      ],
+      ctaLabel: 'Open Verification Center',
+      dashboardPath: ownerDashboardTab(existing.entityType),
+    });
+  }
+  Logger.audit('verification.revoked', {
+    actorId: req.userId,
+    verificationId: existing.id,
+    entityType: existing.entityType,
+    entityId: existing.entityId,
+    rejectedDocuments: docIds.length,
+  });
+  res.json({ success: true, data: saved });
 });
 
 operationsRouter.patch('/operations/verifications/:id/review', ...requireModerator, async (req, res) => {

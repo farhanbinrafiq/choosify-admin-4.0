@@ -14,7 +14,7 @@ import { sendOwnershipClaimEmail } from '../email/emailService';
 import type { OpsAuditEvent, OpsClaimIntent, OpsVerificationDocument, OpsVerificationRequest } from '../operations/types';
 import type { CatalogBrand } from '../../src/types/catalog';
 import type { CatalogCreator } from '../../lib/vercel-catalog/catalogEditorialTypes';
-import { VERIFICATION_DOCUMENT_TYPES, missingRequiredDocuments } from '../../shared/verification/verificationDocuments';
+import { VERIFICATION_DOCUMENT_TYPES, claimantDetailsProblem, missingClaimDocuments } from '../../shared/verification/verificationDocuments';
 
 /**
  * Community Claimable Profiles — the single place ownership claims are decided.
@@ -54,7 +54,7 @@ export class ClaimError extends Error {
 }
 
 export const claimLockKey = (type: ClaimEntityType, id: string) => `claim:${type}:${id}`;
-const entityLockKeys = (type: ClaimEntityType, id: string) => [claimLockKey(type, id), recordKey(type, id)];
+export const entityLockKeys = (type: ClaimEntityType, id: string) => [claimLockKey(type, id), recordKey(type, id)];
 
 export function ownerOf(type: ClaimEntityType, entity: Entity | null | undefined): string {
   if (!entity) return '';
@@ -314,6 +314,7 @@ export async function createOwnershipClaim(params: {
   intentId?: string;
   documents?: unknown;
   submit?: boolean;
+  claimantDetails?: OpsVerificationRequest['claimantDetails'];
 }): Promise<{ claim: OpsVerificationRequest; reused: boolean }> {
   const { type, entityId, claimant } = params;
   return withRecordLocks(entityLockKeys(type, entityId), async () => {
@@ -361,7 +362,9 @@ export async function createOwnershipClaim(params: {
     const documents = sanitizeClaimDocuments(params.documents);
     const status: OpsVerificationRequest['status'] = params.submit ? 'Submitted' : 'Draft';
     if (params.submit) {
-      const missing = missingRequiredDocuments(type, documents, 'ownership_claim');
+      const detailsProblem = claimantDetailsProblem(params.claimantDetails);
+      if (detailsProblem) throw new ClaimError(400, 'CLAIMANT_DETAILS_MISSING', `Add your details before submitting: ${detailsProblem}`);
+      const missing = missingClaimDocuments(type, documents, params.claimantDetails?.relationship);
       if (missing.length) {
         throw new ClaimError(400, 'CLAIM_DOCUMENTS_MISSING', `Upload every required document before submitting. Missing: ${missing.map((m) => m.label).join(', ')}`);
       }
@@ -381,6 +384,7 @@ export async function createOwnershipClaim(params: {
       kind: 'ownership_claim',
       claimSource: params.source || 'storefront',
       ...(intent ? { claimIntentId: intent.id } : {}),
+      ...(params.claimantDetails && !claimantDetailsProblem(params.claimantDetails) ? { claimantDetails: params.claimantDetails } : {}),
       documents,
       audit_trail: [
         {
@@ -441,7 +445,7 @@ export async function approveOwnershipClaim(params: {
     if (!claimant || !roleCanClaim(type, claimant.role)) {
       throw new ClaimError(409, 'CLAIMANT_NOT_ELIGIBLE', 'The claimant account no longer exists or no longer has the required Seller/Creator account.');
     }
-    const missing = missingRequiredDocuments(type, claim.documents || [], 'ownership_claim');
+    const missing = missingClaimDocuments(type, claim.documents || [], claim.claimantDetails?.relationship);
     const notApproved = (claim.documents || []).filter((d) => d.status !== 'approved');
     if (missing.length) throw new ClaimError(400, 'CLAIM_DOCUMENTS_MISSING', `Required documents are missing: ${missing.map((m) => m.label).join(', ')}.`);
     if (notApproved.length) throw new ClaimError(400, 'CLAIM_DOCUMENTS_NOT_APPROVED', 'Approve (or have the claimant replace) every document before approving ownership.');

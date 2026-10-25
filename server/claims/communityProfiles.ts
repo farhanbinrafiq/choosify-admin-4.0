@@ -5,7 +5,8 @@ import { normalizeCreatorInput } from '../../lib/vercel-catalog/catalogEditorial
 import { CREATOR_SOCIAL_PLATFORM_KEYS, creatorSocialLinkProblem, type CreatorSocialPlatform } from '../../shared/creatorProfileRules';
 import type { CatalogBrand } from '../../src/types/catalog';
 import type { CatalogCreator } from '../../lib/vercel-catalog/catalogEditorialTypes';
-import { ClaimError, ownerOf, recordAudit, type ClaimEntityType } from './ownershipClaims';
+import { ClaimError, activeOwnershipClaims, entityLockKeys, loadEntity, ownerOf, recordAudit, type ClaimEntityType } from './ownershipClaims';
+import { withRecordLocks } from '../catalog/recordLock';
 import { slugForAutomatedCreation } from '../publicHandles/publicHandleCatalog';
 
 /**
@@ -225,4 +226,89 @@ export async function createCommunityProfile(
     refs: { via: 'community_form', ...(duplicates.length ? { acknowledgedDuplicates: duplicates.map((d) => d.id).join(',') } : {}) },
   });
   return { created: saved, duplicates };
+}
+
+/** A staff-editable community profile: created by staff and still without an owner. */
+function assertStaffManaged(type: ClaimEntityType, entity: CatalogBrand | CatalogCreator | null): CatalogBrand | CatalogCreator {
+  if (!entity) throw new ClaimError(404, 'PROFILE_NOT_FOUND', 'This profile does not exist.');
+  if (entity.origin !== 'community') throw new ClaimError(409, 'NOT_COMMUNITY_PROFILE', 'Only community profiles can be managed here.');
+  if (ownerOf(type, entity)) {
+    throw new ClaimError(409, 'PROFILE_OWNED', 'This profile has been claimed — its owner manages it now. Use the regular Brand / Creator tools.');
+  }
+  return entity;
+}
+
+/** Edit a community profile (staff only — caller checks cms:edit). Only the fields sent change; the public slug never does. */
+export async function updateCommunityProfile(
+  req: Request,
+  type: ClaimEntityType,
+  id: string,
+  input: Omit<CommunityProfileInput, 'type' | 'publish' | 'acknowledgeDuplicates'>,
+): Promise<CatalogBrand | CatalogCreator> {
+  return withRecordLocks(entityLockKeys(type, id), async () => {
+    const existing = assertStaffManaged(type, await loadEntity(type, id));
+    const sent = (k: keyof typeof input) => input[k] !== undefined;
+    const name = sent('name') ? String(input.name || '').trim() : existing.name;
+    if (name.length < 2) throw new ClaimError(400, 'NAME_REQUIRED', 'A name is required');
+    const socialLinks = sent('socialLinks') ? cleanSocialLinks(input.socialLinks) : (existing.socialLinks as Record<string, string>) || {};
+    let saved: CatalogBrand | CatalogCreator;
+    if (type === 'brand') {
+      const brand = existing as CatalogBrand;
+      let category = brand.category;
+      let categoryId = brand.categoryId;
+      if (input.categoryId && input.categoryId !== brand.categoryId) {
+        const cat = (await catalogStore.listCategories()).find((c) => c.id === input.categoryId);
+        if (!cat) throw new ClaimError(400, 'INVALID_CATEGORY', 'Choose a category from Category Management');
+        category = cat.name;
+        categoryId = cat.id;
+      }
+      const next = normalizeBrandInput(
+        {
+          ...brand,
+          name,
+          category,
+          categoryId,
+          description: sent('description') ? String(input.description || '').trim() : brand.description,
+          logo: sent('logo') ? httpUrl(input.logo, 'Logo') : brand.logo,
+          coverImage: sent('coverImage') ? httpUrl(input.coverImage, 'Cover image') : brand.coverImage,
+          website: sent('website') ? httpUrl(input.website, 'Website') : brand.website,
+          socialLinks,
+          overview: sent('location') ? { ...(brand.overview || {}), address: String(input.location || '').trim() } : brand.overview,
+        },
+        brand,
+      );
+      saved = await catalogStore.upsertBrand({ ...next, slug: brand.slug, sellerId: undefined });
+    } else {
+      const creator = existing as CatalogCreator;
+      const next = normalizeCreatorInput(
+        {
+          ...creator,
+          name,
+          bio: sent('description') ? String(input.description || '').trim() : creator.bio,
+          avatar: sent('logo') ? httpUrl(input.logo, 'Profile photo') : creator.avatar,
+          coverImage: sent('coverImage') ? httpUrl(input.coverImage, 'Cover image') : creator.coverImage,
+          socialLinks,
+          location: sent('location') ? String(input.location || '').trim() || undefined : creator.location,
+        },
+        creator,
+      );
+      saved = await catalogStore.upsertCreator({ ...next, slug: creator.slug, userId: undefined });
+    }
+    recordAudit(req, { action: 'community_profile_updated', targetType: type, targetId: id, targetName: name, refs: { via: 'community_form' } });
+    return saved;
+  });
+}
+
+/** Delete an unclaimed community profile (staff only). Refused while it has an owner or an open claim. */
+export async function deleteCommunityProfile(req: Request, type: ClaimEntityType, id: string): Promise<{ name: string }> {
+  return withRecordLocks(entityLockKeys(type, id), async () => {
+    const existing = assertStaffManaged(type, await loadEntity(type, id));
+    if (activeOwnershipClaims(type, id).length) {
+      throw new ClaimError(409, 'CLAIM_IN_PROGRESS', 'An ownership claim for this profile is open. Close or decide the claim before deleting the profile.');
+    }
+    if (type === 'brand') await catalogStore.deleteBrand(id);
+    else await catalogStore.deleteCreator(id);
+    recordAudit(req, { action: 'community_profile_deleted', targetType: type, targetId: id, targetName: existing.name, refs: { via: 'community_form' } });
+    return { name: existing.name };
+  });
 }

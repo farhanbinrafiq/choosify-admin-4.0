@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, Upload, FileText, ShieldCheck, AlertTriangle, Camera } from 'lucide-react';
 import { operationsApi, type OpsVerification, type VerificationDocRequest } from '../../../services/operationsApi';
 import { uploadVerificationDocument } from '../../../services/mediaUpload';
-import { DocumentViewerHost, downloadVerificationDocument, openVerificationDocument } from './VerificationCenterPanel';
+import { DocumentThumbnail, DocumentViewerHost, downloadVerificationDocument, openVerificationDocument } from './VerificationCenterPanel';
 import {
   PROFILE_PHOTO_DOCUMENT,
   missingRequiredDocuments,
@@ -229,15 +229,19 @@ function EntityVerification({
               const fileBusy = busy === `file:${spec.type}`;
               return (
                 <div key={spec.type} style={row} data-testid={`owner-doc-${spec.type}`}>
-                  <div style={thumb}>
-                    {isPhoto && (doc?.doc_url || avatarUrl) ? (
-                      <img src={doc?.doc_url || avatarUrl || ''} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : isPhoto ? (
-                      <Camera size={16} />
-                    ) : (
-                      <FileText size={16} />
-                    )}
-                  </div>
+                  {!isPhoto && doc ? (
+                    <DocumentThumbnail url={doc.doc_url} name={doc.name} />
+                  ) : (
+                    <div style={thumb}>
+                      {isPhoto && (doc?.doc_url || avatarUrl) ? (
+                        <img src={doc?.doc_url || avatarUrl || ''} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : isPhoto ? (
+                        <Camera size={16} />
+                      ) : (
+                        <FileText size={16} />
+                      )}
+                    </div>
+                  )}
                   <div style={{ flex: '1 1 220px', minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 800 }}>{spec.label}</div>
                     <div style={{ fontSize: 10.5, color: '#6B7280', fontWeight: 600, overflowWrap: 'anywhere' }}>{doc ? doc.name : spec.hint}</div>
@@ -285,7 +289,7 @@ function EntityVerification({
             })}
             {extraDocs.map((doc) => (
               <div key={doc.id} style={row}>
-                <div style={thumb}><FileText size={16} /></div>
+                <DocumentThumbnail url={doc.doc_url} name={doc.name} />
                 <div style={{ flex: '1 1 220px', minWidth: 0 }}>
                   <div style={{ fontSize: 12, fontWeight: 800 }}>{doc.type}</div>
                   <div style={{ fontSize: 10.5, color: '#6B7280', fontWeight: 600 }}>{doc.name}</div>

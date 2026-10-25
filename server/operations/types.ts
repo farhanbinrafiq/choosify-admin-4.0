@@ -753,6 +753,8 @@ export interface OpsVerificationRequest {
   claimSource?: 'storefront' | 'invitation' | 'onboarding';
   /** Server-issued claim intent this claim was created from (ownership claims only). */
   claimIntentId?: string;
+  /** Who is claiming (ownership claims only) — collected before the documents, required to submit. */
+  claimantDetails?: import('../../shared/verification/verificationDocuments').ClaimantDetails;
   /** Terminal-state bookkeeping (withdrawn / expired / superseded claims). */
   closedAt?: string;
   closedReason?: string;

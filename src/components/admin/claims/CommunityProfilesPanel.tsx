@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Copy, ExternalLink, Loader2, Plus, X } from 'lucide-react';
+import { AlertTriangle, ExternalLink, Eye, Globe, ImagePlus, Loader2, MapPin, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { catalogApi } from '../../../services/catalogApi';
+import { useAuth } from '../../../contexts/AuthContext';
 import {
   operationsApi,
   type CommunityDuplicate,
@@ -8,6 +9,7 @@ import {
 } from '../../../services/operationsApi';
 import type { CatalogBrand, CatalogCategory, CatalogCreator } from '../../../types/catalog';
 import { getPublishedStorefrontUrl } from '../../../lib/storefrontUrls';
+import { uploadBrandImage, uploadCreatorImage } from '../../../services/mediaUpload';
 
 /**
  * Community profiles — public-information discovery profiles staff create for
@@ -24,6 +26,23 @@ type Row = {
   createdAt: string;
   state: string;
   stateTone: string;
+  /** Staff manage the profile only while it has no owner; delete also needs no open claim. */
+  owned: boolean;
+  claimPending: boolean;
+  profile: CommunityProfileFields;
+};
+
+/** The fields staff fill in — the same shape for create, edit and the View card. */
+type CommunityProfileFields = {
+  name: string;
+  categoryId: string;
+  category: string;
+  description: string;
+  logo: string;
+  coverImage: string;
+  website: string;
+  location: string;
+  socials: Record<string, string>;
 };
 
 const STATE_LABEL: Record<string, [string, string]> = {
@@ -34,6 +53,37 @@ const STATE_LABEL: Record<string, [string, string]> = {
   unavailable: ['Unavailable', 'bg-red-500/10 text-red-600'],
 };
 const SOCIALS = ['facebook', 'instagram', 'youtube', 'tiktok', 'linkedin'] as const;
+
+function profileFieldsOf(entityType: 'brand' | 'creator', r: CatalogBrand | CatalogCreator): CommunityProfileFields {
+  const links = (r.socialLinks || {}) as Record<string, unknown>;
+  const socials = Object.fromEntries(SOCIALS.map((k) => [k, String(links[k] || '')]).filter(([, v]) => v));
+  if (entityType === 'brand') {
+    const b = r as CatalogBrand;
+    return {
+      name: b.name,
+      categoryId: String(b.categoryId || ''),
+      category: String(b.category || ''),
+      description: String(b.description || ''),
+      logo: String(b.logo || ''),
+      coverImage: String(b.coverImage || ''),
+      website: String(b.website || ''),
+      location: String((b.overview as { address?: string } | undefined)?.address || ''),
+      socials,
+    };
+  }
+  const c = r as CatalogCreator;
+  return {
+    name: c.name,
+    categoryId: '',
+    category: String((c as { category?: string }).category || ''),
+    description: String(c.bio || ''),
+    logo: String(c.avatar || ''),
+    coverImage: String(c.coverImage || ''),
+    website: '',
+    location: String(c.location || ''),
+    socials,
+  };
+}
 const input = 'w-full bg-white border border-app-border rounded-lg px-3 py-2 text-xs outline-none focus:border-app-accent';
 const label = 'block text-[9.5px] font-black uppercase tracking-wider text-app-text-secondary mb-1';
 
@@ -43,6 +93,12 @@ export function CommunityProfilesPanel({ entityType }: { entityType: 'brand' | '
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<Row | null>(null);
+  const [viewing, setViewing] = useState<Row | null>(null);
+  const [deleting, setDeleting] = useState<Row | null>(null);
+  const { profile } = useAuth();
+  // Deleting is final — Admins and Super Admins only (the server enforces the same).
+  const canDelete = ['super_admin', 'admin'].includes(String(profile?.role || ''));
   const [notice, setNotice] = useState<string | null>(null);
   const publicBase = `${getPublishedStorefrontUrl()}/${entityType === 'brand' ? 'brands' : 'creators'}`;
 
@@ -60,6 +116,7 @@ export function CommunityProfilesPanel({ entityType }: { entityType: 'brand' | '
             const owner = entityType === 'brand' ? (r as CatalogBrand).sellerId : (r as CatalogCreator).userId;
             const state = r.ownership?.state || (owner ? 'owned' : 'community');
             const [stateLabel, tone] = STATE_LABEL[state] || STATE_LABEL.community;
+            const profile = profileFieldsOf(entityType, r);
             return {
               id: r.id,
               name: r.name,
@@ -68,6 +125,9 @@ export function CommunityProfilesPanel({ entityType }: { entityType: 'brand' | '
               createdAt: String(r.createdAt || ''),
               state: stateLabel,
               stateTone: tone,
+              owned: Boolean(owner),
+              claimPending: state === 'claim_pending',
+              profile,
             };
           })
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
@@ -83,15 +143,6 @@ export function CommunityProfilesPanel({ entityType }: { entityType: 'brand' | '
   useEffect(() => {
     void load();
   }, [load]);
-
-  const copyLink = async (slug: string) => {
-    try {
-      await navigator.clipboard.writeText(`${publicBase}/${slug}`);
-      setNotice('Public profile link copied.');
-    } catch {
-      setNotice(`${publicBase}/${slug}`);
-    }
-  };
 
   return (
     <div className="space-y-4" data-testid="community-profiles-panel">
@@ -134,6 +185,16 @@ export function CommunityProfilesPanel({ entityType }: { entityType: 'brand' | '
           <div className="divide-y divide-app-border">
             {rows.map((r) => (
               <div key={r.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-3" data-testid="community-profile-row">
+                <div
+                  className={`h-11 w-11 shrink-0 overflow-hidden border border-app-border bg-slate-100 ${entityType === 'creator' ? 'rounded-full' : 'rounded-lg'}`}
+                  data-testid="community-row-photo"
+                >
+                  {r.profile.logo ? (
+                    <img src={r.profile.logo} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-[11px] font-black text-slate-500">{r.name.slice(0, 2).toUpperCase()}</div>
+                  )}
+                </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-bold truncate">{r.name}</div>
                   <div className="text-[10.5px] text-app-text-secondary">
@@ -141,21 +202,44 @@ export function CommunityProfilesPanel({ entityType }: { entityType: 'brand' | '
                   </div>
                 </div>
                 <span className={`text-[9px] font-black uppercase px-2 py-1 rounded shrink-0 w-max ${r.stateTone}`}>{r.state}</span>
-                <div className="flex gap-1.5 shrink-0">
+                <div className="flex flex-wrap gap-1.5 shrink-0">
                   <button
                     type="button"
-                    onClick={() => void copyLink(r.slug)}
+                    onClick={() => setViewing(r)}
                     className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-app-border text-[10px] font-bold"
+                    data-testid="community-view"
                   >
-                    <Copy className="w-3 h-3" /> Copy public link
+                    <Eye className="w-3 h-3" /> View
                   </button>
+                  <button
+                    type="button"
+                    disabled={r.owned}
+                    title={r.owned ? 'Claimed — the owner manages this profile now' : undefined}
+                    onClick={() => setEditing(r)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-app-border text-[10px] font-bold disabled:opacity-40"
+                    data-testid="community-edit"
+                  >
+                    <Pencil className="w-3 h-3" /> Edit
+                  </button>
+                  {canDelete && (
+                  <button
+                    type="button"
+                    disabled={r.owned || r.claimPending}
+                    title={r.owned ? 'Claimed — the owner manages this profile now' : r.claimPending ? 'Decide or close the open claim first' : undefined}
+                    onClick={() => setDeleting(r)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-200 text-red-600 text-[10px] font-bold disabled:opacity-40"
+                    data-testid="community-delete"
+                  >
+                    <Trash2 className="w-3 h-3" /> Delete
+                  </button>
+                  )}
                   <a
                     href={`${publicBase}/${r.slug}`}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-app-border text-[10px] font-bold"
                   >
-                    View <ExternalLink className="w-3 h-3" />
+                    Public page <ExternalLink className="w-3 h-3" />
                   </a>
                 </div>
               </div>
@@ -166,14 +250,47 @@ export function CommunityProfilesPanel({ entityType }: { entityType: 'brand' | '
 
       <CommunityCopyEditor entityType={entityType} />
 
-      {creating && (
-        <CreateCommunityProfileDialog
+      {(creating || editing) && (
+        <CommunityProfileDialog
           entityType={entityType}
           categories={categories}
-          onClose={() => setCreating(false)}
-          onCreated={(name, slug) => {
+          editing={editing ? { id: editing.id, ...editing.profile } : null}
+          onClose={() => {
             setCreating(false);
-            setNotice(`Community profile “${name}” created — ${publicBase}/${slug}`);
+            setEditing(null);
+          }}
+          onSaved={(name, slug) => {
+            setNotice(editing ? `Community profile “${name}” updated.` : `Community profile “${name}” created — ${publicBase}/${slug}`);
+            setCreating(false);
+            setEditing(null);
+            void load();
+          }}
+        />
+      )}
+      {viewing && (
+        <CommunityProfileViewCard
+          entityType={entityType}
+          row={viewing}
+          publicUrl={`${publicBase}/${viewing.slug}`}
+          onClose={() => setViewing(null)}
+          onEdit={
+            viewing.owned
+              ? undefined
+              : () => {
+                  setEditing(viewing);
+                  setViewing(null);
+                }
+          }
+        />
+      )}
+      {deleting && (
+        <DeleteCommunityProfileDialog
+          entityType={entityType}
+          row={deleting}
+          onClose={() => setDeleting(null)}
+          onDeleted={(name, warning) => {
+            setDeleting(null);
+            setNotice(`Community profile “${name}” deleted.${warning ? ` ${warning}` : ''}`);
             void load();
           }}
         />
@@ -182,25 +299,31 @@ export function CommunityProfilesPanel({ entityType }: { entityType: 'brand' | '
   );
 }
 
-function CreateCommunityProfileDialog({
+function CommunityProfileDialog({
   entityType,
   categories,
+  editing,
   onClose,
-  onCreated,
+  onSaved,
 }: {
   entityType: 'brand' | 'creator';
   categories: CatalogCategory[];
+  /** Present when editing an existing community profile. */
+  editing: (CommunityProfileFields & { id: string }) | null;
   onClose: () => void;
-  onCreated: (name: string, slug: string) => void;
+  onSaved: (name: string, slug: string) => void;
 }) {
-  const [name, setName] = useState('');
-  const [categoryId, setCategoryId] = useState('');
-  const [description, setDescription] = useState('');
-  const [logo, setLogo] = useState('');
-  const [coverImage, setCoverImage] = useState('');
-  const [website, setWebsite] = useState('');
-  const [location, setLocation] = useState('');
-  const [socials, setSocials] = useState<Record<string, string>>({});
+  const [name, setName] = useState(editing?.name || '');
+  const [categoryId, setCategoryId] = useState(
+    editing ? editing.categoryId || categories.find((c) => c.name === editing.category)?.id || '' : '',
+  );
+  const [description, setDescription] = useState(editing?.description || '');
+  const [logo, setLogo] = useState(editing?.logo || '');
+  const [coverImage, setCoverImage] = useState(editing?.coverImage || '');
+  const [website, setWebsite] = useState(editing?.website || '');
+  const [location, setLocation] = useState(editing?.location || '');
+  const [socials, setSocials] = useState<Record<string, string>>(editing?.socials || {});
+  const [uploading, setUploading] = useState(0);
   const [duplicates, setDuplicates] = useState<CommunityDuplicate[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -211,11 +334,27 @@ function CreateCommunityProfileDialog({
   );
   // Any edit invalidates a previous duplicate check.
   useEffect(() => setDuplicates(null), [name, website, cleanSocials]);
+  const trackUpload = (busyNow: boolean) => setUploading((n) => Math.max(0, n + (busyNow ? 1 : -1)));
 
   const submit = async () => {
     setBusy(true);
     setError(null);
     try {
+      if (editing) {
+        const saved = await operationsApi.updateCommunityProfile(editing.id, {
+          entityType,
+          name: name.trim(),
+          categoryId: categoryId || undefined,
+          description: description.trim(),
+          logo: logo.trim(),
+          coverImage: coverImage.trim(),
+          website: website.trim(),
+          location: location.trim(),
+          socialLinks: cleanSocials,
+        });
+        onSaved(saved.name, saved.slug);
+        return;
+      }
       if (duplicates === null) {
         const found = await operationsApi.findCommunityDuplicates({ entityType, name: name.trim(), website: website.trim(), socialLinks: cleanSocials });
         if (found.length) {
@@ -235,26 +374,29 @@ function CreateCommunityProfileDialog({
         socialLinks: cleanSocials,
         acknowledgeDuplicates: Boolean(duplicates?.length),
       });
-      onCreated(created.name, created.slug);
+      onSaved(created.name, created.slug);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not create the profile.');
+      setError(e instanceof Error ? e.message : editing ? 'Could not save the profile.' : 'Could not create the profile.');
     } finally {
       setBusy(false);
     }
   };
 
-  const canSubmit = name.trim().length >= 2 && (!isBrand || categoryId) && !busy;
+  const canSubmit = name.trim().length >= 2 && (!isBrand || categoryId) && !busy && uploading === 0;
+  const uploadImage = isBrand ? uploadBrandImage : uploadCreatorImage;
   return (
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={`Create community ${entityType}`}
+      aria-label={`${editing ? 'Edit' : 'Create'} community ${entityType}`}
       className="fixed inset-0 z-[1000] bg-slate-900/50 flex items-start sm:items-center justify-center p-4 overflow-y-auto"
       onClick={onClose}
     >
       <div className="bg-white rounded-xl w-full max-w-[560px] shadow-xl" onClick={(e) => e.stopPropagation()} data-testid="community-create-dialog">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-app-border">
-          <div className="text-sm font-black">Create community {isBrand ? 'brand' : 'creator'} profile</div>
+          <div className="text-sm font-black">
+            {editing ? `Edit ${editing.name}` : `Create community ${isBrand ? 'brand' : 'creator'} profile`}
+          </div>
           <button type="button" onClick={onClose} aria-label="Close">
             <X className="w-4 h-4" />
           </button>
@@ -285,15 +427,27 @@ function CreateCommunityProfileDialog({
             <label className={label} htmlFor="cp-desc">Short description</label>
             <textarea id="cp-desc" className={input} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={600} />
           </div>
+          <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-3">
+            <ImageUploadField
+              id="cp-logo"
+              title={isBrand ? 'Logo' : 'Profile photo'}
+              value={logo}
+              wide={false}
+              upload={uploadImage}
+              onChange={setLogo}
+              onBusy={trackUpload}
+            />
+            <ImageUploadField
+              id="cp-cover"
+              title="Cover image"
+              value={coverImage}
+              wide
+              upload={uploadImage}
+              onChange={setCoverImage}
+              onBusy={trackUpload}
+            />
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className={label} htmlFor="cp-logo">{isBrand ? 'Logo URL' : 'Profile photo URL'}</label>
-              <input id="cp-logo" className={input} value={logo} onChange={(e) => setLogo(e.target.value)} placeholder="https://" />
-            </div>
-            <div>
-              <label className={label} htmlFor="cp-cover">Cover image URL</label>
-              <input id="cp-cover" className={input} value={coverImage} onChange={(e) => setCoverImage(e.target.value)} placeholder="https://" />
-            </div>
             {isBrand && (
               <div>
                 <label className={label} htmlFor="cp-web">Official website</label>
@@ -319,7 +473,7 @@ function CreateCommunityProfileDialog({
               </div>
             ))}
           </div>
-          {duplicates && duplicates.length > 0 && (
+          {!editing && duplicates && duplicates.length > 0 && (
             <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-[11px] text-amber-900" data-testid="community-duplicates">
               <div className="flex items-center gap-1.5 font-black mb-1.5">
                 <AlertTriangle className="w-3.5 h-3.5" /> Possible duplicates — check before creating
@@ -348,7 +502,277 @@ function CreateCommunityProfileDialog({
             className="px-3.5 py-2 rounded-lg bg-app-accent text-white text-[11px] font-black disabled:opacity-50"
             data-testid="community-create-submit"
           >
-            {busy ? 'Working…' : duplicates?.length ? 'Create anyway' : 'Create profile'}
+            {busy ? 'Working…' : uploading ? 'Uploading…' : editing ? 'Save changes' : duplicates?.length ? 'Create anyway' : 'Create profile'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Logo / cover picker: uploads the chosen image file (no pasted links) and previews it. */
+function ImageUploadField({
+  id,
+  title,
+  value,
+  wide,
+  upload,
+  onChange,
+  onBusy,
+}: {
+  id: string;
+  title: string;
+  value: string;
+  wide: boolean;
+  upload: (file: File) => Promise<string>;
+  onChange: (url: string) => void;
+  onBusy: (busy: boolean) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const pick = async (file: File) => {
+    setBusy(true);
+    onBusy(true);
+    setError(null);
+    try {
+      onChange(await upload(file));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Upload failed.');
+    } finally {
+      setBusy(false);
+      onBusy(false);
+    }
+  };
+  return (
+    <div data-testid={`${id}-field`}>
+      <div className={label}>{title}</div>
+      <label
+        htmlFor={id}
+        className={`relative flex items-center justify-center overflow-hidden rounded-lg border border-dashed border-app-border bg-slate-50 cursor-pointer hover:border-app-accent ${
+          wide ? 'h-[110px] w-full' : 'h-[110px] w-[110px]'
+        }`}
+      >
+        {value ? (
+          <img src={value} alt="" className="h-full w-full object-cover" data-testid={`${id}-preview`} />
+        ) : (
+          <span className="flex flex-col items-center gap-1 text-[10px] font-bold text-app-text-secondary">
+            <ImagePlus className="w-4 h-4" /> Upload image
+          </span>
+        )}
+        {busy && (
+          <span className="absolute inset-0 flex items-center justify-center bg-white/70">
+            <Loader2 className="w-4 h-4 animate-spin" />
+          </span>
+        )}
+      </label>
+      <input
+        id={id}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        className="hidden"
+        disabled={busy}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (file) void pick(file);
+        }}
+      />
+      <div className="mt-1 flex gap-2 text-[10px] font-bold">
+        <label htmlFor={id} className="cursor-pointer text-app-accent">
+          {value ? 'Replace' : 'Choose file'}
+        </label>
+        {value && !busy && (
+          <button type="button" className="text-red-600" onClick={() => onChange('')}>
+            Remove
+          </button>
+        )}
+      </div>
+      {error && <div className="mt-1 text-[10.5px] font-bold text-red-600">{error}</div>}
+    </div>
+  );
+}
+
+/**
+ * Read-only preview laid out like the public profile, with an unmistakable
+ * "Community profile" banner so staff never confuse it with an owner-managed one.
+ */
+function CommunityProfileViewCard({
+  entityType,
+  row,
+  publicUrl,
+  onClose,
+  onEdit,
+}: {
+  entityType: 'brand' | 'creator';
+  row: Row;
+  publicUrl: string;
+  onClose: () => void;
+  onEdit?: () => void;
+}) {
+  const p = row.profile;
+  const links = Object.entries(p.socials).filter(([, v]) => v);
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Community profile ${row.name}`}
+      className="fixed inset-0 z-[1000] bg-slate-900/50 flex items-start sm:items-center justify-center p-4 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div className="bg-white rounded-xl w-full max-w-[600px] shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()} data-testid="community-view-card">
+        <div className="flex items-start gap-2 bg-amber-50 border-b border-amber-200 px-5 py-3 text-[11px] text-amber-900" data-testid="community-view-banner">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="font-black uppercase tracking-wider text-[10px]">Community profile · {row.state}</div>
+            <div>
+              Created by Choosify staff from public information. {row.owned ? 'It has since been claimed by its owner.' : 'It has no owner, account, CF-ID or Marketplace Access.'}
+            </div>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="relative h-[150px] bg-gradient-to-r from-slate-200 to-slate-100">
+          {p.coverImage && <img src={p.coverImage} alt="" className="h-full w-full object-cover" />}
+        </div>
+        <div className="px-5 pb-5">
+          <div className="-mt-10 flex items-end gap-3">
+            <div className={`h-20 w-20 shrink-0 overflow-hidden border-4 border-white bg-slate-100 shadow ${entityType === 'creator' ? 'rounded-full' : 'rounded-xl'}`}>
+              {p.logo ? (
+                <img src={p.logo} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-lg font-black text-slate-500">{row.name.slice(0, 2).toUpperCase()}</div>
+              )}
+            </div>
+            <div className="min-w-0 pb-1">
+              <div className="text-base font-black truncate">{row.name}</div>
+              <div className="text-[11px] text-app-text-secondary">
+                {[p.category, `/${row.slug}`].filter(Boolean).join(' · ')}
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 space-y-3 text-[12px]">
+            <div>
+              <div className={label}>{entityType === 'brand' ? 'Description' : 'Bio'}</div>
+              <p className="whitespace-pre-line">{p.description || <span className="text-app-text-secondary">Not added</span>}</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {entityType === 'brand' && (
+                <div>
+                  <div className={label}>Official website</div>
+                  {p.website ? (
+                    <a href={p.website} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-app-accent break-all">
+                      <Globe className="w-3 h-3 shrink-0" /> {p.website}
+                    </a>
+                  ) : (
+                    <span className="text-app-text-secondary">Not added</span>
+                  )}
+                </div>
+              )}
+              <div>
+                <div className={label}>Location</div>
+                {p.location ? (
+                  <span className="inline-flex items-center gap-1">
+                    <MapPin className="w-3 h-3" /> {p.location}
+                  </span>
+                ) : (
+                  <span className="text-app-text-secondary">Not added</span>
+                )}
+              </div>
+            </div>
+            <div>
+              <div className={label}>Social links</div>
+              {links.length ? (
+                <ul className="space-y-1">
+                  {links.map(([k, v]) => (
+                    <li key={k} className="break-all">
+                      <span className="font-bold capitalize">{k}:</span>{' '}
+                      <a href={v} target="_blank" rel="noreferrer" className="text-app-accent">
+                        {v}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <span className="text-app-text-secondary">Not added</span>
+              )}
+            </div>
+            <div className="text-[10.5px] text-app-text-secondary">Created {row.createdAt.slice(0, 10) || '—'}</div>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-app-border">
+          <a href={publicUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 px-3.5 py-2 rounded-lg border border-app-border text-[11px] font-bold">
+            Public page <ExternalLink className="w-3 h-3" />
+          </a>
+          {onEdit && (
+            <button type="button" onClick={onEdit} className="inline-flex items-center gap-1 px-3.5 py-2 rounded-lg bg-app-accent text-white text-[11px] font-black">
+              <Pencil className="w-3 h-3" /> Edit
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeleteCommunityProfileDialog({
+  entityType,
+  row,
+  onClose,
+  onDeleted,
+}: {
+  entityType: 'brand' | 'creator';
+  row: Row;
+  onClose: () => void;
+  onDeleted: (name: string, warning?: string) => void;
+}) {
+  const [confirmText, setConfirmText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await operationsApi.deleteCommunityProfile(entityType, row.id);
+      onDeleted(result.data?.name || row.name, result.warning);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not delete the profile.');
+      setBusy(false);
+    }
+  };
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Delete ${row.name}`}
+      className="fixed inset-0 z-[1000] bg-slate-900/50 flex items-start sm:items-center justify-center p-4 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div className="bg-white rounded-xl w-full max-w-[440px] shadow-xl" onClick={(e) => e.stopPropagation()} data-testid="community-delete-dialog">
+        <div className="px-5 py-4 space-y-3">
+          <div className="text-sm font-black">Delete community profile?</div>
+          <p className="text-[11.5px] text-app-text-secondary">
+            “{row.name}” and its public page /{row.slug} will be removed. Its public handle is retired and will not be reused. This cannot be
+            undone.
+          </p>
+          <div>
+            <label className={label} htmlFor="cp-del-confirm">Type the profile name to confirm</label>
+            <input id="cp-del-confirm" className={input} value={confirmText} onChange={(e) => setConfirmText(e.target.value)} />
+          </div>
+          {error && <div className="text-[11.5px] font-bold text-red-600" role="alert">{error}</div>}
+        </div>
+        <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-app-border">
+          <button type="button" onClick={onClose} className="px-3.5 py-2 rounded-lg border border-app-border text-[11px] font-bold">
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={busy || confirmText.trim() !== row.name.trim()}
+            onClick={() => void run()}
+            className="px-3.5 py-2 rounded-lg bg-red-600 text-white text-[11px] font-black disabled:opacity-50"
+            data-testid="community-delete-confirm"
+          >
+            {busy ? 'Deleting…' : 'Delete profile'}
           </button>
         </div>
       </div>

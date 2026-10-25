@@ -44,6 +44,9 @@ export function isPartnerIdentityApiPath(path: string, method: string): boolean 
   // read the document requests addressed to them.
   if (m === 'POST' && p === '/api/v1/operations/media/upload-verification') return true;
   if (m === 'GET' && p === '/api/v1/operations/verification-document-requests') return true;
+  // Reading back one's own private upload (thumbnail / View / Download) — the
+  // route handler still restricts it to the uploader or a platform admin.
+  if (m === 'GET' && /^\/api\/v1\/catalog\/media\/private\/[^/]+$/.test(p)) return true;
   if (p.startsWith('/api/v1/operations/partner-applications')) return true;
   // Buying/messaging is a role-independent identity action, not a partner
   // commercial capability -- a person mid-review on a seller/creator

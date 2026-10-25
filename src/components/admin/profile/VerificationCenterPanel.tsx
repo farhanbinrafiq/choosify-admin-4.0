@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { FileText, Loader2 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { operationsApi, type OpsVerification, type VerificationDocRequest } from '../../../services/operationsApi';
 import { getStoredAccessToken } from '../../../services/authRefresh';
 import {
   PROFILE_PHOTO_DOCUMENT,
+  missingClaimDocuments,
   missingRequiredDocuments,
   verificationDocumentLabel,
   verificationDocumentSpecs,
@@ -102,6 +103,42 @@ export function DocumentViewerHost() {
   );
 }
 
+const IMAGE_FILE = /\.(png|jpe?g|webp|gif)(\?|$)/i;
+
+/**
+ * Small preview of an uploaded verification document. Images are fetched the
+ * same way View opens them (private files with the bearer token); PDFs and
+ * other files, or a file that cannot be loaded, show the document icon.
+ */
+export function DocumentThumbnail({ url, name, size = 44 }: { url: string; name: string; size?: number }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const isImage = IMAGE_FILE.test(name) || IMAGE_FILE.test(url);
+  useEffect(() => {
+    if (!isImage || !url) return;
+    let alive = true;
+    let objectUrl: string | null = null;
+    fetchVerificationBlob(url)
+      .then((blob) => {
+        if (!alive) return;
+        if (blob) {
+          objectUrl = URL.createObjectURL(blob);
+          setSrc(objectUrl);
+        } else setSrc(url);
+      })
+      .catch(() => alive && setSrc(null));
+    return () => {
+      alive = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [url, isImage]);
+  const box: React.CSSProperties = { width: size, height: size, borderRadius: 8, border: '1px solid #E8EDF2', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0, color: '#94A3B8' };
+  return (
+    <div style={box} data-testid="document-thumbnail">
+      {src ? <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={() => setSrc(null)} /> : <FileText size={Math.round(size * 0.38)} />}
+    </div>
+  );
+}
+
 export async function downloadVerificationDocument(url: string, fileName: string): Promise<void> {
   const blob = (await fetchVerificationBlob(url)) || (await (await fetch(url)).blob());
   const blobUrl = URL.createObjectURL(blob);
@@ -146,6 +183,7 @@ export function VerificationCenterPanel({
 }) {
   const { profile } = useAuth();
   const canReview = ['super_admin', 'admin', 'moderator'].includes(String(profile?.role || ''));
+  const canRevoke = ['super_admin', 'admin'].includes(String(profile?.role || ''));
   const [rows, setRows] = useState<OpsVerification[]>([]);
   const [requests, setRequests] = useState<VerificationDocRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -201,6 +239,7 @@ export function VerificationCenterPanel({
           entityId={v.entityId}
           entityName={entities.find((e) => e.id === v.entityId)?.name || v.entityName}
           canReview={canReview && v.submitted_by !== profile?.id}
+          canRevoke={canRevoke && v.submitted_by !== profile?.id}
           asks={askedFor(v.entityId)}
           kind={kind}
           onChanged={load}
@@ -231,6 +270,7 @@ export function VerificationRequestCard({
   entityId,
   entityName,
   canReview,
+  canRevoke = false,
   asks,
   emptyHint,
   onMessageOwner,
@@ -244,6 +284,8 @@ export function VerificationRequestCard({
   entityId: string;
   entityName: string;
   canReview: boolean;
+  /** Admin / Super Admin may revoke an approved owner verification. */
+  canRevoke?: boolean;
   asks: VerificationDocRequest[];
   emptyHint?: string;
   onMessageOwner?: () => void;
@@ -256,9 +298,19 @@ export function VerificationRequestCard({
   const open = Boolean(v && (v.status === 'Submitted' || v.status === 'Under Review'));
   const closed = Boolean(v && !['Draft', 'Submitted', 'Under Review'].includes(v.status));
   const isClaim = kind === 'ownership_claim';
+  // Owner verifications: uploaded documents can be verified / rejected while the
+  // owner is still completing the draft (the request stays a draft).
+  const docReviewable = open || (!isClaim && v?.status === 'Draft');
+  const [revoking, setRevoking] = useState(false);
+  const [revokeReason, setRevokeReason] = useState('');
+  const [revokeDocs, setRevokeDocs] = useState<string[]>([]);
   const who = isClaim ? 'claimant' : 'owner';
   const specs = verificationDocumentSpecs(entityType, kind);
-  const missing = missingRequiredDocuments(entityType, docs, kind);
+  const claimant = isClaim ? v?.claimantDetails : undefined;
+  // A representative claiming a Brand must also show their company ID card.
+  const isRequired = (sp: { type: string; required: boolean }) =>
+    sp.required || (isClaim && claimant?.relationship === 'representative' && sp.type === 'Company ID Card');
+  const missing = isClaim ? missingClaimDocuments(entityType, docs, claimant?.relationship) : missingRequiredDocuments(entityType, docs, kind);
   const rejectedDocs = docs.filter((d) => d.status === 'rejected');
   const extraDocs = docs.filter((d) => !specs.some((s) => s.type === d.type));
   /** Latest time Choosify asked for each document type. */
@@ -339,9 +391,33 @@ export function VerificationRequestCard({
         </div>
       </div>
 
+      {isClaim && v ? (
+        <div style={{ padding: '10px 16px', borderBottom: '1px solid #F1F3F5', background: '#FAFBFC' }} data-testid="claimant-details">
+          <div style={{ fontSize: 9, fontWeight: 800, color: '#9CA3AF', marginBottom: 6 }}>CLAIMANT DETAILS</div>
+          {claimant ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '6px 14px', fontSize: 11.5 }}>
+              {[
+                ['Claiming as', claimant.relationship === 'owner' ? 'Owner' : 'Authorised representative'],
+                ['Role', claimant.roleTitle],
+                ['Full name', claimant.fullName],
+                ['Phone', claimant.phone],
+                ['Official email', claimant.email],
+              ].map(([k, val]) => (
+                <div key={k} style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 9.5, fontWeight: 700, color: '#94A3B8' }}>{k}</div>
+                  <div style={{ fontWeight: 700, overflowWrap: 'anywhere' }}>{val}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontSize: 11, color: '#94A3B8' }}>Not provided{v.status === 'Draft' ? ' yet — the claimant adds them before submitting.' : ' (claim filed before details were collected).'}</div>
+          )}
+        </div>
+      ) : null}
+
       <div style={{ padding: '10px 16px' }}>
         <div style={{ fontSize: 9, fontWeight: 800, color: '#9CA3AF', marginBottom: 6 }}>
-          REQUIRED DOCUMENTS · {specs.filter((sp) => sp.required).length - missing.length}/{specs.filter((sp) => sp.required).length} uploaded
+          REQUIRED DOCUMENTS · {specs.filter(isRequired).length - missing.length}/{specs.filter(isRequired).length} uploaded
         </div>
         {[...specs.map((sp) => ({ sp, d: docs.find((x) => x.type === sp.type) })), ...extraDocs.map((d) => ({ sp: null, d }))].map(({ sp, d }) => {
           const key = d?.id || sp?.type || '';
@@ -350,13 +426,11 @@ export function VerificationRequestCard({
           return (
             <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid #F5F6F8', flexWrap: 'wrap' }} data-testid={d ? 'verification-document' : 'verification-document-missing'}>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
-                {sp?.type === PROFILE_PHOTO_DOCUMENT && d ? (
-                  <img src={d.doc_url} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover', border: '1px solid #E8EDF2' }} />
-                ) : null}
+                {d ? <DocumentThumbnail url={d.doc_url} name={sp?.type === PROFILE_PHOTO_DOCUMENT ? 'photo.jpg' : d.name} size={36} /> : null}
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 11.5, fontWeight: 800 }}>
                     {label}
-                    {sp ? <span style={{ fontSize: 9, fontWeight: 800, color: sp.required ? '#64748B' : '#94A3B8', marginLeft: 6 }}>{sp.required ? 'REQUIRED' : 'OPTIONAL'}</span> : null}
+                    {sp ? <span style={{ fontSize: 9, fontWeight: 800, color: isRequired(sp) ? '#64748B' : '#94A3B8', marginLeft: 6 }}>{isRequired(sp) ? 'REQUIRED' : 'OPTIONAL'}</span> : null}
                   </div>
                   <div style={{ fontSize: 10.5, color: '#6B7280', fontWeight: 600, overflowWrap: 'anywhere' }}>
                     {d ? d.name : 'Not uploaded yet'}
@@ -386,12 +460,12 @@ export function VerificationRequestCard({
                     <button type="button" style={btn} onClick={() => void downloadVerificationDocument(d.doc_url, d.name).catch((e) => setMsg({ ok: false, text: e.message }))}>Download</button>
                   </>
                 ) : null}
-                {d && canReview && open && d.status !== 'approved' ? (
+                {d && canReview && docReviewable && d.status !== 'approved' ? (
                   <button type="button" style={{ ...btn, color: '#166534' }} disabled={busy} onClick={() => void act(() => operationsApi.updateVerificationDocument(v!.id, d.id, { status: 'approved' }), `${label} approved.`)} data-testid="verification-doc-approve">
                     Approve
                   </button>
                 ) : null}
-                {d && canReview && open && d.status !== 'rejected' ? (
+                {d && canReview && docReviewable && d.status !== 'rejected' ? (
                   <button type="button" style={{ ...btn, color: '#991B1B' }} disabled={busy} onClick={() => { setRejecting(d.id); setRejectReason(''); }} data-testid="verification-doc-reject">
                     Reject
                   </button>
@@ -423,7 +497,11 @@ export function VerificationRequestCard({
           );
         })}
         {v?.status === 'Draft' ? (
-          <div style={{ fontSize: 10.5, color: '#6B7280', fontWeight: 600, marginTop: 6 }}>The {who} has not submitted this request yet — it can be reviewed once they submit it.</div>
+          <div style={{ fontSize: 10.5, color: '#6B7280', fontWeight: 600, marginTop: 6 }}>
+            {isClaim
+              ? `The ${who} has not submitted this request yet — it can be reviewed once they submit it.`
+              : `The ${who} has not submitted this request yet. You can verify or reject each uploaded document now; the request itself is approved after the ${who} uploads every required document and submits it.`}
+          </div>
         ) : null}
       </div>
 
@@ -515,6 +593,84 @@ export function VerificationRequestCard({
               {approveBlockedReason}
             </div>
           ) : null}
+        </div>
+      ) : null}
+      {canRevoke && !isClaim && v?.status === 'Approved' ? (
+        <div style={{ padding: '12px 16px', borderTop: '1px solid #F1F3F5', background: '#FFFAFA' }} data-testid="verification-revoke">
+          {!revoking ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                style={{ ...btn, color: '#991B1B', borderColor: '#FCA5A5' }}
+                disabled={busy}
+                onClick={() => {
+                  setRevoking(true);
+                  setRevokeReason('');
+                  setRevokeDocs([]);
+                }}
+                data-testid="verification-revoke-open"
+              >
+                Revoke approval…
+              </button>
+              <span style={{ fontSize: 10.5, fontWeight: 600, color: '#6B7280' }}>
+                Removes the verified badge and reopens this request so the {who} can upload again. Ownership and Marketplace Access are not changed.
+              </span>
+            </div>
+          ) : (
+            <div>
+              <label htmlFor={`rv-${v.id}`} style={{ fontSize: 9, fontWeight: 800, color: '#991B1B', display: 'block', marginBottom: 4 }}>
+                REASON FOR REVOKING (SHOWN TO THE {who.toUpperCase()})
+              </label>
+              <textarea
+                id={`rv-${v.id}`}
+                value={revokeReason}
+                onChange={(e) => setRevokeReason(e.target.value)}
+                rows={2}
+                maxLength={1000}
+                placeholder="e.g. The trade license was approved by mistake — it expired in 2025. Please upload the renewed license."
+                style={{ width: '100%', border: '1px solid #FCA5A5', borderRadius: 7, padding: 8, fontSize: 12, boxSizing: 'border-box', resize: 'vertical' }}
+                data-testid="verification-revoke-reason"
+              />
+              {docs.length ? (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontSize: 9, fontWeight: 800, color: '#6B7280', marginBottom: 4 }}>ASK THE {who.toUpperCase()} TO REPLACE (OPTIONAL)</div>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    {docs.map((d) => (
+                      <label key={d.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: '#374151' }}>
+                        <input
+                          type="checkbox"
+                          checked={revokeDocs.includes(d.id)}
+                          onChange={(e) => setRevokeDocs((list) => (e.target.checked ? [...list, d.id] : list.filter((x) => x !== d.id)))}
+                          data-testid={`verification-revoke-doc-${d.type}`}
+                        />
+                        {verificationDocumentLabel(entityType, d.type, kind)}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  style={{ ...btn, background: '#991B1B', color: '#fff', borderColor: '#991B1B' }}
+                  disabled={busy || revokeReason.trim().length < 10}
+                  title={revokeReason.trim().length < 10 ? 'Write a reason of at least 10 characters.' : undefined}
+                  onClick={() =>
+                    void act(
+                      () => operationsApi.revokeVerification(v.id, { reason: revokeReason.trim(), documentIds: revokeDocs }),
+                      `Approval revoked — the verified badge was removed and the ${who} was asked to ${revokeDocs.length ? 're-upload the selected documents' : 'review the request'}.`,
+                    ).then(() => setRevoking(false))
+                  }
+                  data-testid="verification-revoke-confirm"
+                >
+                  Revoke approval
+                </button>
+                <button type="button" style={btn} disabled={busy} onClick={() => setRevoking(false)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       ) : null}
       {msg ? <div role={msg.ok ? 'status' : 'alert'} style={{ padding: '8px 16px', fontSize: 11.5, fontWeight: 700, color: msg.ok ? '#166534' : '#DC2626' }}>{msg.text}</div> : null}

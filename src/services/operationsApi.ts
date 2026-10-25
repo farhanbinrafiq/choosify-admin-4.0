@@ -630,6 +630,8 @@ export interface OpsVerification {
   kind?: 'owner_verification' | 'ownership_claim';
   claimSource?: 'storefront' | 'invitation' | 'onboarding';
   claimIntentId?: string;
+  /** Ownership claims: who is claiming (owner / representative, role, name, phone, official email). */
+  claimantDetails?: import('../../shared/verification/verificationDocuments').ClaimantDetails;
   closedAt?: string;
   closedReason?: string;
   documents: import('../contexts/TrustContext').VerificationDocument[];
@@ -1459,6 +1461,17 @@ export const operationsApi = {
     const result = await request<{ data: { id: string; name: string; slug: string } }>('/catalog/community-profiles', 'POST', input);
     return result.data;
   },
+  updateCommunityProfile: async (id: string, input: Omit<CommunityProfileInput, 'publish' | 'acknowledgeDuplicates'>) => {
+    const result = await request<{ data: { id: string; name: string; slug: string } }>(
+      `/catalog/community-profiles/${input.entityType}/${encodeURIComponent(id)}`,
+      'PATCH',
+      input,
+    );
+    return result.data;
+  },
+  deleteCommunityProfile: async (entityType: 'brand' | 'creator', id: string) => {
+    return request<{ data: { name: string }; warning?: string }>(`/catalog/community-profiles/${entityType}/${encodeURIComponent(id)}`, 'DELETE');
+  },
   getCommunityProfileCopy: async () => {
     const result = await request<{ data: CommunityProfileCopy }>('/catalog/site/community-profiles');
     return result.data;
@@ -1584,6 +1597,15 @@ export const operationsApi = {
       'PUT',
       payload,
     );
+    return result.data;
+  },
+  /**
+   * Admin / Super Admin: revoke an approved owner verification — removes the
+   * verified badge, rejects the chosen documents with `reason` and reopens the
+   * request for the owner. Ownership and Marketplace Access are unchanged.
+   */
+  revokeVerification: async (id: string, payload: { reason: string; documentIds: string[] }) => {
+    const result = await request<{ data: unknown }>(`/operations/verifications/${encodeURIComponent(id)}/revoke`, 'POST', payload);
     return result.data;
   },
   reviewVerification: async (

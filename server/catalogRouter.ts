@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { recordAccountActivity } from './accountActivity/accountActivity';
 import { recordAudit, withPublicOwnership } from './claims/ownershipClaims';
-import { brandProfileIsDiscoverable, createCommunityProfile, findCommunityDuplicates, isCommunityOwnerlessBrand, type CommunityProfileInput } from './claims/communityProfiles';
+import { brandProfileIsDiscoverable, createCommunityProfile, deleteCommunityProfile, findCommunityDuplicates, updateCommunityProfile, isCommunityOwnerlessBrand, type CommunityProfileInput } from './claims/communityProfiles';
 import { ClaimError } from './claims/ownershipClaims';
 import { Logger } from './lib/logger';
 import { detectBrandablePlatform } from '../src/lib/creatorReviewPlatform';
@@ -2951,6 +2951,58 @@ catalogRouter.post('/catalog/community-profiles', ...requireCmsWrite, async (req
       return;
     }
     sendCatalogWriteError(res, error, 'Invalid community profile');
+  }
+});
+
+/** Edit / delete a community profile (staff) — only while it has no owner. */
+catalogRouter.patch('/catalog/community-profiles/:type/:id', ...requireCmsWrite, async (req, res) => {
+  const type = req.params.type === 'creator' ? 'creator' : req.params.type === 'brand' ? 'brand' : null;
+  if (!type) {
+    res.status(400).json({ error: 'type must be brand or creator' });
+    return;
+  }
+  try {
+    const saved = await updateCommunityProfile(req, type, req.params.id, req.body as CommunityProfileInput);
+    res.json({ success: true, data: saved });
+  } catch (error) {
+    if (error instanceof ClaimError) {
+      res.status(error.status).json({ error: error.message, code: error.code });
+      return;
+    }
+    sendCatalogWriteError(res, error, 'Invalid community profile');
+  }
+});
+
+catalogRouter.delete('/catalog/community-profiles/:type/:id', ...requireCmsWrite, async (req, res) => {
+  if (!userIsPlatformAdmin(req)) {
+    res.status(403).json({ error: 'Only Admins and Super Admins can delete community profiles.', code: 'DELETE_NOT_ALLOWED' });
+    return;
+  }
+  const type = req.params.type === 'creator' ? 'creator' : req.params.type === 'brand' ? 'brand' : null;
+  if (!type) {
+    res.status(400).json({ error: 'type must be brand or creator' });
+    return;
+  }
+  try {
+    const { name } = await deleteCommunityProfile(req, type, req.params.id);
+    let warning: string | undefined;
+    try {
+      await retireHandlesForDeletedEntity({
+        entityType: type,
+        entityId: req.params.id,
+        actor: { userId: String(req.userId || ''), realActorUserId: req.realActorUserId || null },
+      });
+    } catch (handleError) {
+      console.error('[PublicHandles] retire after community profile delete failed:', handleError instanceof Error ? handleError.message : handleError);
+      warning = 'The profile was deleted, but its public handle could not be retired right now.';
+    }
+    res.json({ success: true, data: { name }, ...(warning ? { warning } : {}) });
+  } catch (error) {
+    if (error instanceof ClaimError) {
+      res.status(error.status).json({ error: error.message, code: error.code });
+      return;
+    }
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to delete profile' });
   }
 });
 
