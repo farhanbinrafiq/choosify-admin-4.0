@@ -181,7 +181,8 @@ export default function SellerManagement() {
         sellerId,
         cfId: user?.choosifyUserId || '—',
         displayName: user?.displayName || primaryBrand?.name || 'Unknown seller',
-        avatarUrl: user?.avatarUrl || null,
+        // Same picture as the seller profile page: personal photo, else the primary brand logo.
+        avatarUrl: user?.avatarUrl || primaryBrand?.logo || null,
         email: user?.email || '—',
         brands: ownedBrands,
         primaryBrand,
