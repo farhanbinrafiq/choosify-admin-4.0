@@ -46,6 +46,8 @@ type CommunityProfileFields = {
   socials: Record<string, string>;
   /** "Best for #tags" (brand overview.tags / creator bestForTags). */
   tags: string[];
+  /** Brand price range text (overview.priceRange); empty for creators. */
+  priceRange: string;
 };
 
 const STATE_LABEL: Record<string, [string, string]> = {
@@ -73,6 +75,7 @@ function profileFieldsOf(entityType: 'brand' | 'creator', r: CatalogBrand | Cata
       location: String((b.overview as { address?: string } | undefined)?.address || ''),
       socials,
       tags: Array.isArray(b.overview?.tags) ? b.overview!.tags!.map(String) : [],
+      priceRange: String(b.overview?.priceRange || ''),
     };
   }
   const c = r as CatalogCreator;
@@ -87,6 +90,7 @@ function profileFieldsOf(entityType: 'brand' | 'creator', r: CatalogBrand | Cata
     location: String(c.location || ''),
     socials,
     tags: Array.isArray(c.bestForTags) ? c.bestForTags.map(String) : [],
+    priceRange: '',
   };
 }
 const input = 'w-full bg-white border border-app-border rounded-lg px-3 py-2 text-xs outline-none focus:border-app-accent';
@@ -329,6 +333,7 @@ function CommunityProfileDialog({
   const [location, setLocation] = useState(editing?.location || '');
   const [socials, setSocials] = useState<Record<string, string>>(editing?.socials || {});
   const [tags, setTags] = useState<string[]>(editing?.tags || []);
+  const [priceRange, setPriceRange] = useState(editing?.priceRange || '');
   const [uploading, setUploading] = useState(0);
   const [duplicates, setDuplicates] = useState<CommunityDuplicate[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -358,6 +363,7 @@ function CommunityProfileDialog({
           location: location.trim(),
           socialLinks: cleanSocials,
           tags,
+          ...(isBrand ? { priceRange: priceRange.trim() } : {}),
         });
         onSaved(saved.name, saved.slug);
         return;
@@ -380,6 +386,7 @@ function CommunityProfileDialog({
         location: location.trim(),
         socialLinks: cleanSocials,
         tags,
+        ...(isBrand ? { priceRange: priceRange.trim() } : {}),
         acknowledgeDuplicates: Boolean(duplicates?.length),
       });
       onSaved(created.name, created.slug);
@@ -393,7 +400,7 @@ function CommunityProfileDialog({
   const canSubmit = name.trim().length >= 2 && (!isBrand || categoryId) && !busy && uploading === 0;
   const uploadImage = isBrand ? uploadBrandImage : uploadCreatorImage;
   // A click outside never closes the form; × / Cancel ask first when something was entered.
-  const snapshot = JSON.stringify([name, categoryId, description, logo, coverImage, website, location, cleanSocials, tags]);
+  const snapshot = JSON.stringify([name, categoryId, description, logo, coverImage, website, location, cleanSocials, tags, priceRange]);
   const [initialSnapshot] = useState(snapshot);
   const requestClose = () => {
     if (snapshot !== initialSnapshot && !window.confirm('Discard the information you entered? It will not be saved.')) return;
@@ -466,6 +473,19 @@ function CommunityProfileDialog({
               <div>
                 <label className={label} htmlFor="cp-web">Official website</label>
                 <input id="cp-web" className={input} value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://" />
+              </div>
+            )}
+            {isBrand && (
+              <div>
+                <label className={label} htmlFor="cp-price">Price range</label>
+                <input
+                  id="cp-price"
+                  className={input}
+                  value={priceRange}
+                  onChange={(e) => setPriceRange(e.target.value)}
+                  maxLength={60}
+                  placeholder="e.g. ৳1,000 – ৳20,000"
+                />
               </div>
             )}
             <div>
@@ -696,6 +716,12 @@ function CommunityProfileViewCard({
                   ) : (
                     <span className="text-app-text-secondary">Not added</span>
                   )}
+                </div>
+              )}
+              {entityType === 'brand' && (
+                <div>
+                  <div className={label}>Price range</div>
+                  {p.priceRange ? <span>{p.priceRange}</span> : <span className="text-app-text-secondary">Not added</span>}
                 </div>
               )}
               <div>

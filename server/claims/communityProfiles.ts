@@ -115,6 +115,8 @@ export type CommunityProfileInput = {
   location?: string;
   /** "Best for #tags" — brand overview.tags / creator bestForTags. */
   tags?: unknown;
+  /** Brand price range text (overview.priceRange), e.g. "৳1,000 – ৳20,000". Brands only. */
+  priceRange?: string;
   publish?: boolean;
   acknowledgeDuplicates?: boolean;
 };
@@ -140,6 +142,9 @@ function cleanTags(raw: unknown): string[] {
   }
   return out.slice(0, 15);
 }
+
+/** Short single-line price range text (max 60 chars). */
+const cleanPriceRange = (v: unknown): string => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
 
 const httpUrl = (v: string | undefined, field: string): string => {
   const t = String(v || '').trim();
@@ -188,7 +193,11 @@ export async function createCommunityProfile(
         website,
         socialLinks,
         story: String(input.overview || '').trim(),
-        overview: { ...(input.location ? { address: String(input.location).trim() } : {}), tags: cleanTags(input.tags) },
+        overview: {
+          ...(input.location ? { address: String(input.location).trim() } : {}),
+          ...(cleanPriceRange(input.priceRange) ? { priceRange: cleanPriceRange(input.priceRange) } : {}),
+          tags: cleanTags(input.tags),
+        },
         followers: 0,
         ratings: 0,
         featuredFlag: false,
@@ -292,6 +301,12 @@ export async function updateCommunityProfile(
       );
       // The brand normalizer keeps the old tags when given an empty list, so set the edited list explicitly.
       if (sent('tags')) next.overview = { ...(next.overview || {}), tags: cleanTags(input.tags) } as typeof next.overview;
+      // Same for the price range: an empty value clears it.
+      if (sent('priceRange')) {
+        const { priceRange: _old, ...rest } = (next.overview || {}) as Record<string, unknown>;
+        const pr = cleanPriceRange(input.priceRange);
+        next.overview = (pr ? { ...rest, priceRange: pr } : rest) as typeof next.overview;
+      }
       saved = await catalogStore.upsertBrand({ ...next, slug: brand.slug, sellerId: undefined });
     } else {
       const creator = existing as CatalogCreator;

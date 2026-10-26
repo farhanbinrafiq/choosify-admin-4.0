@@ -661,6 +661,8 @@ export interface CommunityProfileInput {
   location?: string;
   /** "Best for #tags". */
   tags?: string[];
+  /** Brand price range text (brands only). */
+  priceRange?: string;
   publish?: boolean;
   acknowledgeDuplicates?: boolean;
 }
