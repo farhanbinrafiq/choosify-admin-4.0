@@ -475,6 +475,9 @@ function CommunityProfileDialog({
           </div>
           <div data-testid="cp-tags">
             <div className={label}>Best for #tags</div>
+            <div className="mb-1 text-[10.5px] text-app-text-secondary">
+              What the brand is best known for — shown as “Best For” on its storefront card (e.g. Men’s Shirts, Sunglasses). Separate from the category.
+            </div>
             <TagPillInput
               className="w-full bg-white border border-app-border rounded-lg text-xs"
               values={tags}
