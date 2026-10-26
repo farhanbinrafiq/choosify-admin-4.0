@@ -67,6 +67,8 @@ function entityProblem(
   const b = ent.brands.find((x) => x.id === entityId);
   if (!b) return 'Brand not found';
   if (!brandVisible(b)) return `Brand ${b.name} is not visible on the storefront`;
+  // Only the Deals page "Brand Deals" module requires an active deal; Brands page pins don't.
+  if (key !== 'deals.brand_deals') return null;
   return liveDeals.has(b.id) ? null : `Brand ${b.name} has no active deal`;
 }
 
@@ -145,6 +147,16 @@ export function resolveDealsCuration(site: SiteConfig | null, ent: CurationEntit
     .map((b) => ({ id: b.id, name: b.name, slug: b.slug, logo: isHttpUrl(b.logo) ? b.logo : null, upToPercent: pct.get(b.id) ?? null }));
 
   return { topCoupons, popularCategories, brandDeals };
+}
+
+/** Brands page: pinned brand ids in the Super Admin's order (visible brands only). */
+export function resolveBrandsCuration(site: SiteConfig | null, ent: Pick<CurationEntities, 'brands'>): { pinnedBrandIds: string[] } {
+  const brandById = new Map(ent.brands.map((b) => [b.id, b]));
+  const pinnedBrandIds = activeItems(site?.storefrontCuration?.['brands.pinned']).filter((id) => {
+    const b = brandById.get(id);
+    return !!b && brandVisible(b);
+  });
+  return { pinnedBrandIds };
 }
 
 /** Every coupon currently valid for storefront display (the full "View All Coupons" set). */

@@ -22,7 +22,15 @@ import { lastUpdatedLabel } from '../../lib/curationMeta';
 /** Super Admin only — mirrors the server's requireCurationEditor on every curation write. */
 const canEditCuration = (role: string | undefined) => role === CURATION_EDITOR_ROLE;
 
-const SECTIONS: Array<{ key: CurationPlacementKey; empty: string; help: string; addLabel: string }> = [
+const SECTIONS: Array<{ key: CurationPlacementKey; empty: string; help: string; addLabel: string; toggle?: string; emptyEffect?: string }> = [
+  {
+    key: 'brands.pinned',
+    empty: 'No brands pinned',
+    help: 'Brands page default order: the brands pinned here appear first, in this order; every other brand follows alphabetically (A–Z). Shoppers can still choose another sort. Turning the placement off keeps the pins but shows everything A–Z.',
+    addLabel: 'Pin brands',
+    toggle: 'Pin these brands to the top of the Brands page',
+    emptyEffect: 'the Brands page shows every brand A–Z.',
+  },
   {
     key: 'deals.top_coupons',
     empty: 'No Top Coupons selected',
@@ -133,7 +141,7 @@ export default function StorefrontDealsCuration() {
       problem:
         b.marketplaceAccess === false
           ? 'Hidden from storefront'
-          : brandLiveDeals && upTo == null
+          : key === 'deals.brand_deals' && brandLiveDeals && upTo == null
             ? BRAND_NO_ACTIVE_DEAL
             : null,
     };
@@ -214,7 +222,7 @@ export default function StorefrontDealsCuration() {
         <div>
           <div className="text-[15px] font-extrabold text-[#111827]">Deals Curation</div>
           <div className="text-[11px] font-semibold text-[#6B7280]">
-            Top Coupons, Popular Deal Categories and Brand Deals on the storefront Deals page · Storefront Curation
+            Brands page pins, plus Top Coupons, Popular Deal Categories and Brand Deals on the storefront Deals page · Storefront Curation
           </div>
         </div>
         {savedFlash && (
@@ -238,6 +246,7 @@ export default function StorefrontDealsCuration() {
           return (
             <section
               key={section.key}
+              data-testid={`curation-section-${section.key}`}
               className={`rounded-xl border bg-white p-4 ${isEditing ? 'border-[#EF3C23]/50 shadow-sm' : 'border-[#E8EDF2]'}`}
             >
               <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
@@ -276,13 +285,13 @@ export default function StorefrontDealsCuration() {
               {isEditing && (
                 <label className="mb-3 inline-flex items-center gap-2 text-[12px] font-semibold text-[#374151]">
                   <input type="checkbox" checked={draft!.enabled} onChange={(e) => setDraft({ ...draft!, enabled: e.target.checked })} />
-                  Show this module on the Deals page
+                  {section.toggle ?? 'Show this module on the Deals page'}
                 </label>
               )}
 
               {view.items.length === 0 ? (
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed border-[#E5E7EB] bg-[#FAFBFC] px-4 py-5">
-                  <div className="text-[12px] font-semibold text-[#6B7280]">{section.empty} — the module is hidden on the storefront.</div>
+                  <div className="text-[12px] font-semibold text-[#6B7280]">{section.empty} — {section.emptyEffect ?? 'the module is hidden on the storefront.'}</div>
                   {!isEditing && (
                     <button
                       type="button"

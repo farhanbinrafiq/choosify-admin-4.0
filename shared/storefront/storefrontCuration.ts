@@ -18,6 +18,8 @@ export const CURATION_PLACEMENTS = {
   'deals.top_coupons': { entityType: 'coupon', label: 'Top Coupons', max: 6 },
   'deals.popular_categories': { entityType: 'category', label: 'Popular Deal Categories', max: 12 },
   'deals.brand_deals': { entityType: 'brand', label: 'Brand Deals', max: 12 },
+  // Brands page default order: these first (in this order), then every other brand A–Z.
+  'brands.pinned': { entityType: 'brand', label: 'Brands page — pinned to top', max: 24 },
 } as const satisfies Record<string, { entityType: CurationEntityType; label: string; max: number }>;
 
 export type CurationPlacementKey = keyof typeof CURATION_PLACEMENTS;
@@ -52,7 +54,7 @@ export type StorefrontCurationConfig = Partial<Record<CurationPlacementKey, Cura
  */
 export interface CurationAuditEntry {
   at: string;
-  area: 'deals' | 'assurance';
+  area: 'deals' | 'assurance' | 'brands';
   placement: string;
   editorId: string;
   editorRole: string;

@@ -127,6 +127,7 @@ import {
   listEligibleCoupons,
   loadCurationEntities,
   resolveAssurance,
+  resolveBrandsCuration,
   resolveDealsCuration,
   validateCurationChange,
 } from './storefront/storefrontCurationService';
@@ -3043,6 +3044,15 @@ catalogRouter.get('/catalog/storefront/deals-curation', async (_req, res) => {
   }
 });
 
+catalogRouter.get('/catalog/storefront/brands-curation', async (_req, res) => {
+  try {
+    const [site, brands] = await Promise.all([catalogStore.getSiteConfig(), catalogStore.listBrands()]);
+    res.json({ data: resolveBrandsCuration(site, { brands }) });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to load brands curation' });
+  }
+});
+
 catalogRouter.get('/catalog/storefront/coupons', (_req, res) => {
   res.json({ data: listEligibleCoupons({ coupons: operationsStore.listCoupons() as CurationCoupon[] }) });
 });
@@ -3078,7 +3088,8 @@ catalogRouter.put('/catalog/site/curation/:placement', ...requireCurationWrite, 
       res.status(400).json({ error: checked.errors[0], errors: checked.errors });
       return;
     }
-    const { stamped, audit } = recordCurationSave(req, existing, 'deals', key, checked.value, checked.dropped.length);
+    const area = key.startsWith('brands.') ? 'brands' : 'deals';
+    const { stamped, audit } = recordCurationSave(req, existing, area, key, checked.value, checked.dropped.length);
     const saved = await catalogStore.upsertSiteConfig({
       ...existing,
       storefrontCuration: { ...(existing?.storefrontCuration ?? {}), [key]: stamped },
