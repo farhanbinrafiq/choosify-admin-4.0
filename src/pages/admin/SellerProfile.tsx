@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState, CSSProperties } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { ProfileModeSwitch, ShopperActivity } from '../../components/admin/profile/ShopperActivity';
 import { profileReturnTarget } from '../../lib/profileReturn';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRbac } from '../../contexts/RbacContext';
@@ -81,6 +82,9 @@ export default function SellerProfile() {
   const [showMessagePopup, setShowMessagePopup] = useState(false);
   const initialTab = searchParams.get('tab') === 'handle' ? 'account' : searchParams.get('tab');
   const [activeTab, setActiveTab] = useState(() => (initialTab && TABS.some((t) => t.key === initialTab) ? initialTab : 'account'));
+  // Business (seller/creator) vs Shopping (this same account as a storefront shopper).
+  const [mode, setMode] = useState<'business' | 'shopping'>(() => (searchParams.get('mode') === 'shopping' ? 'shopping' : 'business'));
+  const shownTab = mode === 'business' ? activeTab : '';
   const showHandles = canViewPublicHandles(profile?.role);
   const visibleTabs = TABS;
 
@@ -298,6 +302,9 @@ export default function SellerProfile() {
             <div style={S.statCard}><div style={S.statLabel}>REVIEWS RECEIVED</div><div style={S.statValue}>{received.length}</div><div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>{received.filter((r) => Number(r.rating) >= 4).length} positive · {received.filter((r) => Number(r.rating) > 0 && Number(r.rating) < 2.5).length} negative</div></div>
           </div>
 
+          <ProfileModeSwitch mode={mode} onChange={setMode} businessLabel="Seller" />
+          {mode === 'shopping' && sellerId ? <ShopperActivity userId={sellerId} /> : null}
+          {mode === 'business' && (
           <div style={S.tabBar} role="tablist">
             {visibleTabs.map((t) => (
               <button key={t.key} type="button" role="tab" aria-selected={activeTab === t.key} data-tab={t.key} onClick={() => setActiveTab(t.key)} style={{ ...S.tab, ...(activeTab === t.key ? S.tabActive : {}) }}>
@@ -305,8 +312,9 @@ export default function SellerProfile() {
               </button>
             ))}
           </div>
+          )}
 
-          {activeTab === 'account' && (
+          {shownTab === 'account' && (
             <>
               {edit.editing && sellerId ? (
                 <AccountDetailsSection
@@ -376,7 +384,7 @@ export default function SellerProfile() {
             </>
           )}
 
-          {activeTab === 'verification' && (
+          {shownTab === 'verification' && (
             <VerificationCenterPanel
               entityType="brand"
               entities={brands.map((b) => ({ id: b.id, name: b.name }))}
@@ -385,30 +393,30 @@ export default function SellerProfile() {
             />
           )}
 
-          {activeTab === 'portfolio' && <BrandPortfolioView brands={brands} products={products} editing={edit.editing} />}
+          {shownTab === 'portfolio' && <BrandPortfolioView brands={brands} products={products} editing={edit.editing} />}
 
-          {activeTab === 'products' && <ProductListingsTable products={products} editing={edit.editing} />}
+          {shownTab === 'products' && <ProductListingsTable products={products} editing={edit.editing} />}
 
-          {activeTab === 'guides' && <GuideListingsTable guides={guides} views={guideViews} ownerLabel="this seller’s brands" />}
+          {shownTab === 'guides' && <GuideListingsTable guides={guides} views={guideViews} ownerLabel="this seller’s brands" />}
 
-          {activeTab === 'orders' && <OrderHistoryTable orders={orders} sellerId={sellerId} perspective="seller" />}
+          {shownTab === 'orders' && <OrderHistoryTable orders={orders} sellerId={sellerId} perspective="seller" />}
 
-          {activeTab === 'earnings' && <SellerEarningsPanel finance={finance} unavailable={financeError} />}
+          {shownTab === 'earnings' && <SellerEarningsPanel finance={finance} unavailable={financeError} />}
 
-          {activeTab === 'payment' && <PayoutInfoPanel userId={sellerId} ownerLabel="seller" />}
+          {shownTab === 'payment' && <PayoutInfoPanel userId={sellerId} ownerLabel="seller" />}
 
-          {activeTab === 'reviews' && (
+          {shownTab === 'reviews' && (
             <>
               <ReviewsPanel direction="received" reviews={received} error={reviewsError} emptyText="No buyer reviews on this seller’s products yet." />
               <ReviewsPanel direction="posted" reviews={posted} error={reviewsError} emptyText="This account has not posted any reviews." />
             </>
           )}
 
-          {activeTab === 'ads' && <AdsDealsPanel ownerUserId={sellerId} brands={brands} editing={edit.editing} />}
+          {shownTab === 'ads' && <AdsDealsPanel ownerUserId={sellerId} brands={brands} editing={edit.editing} />}
 
-          {activeTab === 'activity' && <AccountActivityPanel userId={sellerId} ownerLabel="this seller account" />}
+          {shownTab === 'activity' && <AccountActivityPanel userId={sellerId} ownerLabel="this seller account" />}
 
-          {activeTab === 'features' && (
+          {shownTab === 'features' && (
             <AccountEntitlementsPanel
               userId={sellerId}
               canMutate={false}

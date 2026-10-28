@@ -19,6 +19,8 @@ import {
   RefundsPanel,
   ReturnsPanel,
   SavedAddressesPanel,
+  SearchHistoryPanel,
+  SignalList,
   ToPayPanel,
   WarrantyPanel,
   cancelledOrders,
@@ -65,30 +67,6 @@ const TABS: Array<{ key: string; label: string; icon: string }> = [
 
 const taka = (n: number) => `৳${Math.round(n).toLocaleString('en-US')}`;
 
-function SignalList({ title, items, empty, to, testId }: { title: string; items: ShopperSignalItem[]; empty: string; to?: (i: ShopperSignalItem) => string; testId: string }) {
-  return (
-    <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: 16 }} data-testid={testId}>
-      <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 2 }}>{title} ({items.length})</div>
-      <div style={{ fontSize: 10.5, color: '#9CA3AF', fontWeight: 600, marginBottom: 10 }}>Recorded from the storefront while signed in.</div>
-      {items.length === 0 ? (
-        <div style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 12, fontWeight: 600, fontStyle: 'italic', padding: '16px 0' }}>{empty}</div>
-      ) : (
-        items.map((i) => (
-          <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid #F1F3F5', fontSize: 11.5, fontWeight: 700 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 6, background: '#F4F7F9', overflow: 'hidden', flexShrink: 0 }}>
-              {i.image ? <img src={i.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
-            </div>
-            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {to ? <Link to={to(i)} style={{ color: '#111827', textDecoration: 'none' }}>{i.label}</Link> : i.label}
-            </span>
-            <span style={{ color: '#9CA3AF', fontWeight: 600, fontSize: 10.5 }}>{new Date(i.at).toLocaleDateString()}</span>
-          </div>
-        ))
-      )}
-    </div>
-  );
-}
-
 export default function ConsumerProfileView() {
   const { id } = useParams<{ id: string }>();
   const uid = id ? decodeURIComponent(id) : '';
@@ -106,6 +84,8 @@ export default function ConsumerProfileView() {
   const [signals, setSignals] = useState<ShopperSignals | null>(null);
   const [returns, setReturns] = useState<ReturnRequest[]>([]);
   const [claims, setClaims] = useState<WarrantyClaim[]>([]);
+  /** Same account's business side, when it is also a Seller / Creator. */
+  const [partnerLink, setPartnerLink] = useState<{ label: string; to: string } | null>(null);
   const [sectionErrors, setSectionErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -154,6 +134,29 @@ export default function ConsumerProfileView() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const role = String(account?.role || '').toLowerCase();
+    if (!account?.uid || (role !== 'seller' && role !== 'verified_seller' && role !== 'creator')) {
+      setPartnerLink(null);
+      return;
+    }
+    if (role !== 'creator') {
+      setPartnerLink({ label: 'Seller', to: `/admin/seller-profile?sellerId=${encodeURIComponent(account.uid)}` });
+      return;
+    }
+    let alive = true;
+    catalogApi
+      .listCreators()
+      .then((all) => {
+        const own = all.find((c) => c.userId === account.uid);
+        if (alive) setPartnerLink(own ? { label: 'Creator', to: `/admin/creator-review?creatorId=${encodeURIComponent(own.id)}` } : null);
+      })
+      .catch(() => alive && setPartnerLink(null));
+    return () => {
+      alive = false;
+    };
+  }, [account?.uid, account?.role]);
 
   // Counts next to the activity tabs (like the storefront's My Account menu).
   const tabCounts: Record<string, number> = useMemo(
@@ -310,6 +313,19 @@ export default function ConsumerProfileView() {
             <div style={S.statCard}><div style={S.statLabel}>FOLLOWED BRANDS</div><div style={S.statValue}>{followedIds.length}</div></div>
           </div>
 
+          {partnerLink ? (
+            <div
+              style={{ ...S.panel, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', padding: '12px 16px' }}
+              data-testid="consumer-partner-link"
+            >
+              <span style={{ fontSize: 12, fontWeight: 700 }}>
+                This account is also a {partnerLink.label} — same login, same CF ID. This page is its shopping side.
+              </span>
+              <Link to={partnerLink.to} style={{ color: ACCENT, fontWeight: 800, fontSize: 12, textDecoration: 'none' }}>
+                Open {partnerLink.label.toLowerCase()} profile →
+              </Link>
+            </div>
+          ) : null}
           <div style={S.tabBar} role="tablist">
             {TABS.map((t) => (
               <button key={t.key} type="button" role="tab" aria-selected={activeTab === t.key} data-tab={t.key} onClick={() => setActiveTab(t.key)} style={{ ...S.tab, ...(activeTab === t.key ? S.tabActive : {}) }}>
@@ -382,24 +398,7 @@ export default function ConsumerProfileView() {
             </div>
           )}
 
-          {activeTab === 'search' && (
-            <div style={S.panel} data-testid="consumer-search-history">
-              <div style={S.panelTitle}>SEARCH HISTORY</div>
-              <div style={S.panelSub}>Recent storefront searches while signed in (newest first, last 50).</div>
-              {sectionErrors.signals ? (
-                <div style={{ color: '#DC2626', fontSize: 12, fontWeight: 700 }}>{sectionErrors.signals}</div>
-              ) : !signals?.searches.length ? (
-                <div style={S.emptyBox}>No searches recorded.</div>
-              ) : (
-                signals.searches.map((s, i) => (
-                  <div key={`${s.q}-${i}`} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderTop: '1px solid #F1F3F5', fontSize: 11.5, fontWeight: 700 }}>
-                    <span>“{s.q}”</span>
-                    <span style={{ color: '#9CA3AF', fontWeight: 600 }}>{new Date(s.at).toLocaleString()}</span>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
+          {activeTab === 'search' && <SearchHistoryPanel searches={signals?.searches || []} error={sectionErrors.signals} />}
 
           {activeTab === 'brands' && (
             <SignalList

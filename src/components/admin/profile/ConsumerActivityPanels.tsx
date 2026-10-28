@@ -245,3 +245,67 @@ export function WarrantyPanel({ claims, error }: { claims: WarrantyClaim[]; erro
     </Panel>
   );
 }
+
+/** Saved products / brands / followed creators recorded from the storefront. */
+export function SignalList({
+  title,
+  items,
+  empty,
+  to,
+  testId,
+}: {
+  title: string;
+  items: Array<{ id: string; label: string; image?: string; at: string }>;
+  empty: string;
+  to?: (i: { id: string }) => string;
+  testId: string;
+}) {
+  return (
+    <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: 16 }} data-testid={testId}>
+      <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 2 }}>
+        {title} ({items.length})
+      </div>
+      <div style={{ fontSize: 10.5, color: '#9CA3AF', fontWeight: 600, marginBottom: 10 }}>Recorded from the storefront while signed in.</div>
+      {items.length === 0 ? (
+        <div style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 12, fontWeight: 600, fontStyle: 'italic', padding: '16px 0' }}>{empty}</div>
+      ) : (
+        items.map((i) => (
+          <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid #F1F3F5', fontSize: 11.5, fontWeight: 700 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 6, background: '#F4F7F9', overflow: 'hidden', flexShrink: 0 }}>
+              {i.image ? <img src={i.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+            </div>
+            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {to ? (
+                <Link to={to(i)} style={{ color: '#111827', textDecoration: 'none' }}>
+                  {i.label}
+                </Link>
+              ) : (
+                i.label
+              )}
+            </span>
+            <span style={{ color: '#9CA3AF', fontWeight: 600, fontSize: 10.5 }}>{new Date(i.at).toLocaleDateString()}</span>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+export function SearchHistoryPanel({ searches, error }: { searches: Array<{ q: string; at: string }>; error?: string }) {
+  return (
+    <Panel title="SEARCH HISTORY" sub="Recent storefront searches while signed in (newest first, last 50)." error={error}>
+      <div data-testid="consumer-search-history">
+        {!searches.length ? (
+          <div style={C.empty}>No searches recorded.</div>
+        ) : (
+          searches.map((s, i) => (
+            <div key={`${s.q}-${i}`} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderTop: '1px solid #F1F3F5', fontSize: 11.5, fontWeight: 700 }}>
+              <span>“{s.q}”</span>
+              <span style={{ color: '#9CA3AF', fontWeight: 600 }}>{new Date(s.at).toLocaleString()}</span>
+            </div>
+          ))
+        )}
+      </div>
+    </Panel>
+  );
+}

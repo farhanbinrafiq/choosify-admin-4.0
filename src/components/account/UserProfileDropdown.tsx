@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { KeyRound, Pencil, RefreshCw, Settings, Trash2, Undo2, User } from 'lucide-react';
+import { KeyRound, Pencil, RefreshCw, Settings, Trash2, Undo2, User, ShoppingBag } from 'lucide-react';
+import { getPublishedStorefrontUrl } from '../../lib/storefrontUrls';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   formatRoleLabel,
@@ -206,6 +207,21 @@ export function UserProfileDropdown({ variant = 'header', className = '', light 
             onSelect: () => go('/admin/account/security'),
           },
         ];
+
+        // Sellers and creators shop with the same account: their buyer side
+        // (orders, saved items, addresses) lives in the storefront's My Account.
+        const role = String(profile.role || '').toLowerCase();
+        if (role === 'seller' || role === 'verified_seller' || role === 'creator') {
+          items.push({
+            id: 'shopping',
+            label: 'My shopping account',
+            icon: <ShoppingBag className="w-[18px] h-[18px] text-[#F96500]" aria-hidden strokeWidth={2.25} />,
+            onSelect: () => {
+              close();
+              window.open(`${getPublishedStorefrontUrl()}/dashboard`, '_blank', 'noopener');
+            },
+          });
+        }
 
         return items;
       })()

@@ -57,6 +57,9 @@ export function isPartnerIdentityApiPath(path: string, method: string): boolean 
   if (/^\/api\/v1\/operations\/orders\/[^/]+$/.test(p)) return true; // GET / PATCH a specific order
   if (/^\/api\/v1\/operations\/orders\/[^/]+\/cancel$/.test(p)) return true;
   if (p === '/api/v1/operations/platform-messages') return true;
+  // The shopper's OWN saved items / searches (storefront activity) — shopping
+  // is an identity action, same as placing an order.
+  if (p.startsWith('/api/v1/operations/shopper-signals/me')) return true;
   if (p.startsWith('/api/v1/support/')) return true;
   // Canonical messaging: reading one's own conversations + threads, replying,
   // and marking read are identity-level (a mid-review partner still receives

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState, CSSProperties } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { ProfileModeSwitch, ShopperActivity } from '../../components/admin/profile/ShopperActivity';
 import { profileReturnTarget } from '../../lib/profileReturn';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRbac } from '../../contexts/RbacContext';
@@ -80,6 +81,9 @@ export default function CreatorProfile() {
   const rawTab = searchParams.get('tab');
   const initialTab = rawTab === 'products' ? 'guides' : rawTab === 'handle' ? 'account' : rawTab;
   const [activeTab, setActiveTab] = useState(() => (initialTab && TABS.some((t) => t.key === initialTab) ? initialTab : 'account'));
+  // Business (seller/creator) vs Shopping (this same account as a storefront shopper).
+  const [mode, setMode] = useState<'business' | 'shopping'>(() => (searchParams.get('mode') === 'shopping' ? 'shopping' : 'business'));
+  const shownTab = mode === 'business' ? activeTab : '';
   const showHandles = canViewPublicHandles(profile?.role);
   const visibleTabs = TABS;
 
@@ -338,6 +342,9 @@ export default function CreatorProfile() {
             <div style={S.statCard}><div style={S.statLabel}>REVIEWS POSTED</div><div style={S.statValue}>{posted.length}</div><div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>Creators can’t be reviewed directly</div></div>
           </div>
 
+          <ProfileModeSwitch mode={mode} onChange={setMode} businessLabel="Creator" />
+          {mode === 'shopping' && targetUserId ? <ShopperActivity userId={targetUserId} /> : null}
+          {mode === 'business' && (
           <div style={S.tabBar} role="tablist">
             {visibleTabs.map((t) => (
               <button key={t.key} type="button" role="tab" aria-selected={activeTab === t.key} data-tab={t.key} onClick={() => setActiveTab(t.key)} style={{ ...S.tab, ...(activeTab === t.key ? S.tabActive : {}) }}>
@@ -345,8 +352,9 @@ export default function CreatorProfile() {
               </button>
             ))}
           </div>
+          )}
 
-          {activeTab === 'account' && (
+          {shownTab === 'account' && (
             <>
               {edit.editing && targetUserId ? (
                 <AccountDetailsSection
@@ -393,7 +401,7 @@ export default function CreatorProfile() {
             </>
           )}
 
-          {activeTab === 'verification' && (
+          {shownTab === 'verification' && (
             <VerificationCenterPanel
               entityType="creator"
               entities={[{ id: creator.id, name: creator.name }]}
@@ -402,7 +410,7 @@ export default function CreatorProfile() {
             />
           )}
 
-          {activeTab === 'studio' && studioModel && (
+          {shownTab === 'studio' && studioModel && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }} data-testid="creator-studio-view">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: '10px 14px' }}>
                 <span style={{ fontSize: 10, fontWeight: 800, color: '#9CA3AF' }}>
@@ -427,7 +435,7 @@ export default function CreatorProfile() {
             </div>
           )}
 
-          {activeTab === 'guides' && (
+          {shownTab === 'guides' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div style={{ ...S.card }} data-testid="creator-guides">
                 <div style={{ padding: '14px 16px', borderBottom: '1px solid #F1F3F5' }}>
@@ -488,7 +496,7 @@ export default function CreatorProfile() {
             </div>
           )}
 
-          {activeTab === 'earnings' && (
+          {shownTab === 'earnings' && (
             <UnavailablePanel
               title="MY EARNINGS"
               sub="Creator earnings and payouts."
@@ -504,9 +512,9 @@ export default function CreatorProfile() {
             />
           )}
 
-          {activeTab === 'payment' && targetUserId ? <PayoutInfoPanel userId={targetUserId} ownerLabel="creator" /> : null}
+          {shownTab === 'payment' && targetUserId ? <PayoutInfoPanel userId={targetUserId} ownerLabel="creator" /> : null}
 
-          {activeTab === 'reviews' && (
+          {shownTab === 'reviews' && (
             <>
               <div style={S.panel} data-testid="creator-reputation">
                 <div style={S.panelTitle}>REPUTATION</div>
@@ -523,16 +531,16 @@ export default function CreatorProfile() {
             </>
           )}
 
-          {activeTab === 'ads' &&
+          {shownTab === 'ads' &&
             (targetUserId ? (
               <AdsDealsPanel ownerUserId={targetUserId} editing={edit.editing} />
             ) : (
               <UnavailablePanel title="ADS & DEALS" message="This creator profile is not linked to a login account, so it owns no ads or deals." />
             ))}
 
-          {activeTab === 'activity' && (targetUserId ? <AccountActivityPanel userId={targetUserId} ownerLabel="this creator account" /> : <UnavailablePanel title="ACTIVITY LOG" message="This creator profile is not linked to a login account, so there is no account activity." />)}
+          {shownTab === 'activity' && (targetUserId ? <AccountActivityPanel userId={targetUserId} ownerLabel="this creator account" /> : <UnavailablePanel title="ACTIVITY LOG" message="This creator profile is not linked to a login account, so there is no account activity." />)}
 
-          {activeTab === 'features' &&
+          {shownTab === 'features' &&
             (targetUserId ? (
               <AccountEntitlementsPanel
                 userId={targetUserId}

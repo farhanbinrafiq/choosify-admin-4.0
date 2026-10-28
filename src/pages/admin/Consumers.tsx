@@ -207,6 +207,8 @@ export default function ConsumersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortKey, setSortKey] = useState<'az' | 'za'>('az');
   const [statusFilter, setStatusFilter] = useState<ConsumerStatusFilter>('all');
+  /** Consumer view: every account can shop, so sellers and creators are listed too (badged). */
+  const [shopperFilter, setShopperFilter] = useState<'all' | 'consumers' | 'sellers' | 'creators'>('all');
   const [searchParams] = useSearchParams();
   const viewMode = searchParams.get('viewMode') || 'consumers';
 
@@ -362,8 +364,16 @@ export default function ConsumersPage() {
 
   // Filter based on currently active left sidebar route type
   const baseFiltered = useMemo(
-    () => directory.filter((u) => roleGroup(u.role) === currentViewRole),
-    [directory, currentViewRole],
+    () =>
+      directory.filter((u) => {
+        const g = roleGroup(u.role);
+        if (currentViewRole !== 'Consumer') return g === currentViewRole;
+        if (shopperFilter === 'consumers') return g === 'Consumer';
+        if (shopperFilter === 'sellers') return g === 'Seller';
+        if (shopperFilter === 'creators') return g === 'Creator';
+        return g === 'Consumer' || g === 'Seller' || g === 'Creator';
+      }),
+    [directory, currentViewRole, shopperFilter],
   );
 
   // Real, backend-supported status tabs applied on top of the role filter
@@ -696,6 +706,20 @@ export default function ConsumersPage() {
             style={S.search}
           />
         </div>
+        {isConsumerView && (
+          <select
+            value={shopperFilter}
+            onChange={(e) => setShopperFilter(e.target.value as typeof shopperFilter)}
+            style={S.select}
+            aria-label="Account type"
+            data-testid="shopper-filter"
+          >
+            <option value="all">All shoppers</option>
+            <option value="consumers">Consumers only</option>
+            <option value="sellers">Also sellers</option>
+            <option value="creators">Also creators</option>
+          </select>
+        )}
         <select value={sortKey} onChange={(e) => setSortKey(e.target.value as 'az' | 'za')} style={S.select}>
           <option value="az">Name: A → Z</option>
           <option value="za">Name: Z → A</option>
