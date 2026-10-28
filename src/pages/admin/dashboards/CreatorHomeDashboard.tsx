@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { ProfileCompletionCard, creatorCompletionItems } from '../../../components/dashboard/ProfileCompletionCard';
 import {
   FilePlus2,
   FolderOpen,
@@ -8,8 +9,6 @@ import {
   MessagesSquare,
   Megaphone,
   Bell,
-  CheckCircle2,
-  Circle,
   FileEdit,
   Archive,
 } from 'lucide-react';
@@ -32,7 +31,6 @@ import {
   type QuickAction,
 } from './primitives';
 
-type CompletionItem = { key: string; label: string; done: boolean; hint: string };
 
 /**
  * Creator Command Center — creator. NOT a seller dashboard.
@@ -88,26 +86,7 @@ export default function CreatorHomeDashboard() {
     [guides],
   );
 
-  const completion: CompletionItem[] = useMemo(() => {
-    const c = creator;
-    const social =
-      !!c?.socialLinks &&
-      (['facebook', 'instagram', 'youtube', 'linkedin', 'tiktok'] as const).some(
-        (k) => !!(c.socialLinks as Record<string, string | undefined>)[k],
-      );
-    const customSocial = Array.isArray((c?.socialLinks as { custom?: unknown[] })?.custom)
-      ? ((c!.socialLinks as { custom?: unknown[] }).custom as unknown[]).length > 0
-      : false;
-    return [
-      { key: 'avatar', label: 'Profile photo', done: !!c?.avatar, hint: 'Add a profile photo in Creator Studio → Profile Photo' },
-      { key: 'cover', label: 'Cover image', done: !!c?.coverImage, hint: 'Add a cover image in Creator Studio → Cover Image' },
-      { key: 'bio', label: 'Bio (40+ characters)', done: (c?.bio?.trim().length || 0) >= 40, hint: 'Write your bio in Creator Studio → Creator Overview' },
-      { key: 'expertise', label: 'Areas of expertise', done: (c?.bestForTags?.length || 0) >= 1, hint: 'Add expertise topics in Creator Studio → Creator Overview' },
-      { key: 'social', label: 'Social presence', done: social || customSocial, hint: 'Add a social link in Creator Studio → Social Links' },
-      { key: 'contact', label: 'Contact information', done: !!c?.email || !!c?.phone, hint: 'Add an email or phone in Creator Studio → Contact & Reach' },
-    ];
-  }, [creator]);
-  const completedCount = completion.filter((i) => i.done).length;
+  const completion = useMemo(() => creatorCompletionItems(creator), [creator]);
   const hasDeals =
     !!creator && ((creator.brandPartners?.length || 0) > 0 || (creator.collabTypes?.length || 0) > 0);
 
@@ -273,46 +252,7 @@ export default function CreatorHomeDashboard() {
         </ContentCard>
 
         <ContentCard title="Profile Completeness">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-[12px] text-app-text-secondary">
-              {completedCount} of {completion.length} complete
-            </span>
-            <Link
-              to="/admin/creator-studio"
-              className="text-[11px] font-bold text-app-accent hover:underline no-underline"
-            >
-              Edit →
-            </Link>
-          </div>
-          <div className="h-1.5 bg-app-border rounded-full overflow-hidden mb-4">
-            <div
-              className="h-full bg-app-accent transition-all"
-              style={{ width: `${(completedCount / completion.length) * 100}%` }}
-            />
-          </div>
-          <div className="space-y-2">
-            {completion.map((item) => (
-              <div key={item.key} className="flex items-start gap-2">
-                {item.done ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                ) : (
-                  <Circle className="w-4 h-4 text-app-text-secondary shrink-0 mt-0.5" />
-                )}
-                <div className="min-w-0">
-                  <div
-                    className={`text-[12px] font-semibold ${
-                      item.done ? 'text-app-text-primary' : 'text-app-text-secondary'
-                    }`}
-                  >
-                    {item.label}
-                  </div>
-                  {!item.done ? (
-                    <div className="text-[10.5px] text-app-text-secondary">{item.hint}</div>
-                  ) : null}
-                </div>
-              </div>
-            ))}
-          </div>
+          <ProfileCompletionCard title={creator?.name || 'Your creator profile'} items={completion} editTo="/admin/creator-studio" />
         </ContentCard>
 
         <ContentCard title="Guides Overview">

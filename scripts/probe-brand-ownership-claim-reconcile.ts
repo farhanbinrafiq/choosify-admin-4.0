@@ -9,8 +9,9 @@
  *    claimStatus:'pending', sellerId=self, marketplaceAccess:false (existing,
  *    unchanged behavior).
  *  - PATCH /catalog/brands/:id/marketplace-access -> 'granted' (admin) now
- *    ALSO reconciles claimStatus -> 'verified' and verifiedStatus -> true,
- *    since the brand has its own sellerId (it's seller-owned, not an
+ *    ALSO reconciles claimStatus -> 'verified' (ownership) but NOT
+ *    verifiedStatus — the public "Verified" badge needs an approved document
+ *    verification — since the brand has its own sellerId (it's seller-owned, not an
  *    unclaimed community profile).
  *  - A brand with NO sellerId (community profile) granted marketplace
  *    access is NOT auto-verified by this same endpoint (guard is scoped to
@@ -83,7 +84,7 @@ async function main() {
   ok(grantedBrand?.marketplaceAccess === true, 'marketplaceAccess is now true', grantedBrand);
   ok(grantedBrand?.marketplaceStatus === 'granted', 'marketplaceStatus is now granted', grantedBrand);
   ok(grantedBrand?.claimStatus === 'verified', 'FIX: claimStatus is reconciled to verified for a seller-owned brand', grantedBrand);
-  ok(grantedBrand?.verifiedStatus === true, 'FIX: verifiedStatus is reconciled to true for a seller-owned brand', grantedBrand);
+  ok(grantedBrand?.verifiedStatus !== true, 'Marketplace Access alone does not make the brand Verified (needs approved documents)', grantedBrand);
 
   // 3) A community brand (no sellerId) granted marketplace access is NOT auto-verified.
   const community = await fetch(`${base}/catalog/brands`, {

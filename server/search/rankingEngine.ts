@@ -104,10 +104,7 @@ export function buildProductSignals(
   const sellerReputation = ctx.sellerReputations?.get(sellerKey) ?? null;
   const sellerHealthScore = ctx.sellerHealthScores?.get(sellerKey) ?? null;
 
-  const verified =
-    brand?.verifiedStatus === true ||
-    brand?.claimStatus === 'verified' ||
-    ctx.brandVerified?.get(product.brandId) === true;
+  const verified = brand?.verifiedStatus === true || ctx.brandVerified?.get(product.brandId) === true;
 
   const sponsoredBoost =
     brand?.sponsoredFlag || ctx.sponsoredBrandIds?.has(product.brandId) ? 15 : 0;

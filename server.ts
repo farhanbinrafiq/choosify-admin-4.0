@@ -1,3 +1,4 @@
+import { reconcileVerifiedBadgesOnce } from "./server/claims/verifiedBadgeReconcile";
 import path from "path";
 import express from "express";
 import { createServer } from "http";
@@ -67,6 +68,10 @@ async function startServer() {
   ensureConversationMemoryHydrated();
   bootstrapConversationEventSubscribers();
   await ensureCatalogSeedData();
+  // One-time: the Verified badge now needs an approved document verification.
+  await reconcileVerifiedBadgesOnce().catch((error) =>
+    Logger.error("verified badge reconciliation failed", { message: error instanceof Error ? error.message : String(error) }),
+  );
   markApplicationReady();
 
   // Plain HTTP server (no Socket.IO) — realtime messaging uses Firestore onSnapshot.

@@ -93,21 +93,28 @@ export function activeOwnershipClaims(type: ClaimEntityType, entityId: string, o
 // ── Public ownership state ─────────────────────────────────────────────────
 
 export type OwnershipState = 'owned_verified' | 'owned' | 'claim_pending' | 'community' | 'unavailable';
-export type PublicOwnership = { state: OwnershipState; claimable: boolean };
+/**
+ * `verification` (owned, not yet verified only): 'pending' while the owner's
+ * document verification is submitted / under review, otherwise 'none'.
+ */
+export type PublicOwnership = { state: OwnershipState; claimable: boolean; verification?: 'pending' | 'none' };
 
 const REMOVED_MARKETPLACE = new Set(['suspended', 'revoked', 'restricted']);
 
-export function publicOwnership(type: ClaimEntityType, entity: Entity, hasActiveClaim: boolean): PublicOwnership {
+export function publicOwnership(
+  type: ClaimEntityType,
+  entity: Entity,
+  hasActiveClaim: boolean,
+  verificationPending = ownerVerificationPending(type, entity),
+): PublicOwnership {
   const owner = ownerOf(type, entity);
   if (owner) {
-    const verified =
-      Boolean(entity.ownershipVerifiedAt) ||
-      (type === 'brand'
-        ? (entity as CatalogBrand).claimStatus === 'verified' ||
-          ((entity as CatalogBrand).marketplaceAccess === true &&
-            ['granted', 'restored'].includes(String((entity as CatalogBrand).marketplaceStatus || '')))
-        : Boolean((entity as CatalogCreator).verifiedStatus));
-    return { state: verified ? 'owned_verified' : 'owned', claimable: false };
+    // "Verified" = an admin-approved, fully documented verification (or an
+    // approved ownership claim) — verifiedStatus is set only by those and
+    // cleared by a revoke. Owning the profile, an approved partner
+    // application or Marketplace Access alone do NOT make it verified.
+    if (entity.verifiedStatus === true) return { state: 'owned_verified', claimable: false };
+    return { state: 'owned', claimable: false, verification: verificationPending ? 'pending' : 'none' };
   }
   // Ownerless. Only profiles with explicit COMMUNITY provenance are claimable;
   // legacy / seed / platform profiles without provenance are not silently
@@ -131,10 +138,27 @@ export function activeClaimEntityIds(type: ClaimEntityType, ownerById: Map<strin
   return ids;
 }
 
+/** Entity ids whose current owner has a document verification submitted / under review. */
+export function pendingOwnerVerificationIds(type: ClaimEntityType, ownerById: Map<string, string>): Set<string> {
+  const ids = new Set<string>();
+  for (const r of operationsStore.listVerifications({ entityType: type })) {
+    if (r.status !== 'Submitted' && r.status !== 'Under Review') continue;
+    const owner = ownerById.get(r.entityId) || '';
+    if (owner && r.submitted_by === owner && verificationKindOf(r, owner) === 'owner_verification') ids.add(r.entityId);
+  }
+  return ids;
+}
+
+function ownerVerificationPending(type: ClaimEntityType, entity: Entity): boolean {
+  const owner = ownerOf(type, entity);
+  return owner ? pendingOwnerVerificationIds(type, new Map([[entity.id, owner]])).has(entity.id) : false;
+}
+
 export function withPublicOwnership<T extends Entity>(type: ClaimEntityType, rows: T[]): Array<T & { ownership: PublicOwnership }> {
   const owners = new Map(rows.map((r) => [r.id, ownerOf(type, r)]));
   const pending = activeClaimEntityIds(type, owners);
-  return rows.map((r) => ({ ...r, ownership: publicOwnership(type, r, pending.has(r.id)) }));
+  const verifying = pendingOwnerVerificationIds(type, owners);
+  return rows.map((r) => ({ ...r, ownership: publicOwnership(type, r, pending.has(r.id), verifying.has(r.id)) }));
 }
 
 // ── Audit ────────────────────────────────────────────────────────────────
@@ -187,7 +211,7 @@ export async function loadClaimant(userId: string): Promise<{ id: string; role: 
 
 // ── Catalog label writes (always inside the entity lock) ──────────────────
 
-async function writeEntity(type: ClaimEntityType, existing: Entity, patch: Record<string, unknown>): Promise<Entity> {
+export async function writeEntity(type: ClaimEntityType, existing: Entity, patch: Record<string, unknown>): Promise<Entity> {
   if (type === 'brand') {
     const next = normalizeBrandInput({ ...existing, ...patch }, existing as CatalogBrand);
     return catalogStore.upsertBrand({ ...next, slug: (existing as CatalogBrand).slug });
@@ -604,7 +628,9 @@ export async function assignOwnerExplicitly(params: {
     const saved = await writeEntity(params.type, entity, {
       ...(params.type === 'brand' ? { sellerId: user.id } : { userId: user.id }),
       claimStatus: 'verified',
-      verifiedStatus: true,
+      // Staff assigned the owner; documents were not reviewed, so the profile
+      // is owned but not "Verified" until the owner's verification is approved.
+      verifiedStatus: false,
       ownershipVerifiedAt: now,
       ownershipSource: 'admin_assigned',
     });

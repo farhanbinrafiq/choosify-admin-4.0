@@ -14,10 +14,12 @@ import {
   type InquiryType,
 } from '../../shared/inquiries/inquiryOptions';
 import type {
+  OpsBrandSuggestion,
   OpsLead,
   OpsLeadDelivery,
   OpsLeadDuplicateSignal,
 } from '../operations/types';
+import { cleanSocialLinks } from '../claims/communityProfiles';
 import type { CatalogBrand, CatalogCategory } from '../../lib/vercel-catalog/catalogTypes';
 import { notifyRoles } from '../communication/systemNotify';
 import { sendEmail } from '../email/emailService';
@@ -51,7 +53,33 @@ export type ValidatedInquiry = {
   placementInterest?: string;
   message?: string;
   sourcePath?: string;
+  suggestion?: OpsBrandSuggestion;
 };
+
+/**
+ * A media URL this platform issued (our upload pipeline) — never an arbitrary
+ * hotlink: its path is under the media mount (MEDIA_PUBLIC_BASE_URL, default
+ * /media) and it is relative, on MEDIA_PUBLIC_ORIGIN, or on one of `ownHosts`.
+ */
+export function isOwnMediaUrl(raw: string, ownHosts: string[] = []): boolean {
+  const base = (String(process.env.MEDIA_PUBLIC_BASE_URL || '').trim() || '/media').replace(/\/+$/, '');
+  if (raw.startsWith('/')) return raw.startsWith(`${base}/`);
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return false;
+  const hosts = new Set(ownHosts.map((h) => h.toLowerCase()));
+  try {
+    const origin = String(process.env.MEDIA_PUBLIC_ORIGIN || '').trim();
+    if (origin) hosts.add(new URL(origin).host.toLowerCase());
+  } catch {
+    /* ignore a malformed origin */
+  }
+  return hosts.has(url.host.toLowerCase()) && url.pathname.startsWith(`${base}/`);
+}
 
 const EMAIL_RE = /^[^\s@<>()[\]\\,;:"]+@[^\s@<>()[\]\\,;:"]+\.[^\s@<>()[\]\\,;:"]{2,}$/;
 // Strip control characters (keeps tab/newline) — text is always rendered escaped, never as HTML.
@@ -95,6 +123,8 @@ export function inquiryOptionsPayload(categories: CatalogCategory[]) {
 export function validateInquiry(
   body: Record<string, unknown>,
   categories: CatalogCategory[],
+  /** Logo / cover uploads are accepted only from signed-in visitors. */
+  opts: { allowImages?: boolean; ownHosts?: string[] } = {},
 ): { ok: true; value: ValidatedInquiry } | { ok: false; errors: InquiryFieldErrors } {
   const errors: InquiryFieldErrors = {};
   const type = body.inquiryType as InquiryType;
@@ -137,6 +167,40 @@ export function validateInquiry(
     req('message', message, INQUIRY_LIMITS.message, 'Reason');
     const contactPerson = clean(body.contactPerson, INQUIRY_LIMITS.name);
     opt('contactPerson', contactPerson, INQUIRY_LIMITS.name, 'Your name');
+    // Community-profile details (all optional) — what a staff approval turns into a profile.
+    const suggestion: OpsBrandSuggestion = {};
+    const description = clean(body.description, 600);
+    opt('description', description, 600, 'Short description');
+    if (description) suggestion.description = description;
+    const location = clean(body.location, 120);
+    opt('location', location, 120, 'Location');
+    if (location) suggestion.location = location;
+    const priceRange = clean(body.priceRange, 60).replace(/\s+/g, ' ');
+    opt('priceRange', priceRange, 60, 'Price range');
+    if (priceRange) suggestion.priceRange = priceRange;
+    if (Array.isArray(body.tags)) {
+      const tags: string[] = [];
+      for (const t of body.tags.slice(0, 30)) {
+        const tag = clean(t, 40).replace(/^#+/, '').trim().slice(0, 40);
+        if (tag && !tags.some((x) => x.toLowerCase() === tag.toLowerCase())) tags.push(tag);
+      }
+      if (tags.length) suggestion.tags = tags.slice(0, 15);
+    }
+    if (body.socialLinks && typeof body.socialLinks === 'object') {
+      try {
+        const links = cleanSocialLinks(body.socialLinks as Record<string, unknown>);
+        if (Object.keys(links).length) suggestion.socialLinks = links;
+      } catch (error) {
+        errors.socialLinks = error instanceof Error ? error.message : 'Check the social links.';
+      }
+    }
+    for (const [field, label] of [['logo', 'Logo'], ['coverImage', 'Cover image']] as const) {
+      const url = clean(body[field], INQUIRY_LIMITS.url);
+      if (!url) continue;
+      if (!opts.allowImages) errors[field] = `Sign in to add a ${label.toLowerCase()}.`;
+      else if (!isOwnMediaUrl(url, opts.ownHosts)) errors[field] = `${label} must be uploaded here.`;
+      else suggestion[field] = url;
+    }
     Object.assign(v, {
       brandName,
       website: website ?? undefined,
@@ -145,6 +209,7 @@ export function validateInquiry(
       country: country || undefined,
       contactPerson: contactPerson || undefined,
       message,
+      ...(Object.keys(suggestion).length ? { suggestion } : {}),
     });
   } else if (type === 'partnership') {
     const brandName = clean(body.brandName, INQUIRY_LIMITS.name);

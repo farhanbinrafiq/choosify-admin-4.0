@@ -197,7 +197,7 @@ export interface OpsLeadNote {
 
 export interface OpsLeadHistoryEntry {
   at: string;
-  action: 'created' | 'status_changed' | 'note_added';
+  action: 'created' | 'status_changed' | 'note_added' | 'suggestion_approved' | 'suggestion_rejected';
   actorId?: string;
   actorName?: string;
   fromStatus?: OpsLeadStatus;
@@ -253,6 +253,30 @@ export interface OpsLead {
   notes?: OpsLeadNote[];
   history?: OpsLeadHistoryEntry[];
   delivery?: OpsLeadDelivery;
+  /** Suggest a Brand: the community-profile details the visitor filled in. */
+  suggestion?: OpsBrandSuggestion;
+  /** Suggest a Brand: the staff review outcome. */
+  suggestionDecision?: {
+    decision: 'approved' | 'rejected';
+    at: string;
+    actorId: string;
+    actorName: string;
+    note?: string;
+    /** The community profile created on approval. */
+    communityProfileId?: string;
+    communityProfileSlug?: string;
+  };
+}
+
+/** Optional community-profile fields on a brand suggestion (logo/cover only from signed-in visitors). */
+export interface OpsBrandSuggestion {
+  description?: string;
+  location?: string;
+  priceRange?: string;
+  tags?: string[];
+  socialLinks?: Record<string, string>;
+  logo?: string;
+  coverImage?: string;
 }
 
 export type OpsJobEmploymentType = 'full_time' | 'part_time' | 'internship' | 'contract';

@@ -420,8 +420,34 @@ export interface OpsLead {
   sourcePath?: string;
   duplicateSignals?: Array<{ kind: 'existing_brand' | 'existing_suggestion'; matchId: string; matchLabel: string; matchedOn: 'name' | 'website' }>;
   notes?: Array<{ id: string; body: string; authorId: string; authorName: string; createdAt: string }>;
-  history?: Array<{ at: string; action: 'created' | 'status_changed' | 'note_added'; actorId?: string; actorName?: string; fromStatus?: string; toStatus?: string }>;
+  history?: Array<{
+    at: string;
+    action: 'created' | 'status_changed' | 'note_added' | 'suggestion_approved' | 'suggestion_rejected';
+    actorId?: string;
+    actorName?: string;
+    fromStatus?: string;
+    toStatus?: string;
+  }>;
   delivery?: { adminNotified: boolean; adminNotifyError?: string; emailAttempted: boolean; emailSent: boolean; emailVia?: string; emailSkippedReason?: string };
+  /** Suggest a Brand: community-profile details from the visitor. */
+  suggestion?: {
+    description?: string;
+    location?: string;
+    priceRange?: string;
+    tags?: string[];
+    socialLinks?: Record<string, string>;
+    logo?: string;
+    coverImage?: string;
+  };
+  suggestionDecision?: {
+    decision: 'approved' | 'rejected';
+    at: string;
+    actorId: string;
+    actorName: string;
+    note?: string;
+    communityProfileId?: string;
+    communityProfileSlug?: string;
+  };
 }
 
 export type OpsJobEmploymentType = 'full_time' | 'part_time' | 'internship' | 'contract';
@@ -1104,6 +1130,19 @@ export const operationsApi = {
   /** Status only — submitted inquiry fields are immutable server-side. */
   updateLead: async (id: string, payload: { status: OpsLead['status'] }): Promise<OpsLead> => {
     const result = await request<{ data: OpsLead }>(`/operations/leads/${encodeURIComponent(id)}`, 'PATCH', { status: payload.status });
+    return result.data;
+  },
+  /** Suggest a Brand: create the community brand profile (staff-reviewed details) and link it. */
+  approveBrandSuggestion: async (id: string, input: Omit<CommunityProfileInput, 'entityType'>) => {
+    const result = await request<{ data: { id: string; name: string; slug: string } }>(
+      `/operations/leads/${encodeURIComponent(id)}/approve-suggestion`,
+      'POST',
+      { ...input, entityType: 'brand' },
+    );
+    return result.data;
+  },
+  rejectBrandSuggestion: async (id: string, note: string): Promise<OpsLead> => {
+    const result = await request<{ data: OpsLead }>(`/operations/leads/${encodeURIComponent(id)}/reject-suggestion`, 'POST', { note });
     return result.data;
   },
   addLeadNote: async (id: string, body: string): Promise<OpsLead> => {

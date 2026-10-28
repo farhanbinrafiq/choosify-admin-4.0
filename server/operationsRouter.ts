@@ -25,6 +25,7 @@ import type {
   OpsReview,
   OpsStorefrontOrder,
   OpsOrderInternalNote,
+  OpsLead,
   OpsVerificationDocument,
   OpsVerificationRequest,
   OpsWarrantyClaim,
@@ -94,6 +95,7 @@ import { Logger } from './lib/logger';
 import { randomUUID } from 'crypto';
 import { ownerView, recordAccountActivity } from './accountActivity/accountActivity';
 import { recordKey, withRecordLocks } from './catalog/recordLock';
+import { createCommunityProfile, type CommunityProfileInput } from './claims/communityProfiles';
 import type { CatalogBrand } from '../src/types/catalog';
 import {
   ACTIVE_VERIFICATION_STATUSES,
@@ -5282,7 +5284,7 @@ operationsRouter.post('/operations/leads', softAuthenticateRequest, async (req, 
       return;
     }
   }
-  const result = validateInquiry(body, categories);
+  const result = validateInquiry(body, categories, { allowImages: Boolean(submittedByUserId), ownHosts: [String(req.get('host') || '')].filter(Boolean) });
   if ('errors' in result) {
     res.status(400).json({ error: 'Please check the highlighted fields.', fieldErrors: result.errors });
     return;
@@ -5326,6 +5328,7 @@ operationsRouter.post('/operations/leads', softAuthenticateRequest, async (req, 
       sourcePath: value.sourcePath,
       submittedByUserId,
       duplicateSignals: duplicateSignals.length ? duplicateSignals : undefined,
+      ...(value.suggestion ? { suggestion: value.suggestion } : {}),
     },
     { status: honeypot ? 'spam' : 'new' },
   );
@@ -5366,6 +5369,91 @@ operationsRouter.patch('/operations/leads/:id', ...requireAdmin, (req, res) => {
     res.status(404).json({ error: 'Inquiry not found' });
     return;
   }
+  res.json({ success: true, data: saved });
+});
+
+/**
+ * Suggest a Brand review. Approve creates a community brand profile from the
+ * (staff-reviewed) details through the same path as "Create community brand",
+ * then links it to the suggestion; Reject records a note. Each suggestion can
+ * be decided once.
+ */
+function openBrandSuggestion(id: string, res: import('express').Response): OpsLead | null {
+  const lead = operationsStore.getLead(id);
+  if (!lead || lead.inquiryType !== 'suggest_brand') {
+    res.status(404).json({ error: 'Brand suggestion not found' });
+    return null;
+  }
+  if (lead.suggestionDecision) {
+    res.status(409).json({ error: `This suggestion was already ${lead.suggestionDecision.decision}.`, code: 'SUGGESTION_DECIDED' });
+    return null;
+  }
+  return lead;
+}
+
+operationsRouter.post('/operations/leads/:id/approve-suggestion', ...requireAdmin, async (req, res) => {
+  await withRecordLocks([`lead:${req.params.id}`], async () => {
+    const lead = openBrandSuggestion(req.params.id, res);
+    if (!lead) return;
+    try {
+      const result = await createCommunityProfile(req, { ...(req.body as CommunityProfileInput), type: 'brand' });
+      if (!result.created) {
+        res.status(409).json({
+          error: 'Possible duplicate profiles found. Review them, then confirm to create anyway.',
+          code: 'POSSIBLE_DUPLICATES',
+          duplicates: result.duplicates,
+        });
+        return;
+      }
+      const actor = { id: req.userId || 'unknown', name: req.user?.displayName || req.userId || 'Admin' };
+      const at = new Date().toISOString();
+      operationsStore.updateLead(lead.id, {
+        status: 'closed',
+        suggestionDecision: {
+          decision: 'approved',
+          at,
+          actorId: actor.id,
+          actorName: actor.name,
+          communityProfileId: result.created.id,
+          communityProfileSlug: result.created.slug,
+        },
+        history: [
+          ...(lead.history ?? []),
+          { at, action: 'suggestion_approved', actorId: actor.id, actorName: actor.name, fromStatus: lead.status, toStatus: 'closed' },
+        ],
+      });
+      scheduleOperationsPersist();
+      res.status(201).json({ success: true, data: result.created });
+    } catch (error) {
+      if (error instanceof ClaimError) {
+        res.status(error.status).json({ error: error.message, code: error.code });
+        return;
+      }
+      res.status(400).json({ error: error instanceof Error ? error.message : 'Could not create the profile.' });
+    }
+  });
+});
+
+operationsRouter.post('/operations/leads/:id/reject-suggestion', ...requireAdmin, (req, res) => {
+  const lead = openBrandSuggestion(req.params.id, res);
+  if (!lead) return;
+  const raw = (req.body as { note?: unknown } | undefined)?.note;
+  const note = typeof raw === 'string' ? raw.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').trim().slice(0, 1000) : '';
+  if (note.length < 5) {
+    res.status(400).json({ error: 'Add a short reason (at least 5 characters).', code: 'REASON_REQUIRED' });
+    return;
+  }
+  const actor = { id: req.userId || 'unknown', name: req.user?.displayName || req.userId || 'Admin' };
+  const at = new Date().toISOString();
+  const saved = operationsStore.updateLead(lead.id, {
+    status: 'rejected',
+    suggestionDecision: { decision: 'rejected', at, actorId: actor.id, actorName: actor.name, note },
+    history: [
+      ...(lead.history ?? []),
+      { at, action: 'suggestion_rejected', actorId: actor.id, actorName: actor.name, fromStatus: lead.status, toStatus: 'rejected' },
+    ],
+  });
+  scheduleOperationsPersist();
   res.json({ success: true, data: saved });
 });
 

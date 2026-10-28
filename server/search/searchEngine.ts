@@ -61,7 +61,7 @@ async function buildRankingContext(query?: string): Promise<RankingContext> {
   const brandVerified = new Map<string, boolean>();
 
   for (const brand of brands) {
-    brandVerified.set(brand.id, brand.verifiedStatus || brand.claimStatus === 'verified');
+    brandVerified.set(brand.id, brand.verifiedStatus === true);
     try {
       const brandTrust = calculateTrustScore('brand', brand.id, brand.name);
       brandTrustScores.set(brand.id, brandTrust.score);

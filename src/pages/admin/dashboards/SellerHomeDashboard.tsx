@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { ProfileCompletionCard, brandCompletionItems } from '../../../components/dashboard/ProfileCompletionCard';
 import {
   Package,
   PackagePlus,
@@ -229,6 +230,19 @@ export default function SellerHomeDashboard() {
           to="/admin/brand-studio"
         />
       </KpiPanel>
+
+      {brands.length ? (
+        <ContentCard title="Profile Completeness">
+          <div className="grid gap-6 md:grid-cols-2" data-testid="seller-profile-completion">
+            {[...brands]
+              .map((b) => ({ b, items: brandCompletionItems(b) }))
+              .sort((x, y) => x.items.filter((i) => i.done).length / x.items.length - y.items.filter((i) => i.done).length / y.items.length)
+              .map(({ b, items }) => (
+                <ProfileCompletionCard key={b.id} title={b.name} items={items} editTo={`/admin/brand-studio/${encodeURIComponent(b.id)}/edit`} />
+              ))}
+          </div>
+        </ContentCard>
+      ) : null}
 
       <ContentCard>
         <div className="mb-4">

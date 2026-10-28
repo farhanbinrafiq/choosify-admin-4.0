@@ -59,7 +59,7 @@ const FILTER_TABS: { key: CreatorFilter; label: string }[] = [
   { key: 'pending', label: 'Pending Review' },
   { key: 'requests', label: 'Requests' },
   { key: 'claims', label: 'Ownership Claims' },
-  { key: 'community', label: 'Community Profiles' },
+  { key: 'community', label: 'Community Creators Profiles' },
   { key: 'active', label: 'Active Creators' },
   { key: 'flagged', label: 'Flagged' },
   { key: 'inactive', label: 'Inactive' },

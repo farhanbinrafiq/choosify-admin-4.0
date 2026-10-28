@@ -2620,7 +2620,8 @@ catalogRouter.patch(
           ...existing,
           marketplaceStatus: status,
           marketplaceAccess: grantingAccess,
-          ...(reconcileOwnerClaim ? { claimStatus: 'verified', verifiedStatus: true } : null),
+          // Ownership only — the "Verified" badge needs an approved document verification.
+          ...(reconcileOwnerClaim ? { claimStatus: 'verified' } : null),
         },
         existing,
         context,

@@ -435,27 +435,20 @@ async function validateOnboardingClaimIntent(
   return { intentId: intent.id, type: intent.entityType, entityId: entity.id };
 }
 
+/**
+ * Approving the application confirms the applicant OWNS the brand (claimStatus
+ * 'verified'), but it is not a document verification: verifiedStatus — the
+ * public "Verified" badge — is set only when the owner's Verification Center
+ * request (every required document) is approved by staff.
+ */
 async function markIdentityVerified(app: PartnerApplication): Promise<void> {
   if (!app.catalogEntityId) return;
   if (app.applicantType === 'seller') {
     const brand = await catalogStore.getBrand(app.catalogEntityId);
     if (!brand) return;
-    const saved = normalizeBrandInput(
-      {
-        ...brand,
-        verifiedStatus: true,
-        claimStatus: 'verified',
-      },
-      brand,
-    );
+    const saved = normalizeBrandInput({ ...brand, claimStatus: 'verified' }, brand);
     await catalogStore.upsertBrand(saved);
-    return;
   }
-  const creator = await catalogStore.getCreator(app.catalogEntityId);
-  if (!creator) return;
-  await catalogStore.upsertCreator(
-    normalizeCreatorInput({ ...creator, verifiedStatus: true }, creator),
-  );
 }
 
 export async function approvePartnerApplication(params: {

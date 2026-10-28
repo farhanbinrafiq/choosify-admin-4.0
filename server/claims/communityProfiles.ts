@@ -121,7 +121,7 @@ export type CommunityProfileInput = {
   acknowledgeDuplicates?: boolean;
 };
 
-function cleanSocialLinks(raw: Record<string, unknown> | undefined): Record<string, string> {
+export function cleanSocialLinks(raw: Record<string, unknown> | undefined): Record<string, string> {
   const out: Record<string, string> = {};
   for (const k of CREATOR_SOCIAL_PLATFORM_KEYS) {
     const v = String(raw?.[k] || '').trim();

@@ -6,6 +6,8 @@ import {
   operationsApi,
   type CommunityDuplicate,
   type CommunityProfileCopy,
+  type CommunityProfileInput,
+  type OpsLead,
 } from '../../../services/operationsApi';
 import type { CatalogBrand, CatalogCategory, CatalogCreator } from '../../../types/catalog';
 import { getPublishedStorefrontUrl } from '../../../lib/storefrontUrls';
@@ -312,6 +314,9 @@ function CommunityProfileDialog({
   entityType,
   categories,
   editing,
+  prefill,
+  title,
+  createProfile,
   onClose,
   onSaved,
 }: {
@@ -319,21 +324,27 @@ function CommunityProfileDialog({
   categories: CatalogCategory[];
   /** Present when editing an existing community profile. */
   editing: (CommunityProfileFields & { id: string }) | null;
+  /** Starting values for a new profile (e.g. from a brand suggestion). */
+  prefill?: CommunityProfileFields | null;
+  title?: string;
+  /** Replaces the default create call (e.g. approving a brand suggestion). */
+  createProfile?: (input: Omit<CommunityProfileInput, 'entityType'>) => Promise<{ name: string; slug: string }>;
   onClose: () => void;
   onSaved: (name: string, slug: string) => void;
 }) {
-  const [name, setName] = useState(editing?.name || '');
+  const start = editing ?? prefill ?? null;
+  const [name, setName] = useState(start?.name || '');
   const [categoryId, setCategoryId] = useState(
-    editing ? editing.categoryId || categories.find((c) => c.name === editing.category)?.id || '' : '',
+    start ? start.categoryId || categories.find((c) => c.name === start.category)?.id || '' : '',
   );
-  const [description, setDescription] = useState(editing?.description || '');
-  const [logo, setLogo] = useState(editing?.logo || '');
-  const [coverImage, setCoverImage] = useState(editing?.coverImage || '');
-  const [website, setWebsite] = useState(editing?.website || '');
-  const [location, setLocation] = useState(editing?.location || '');
-  const [socials, setSocials] = useState<Record<string, string>>(editing?.socials || {});
-  const [tags, setTags] = useState<string[]>(editing?.tags || []);
-  const [priceRange, setPriceRange] = useState(editing?.priceRange || '');
+  const [description, setDescription] = useState(start?.description || '');
+  const [logo, setLogo] = useState(start?.logo || '');
+  const [coverImage, setCoverImage] = useState(start?.coverImage || '');
+  const [website, setWebsite] = useState(start?.website || '');
+  const [location, setLocation] = useState(start?.location || '');
+  const [socials, setSocials] = useState<Record<string, string>>(start?.socials || {});
+  const [tags, setTags] = useState<string[]>(start?.tags || []);
+  const [priceRange, setPriceRange] = useState(start?.priceRange || '');
   const [uploading, setUploading] = useState(0);
   const [duplicates, setDuplicates] = useState<CommunityDuplicate[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -375,8 +386,7 @@ function CommunityProfileDialog({
           return;
         }
       }
-      const created = await operationsApi.createCommunityProfile({
-        entityType,
+      const input = {
         name: name.trim(),
         categoryId: categoryId || undefined,
         description: description.trim(),
@@ -388,7 +398,8 @@ function CommunityProfileDialog({
         tags,
         ...(isBrand ? { priceRange: priceRange.trim() } : {}),
         acknowledgeDuplicates: Boolean(duplicates?.length),
-      });
+      };
+      const created = createProfile ? await createProfile(input) : await operationsApi.createCommunityProfile({ entityType, ...input });
       onSaved(created.name, created.slug);
     } catch (e) {
       setError(e instanceof Error ? e.message : editing ? 'Could not save the profile.' : 'Could not create the profile.');
@@ -416,7 +427,7 @@ function CommunityProfileDialog({
       <div className="bg-white rounded-xl w-full max-w-[560px] shadow-xl" onClick={(e) => e.stopPropagation()} data-testid="community-create-dialog">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-app-border">
           <div className="text-sm font-black">
-            {editing ? `Edit ${editing.name}` : `Create community ${isBrand ? 'brand' : 'creator'} profile`}
+            {title ?? (editing ? `Edit ${editing.name}` : `Create community ${isBrand ? 'brand' : 'creator'} profile`)}
           </div>
           <button type="button" onClick={requestClose} aria-label="Close" data-testid="community-create-close">
             <X className="w-4 h-4" />
@@ -651,12 +662,21 @@ function CommunityProfileViewCard({
   publicUrl,
   onClose,
   onEdit,
+  banner,
+  extra,
+  actions,
 }: {
   entityType: 'brand' | 'creator';
   row: Row;
-  publicUrl: string;
+  /** Omitted when the profile isn't public yet (a brand suggestion). */
+  publicUrl?: string;
   onClose: () => void;
   onEdit?: () => void;
+  banner?: { title: string; text: string };
+  /** Extra section under the profile details (e.g. who suggested it). */
+  extra?: React.ReactNode;
+  /** Extra footer buttons. */
+  actions?: React.ReactNode;
 }) {
   const p = row.profile;
   const links = Object.entries(p.socials).filter(([, v]) => v);
@@ -672,9 +692,10 @@ function CommunityProfileViewCard({
         <div className="flex items-start gap-2 bg-amber-50 border-b border-amber-200 px-5 py-3 text-[11px] text-amber-900" data-testid="community-view-banner">
           <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
           <div className="flex-1">
-            <div className="font-black uppercase tracking-wider text-[10px]">Community profile · {row.state}</div>
+            <div className="font-black uppercase tracking-wider text-[10px]">{banner?.title ?? `Community profile · ${row.state}`}</div>
             <div>
-              Created by Choosify staff from public information. {row.owned ? 'It has since been claimed by its owner.' : 'It has no owner, account, CF-ID or Marketplace Access.'}
+              {banner?.text ??
+                `Created by Choosify staff from public information. ${row.owned ? 'It has since been claimed by its owner.' : 'It has no owner, account, CF-ID or Marketplace Access.'}`}
             </div>
           </div>
           <button type="button" onClick={onClose} aria-label="Close">
@@ -696,7 +717,7 @@ function CommunityProfileViewCard({
             <div className="min-w-0 pb-1">
               <div className="text-base font-black truncate">{row.name}</div>
               <div className="text-[11px] text-app-text-secondary">
-                {[p.category, `/${row.slug}`].filter(Boolean).join(' · ')}
+                {[p.category, row.slug ? `/${row.slug}` : ''].filter(Boolean).join(' · ')}
               </div>
             </div>
           </div>
@@ -766,13 +787,17 @@ function CommunityProfileViewCard({
                 <span className="text-app-text-secondary">Not added</span>
               )}
             </div>
-            <div className="text-[10.5px] text-app-text-secondary">Created {row.createdAt.slice(0, 10) || '—'}</div>
+            {extra}
+            <div className="text-[10.5px] text-app-text-secondary">{banner ? 'Submitted' : 'Created'} {row.createdAt.slice(0, 10) || '—'}</div>
           </div>
         </div>
         <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-app-border">
-          <a href={publicUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 px-3.5 py-2 rounded-lg border border-app-border text-[11px] font-bold">
-            Public page <ExternalLink className="w-3 h-3" />
-          </a>
+          {publicUrl && (
+            <a href={publicUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 px-3.5 py-2 rounded-lg border border-app-border text-[11px] font-bold">
+              Public page <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
+          {actions}
           {onEdit && (
             <button type="button" onClick={onEdit} className="inline-flex items-center gap-1 px-3.5 py-2 rounded-lg bg-app-accent text-white text-[11px] font-black">
               <Pencil className="w-3 h-3" /> Edit
@@ -916,6 +941,341 @@ function CommunityCopyEditor({ entityType }: { entityType: 'brand' | 'creator' }
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// ── Suggested Brands (storefront "Suggest a Brand") ─────────────────────────
+
+type SuggestionView = 'pending' | 'approved' | 'rejected';
+
+const suggestionOf = (l: OpsLead): SuggestionView =>
+  l.suggestionDecision?.decision === 'approved' ? 'approved' : l.suggestionDecision?.decision === 'rejected' || l.status === 'rejected' || l.status === 'spam' ? 'rejected' : 'pending';
+
+function suggestionFields(l: OpsLead): CommunityProfileFields {
+  const s = l.suggestion || {};
+  return {
+    name: l.brandName,
+    categoryId: l.categoryId || '',
+    category: l.categoryName || '',
+    description: s.description || '',
+    logo: s.logo || '',
+    coverImage: s.coverImage || '',
+    website: l.website || '',
+    location: s.location || l.country || '',
+    socials: { ...(s.socialLinks || {}) },
+    tags: s.tags || [],
+    priceRange: s.priceRange || '',
+  };
+}
+
+/** Open brand suggestions waiting for review (for the tab count). */
+export function countPendingBrandSuggestions(leads: OpsLead[]): number {
+  return leads.filter((l) => l.inquiryType === 'suggest_brand' && suggestionOf(l) === 'pending' && l.status !== 'closed').length;
+}
+
+/**
+ * Brand suggestions from the storefront. Review shows the same profile card
+ * staff use for community profiles; Approve opens the community profile form
+ * pre-filled (staff can correct anything) and creates the community brand
+ * profile; Reject needs a short reason.
+ */
+export function SuggestedBrandsPanel({ onCountChange }: { onCountChange?: (n: number) => void }) {
+  const [leads, setLeads] = useState<OpsLead[]>([]);
+  const [categories, setCategories] = useState<CatalogCategory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<SuggestionView>('pending');
+  const [viewing, setViewing] = useState<OpsLead | null>(null);
+  const [approving, setApproving] = useState<OpsLead | null>(null);
+  const [rejecting, setRejecting] = useState<OpsLead | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const publicBase = `${getPublishedStorefrontUrl()}/brands`;
+
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      const [all, cats] = await Promise.all([operationsApi.listLeads(), catalogApi.listCategories()]);
+      const rows = all.filter((l) => l.inquiryType === 'suggest_brand');
+      setLeads(rows);
+      setCategories(cats.filter((c) => !c.parentId && c.enabled !== false));
+      onCountChange?.(countPendingBrandSuggestions(rows));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load brand suggestions.');
+    } finally {
+      setLoading(false);
+    }
+  }, [onCountChange]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const visible = leads.filter((l) => suggestionOf(l) === view && (view !== 'pending' || l.status !== 'closed'));
+  const counts = {
+    pending: leads.filter((l) => suggestionOf(l) === 'pending' && l.status !== 'closed').length,
+    approved: leads.filter((l) => suggestionOf(l) === 'approved').length,
+    rejected: leads.filter((l) => suggestionOf(l) === 'rejected').length,
+  };
+  const rowOf = (l: OpsLead): Row => ({
+    id: l.id,
+    name: l.brandName,
+    slug: l.suggestionDecision?.communityProfileSlug || '',
+    category: l.categoryName || '—',
+    createdAt: l.createdAt,
+    state: suggestionOf(l),
+    stateTone: '',
+    owned: false,
+    claimPending: false,
+    profile: suggestionFields(l),
+  });
+
+  return (
+    <div className="space-y-4" data-testid="suggested-brands-panel">
+      <div className="aws-page-card p-4">
+        <div className="text-xs font-black">Suggested brands</div>
+        <div className="text-[11px] text-app-text-secondary">
+          Brands shoppers suggested on the storefront. Approving creates a community brand profile from the details below (you can correct them first).
+        </div>
+        <div className="mt-3 flex gap-1.5">
+          {(['pending', 'approved', 'rejected'] as const).map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setView(k)}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider ${view === k ? 'bg-app-accent text-white' : 'text-app-text-secondary hover:bg-[#F1F3F5]'}`}
+              data-testid={`suggested-view-${k}`}
+            >
+              {k === 'pending' ? 'To review' : k} ({counts[k]})
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {notice && (
+        <div className="aws-page-card p-3 text-[11.5px] font-bold text-emerald-600 flex items-center justify-between gap-2" role="status">
+          <span className="break-all">{notice}</span>
+          <button type="button" onClick={() => setNotice(null)} aria-label="Dismiss">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      <div className="aws-page-card overflow-hidden">
+        {loading ? (
+          <div className="p-10 flex justify-center">
+            <Loader2 className="w-4 h-4 animate-spin text-app-text-secondary" />
+          </div>
+        ) : error ? (
+          <p className="p-6 text-xs font-bold text-red-500">{error}</p>
+        ) : visible.length === 0 ? (
+          <p className="p-10 text-center text-xs text-app-text-secondary">
+            {view === 'pending' ? 'No brand suggestions to review.' : `No ${view} suggestions.`}
+          </p>
+        ) : (
+          <div className="divide-y divide-app-border">
+            {visible.map((l) => (
+              <div key={l.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-3" data-testid="suggested-brand-row">
+                <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-app-border bg-slate-100">
+                  {l.suggestion?.logo ? (
+                    <img src={l.suggestion.logo} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-[11px] font-black text-slate-500">{l.brandName.slice(0, 2).toUpperCase()}</div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-bold truncate">
+                    {l.brandName}
+                    {l.duplicateSignals?.length ? (
+                      <span className="ml-2 rounded bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-black uppercase text-amber-700">Possible duplicate</span>
+                    ) : null}
+                  </div>
+                  <div className="text-[10.5px] text-app-text-secondary truncate">
+                    {[l.categoryName, `by ${l.contactPerson || l.email}`, l.createdAt.slice(0, 10)].filter(Boolean).join(' · ')}
+                  </div>
+                  {l.suggestionDecision?.decision === 'rejected' && l.suggestionDecision.note && (
+                    <div className="text-[10.5px] text-red-600 truncate">Rejected: {l.suggestionDecision.note}</div>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setViewing(l)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-app-border text-[10px] font-bold"
+                    data-testid="suggested-view"
+                  >
+                    <Eye className="w-3 h-3" /> View
+                  </button>
+                  {view === 'pending' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setApproving(l)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-app-accent text-white text-[10px] font-black"
+                        data-testid="suggested-approve"
+                      >
+                        <Plus className="w-3 h-3" /> Approve
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRejecting(l)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-200 text-red-600 text-[10px] font-bold"
+                        data-testid="suggested-reject"
+                      >
+                        <X className="w-3 h-3" /> Reject
+                      </button>
+                    </>
+                  )}
+                  {view === 'approved' && l.suggestionDecision?.communityProfileSlug && (
+                    <a
+                      href={`${publicBase}/${l.suggestionDecision.communityProfileSlug}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-app-border text-[10px] font-bold"
+                    >
+                      Public page <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {viewing && (
+        <CommunityProfileViewCard
+          entityType="brand"
+          row={rowOf(viewing)}
+          onClose={() => setViewing(null)}
+          banner={{
+            title: `Suggested brand · ${suggestionOf(viewing) === 'pending' ? 'to review' : suggestionOf(viewing)}`,
+            text: 'Suggested by a shopper on the storefront. Nothing is public until Choosify approves it as a community profile.',
+          }}
+          extra={
+            <div className="rounded-lg border border-app-border bg-slate-50 p-3 text-[11.5px] space-y-1" data-testid="suggested-by">
+              <div className={label}>Suggested by</div>
+              <div>
+                {viewing.contactPerson || '—'} · {viewing.email}
+                {viewing.submittedByUserId ? ' · signed in' : ''}
+              </div>
+              {viewing.message && (
+                <>
+                  <div className={label}>Why list this brand</div>
+                  <p className="whitespace-pre-line">{viewing.message}</p>
+                </>
+              )}
+              {viewing.duplicateSignals?.length ? (
+                <div className="text-amber-700">
+                  Possible duplicate: {viewing.duplicateSignals.map((d) => `${d.matchLabel} (${d.matchedOn})`).join(', ')}
+                </div>
+              ) : null}
+            </div>
+          }
+          actions={
+            suggestionOf(viewing) === 'pending' && viewing.status !== 'closed' ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRejecting(viewing);
+                    setViewing(null);
+                  }}
+                  className="inline-flex items-center gap-1 px-3.5 py-2 rounded-lg border border-red-200 text-red-600 text-[11px] font-bold"
+                >
+                  <X className="w-3 h-3" /> Reject
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setApproving(viewing);
+                    setViewing(null);
+                  }}
+                  className="inline-flex items-center gap-1 px-3.5 py-2 rounded-lg bg-app-accent text-white text-[11px] font-black"
+                >
+                  <Plus className="w-3 h-3" /> Approve
+                </button>
+              </>
+            ) : null
+          }
+        />
+      )}
+      {approving && (
+        <CommunityProfileDialog
+          entityType="brand"
+          categories={categories}
+          editing={null}
+          prefill={suggestionFields(approving)}
+          title={`Approve suggestion — ${approving.brandName}`}
+          createProfile={(input) => operationsApi.approveBrandSuggestion(approving.id, input)}
+          onClose={() => setApproving(null)}
+          onSaved={(name, slug) => {
+            setApproving(null);
+            setNotice(`“${name}” approved and listed as a community brand profile — ${publicBase}/${slug}`);
+            void load();
+          }}
+        />
+      )}
+      {rejecting && (
+        <RejectSuggestionDialog
+          lead={rejecting}
+          onClose={() => setRejecting(null)}
+          onRejected={() => {
+            setRejecting(null);
+            setNotice(`Suggestion “${rejecting.brandName}” rejected.`);
+            void load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function RejectSuggestionDialog({ lead, onClose, onRejected }: { lead: OpsLead; onClose: () => void; onRejected: () => void }) {
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await operationsApi.rejectBrandSuggestion(lead.id, note.trim());
+      onRejected();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not reject the suggestion.');
+      setBusy(false);
+    }
+  };
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Reject ${lead.brandName}`}
+      className="fixed inset-0 z-[1000] bg-slate-900/50 flex items-start sm:items-center justify-center p-4 overflow-y-auto"
+    >
+      <div className="bg-white rounded-xl w-full max-w-[440px] shadow-xl" data-testid="suggested-reject-dialog">
+        <div className="px-5 py-4 space-y-3">
+          <div className="text-sm font-black">Reject “{lead.brandName}”?</div>
+          <div>
+            <label className={label} htmlFor="sg-reject-note">Reason (kept on the inquiry)</label>
+            <textarea id="sg-reject-note" className={input} rows={3} maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)} />
+          </div>
+          {error && <div className="text-[11.5px] font-bold text-red-600" role="alert">{error}</div>}
+        </div>
+        <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-app-border">
+          <button type="button" onClick={onClose} className="px-3.5 py-2 rounded-lg border border-app-border text-[11px] font-bold">
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={busy || note.trim().length < 5}
+            onClick={() => void run()}
+            className="px-3.5 py-2 rounded-lg bg-red-600 text-white text-[11px] font-black disabled:opacity-50"
+            data-testid="suggested-reject-confirm"
+          >
+            {busy ? 'Rejecting…' : 'Reject suggestion'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -12,7 +12,7 @@ import { Avatar } from '../../components/shared/Avatar';
 import { PartnerApplicationReviewActions, PartnerApprovedNotice } from '../../components/admin/PartnerApplicationReviewActions';
 import { OwnershipClaimsQueue } from '../../components/admin/claims/OwnershipClaimsQueue';
 import { PartnerRequestsTable } from '../../components/admin/claims/PartnerRequestsTable';
-import { CommunityProfilesPanel } from '../../components/admin/claims/CommunityProfilesPanel';
+import { CommunityProfilesPanel, SuggestedBrandsPanel, countPendingBrandSuggestions } from '../../components/admin/claims/CommunityProfilesPanel';
 
 /**
  * Super Admin Seller Management — real React replacement for the legacy
@@ -46,6 +46,7 @@ type SellerFilter =
   | 'requests'
   | 'claims'
   | 'community'
+  | 'suggested'
   | 'active'
   | 'suspended'
   | 'inactive'
@@ -72,7 +73,8 @@ const FILTER_TABS: { key: SellerFilter; label: string }[] = [
   { key: 'verified', label: 'Verified Sellers' },
   { key: 'requests', label: 'Requests' },
   { key: 'claims', label: 'Ownership Claims' },
-  { key: 'community', label: 'Community Profiles' },
+  { key: 'community', label: 'Community Brand Profiles' },
+  { key: 'suggested', label: 'Suggested Brands' },
   { key: 'active', label: 'Active Sellers' },
   { key: 'flagged', label: 'Flagged' },
   { key: 'inactive', label: 'Inactive' },
@@ -92,6 +94,8 @@ export default function SellerManagement() {
   const [claims, setClaims] = useState<OpsVerification[]>([]);
   /** Refreshed by the claims queue after a review, so the tab count stays current. */
   const [openClaimCount, setOpenClaimCount] = useState<number | null>(null);
+  /** Brand suggestions waiting for review (refreshed by the Suggested Brands panel). */
+  const [suggestedCount, setSuggestedCount] = useState(0);
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -114,6 +118,10 @@ export default function SellerManagement() {
           moderationApi.listReports({ status: 'open' }),
           moderationApi.listReports({ status: 'investigating' }),
         ]);
+        operationsApi
+          .listLeads()
+          .then((leads) => !cancelled && setSuggestedCount(countPendingBrandSuggestions(leads)))
+          .catch(() => undefined);
         if (cancelled) return;
         setBrands(brandsRes);
         setUsers(usersRes);
@@ -168,7 +176,8 @@ export default function SellerManagement() {
     for (const [sellerId, ownedBrands] of bySeller) {
       const user = usersById.get(sellerId);
       const primaryBrand = ownedBrands.find((b) => b.verifiedStatus) ?? ownedBrands[0] ?? null;
-      const verified = ownedBrands.some((b) => b.verifiedStatus || b.claimStatus === 'verified');
+      // Verified = an approved document verification (verifiedStatus), not just ownership.
+      const verified = ownedBrands.some((b) => b.verifiedStatus === true);
       const suspended = ownedBrands.some((b) => b.marketplaceStatus === 'suspended');
       const marketplaceActive = ownedBrands.some((b) => b.marketplaceAccess);
       // Active Seller = documented condition from the audit: verified, has at
@@ -208,6 +217,7 @@ export default function SellerManagement() {
       requests: requests.length,
       claims: openClaimCount ?? claims.length,
       community: brands.filter((b) => b.origin === 'community' && !b.sellerId).length,
+      suggested: suggestedCount,
       active: sellers.filter((s) => s.active).length,
       flagged: sellers.filter((s) => s.flagged).length,
       inactive: sellers.filter((s) => s.inactive).length,
@@ -271,6 +281,7 @@ export default function SellerManagement() {
   const isRequestsView = filter === 'requests';
   const isClaimsView = filter === 'claims';
   const isCommunityView = filter === 'community';
+  const isSuggestedView = filter === 'suggested';
 
   // Reviewed applications leave the pending list; approval shows the separate
   // Marketplace Access next step.
@@ -458,6 +469,8 @@ export default function SellerManagement() {
         />
       ) : isCommunityView ? (
         <CommunityProfilesPanel entityType="brand" />
+      ) : isSuggestedView ? (
+        <SuggestedBrandsPanel onCountChange={setSuggestedCount} />
       ) : (
         <div className="aws-page-card overflow-hidden">
           <DataTable
