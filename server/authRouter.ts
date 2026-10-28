@@ -57,6 +57,7 @@ import {
 import {
   getUserProfileExtras,
   PROFILE_NAME_LOCK_MS,
+  sanitizeAddressBook,
   upsertUserProfileExtras,
 } from './auth/userProfileExtras';
 import { parseAccountUsername } from './auth/accountUsername';
@@ -829,6 +830,29 @@ authRouter.get('/auth/me', async (req, res) => {
  * - Real actor for audit = admin/super_admin (JWT impersonation claims).
  * - Original admin access token remains intact on the client (client swaps tokens).
  */
+/** The signed-in account's own storefront address book (synced across devices). */
+authRouter.get('/auth/me/addresses', ...requireAuth, (req, res) => {
+  if (!req.userId) {
+    res.status(401).json({ success: false, error: 'Authentication required' });
+    return;
+  }
+  res.json({ success: true, data: getUserProfileExtras(req.userId)?.addresses ?? [] });
+});
+
+authRouter.put('/auth/me/addresses', ...requireAuth, (req, res) => {
+  if (!req.userId) {
+    res.status(401).json({ success: false, error: 'Authentication required' });
+    return;
+  }
+  const result = sanitizeAddressBook((req.body as { addresses?: unknown } | undefined)?.addresses);
+  if (result.ok === false) {
+    res.status(400).json({ success: false, error: result.error });
+    return;
+  }
+  const saved = upsertUserProfileExtras({ userId: req.userId, addresses: result.value });
+  res.json({ success: true, data: saved.addresses ?? [] });
+});
+
 authRouter.post('/auth/impersonate/start', ...requireAuth, async (req, res) => {
   const actorRole = req.userRole;
   if (!actorRole) {
@@ -2172,6 +2196,8 @@ authRouter.get('/auth/users/:userId', ...requireAdmin, async (req, res) => {
         // (creator approval does not copy it anywhere else).
         phone: accountPhone || applicationPhone || null,
         phoneSource: accountPhone ? 'account' : applicationPhone ? 'partner_application' : null,
+        // The shopper's saved storefront addresses (admin-only endpoint).
+        addresses: getUserProfileExtras(user.id)?.addresses ?? [],
         ...status,
       },
     });

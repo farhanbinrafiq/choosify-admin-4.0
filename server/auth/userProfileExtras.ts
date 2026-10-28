@@ -22,8 +22,47 @@ export type UserProfileExtras = {
    * historical order/invoice/shipment snapshot.
    */
   phone?: string;
+  /**
+   * Storefront address book (the shopper's own saved delivery addresses).
+   * Stored as the storefront sends it, plus a readable `summary` / `trail`
+   * so staff can read it without the storefront's location dataset.
+   */
+  addresses?: StoredCustomerAddress[];
   updatedAt: string;
 };
+
+export type StoredCustomerAddress = Record<string, unknown> & {
+  id: string;
+  label?: string;
+  type?: string;
+  isDefault?: boolean;
+  summary?: string;
+  trail?: string;
+};
+
+const MAX_ADDRESSES = 10;
+const MAX_ADDRESS_JSON = 4000;
+
+/** Validates a client address book: at most 10 objects with an id, each reasonably small. */
+export function sanitizeAddressBook(raw: unknown): { ok: true; value: StoredCustomerAddress[] } | { ok: false; error: string } {
+  if (!Array.isArray(raw)) return { ok: false, error: 'addresses must be an array' };
+  if (raw.length > MAX_ADDRESSES) return { ok: false, error: `At most ${MAX_ADDRESSES} saved addresses.` };
+  const out: StoredCustomerAddress[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return { ok: false, error: 'Each address must be an object.' };
+    const a = item as Record<string, unknown>;
+    const id = typeof a.id === 'string' ? a.id.trim().slice(0, 64) : '';
+    if (!id) return { ok: false, error: 'Each address needs an id.' };
+    if (JSON.stringify(a).length > MAX_ADDRESS_JSON) return { ok: false, error: 'An address is too large.' };
+    out.push({
+      ...a,
+      id,
+      ...(typeof a.summary === 'string' ? { summary: a.summary.slice(0, 300) } : {}),
+      ...(typeof a.trail === 'string' ? { trail: a.trail.slice(0, 200) } : {}),
+    });
+  }
+  return { ok: true, value: out };
+}
 
 type Snapshot = {
   version: 1;

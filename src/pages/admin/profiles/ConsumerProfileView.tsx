@@ -14,19 +14,36 @@ import { AccountDetailsSection } from '../../../components/admin/profile/Account
 import { AdminEditHistory, AdminEditModeStrip, AdminEditUserButton, useAdminEditUser } from '../../../components/admin/profile/AdminEditUser';
 import { OrderHistoryTable, ReviewsPanel } from '../../../components/admin/profile/ProfileSections';
 import { ProfileContactActions } from '../../../components/admin/profile/ProfileContactActions';
+import {
+  CancellationsPanel,
+  RefundsPanel,
+  ReturnsPanel,
+  SavedAddressesPanel,
+  ToPayPanel,
+  WarrantyPanel,
+  cancelledOrders,
+  refundCases,
+  toPayOrders,
+} from '../../../components/admin/profile/ConsumerActivityPanels';
+import type { ReturnRequest } from '../../../contexts/ReturnsContext';
+import { warrantyClaimsApi, type WarrantyClaim } from '../../../services/warrantyClaimsApi';
 
 // ============================================================================
 // Consumer Profile — the Super Admin 360° view at /admin/consumers/:id.
 //
 // VIEW ONLY. Every section reads a canonical source:
-//   Account Information → GET /auth/users/:id (identity, lifecycle, primary phone)
+//   Account Information → GET /auth/users/:id (identity, lifecycle, primary phone,
+//                         saved storefront addresses)
 //   Order History       → Order Console orders placed by this buyer (each opens /admin/orders/:orderId)
+//   To Pay / Cancellations → the same orders, filtered with the storefront's rules
+//   Returns / Refunds   → return requests this buyer opened (refunds = past first review)
+//   Warranty            → warranty claims this buyer filed
 //   Reviews & Score     → review store: reviews this consumer posted
 //   Saved Brands & Products, Followed Creators, Search History → shopper-signals
 //     record the Web storefront syncs while the shopper is signed in
 //   Followed Brands     → brand-follow store
-// The former prototype widgets (lifetime value, wallet, tickets, addresses,
-// connected accounts, sessions) have no server-side record, so they are not shown.
+// The former prototype widgets (lifetime value, wallet, tickets, connected
+// accounts, sessions) have no server-side record, so they are not shown.
 // ============================================================================
 
 const ACCENT = 'var(--cms-accent)';
@@ -35,6 +52,11 @@ const ACCENT_WASH = 'color-mix(in srgb, var(--cms-accent) 10%, transparent)';
 const TABS: Array<{ key: string; label: string; icon: string }> = [
   { key: 'account', label: 'Account Information', icon: '⚙' },
   { key: 'orders', label: 'Order History', icon: '▤' },
+  { key: 'to-pay', label: 'To Pay', icon: '৳' },
+  { key: 'cancellations', label: 'Cancellations', icon: '⊘' },
+  { key: 'returns', label: 'Returns', icon: '↺' },
+  { key: 'refunds', label: 'Refunds', icon: '⇄' },
+  { key: 'warranty', label: 'Warranty', icon: '⛨' },
   { key: 'reviews', label: 'Reviews & Score', icon: '⭐' },
   { key: 'saved', label: 'Saved Brands & Products', icon: '♡' },
   { key: 'search', label: 'Search History', icon: '⌕' },
@@ -82,6 +104,8 @@ export default function ConsumerProfileView() {
   const [followed, setFollowed] = useState<CatalogBrand[]>([]);
   const [followedIds, setFollowedIds] = useState<string[]>([]);
   const [signals, setSignals] = useState<ShopperSignals | null>(null);
+  const [returns, setReturns] = useState<ReturnRequest[]>([]);
+  const [claims, setClaims] = useState<WarrantyClaim[]>([]);
   const [sectionErrors, setSectionErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -120,6 +144,8 @@ export default function ConsumerProfileView() {
         })
         .catch((e) => (errs.brands = e instanceof Error ? e.message : 'Could not load followed brands.')),
       operationsApi.getUserShopperSignals(uid).then(setSignals).catch((e) => (errs.signals = e instanceof Error ? e.message : 'Could not load saved items and searches.')),
+      operationsApi.listReturns({ buyerId: uid }).then(setReturns).catch((e) => (errs.returns = e instanceof Error ? e.message : 'Could not load returns.')),
+      warrantyClaimsApi.list({ consumerId: uid }).then(setClaims).catch((e) => (errs.warranty = e instanceof Error ? e.message : 'Could not load warranty claims.')),
     ]);
     setSectionErrors(errs);
     setLoading(false);
@@ -129,6 +155,18 @@ export default function ConsumerProfileView() {
     void load();
   }, [load]);
 
+  // Counts next to the activity tabs (like the storefront's My Account menu).
+  const tabCounts: Record<string, number> = useMemo(
+    () => ({
+      orders: orders.length,
+      'to-pay': toPayOrders(orders).length,
+      cancellations: cancelledOrders(orders).length,
+      returns: returns.length,
+      refunds: refundCases(returns).length,
+      warranty: claims.length,
+    }),
+    [orders, returns, claims],
+  );
   const name = account?.displayName || '(no name on file)';
   const email = account?.email || '';
   const phone = account?.phone || '';
@@ -276,6 +314,7 @@ export default function ConsumerProfileView() {
             {TABS.map((t) => (
               <button key={t.key} type="button" role="tab" aria-selected={activeTab === t.key} data-tab={t.key} onClick={() => setActiveTab(t.key)} style={{ ...S.tab, ...(activeTab === t.key ? S.tabActive : {}) }}>
                 {t.icon} {t.label}
+                {tabCounts[t.key] != null ? <span style={{ marginLeft: 4, color: '#9CA3AF' }}>{tabCounts[t.key]}</span> : null}
               </button>
             ))}
           </div>
@@ -301,11 +340,12 @@ export default function ConsumerProfileView() {
                   {kv('ACCOUNT ACCESS', account.marketplaceAccess === false ? 'Limited' : 'Active', false, true)}
                 </div>
               </div>
+              <SavedAddressesPanel addresses={account.addresses ?? []} />
               <div style={{ ...S.panel, background: '#F8FAFC' }}>
                 <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, lineHeight: 1.5 }}>
-                  Delivery addresses are saved on each order (see Order History), not on the account. Saved items, followed creators and
-                  search history are recorded from the storefront while the shopper is signed in; activity from before that, or while
-                  signed out, stays only in their browser.
+                  Each order also keeps the delivery address used at checkout (see Order History). Saved addresses, saved items, followed
+                  creators and search history are recorded from the storefront while the shopper is signed in; activity from before that,
+                  or while signed out, stays only in their browser.
                   {edit.editing ? ' Display name and phone can be edited in Account Details above; email changes stay with the account owner.' : ''}
                 </div>
               </div>
@@ -319,6 +359,12 @@ export default function ConsumerProfileView() {
             ) : (
               <OrderHistoryTable orders={orders} perspective="buyer" />
             ))}
+
+          {activeTab === 'to-pay' && <ToPayPanel orders={orders} error={sectionErrors.orders} />}
+          {activeTab === 'cancellations' && <CancellationsPanel orders={orders} error={sectionErrors.orders} />}
+          {activeTab === 'returns' && <ReturnsPanel returns={returns} error={sectionErrors.returns} />}
+          {activeTab === 'refunds' && <RefundsPanel returns={returns} error={sectionErrors.returns} />}
+          {activeTab === 'warranty' && <WarrantyPanel claims={claims} error={sectionErrors.warranty} />}
 
           {activeTab === 'reviews' && <ReviewsPanel direction="posted" reviews={reviews} error={sectionErrors.reviews} emptyText="This shopper has not posted any reviews." />}
 

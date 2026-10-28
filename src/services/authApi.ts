@@ -82,7 +82,23 @@ export interface UserDetail extends UserDirectoryEntry {
   profileStatus?: string;
   profileStatusPrimary?: string;
   profileStatusSecondary?: string | null;
+  /** The shopper's saved storefront addresses (admin user-detail endpoint only). */
+  addresses?: StoredCustomerAddress[];
 }
+
+/** A storefront address as saved on the account, with a readable summary for staff. */
+export type StoredCustomerAddress = {
+  id: string;
+  label?: string;
+  type?: string;
+  isDefault?: boolean;
+  recipientName?: string;
+  phone?: string;
+  landmark?: string;
+  summary?: string;
+  trail?: string;
+  [key: string]: unknown;
+};
 
 /** Row shape returned by GET /auth/users/search — a single account by Choosify User ID / CF-##### string. */
 export interface UserSearchResult {
