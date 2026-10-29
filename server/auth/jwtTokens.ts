@@ -60,7 +60,8 @@ export function signAccessToken(user: {
 
 export function verifyAccessToken(token: string): AccessTokenClaims | null {
   try {
-    const decoded = jwt.verify(token, requireAccessSecret()) as jwt.JwtPayload & AccessTokenClaims;
+    // Only the algorithm access tokens are signed with (jwt.sign default: HS256).
+    const decoded = jwt.verify(token, requireAccessSecret(), { algorithms: ['HS256'] }) as jwt.JwtPayload & AccessTokenClaims;
     const uid = decoded.uid || decoded.sub;
     if (!uid || typeof uid !== 'string') return null;
     return {

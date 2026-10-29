@@ -54,8 +54,30 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
+    // dist/ also holds the server bundle (server.cjs + its source map): never
+    // serve it, or any source map. Checked on the decoded, normalized path so
+    // "../" and %2e%2e spellings are caught too.
+    app.use((req, res, next) => {
+      let file = req.path;
+      try {
+        file = path.posix.basename(path.posix.normalize(decodeURIComponent(req.path)));
+      } catch {
+        res.status(400).end();
+        return;
+      }
+      if (/^server\.cjs/i.test(file) || /\.map$/i.test(file)) {
+        res.status(404).end();
+        return;
+      }
+      next();
+    });
     app.use(express.static(distPath));
-    app.get("*", (_req, res) => {
+    app.get("*", (req, res) => {
+      // Unknown API routes are a JSON 404, not the SPA shell.
+      if (req.path.startsWith("/api/")) {
+        res.status(404).json({ error: "Not found", code: "NOT_FOUND" });
+        return;
+      }
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
