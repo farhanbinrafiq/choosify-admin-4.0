@@ -265,7 +265,12 @@ export default function SellerProfile() {
       <AdminEditModeStrip state={edit} />
       <AccountLifecycleBanner lifecycle={user?.lifecycle} />
       {claimId ? <ClaimReviewSection claimId={claimId} onDecided={() => void load()} /> : null}
-      {applicationId ? <ApplicationReviewSection applicationId={applicationId} onDecided={() => void load()} /> : null}
+      <ApplicationReviewSection
+        applicationId={applicationId || undefined}
+        match={{ type: 'seller', userId: sellerId || undefined }}
+        accountCreatedAt={user?.createdAt}
+        onDecided={() => void load()}
+      />
 
       <div style={S.grid} className="spv-grid">
         {/* Identity card — information only; actions live in the header */}

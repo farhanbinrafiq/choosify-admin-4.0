@@ -62,7 +62,36 @@ function ApplicantSocialLinks({ app }: { app: OpsPartnerApplication }) {
 
 const btn: React.CSSProperties = { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 7, padding: '7px 12px', fontSize: 11, fontWeight: 800, cursor: 'pointer', color: '#374151' };
 
-export function ApplicationReviewSection({ applicationId, onDecided }: { applicationId: string; onDecided: () => void }) {
+const HISTORY_LABEL: Record<string, string> = {
+  submitted: 'Application submitted',
+  admin_note: 'Internal note added (kept pending)',
+  resubmission_requested: 'Changes requested from the applicant',
+  applicant_resubmitted: 'Applicant sent the changes',
+  identity_verified: 'Approved (identity verified)',
+  rejected: 'Rejected',
+  legacy_linked: 'Linked to an existing account',
+  legacy_provisioned: 'Account set up for review',
+};
+const when = (iso?: string) => (iso ? new Date(iso).toLocaleString() : '—');
+
+/**
+ * Shown on the applicant's profile whether staff arrived from the Requests tab
+ * (`applicationId` in the URL) or from any creator / seller list: without an id
+ * the section finds the account's application itself (pending first, else the
+ * latest), and renders nothing when the account never applied.
+ */
+export function ApplicationReviewSection({
+  applicationId,
+  match,
+  accountCreatedAt,
+  onDecided,
+}: {
+  applicationId?: string;
+  match?: { type: 'seller' | 'creator'; userId?: string; catalogEntityId?: string };
+  /** users.createdAt — when the login account was created (sign-up). */
+  accountCreatedAt?: string;
+  onDecided: () => void;
+}) {
   const navigate = useNavigate();
   const [app, setApp] = useState<OpsPartnerApplication | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -70,19 +99,37 @@ export function ApplicationReviewSection({ applicationId, onDecided }: { applica
   const [adminNotes, setAdminNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [none, setNone] = useState(false);
 
   const load = useCallback(async () => {
     try {
       // No single-application endpoint: the admin list (all statuses) is the canonical source.
-      const row = (await operationsApi.listPartnerApplications()).find((a) => a.id === applicationId) || null;
+      const all = await operationsApi.listPartnerApplications();
+      let row = applicationId ? all.find((a) => a.id === applicationId) || null : null;
+      if (!row && !applicationId && match) {
+        const mine = all
+          .filter((a) => a.applicantType === match.type)
+          .filter(
+            (a) =>
+              (match.catalogEntityId && a.catalogEntityId === match.catalogEntityId) ||
+              (match.userId && (a.provisionedUserId === match.userId || a.existingUserId === match.userId)),
+          )
+          .sort((x, y) => (y.status === 'pending' ? 1 : 0) - (x.status === 'pending' ? 1 : 0) || y.createdAt.localeCompare(x.createdAt));
+        row = mine[0] || null;
+        if (!row) {
+          setNone(true);
+          return;
+        }
+      }
       if (!row) throw new Error('Application not found.');
+      setNone(false);
       setApp(row);
       setAdminNotes(row.adminNotes || '');
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load the application.');
     }
-  }, [applicationId]);
+  }, [applicationId, match?.type, match?.userId, match?.catalogEntityId]);
 
   useEffect(() => {
     void load();
@@ -105,6 +152,7 @@ export function ApplicationReviewSection({ applicationId, onDecided }: { applica
   };
 
   const box: React.CSSProperties = { background: '#fff', border: '2px solid var(--cms-accent)', borderRadius: 16, padding: 16, marginBottom: 16 };
+  if (none) return null;
   if (error) return <div style={{ ...box, color: '#DC2626', fontSize: 12, fontWeight: 700 }}>{error}</div>;
   if (!app) {
     return (
@@ -132,7 +180,11 @@ export function ApplicationReviewSection({ applicationId, onDecided }: { applica
         ] as Array<[string, string | undefined]>)
       : []),
     ['Applicant notes', app.notes],
-    ['Applied', new Date(app.createdAt).toLocaleString()],
+    ['Account created (sign-up)', accountCreatedAt ? when(accountCreatedAt) : undefined],
+    // The recorded 'submitted' event (an ISO time) — the same moment the timeline shows.
+    ['Application submitted', when(app.reviewHistory?.find((h) => h.action === 'submitted')?.at || app.createdAt)],
+    ['Last updated', app.updatedAt && app.updatedAt !== app.createdAt ? when(app.updatedAt) : undefined],
+    ['Reviewed', app.reviewedAt ? when(app.reviewedAt) : pending ? 'Not reviewed yet' : undefined],
     ['Existing account upgraded', app.existingUserId ? 'Yes — Consumer account kept (same CF-ID)' : 'No — new account'],
   ];
 
@@ -168,6 +220,31 @@ export function ApplicationReviewSection({ applicationId, onDecided }: { applica
       </div>
 
       {isCreator ? <ApplicantSocialLinks app={app} /> : null}
+
+      <div style={{ marginTop: 10, border: '1px solid #EEF1F4', borderRadius: 8, padding: 12 }} data-testid="application-timeline">
+        <div style={{ fontSize: 9, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', marginBottom: 6 }}>Timeline</div>
+        {[
+          ...(accountCreatedAt ? [{ at: accountCreatedAt, label: 'Account created (sign-up)', note: '' }] : []),
+          ...((app.reviewHistory || []).length
+            ? (app.reviewHistory || []).map((h) => ({
+                at: h.at,
+                label: HISTORY_LABEL[h.action] || h.action.replace(/_/g, ' '),
+                note: h.note || '',
+              }))
+            : [{ at: app.createdAt, label: 'Application submitted', note: '' }]),
+        ]
+          .sort((x, y) => x.at.localeCompare(y.at))
+          .map((e, i) => (
+            <div key={`${e.at}-${i}`} style={{ display: 'flex', gap: 12, padding: '5px 0', borderTop: i ? '1px solid #F4F6F8' : undefined, fontSize: 11.5 }}>
+              <span style={{ width: 150, flexShrink: 0, color: '#6B7280', fontWeight: 600 }}>{when(e.at)}</span>
+              <span style={{ fontWeight: 700 }}>
+                {e.label}
+                {e.note ? <span style={{ fontWeight: 500, color: '#6B7280' }}> — {e.note}</span> : null}
+              </span>
+            </div>
+          ))}
+        {pending ? <div style={{ marginTop: 6, fontSize: 11, fontWeight: 700, color: '#B45309' }}>Waiting for review — not approved or rejected yet.</div> : null}
+      </div>
 
       {app.reviewNote && !pending ? (
         <div style={{ fontSize: 11.5, fontWeight: 600, marginTop: 10, color: '#374151' }}>

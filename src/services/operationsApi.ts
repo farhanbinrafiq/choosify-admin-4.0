@@ -727,6 +727,8 @@ export interface OpsPartnerApplication {
   adminNotes?: string;
   reviewNote?: string;
   reviewedAt?: string;
+  /** Every step: submitted, admin_note, resubmission_requested, identity_verified, rejected, … */
+  reviewHistory?: Array<{ at: string; by: string; action: string; note?: string }>;
   createdAt: string;
   updatedAt: string;
 }

@@ -254,7 +254,12 @@ export default function CreatorProfile() {
         </div>
         <AdminEditModeStrip state={edit} />
         {claimId ? <ClaimReviewSection claimId={claimId} onDecided={() => void load()} /> : null}
-        {applicationId ? <ApplicationReviewSection applicationId={applicationId} onDecided={() => void load()} /> : null}
+        <ApplicationReviewSection
+          applicationId={applicationId || undefined}
+          match={{ type: 'creator', userId: targetUserId || undefined, catalogEntityId: creator?.id }}
+          accountCreatedAt={user?.createdAt}
+          onDecided={() => void load()}
+        />
         <div style={S.grid} className="cprv-grid">
           <div style={S.card} data-testid="profile-identity">
             <div style={S.cover}><span style={S.coverLabel}>CREATOR</span></div>
@@ -309,7 +314,12 @@ export default function CreatorProfile() {
       <AdminEditModeStrip state={edit} />
       <AccountLifecycleBanner lifecycle={user?.lifecycle} />
       {claimId ? <ClaimReviewSection claimId={claimId} onDecided={() => void load()} /> : null}
-      {applicationId ? <ApplicationReviewSection applicationId={applicationId} onDecided={() => void load()} /> : null}
+      <ApplicationReviewSection
+        applicationId={applicationId || undefined}
+        match={{ type: 'creator', userId: targetUserId || undefined, catalogEntityId: creator?.id }}
+        accountCreatedAt={user?.createdAt}
+        onDecided={() => void load()}
+      />
 
       <div style={S.grid} className="cprv-grid">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
