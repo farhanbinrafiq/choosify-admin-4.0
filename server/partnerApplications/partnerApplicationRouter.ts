@@ -13,6 +13,7 @@ import {
   submitPartnerApplication,
 } from './partnerApplicationService';
 import { Logger } from '../lib/logger';
+import { catalogStore } from '../../lib/vercel-catalog/catalogStore';
 
 export const partnerApplicationRouter = Router();
 
@@ -76,6 +77,14 @@ partnerApplicationRouter.post('/auth/partner-apply', async (req, res) => {
       niche: body.niche ? String(body.niche) : undefined,
       contentFocus: body.contentFocus ? String(body.contentFocus) : undefined,
       socialPrimary: body.socialPrimary ? String(body.socialPrimary) : undefined,
+      socialLinks:
+        body.socialLinks && typeof body.socialLinks === 'object'
+          ? Object.fromEntries(
+              Object.entries(body.socialLinks as Record<string, unknown>)
+                .filter(([, v]) => typeof v === 'string')
+                .map(([k, v]) => [k, String(v).slice(0, 2000)]),
+            )
+          : undefined,
       audienceSize: body.audienceSize ? String(body.audienceSize) : undefined,
       notes: body.notes ? String(body.notes) : undefined,
       claimIntentId: body.claimIntentId ? String(body.claimIntentId) : undefined,
@@ -148,9 +157,15 @@ partnerApplicationRouter.get('/operations/partner-applications', ...requireAdmin
   const rows = await partnerApplicationStore.list(
     status === 'pending' || status === 'approved' || status === 'rejected' ? status : undefined,
   );
+  // Creator applications: the links they applied with live on their draft Creator profile.
+  const creators = new Map((await catalogStore.listCreators()).map((c) => [c.id, c]));
   res.json({
     success: true,
-    applications: rows.map(sanitizeApplication),
+    applications: rows.map((row) => {
+      const app = sanitizeApplication(row);
+      const links = row.applicantType === 'creator' && row.catalogEntityId ? creators.get(row.catalogEntityId)?.socialLinks : undefined;
+      return links ? { ...app, socialLinks: links } : app;
+    }),
   });
 });
 

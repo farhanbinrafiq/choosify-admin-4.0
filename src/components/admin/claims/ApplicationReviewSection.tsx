@@ -17,6 +17,49 @@ const STATUS_TONE: Record<string, React.CSSProperties> = {
   approved: { background: '#DCFCE7', color: '#166534' },
   rejected: { background: '#FEE2E2', color: '#991B1B' },
 };
+const SOCIAL_LABELS: Array<[keyof NonNullable<OpsPartnerApplication['socialLinks']>, string]> = [
+  ['facebook', 'Facebook'],
+  ['youtube', 'YouTube'],
+  ['tiktok', 'TikTok'],
+  ['instagram', 'Instagram'],
+  ['linkedin', 'LinkedIn'],
+];
+
+/** Creator links to check the applicant is real — Facebook is required for applications since 2026-10-29. */
+function ApplicantSocialLinks({ app }: { app: OpsPartnerApplication }) {
+  const links: Array<[string, string]> = SOCIAL_LABELS.map(([k, label]) => [label, app.socialLinks?.[k] || ''] as [string, string]).filter(([, url]) => url);
+  // Older applications only had one "primary social" field.
+  if (!links.length && app.socialPrimary) links.push(['Social link', app.socialPrimary]);
+  const hasFacebook = Boolean(app.socialLinks?.facebook || /facebook\.com|fb\.com|fb\.watch/i.test(app.socialPrimary || ''));
+  return (
+    <div style={{ marginTop: 10, border: '1px solid #EEF1F4', borderRadius: 8, padding: 12 }} data-testid="application-social-links">
+      <div style={{ fontSize: 9, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', marginBottom: 6 }}>
+        Social links — open each one to check this is a real creator
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {links.map(([label, url]) => (
+          <a
+            key={label}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer nofollow"
+            title={url}
+            style={{ ...btn, textDecoration: 'none', color: '#111827', display: 'inline-flex', gap: 6, alignItems: 'center' }}
+          >
+            {label} ↗
+          </a>
+        ))}
+        {!links.length ? <span style={{ fontSize: 11.5, fontWeight: 700, color: '#9CA3AF' }}>No social links given.</span> : null}
+      </div>
+      {!hasFacebook ? (
+        <div style={{ marginTop: 8, fontSize: 11, fontWeight: 700, color: '#B45309' }} data-testid="application-no-facebook">
+          No Facebook link — this application was sent before Facebook became required. Use “Request changes” to ask for it before approving.
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 const btn: React.CSSProperties = { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 7, padding: '7px 12px', fontSize: 11, fontWeight: 800, cursor: 'pointer', color: '#374151' };
 
 export function ApplicationReviewSection({ applicationId, onDecided }: { applicationId: string; onDecided: () => void }) {
@@ -85,7 +128,6 @@ export function ApplicationReviewSection({ applicationId, onDecided }: { applica
       ? ([
           ['Niche', app.niche],
           ['Content focus', app.contentFocus],
-          ['Primary social', app.socialPrimary],
           ['Audience size', app.audienceSize],
         ] as Array<[string, string | undefined]>)
       : []),
@@ -124,6 +166,8 @@ export function ApplicationReviewSection({ applicationId, onDecided }: { applica
             </div>
           ))}
       </div>
+
+      {isCreator ? <ApplicantSocialLinks app={app} /> : null}
 
       {app.reviewNote && !pending ? (
         <div style={{ fontSize: 11.5, fontWeight: 600, marginTop: 10, color: '#374151' }}>

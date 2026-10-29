@@ -5,6 +5,7 @@ import { ClaimError, createOwnershipClaim, loadEntity, ownerOf, publicOwnership,
 import { eq } from 'drizzle-orm';
 import { catalogStore } from '../../lib/vercel-catalog/catalogStore';
 import { normalizeCreatorInput } from '../../lib/vercel-catalog/catalogEditorialContract';
+import { creatorSocialLinkProblem } from '../../shared/creatorProfileRules';
 import { db } from '../db/client';
 import { sellerProfiles, users } from '../db/schema';
 import { allocateNextChoosifyUserId } from '../auth/choosifyUserId';
@@ -34,6 +35,8 @@ export type PartnerApplyInput = {
   niche?: string;
   contentFocus?: string;
   socialPrimary?: string;
+  /** Creator applications: Facebook is required, the others optional (see APPLICATION_SOCIALS). */
+  socialLinks?: Partial<Record<ApplicationSocial, string>>;
   audienceSize?: string;
   notes?: string;
   /**
@@ -43,6 +46,61 @@ export type PartnerApplyInput = {
    */
   claimIntentId?: string;
 };
+
+/** Social links a creator gives when applying — Facebook is required so staff can check the person is real. */
+export const APPLICATION_SOCIALS = ['facebook', 'youtube', 'tiktok', 'instagram'] as const;
+export type ApplicationSocial = (typeof APPLICATION_SOCIALS)[number];
+
+function applicationError(status: number, code: string, message: string): Error {
+  const err = new Error(message);
+  (err as Error & { status?: number; code?: string }).status = status;
+  (err as Error & { code?: string }).code = code;
+  return err;
+}
+
+/** Same page regardless of https/www/m., trailing slash, query or case. */
+function socialIdentity(raw: string | undefined): string {
+  if (!raw) return '';
+  try {
+    const u = new URL(raw.trim());
+    return `${u.hostname.toLowerCase().replace(/^(www|m|mobile|web)\./, '')}${u.pathname.replace(/\/+$/, '').toLowerCase()}`;
+  } catch {
+    return '';
+  }
+}
+
+/** Validates a creator applicant's links; refuses a Facebook page another creator already uses. */
+async function cleanCreatorApplicationSocials(input: PartnerApplyInput): Promise<Partial<Record<ApplicationSocial, string>>> {
+  const raw = { ...(input.socialLinks || {}) };
+  // Older clients sent one "primary social" field — accept it as the Facebook link when it is one.
+  if (!raw.facebook && input.socialPrimary && !creatorSocialLinkProblem('facebook', input.socialPrimary)) raw.facebook = input.socialPrimary;
+  const links: Partial<Record<ApplicationSocial, string>> = {};
+  for (const key of APPLICATION_SOCIALS) {
+    const value = String(raw[key] ?? '').trim();
+    if (!value) continue;
+    const problem = creatorSocialLinkProblem(key, value);
+    if (problem) throw applicationError(400, 'SOCIAL_LINK_INVALID', problem);
+    links[key] = value;
+  }
+  if (!links.facebook) {
+    throw applicationError(400, 'FACEBOOK_REQUIRED', 'Your Facebook profile or page link is required so we can verify you are a real creator.');
+  }
+  const fb = socialIdentity(links.facebook);
+  const usedByCreator = (await catalogStore.listCreators()).some(
+    (c) => c.userId && socialIdentity(c.socialLinks?.facebook) === fb,
+  );
+  const usedByApplication = (await partnerApplicationStore.list('pending')).some(
+    (a) => a.applicantType === 'creator' && socialIdentity(a.socialPrimary) === fb,
+  );
+  if (usedByCreator || usedByApplication) {
+    throw applicationError(
+      409,
+      'SOCIAL_LINK_IN_USE',
+      'This Facebook link is already used by another creator on Choosify. If it is yours, contact support or claim the existing profile.',
+    );
+  }
+  return links;
+}
 
 function appendHistory(
   app: PartnerApplication,
@@ -99,6 +157,7 @@ async function createCreatorDraft(params: {
   displayName: string;
   email: string;
   category: string;
+  socialLinks?: Partial<Record<ApplicationSocial, string>>;
 }): Promise<string> {
   const name = params.displayName.trim() || 'Creator';
   const created = normalizeCreatorInput({
@@ -111,6 +170,7 @@ async function createCreatorDraft(params: {
     bestForTags: [],
     platforms: [],
     followers: {},
+    ...(params.socialLinks && Object.keys(params.socialLinks).length ? { socialLinks: params.socialLinks } : {}),
     email: params.email,
     userId: params.userId,
     origin: 'owner',
@@ -134,6 +194,7 @@ async function provisionPartnerUser(params: {
   existingUserId?: string;
   /** Claim onboarding: the applicant will claim an EXISTING community profile — do not create a new one. */
   skipCatalogEntity?: boolean;
+  socialLinks?: Partial<Record<ApplicationSocial, string>>;
 }): Promise<{ userId: string; catalogEntityId: string }> {
   const role = params.app.applicantType === 'creator' ? ROLES.CREATOR : ROLES.SELLER;
   const now = new Date();
@@ -247,6 +308,7 @@ async function provisionPartnerUser(params: {
           displayName: params.app.businessOrChannelName || params.app.displayName,
           email: params.app.email,
           category: params.app.category,
+          socialLinks: params.socialLinks,
         }));
     }
   }
@@ -305,6 +367,9 @@ export async function submitPartnerApplication(input: PartnerApplyInput): Promis
   // Claim onboarding: validate the server-issued claim reference BEFORE anything is created.
   const claimTarget = input.claimIntentId ? await validateOnboardingClaimIntent(input.claimIntentId, input.applicantType, existingUserId) : null;
 
+  // Creators: Facebook required (+ optional YouTube / TikTok / Instagram), checked before anything is created.
+  const creatorSocials = input.applicantType === 'creator' ? await cleanCreatorApplicationSocials(input) : undefined;
+
   if (await partnerApplicationStore.findPendingByEmail(email)) {
     const err = new Error('A pending partner application already exists for this email.');
     (err as Error & { status?: number; code?: string }).status = 409;
@@ -334,7 +399,7 @@ export async function submitPartnerApplication(input: PartnerApplyInput): Promis
     website: input.website?.trim() || undefined,
     niche: input.niche?.trim() || undefined,
     contentFocus: input.contentFocus?.trim() || undefined,
-    socialPrimary: input.socialPrimary?.trim() || undefined,
+    socialPrimary: creatorSocials?.facebook || input.socialPrimary?.trim() || undefined,
     audienceSize: input.audienceSize?.trim() || undefined,
     notes: input.notes?.trim() || undefined,
     existingUserId,
@@ -342,6 +407,7 @@ export async function submitPartnerApplication(input: PartnerApplyInput): Promis
 
   const provisioned = await provisionPartnerUser({
     app: row,
+    socialLinks: creatorSocials,
     passwordHash,
     existingUserId,
     skipCatalogEntity: Boolean(claimTarget),

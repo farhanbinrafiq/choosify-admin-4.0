@@ -103,6 +103,8 @@ interface AuthContextType {
     notes?: string;
     /** Server-issued claim reference (community profile "Claim" button). */
     claimIntentId?: string;
+    /** Creator applications: Facebook required, the rest optional. */
+    socialLinks?: Partial<Record<'facebook' | 'youtube' | 'tiktok' | 'instagram', string>>;
   }) => Promise<{ applicationId: string; status: 'pending'; message: string; claimId?: string }>;
   /** @deprecated Direct seller self-registration is closed — use applyAsPartner. */
   registerSeller: (input: {
@@ -608,6 +610,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     audienceSize?: string;
     notes?: string;
     claimIntentId?: string;
+    socialLinks?: Partial<Record<'facebook' | 'youtube' | 'tiktok' | 'instagram', string>>;
   }) => {
     console.info('[Auth] Partner application submit', {
       email: input.email.trim().toLowerCase(),
@@ -630,6 +633,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         niche: input.niche?.trim() || undefined,
         contentFocus: input.contentFocus?.trim() || undefined,
         socialPrimary: input.socialPrimary?.trim() || undefined,
+        socialLinks: input.socialLinks,
         audienceSize: input.audienceSize?.trim() || undefined,
         notes: input.notes?.trim() || undefined,
         claimIntentId: input.claimIntentId || undefined,

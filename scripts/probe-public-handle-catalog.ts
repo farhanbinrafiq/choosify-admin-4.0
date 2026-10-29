@@ -657,6 +657,7 @@ async function main() {
     const apply = (type: 'seller' | 'creator', key: string, businessName: string) =>
       call('/auth/partner-apply', null, 'POST', {
         applicantType: type,
+        socialLinks: { facebook: `https://facebook.com/probe.${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}` },
         email: `c3.pa-${key}.${sfx}@probe.local`,
         password: `PartnerApply!${sfx}`,
         displayName: `C3 Applicant ${key}`,

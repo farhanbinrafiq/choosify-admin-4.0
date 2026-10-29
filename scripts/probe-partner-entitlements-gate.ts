@@ -189,6 +189,7 @@ async function main() {
     const dup = await req('/auth/partner-apply', {
       body: {
         applicantType: 'creator',
+        socialLinks: { facebook: `https://facebook.com/probe.${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}` },
         email: sellerEmail,
         password,
         displayName: 'X',
@@ -227,6 +228,7 @@ async function main() {
     const apply = await req('/auth/partner-apply', {
       body: {
         applicantType: 'creator',
+        socialLinks: { facebook: `https://facebook.com/probe.${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}` },
         email: creatorEmail,
         password,
         displayName: 'Gate Creator',
@@ -338,6 +340,7 @@ async function main() {
     const again = await req('/auth/partner-apply', {
       body: {
         applicantType: 'creator',
+        socialLinks: { facebook: `https://facebook.com/probe.${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}` },
         email: sellerEmail,
         password,
         displayName: 'X',

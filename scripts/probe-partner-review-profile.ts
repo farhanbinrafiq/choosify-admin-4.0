@@ -74,6 +74,7 @@ async function main() {
   const creatorApply = await req('/auth/partner-apply', {
     body: {
       applicantType: 'creator',
+      socialLinks: { facebook: `https://facebook.com/probe.${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}` },
       email: creatorEmail,
       password,
       displayName: 'Review Creator',

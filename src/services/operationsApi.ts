@@ -720,6 +720,8 @@ export interface OpsPartnerApplication {
   niche?: string;
   contentFocus?: string;
   socialPrimary?: string;
+  /** Creator applications: links from the draft Creator profile (Facebook required since 2026-10-29). */
+  socialLinks?: Partial<Record<'facebook' | 'youtube' | 'tiktok' | 'instagram' | 'linkedin', string>>;
   audienceSize?: string;
   notes?: string;
   adminNotes?: string;

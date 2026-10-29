@@ -38,6 +38,16 @@ function FormSection({
   );
 }
 
+/** Creator sign-up social links — Facebook is required so staff can confirm the applicant is a real person. */
+import { creatorSocialLinkProblem } from '../../shared/creatorProfileRules';
+type SignupSocial = 'facebook' | 'youtube' | 'tiktok' | 'instagram';
+const SIGNUP_SOCIALS: Array<{ key: SignupSocial; label: string; placeholder: string; required?: boolean }> = [
+  { key: 'facebook', label: 'FACEBOOK', placeholder: 'https://facebook.com/yourpage', required: true },
+  { key: 'youtube', label: 'YOUTUBE', placeholder: 'https://youtube.com/@yourchannel' },
+  { key: 'tiktok', label: 'TIKTOK', placeholder: 'https://tiktok.com/@you' },
+  { key: 'instagram', label: 'INSTAGRAM', placeholder: 'https://instagram.com/you' },
+];
+
 /** Left-panel partner context — adapts to the existing `applicantType` UI state only. */
 function ContextRow({
   active,
@@ -99,7 +109,8 @@ export default function SellerSignupPage() {
   const [website, setWebsite] = useState('');
   const [niche, setNiche] = useState('');
   const [contentFocus, setContentFocus] = useState('');
-  const [socialPrimary, setSocialPrimary] = useState('');
+  // Creators: Facebook is required (staff check the person is real); the rest are optional.
+  const [socials, setSocials] = useState<Record<SignupSocial, string>>({ facebook: '', youtube: '', tiktok: '', instagram: '' });
   const [audienceSize, setAudienceSize] = useState('');
   const [notes, setNotes] = useState('');
   const [agreed, setAgreed] = useState(false);
@@ -203,6 +214,19 @@ export default function SellerSignupPage() {
       setError('Please describe your niche or content focus.');
       return;
     }
+    if (applicantType === 'creator') {
+      if (!socials.facebook.trim()) {
+        setError('Please add your Facebook profile or page link — we use it to verify you are a real creator.');
+        return;
+      }
+      for (const s of SIGNUP_SOCIALS) {
+        const problem = creatorSocialLinkProblem(s.key, socials[s.key]);
+        if (problem) {
+          setError(problem);
+          return;
+        }
+      }
+    }
     if (!agreed) {
       setError('Please agree to the Terms of Service to continue.');
       return;
@@ -222,7 +246,11 @@ export default function SellerSignupPage() {
         website: website.trim() || undefined,
         niche: applicantType === 'creator' ? niche.trim() : undefined,
         contentFocus: applicantType === 'creator' ? contentFocus.trim() || undefined : undefined,
-        socialPrimary: applicantType === 'creator' ? socialPrimary.trim() || undefined : undefined,
+        socialPrimary: applicantType === 'creator' ? socials.facebook.trim() || undefined : undefined,
+        socialLinks:
+          applicantType === 'creator'
+            ? Object.fromEntries(SIGNUP_SOCIALS.map((s) => [s.key, socials[s.key].trim()]).filter(([, v]) => v))
+            : undefined,
         audienceSize: applicantType === 'creator' ? audienceSize.trim() || undefined : undefined,
         notes: notes.trim() || undefined,
         claimIntentId: claimTarget ? claimIntentId : undefined,
@@ -574,15 +602,34 @@ export default function SellerSignupPage() {
                       </div>
                     </div>
 
-                    <label className={fieldLabel}>PRIMARY SOCIAL LINK (OPTIONAL)</label>
-                    <div className={fieldWrap}>
-                      <input
-                        className={fieldInput}
-                        value={socialPrimary}
-                        onChange={(e) => setSocialPrimary(e.target.value)}
-                        placeholder="Instagram / YouTube / TikTok URL"
-                      />
-                    </div>
+                    {SIGNUP_SOCIALS.map((s) => {
+                      const problem = creatorSocialLinkProblem(s.key, socials[s.key]);
+                      return (
+                        <div key={s.key}>
+                          <label className={fieldLabel}>
+                            {s.label} LINK {s.required ? '*' : '(OPTIONAL)'}
+                          </label>
+                          <div className={fieldWrap}>
+                            <input
+                              className={fieldInput}
+                              type="url"
+                              inputMode="url"
+                              required={s.required}
+                              data-testid={`signup-social-${s.key}`}
+                              value={socials[s.key]}
+                              onChange={(e) => setSocials((prev) => ({ ...prev, [s.key]: e.target.value }))}
+                              placeholder={s.placeholder}
+                            />
+                          </div>
+                          {s.required ? (
+                            <p className="-mt-1 mb-3 text-[10.5px] font-semibold text-[#6B7280]">
+                              Required — we check it to confirm you are a real creator before approving.
+                            </p>
+                          ) : null}
+                          {problem ? <p className="-mt-1 mb-3 text-[10.5px] font-semibold text-red-600">{problem}</p> : null}
+                        </div>
+                      );
+                    })}
 
                     <label className={fieldLabel}>WEBSITE / PORTFOLIO (OPTIONAL)</label>
                     <div className={fieldWrap}>

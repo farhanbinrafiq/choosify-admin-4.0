@@ -70,6 +70,7 @@ async function provisionPartner(adminToken: string, type: 'seller' | 'creator', 
     undefined,
     {
       applicantType: type,
+      socialLinks: { facebook: `https://facebook.com/probe.${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}` },
       email,
       password: PASSWORD,
       displayName: `Deals Probe ${type} ${label}`,

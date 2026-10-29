@@ -180,6 +180,7 @@ async function main() {
   const pendingCreatorEmail = `beta-pending-creator-${stamp}@testers.choosify.bd`;
   const pendingCreatorApply = await post('/auth/partner-apply', {
     applicantType: 'creator',
+    socialLinks: { facebook: `https://facebook.com/probe.${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}` },
     email: pendingCreatorEmail,
     displayName: 'Beta Pending Creator',
     businessOrChannelName: 'Pending Beta Channel',
@@ -194,6 +195,7 @@ async function main() {
   const approvedCreatorEmail = `beta-approved-creator-${stamp}@testers.choosify.bd`;
   const approvedCreatorApply = await post('/auth/partner-apply', {
     applicantType: 'creator',
+    socialLinks: { facebook: `https://facebook.com/probe.${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}` },
     email: approvedCreatorEmail,
     displayName: 'Beta Approved Creator',
     businessOrChannelName: 'Approved Beta Channel',
