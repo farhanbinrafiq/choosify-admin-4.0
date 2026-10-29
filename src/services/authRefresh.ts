@@ -21,7 +21,23 @@ export function persistAccessToken(token: string): void {
 // refresh instead of racing each other with the same cookie.
 let inFlightRefresh: Promise<string | null> | null = null;
 
-// Refresh is reactive only: call after a 401, never proactively/on a timer.
+/**
+ * True when the stored access token has already passed its `exp`. Some catalog
+ * GETs accept anonymous callers and quietly treat an expired token as "signed
+ * out" (no 401), returning the public list without drafts — so a known-expired
+ * token is refreshed before the request, exactly as a 401 would trigger.
+ */
+export function isAccessTokenExpired(token: string | null): boolean {
+  if (!token) return false;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))) as { exp?: number };
+    return typeof payload.exp === 'number' && payload.exp * 1000 <= Date.now();
+  } catch {
+    return false;
+  }
+}
+
+// Refresh is reactive only: call after a 401 (or a token known to be expired), never on a timer.
 export function refreshAccessToken(): Promise<string | null> {
   if (!inFlightRefresh) {
     inFlightRefresh = doRefreshAccessToken().finally(() => {

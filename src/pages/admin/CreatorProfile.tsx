@@ -113,7 +113,8 @@ export default function CreatorProfile() {
       setCreator(matched);
       // No creator record: the id may be a creator-role account that has not
       // set up Creator Studio yet — still load the account so staff can act on it.
-      const uid = matched?.userId || (matched ? '' : creatorId);
+      // A creator-… id is a profile id, never an account id.
+      const uid = matched?.userId || (matched || creatorId.startsWith('creator-') ? '' : creatorId);
       const [detail, manage, publicGuides] = await Promise.all([
         uid ? authApi.getUserDetail(uid).catch(() => null) : Promise.resolve(null),
         catalogApi.manageGuides({ status: 'all' }).then((r) => r.data || []).catch(() => [] as GuideManageRow[]),

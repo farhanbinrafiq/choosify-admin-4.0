@@ -2359,6 +2359,11 @@ authRouter.get('/auth/users/:userId', ...requireAdmin, async (req, res) => {
       res.status(400).json({ success: false, error: 'Valid userId is required' });
       return;
     }
+    // Account ids are UUIDs — anything else (e.g. a creator-… profile id) is simply not an account.
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
+    }
     const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     const user = rows[0];
     if (!user) {

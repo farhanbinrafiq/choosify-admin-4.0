@@ -16,7 +16,7 @@ import type {
   HomepageConfig,
   SiteConfig,
 } from '../types/catalog';
-import { getStoredAccessToken, refreshAccessToken, reportFeatureEntitlementDenied } from './authRefresh';
+import { getStoredAccessToken, isAccessTokenExpired, refreshAccessToken, reportFeatureEntitlementDenied } from './authRefresh';
 
 export type DraftEntityType = 'brand' | 'product' | 'creator' | 'guide';
 
@@ -126,7 +126,10 @@ async function request<T>(path: string, method: HttpMethod = 'GET', body?: unkno
   // Write routes require a Firebase Bearer token (authenticateRequest); some GET
   // routes (draft/version endpoints) are admin-only too, so attach it whenever
   // present — public GET routes simply ignore the header.
-  const token = getStoredAccessToken();
+  let token = getStoredAccessToken();
+  // Public-or-staff GETs (e.g. /catalog/creators) treat an expired token as anonymous and
+  // would silently drop drafts / pending profiles — refresh a known-expired token first.
+  if (isAccessTokenExpired(token)) token = (await refreshAccessToken()) || token;
   let response = await doFetch(path, method, body, token, extraHeaders);
 
   // A dashboard tab left open across a long session (e.g. drafting a product)
