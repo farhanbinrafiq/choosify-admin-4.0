@@ -18,6 +18,7 @@ import {
   revokeRefreshToken,
   hashRefreshToken,
   rotateRefreshToken,
+  revokeSessionsOnRefreshTokenReuse,
   setRefreshTokenCookie,
   signAccessToken,
   verifyPassword,
@@ -69,6 +70,7 @@ import {
   requestAccountDeletion,
 } from './auth/accountLifecycle';
 import { AUTH_ERROR_CODES, sendAuthError } from './auth/authErrors';
+import { clearLoginFailures, loginLockedForSeconds, recordLoginFailure } from './auth/loginThrottle';
 import { recordLogin } from './analytics/eventHooks';
 import { recordFailedAuthAttempt } from './lib/abuseProtection';
 import { Logger } from './lib/logger';
@@ -159,10 +161,29 @@ authRouter.post('/auth/login', validate({ body: LoginBodySchema }), async (req, 
   const { email, password } = req.body as { email: string; password: string };
   const normalizedEmail = email.trim().toLowerCase();
 
+  // Per-account throttle (same answer whether or not the account exists).
+  const lockedFor = loginLockedForSeconds(normalizedEmail);
+  if (lockedFor > 0) {
+    operationalEvents.authenticationFailure({
+      requestId: req.requestId,
+      path: req.originalUrl,
+      message: 'Account sign-in paused after repeated failures',
+      metadata: { reason: 'account_login_throttled' },
+    });
+    res.setHeader('Retry-After', String(lockedFor));
+    res.status(429).json({
+      error: `Too many failed sign-in attempts for this account. Try again in ${Math.ceil(lockedFor / 60)} minute(s), or reset your password.`,
+      code: 'ACCOUNT_LOGIN_THROTTLED',
+      retryAfterSeconds: lockedFor,
+    });
+    return;
+  }
+
   try {
     const rows = await db.select().from(users).where(eq(users.email, normalizedEmail)).limit(1);
     const user = rows[0];
     if (!user?.passwordHash) {
+      recordLoginFailure(normalizedEmail);
       recordFailedAuthAttempt(req.ip, req.originalUrl);
       operationalEvents.authenticationFailure({
         requestId: req.requestId,
@@ -176,6 +197,7 @@ authRouter.post('/auth/login', validate({ body: LoginBodySchema }), async (req, 
 
     const ok = await verifyPassword(user.passwordHash, password);
     if (!ok) {
+      recordLoginFailure(normalizedEmail);
       recordFailedAuthAttempt(req.ip, req.originalUrl);
       operationalEvents.authenticationFailure({
         requestId: req.requestId,
@@ -188,6 +210,7 @@ authRouter.post('/auth/login', validate({ body: LoginBodySchema }), async (req, 
       return;
     }
 
+    clearLoginFailures(normalizedEmail);
     const lifecycle = reactivateOnSignIn(req, user.id);
     if (lifecycle.blocked) {
       res.status(401).json({ error: 'This account has been deleted.', code: 'ACCOUNT_DELETED' });
@@ -650,6 +673,20 @@ authRouter.post('/auth/refresh', async (req, res) => {
       // Reason code only (revoked = reused after rotation, lost concurrent race,
       // logged out or password reset); the token itself is never logged.
       const failure = await classifyRefreshFailure(raw).catch(() => 'unknown' as const);
+      // A used token replayed after the race window = a copied cookie: end every
+      // session of that account (see revokeSessionsOnRefreshTokenReuse).
+      const reusedBy = failure === 'revoked' ? await revokeSessionsOnRefreshTokenReuse(raw).catch(() => null) : null;
+      if (reusedBy) {
+        clearRefreshTokenCookie(res);
+        Logger.audit('auth.refresh_token_reuse', { requestId: req.requestId, userId: reusedBy });
+        recordAccountActivity(req, {
+          userId: reusedBy,
+          type: 'sessions_revoked',
+          category: 'security',
+          summary: 'An old sign-in token was used again, so every session was signed out as a precaution',
+          success: false,
+        });
+      }
       // A revoked token is most often one another tab just rotated. This 401 can
       // reach the browser after the winner set the new cookie, so clearing the
       // cookie here would sign that browser out. A dead cookie left in place is
@@ -659,7 +696,7 @@ authRouter.post('/auth/refresh', async (req, res) => {
         requestId: req.requestId,
         path: req.originalUrl,
         message: 'Invalid or expired refresh token',
-        metadata: { reason: failure === 'unknown' ? 'refresh_invalid' : `refresh_${failure}` },
+        metadata: { reason: reusedBy ? 'refresh_reuse_detected' : failure === 'unknown' ? 'refresh_invalid' : `refresh_${failure}` },
       });
       res.status(401).json({ error: 'Invalid or expired refresh token', code: AUTH_ERROR_CODES.INVALID_TOKEN });
       return;
@@ -1785,6 +1822,8 @@ authRouter.post('/auth/reset-password', async (req, res) => {
     clearRefreshTokenCookie(res);
 
     const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    // A new password lifts any per-account sign-in pause.
+    if (rows[0]?.email) clearLoginFailures(rows[0].email);
     Logger.audit('auth.password_reset_completed', { userId, ip: req.ip });
     recordAccountActivity(req, { userId, type: 'password_reset', category: 'security', summary: 'Password reset with an emailed link — all other sessions signed out' });
     if (rows[0]) {

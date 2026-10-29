@@ -85,7 +85,11 @@ export function isExpiredJwtError(error: unknown): boolean {
   );
 }
 
-export async function issueRefreshToken(userId: string, writer: RefreshTokenWriter = db): Promise<string> {
+export async function issueRefreshToken(
+  userId: string,
+  writer: RefreshTokenWriter = db,
+  createdAt?: Date,
+): Promise<string> {
   const raw = randomBytes(32).toString('base64url');
   const tokenHash = hashRefreshToken(raw);
   const expiresAt = new Date(Date.now() + REFRESH_TTL_MS);
@@ -93,6 +97,7 @@ export async function issueRefreshToken(userId: string, writer: RefreshTokenWrit
     userId,
     tokenHash,
     expiresAt,
+    ...(createdAt ? { createdAt } : {}),
   });
   return raw;
 }
@@ -145,9 +150,12 @@ export async function rotateRefreshToken(rawToken: string): Promise<{
   // Losing a race is handled by the clients, which retry once with the cookie
   // the winning request has just set.
   return db.transaction(async (tx) => {
+    // One timestamp for "used" and its successor's creation: reuse detection
+    // recognises a rotated token by a successor created at that same instant.
+    const now = new Date();
     const [row] = await tx
       .update(refreshTokens)
-      .set({ revokedAt: new Date() })
+      .set({ revokedAt: now })
       .where(
         and(
           eq(refreshTokens.tokenHash, tokenHash),
@@ -166,7 +174,7 @@ export async function rotateRefreshToken(rawToken: string): Promise<{
       email: user.email,
       emailVerified: user.emailVerified,
     });
-    const refreshToken = await issueRefreshToken(user.id, tx);
+    const refreshToken = await issueRefreshToken(user.id, tx, now);
     return { userId: user.id, accessToken, refreshToken };
   });
 }
@@ -186,6 +194,45 @@ export async function classifyRefreshFailure(rawToken: string): Promise<'unknown
   if (!row) return 'unknown';
   if (row.revokedAt) return 'revoked';
   return row.expiresAt <= new Date() ? 'expired' : 'unknown';
+}
+
+/** A rotated token presented again within this window is a concurrent-tab race, not theft. */
+const REUSE_GRACE_MS = 60 * 1000;
+
+/**
+ * Refresh-token reuse detection (no schema change): a token that was used for a
+ * refresh (it has a successor created at the instant it was revoked), is not
+ * expired, and is presented again more than REUSE_GRACE_MS later can only be a
+ * copy — the legitimate browser already holds the successor. Every session of
+ * that account is ended (the schema has no token family, so the account is the
+ * family). Tokens revoked by logout / password change / account actions have no
+ * successor and never trigger this. Returns the account id when sessions were ended.
+ */
+export async function revokeSessionsOnRefreshTokenReuse(rawToken: string, nowMs = Date.now()): Promise<string | null> {
+  const [row] = await db
+    .select({ userId: refreshTokens.userId, revokedAt: refreshTokens.revokedAt, expiresAt: refreshTokens.expiresAt })
+    .from(refreshTokens)
+    .where(eq(refreshTokens.tokenHash, hashRefreshToken(rawToken)))
+    .limit(1);
+  if (!row?.revokedAt || row.expiresAt.getTime() <= nowMs) return null;
+  if (nowMs - row.revokedAt.getTime() < REUSE_GRACE_MS) return null;
+  // rotateRefreshToken writes the old token's revokedAt and its successor's
+  // createdAt from one Date, so a rotation is an exact match — a logout or any
+  // other revocation that merely happens near another login never is.
+  const [successor] = await db
+    .select({ id: refreshTokens.id })
+    .from(refreshTokens)
+    .where(
+      and(
+        eq(refreshTokens.userId, row.userId),
+        ne(refreshTokens.tokenHash, hashRefreshToken(rawToken)),
+        eq(refreshTokens.createdAt, row.revokedAt),
+      ),
+    )
+    .limit(1);
+  if (!successor) return null;
+  await revokeAllRefreshTokensForUser(row.userId);
+  return row.userId;
 }
 
 export async function revokeRefreshToken(rawToken: string): Promise<void> {
