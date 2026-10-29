@@ -343,7 +343,7 @@ export interface ShopperSignals {
   savedProducts: ShopperSignalItem[];
   savedBrands: ShopperSignalItem[];
   followedCreators: ShopperSignalItem[];
-  searches: Array<{ q: string; at: string }>;
+  searches: Array<{ q: string; at: string; count?: number }>;
   updatedAt: string;
 }
 

@@ -1,9 +1,10 @@
-import React, { CSSProperties } from 'react';
+import React, { CSSProperties, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { OpsStorefrontOrder } from '../../../services/operationsApi';
 import type { ReturnRequest } from '../../../contexts/ReturnsContext';
 import type { WarrantyClaim } from '../../../services/warrantyClaimsApi';
 import type { StoredCustomerAddress } from '../../../services/authApi';
+import { catalogApi } from '../../../services/catalogApi';
 
 /**
  * Consumer 360 — the shopper's own storefront account sections, read-only for
@@ -246,18 +247,56 @@ export function WarrantyPanel({ claims, error }: { claims: WarrantyClaim[]; erro
   );
 }
 
+type CatalogThumbs = { brand: (id: string) => string | undefined; creator: (id: string) => string | undefined };
+let thumbsLoad: Promise<{ brands: Map<string, string>; creators: Map<string, string> }> | null = null;
+
+/** Brand logos / creator photos by id or slug — for list thumbnails (loaded once per page). */
+export function useCatalogThumbs(): CatalogThumbs {
+  const [maps, setMaps] = useState<{ brands: Map<string, string>; creators: Map<string, string> } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    thumbsLoad ??= Promise.all([catalogApi.listBrands().catch(() => []), catalogApi.listCreators().catch(() => [])]).then(([brands, creators]) => {
+      const b = new Map<string, string>();
+      for (const x of brands) if (x.logo) [x.id, x.slug].forEach((k) => k && b.set(k, x.logo));
+      const c = new Map<string, string>();
+      for (const x of creators) if (x.avatar) [x.id, x.slug].forEach((k) => k && c.set(k, x.avatar));
+      return { brands: b, creators: c };
+    });
+    thumbsLoad.then((m) => alive && setMaps(m)).catch(() => (thumbsLoad = null));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return { brand: (id) => maps?.brands.get(id), creator: (id) => maps?.creators.get(id) };
+}
+
+/** 32px list thumbnail (empty grey tile when there is no image). */
+export function Thumb({ src }: { src?: string | null }) {
+  const [broken, setBroken] = useState<string | null>(null);
+  return (
+    <div style={{ width: 32, height: 32, borderRadius: 6, background: '#F4F7F9', overflow: 'hidden', flexShrink: 0 }}>
+      {src && broken !== src ? (
+        <img src={src} alt="" onError={() => setBroken(src)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      ) : null}
+    </div>
+  );
+}
+
 /** Saved products / brands / followed creators recorded from the storefront. */
 export function SignalList({
   title,
   items,
   empty,
   to,
+  thumbFor,
   testId,
 }: {
   title: string;
   items: Array<{ id: string; label: string; image?: string; at: string }>;
   empty: string;
   to?: (i: { id: string }) => string;
+  /** Fallback image when the saved item has none (brand logo / creator photo). */
+  thumbFor?: (id: string) => string | undefined;
   testId: string;
 }) {
   return (
@@ -271,9 +310,7 @@ export function SignalList({
       ) : (
         items.map((i) => (
           <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid #F1F3F5', fontSize: 11.5, fontWeight: 700 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 6, background: '#F4F7F9', overflow: 'hidden', flexShrink: 0 }}>
-              {i.image ? <img src={i.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
-            </div>
+            <Thumb src={i.image || thumbFor?.(i.id)} />
             <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {to ? (
                 <Link to={to(i)} style={{ color: '#111827', textDecoration: 'none' }}>
@@ -291,16 +328,23 @@ export function SignalList({
   );
 }
 
-export function SearchHistoryPanel({ searches, error }: { searches: Array<{ q: string; at: string }>; error?: string }) {
+export function SearchHistoryPanel({ searches, error }: { searches: Array<{ q: string; at: string; count?: number }>; error?: string }) {
   return (
-    <Panel title="SEARCH HISTORY" sub="Recent storefront searches while signed in (newest first, last 50)." error={error}>
+    <Panel title="SEARCH HISTORY" sub="Recent storefront searches while signed in (newest first, last 50). ×N = searched N times; the date is the latest search." error={error}>
       <div data-testid="consumer-search-history">
         {!searches.length ? (
           <div style={C.empty}>No searches recorded.</div>
         ) : (
           searches.map((s, i) => (
             <div key={`${s.q}-${i}`} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderTop: '1px solid #F1F3F5', fontSize: 11.5, fontWeight: 700 }}>
-              <span>“{s.q}”</span>
+              <span>
+                “{s.q}”
+                {(s.count || 1) > 1 ? (
+                  <span data-testid="search-count" title={`Searched ${s.count} times`} style={{ ...C.pill, marginLeft: 8, background: '#FFF1EC', color: '#EF3C23', textTransform: 'none' }}>
+                    ×{s.count}
+                  </span>
+                ) : null}
+              </span>
               <span style={{ color: '#9CA3AF', fontWeight: 600 }}>{new Date(s.at).toLocaleString()}</span>
             </div>
           ))

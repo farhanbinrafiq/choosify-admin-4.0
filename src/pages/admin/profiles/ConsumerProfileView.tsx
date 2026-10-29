@@ -28,6 +28,8 @@ import {
   cancelledOrders,
   refundCases,
   toPayOrders,
+  Thumb,
+  useCatalogThumbs,
 } from '../../../components/admin/profile/ConsumerActivityPanels';
 import type { ReturnRequest } from '../../../contexts/ReturnsContext';
 import { warrantyClaimsApi, type WarrantyClaim } from '../../../services/warrantyClaimsApi';
@@ -83,6 +85,7 @@ export default function ConsumerProfileView() {
   const [orders, setOrders] = useState<OpsStorefrontOrder[]>([]);
   const [reviews, setReviews] = useState<OpsReview[]>([]);
   const [followed, setFollowed] = useState<CatalogBrand[]>([]);
+  const thumbs = useCatalogThumbs();
   const [followedIds, setFollowedIds] = useState<string[]>([]);
   const [signals, setSignals] = useState<ShopperSignals | null>(null);
   const [returns, setReturns] = useState<ReturnRequest[]>([]);
@@ -401,7 +404,7 @@ export default function ConsumerProfileView() {
                 to={(i) => `/admin/products/${encodeURIComponent(i.id)}/preview`}
                 testId="consumer-saved-products"
               />
-              <SignalList title="SAVED BRANDS" items={signals?.savedBrands || []} empty="No saved brands." testId="consumer-saved-brands" />
+              <SignalList title="SAVED BRANDS" items={signals?.savedBrands || []} empty="No saved brands." thumbFor={thumbs.brand} testId="consumer-saved-brands" />
             </div>
           )}
 
@@ -413,13 +416,14 @@ export default function ConsumerProfileView() {
               items={signals?.followedCreators || []}
               empty="Not following any creators."
               to={(i) => `/admin/creator-review?creatorId=${encodeURIComponent(i.id)}`}
+              thumbFor={thumbs.creator}
               testId="consumer-followed-creators"
             />
           )}
 
           {activeTab === 'brands' && (
             <div style={S.panel} data-testid="consumer-followed-brands">
-              <div style={S.panelTitle}>FOLLOWED BRANDS</div>
+              <div style={S.panelTitle}>FOLLOWED BRANDS ({followedIds.length})</div>
               <div style={S.panelSub}>From the brand-follow store.</div>
               {sectionErrors.brands ? (
                 <div style={{ color: '#DC2626', fontSize: 12, fontWeight: 700 }}>{sectionErrors.brands}</div>
@@ -427,8 +431,9 @@ export default function ConsumerProfileView() {
                 <div style={S.emptyBox}>Not following any brands.</div>
               ) : (
                 followed.map((b) => (
-                  <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '9px 0', borderTop: '1px solid #F1F3F5', fontSize: 11.5, fontWeight: 700 }}>
-                    <span>{b.name} <span style={{ color: '#9CA3AF', fontWeight: 600 }}>· {b.category}</span></span>
+                  <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid #F1F3F5', fontSize: 11.5, fontWeight: 700 }}>
+                    <Thumb src={b.logo} />
+                    <span style={{ flex: 1, minWidth: 0 }}>{b.name} <span style={{ color: '#9CA3AF', fontWeight: 600 }}>· {b.category}</span></span>
                     {b.sellerId ? (
                       <Link to={`/admin/seller-profile?sellerId=${encodeURIComponent(b.sellerId)}`} style={{ color: ACCENT, textDecoration: 'none', fontWeight: 800 }}>Seller profile →</Link>
                     ) : (

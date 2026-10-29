@@ -888,7 +888,8 @@ export interface OpsShopperSignals {
   savedProducts: OpsShopperSignalItem[];
   savedBrands: OpsShopperSignalItem[];
   followedCreators: OpsShopperSignalItem[];
-  searches: Array<{ q: string; at: string }>;
+  /** count = how many times this query was searched (absent on older entries = 1). */
+  searches: Array<{ q: string; at: string; count?: number }>;
   updatedAt: string;
 }
 

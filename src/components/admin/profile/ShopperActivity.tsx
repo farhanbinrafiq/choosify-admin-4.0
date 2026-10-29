@@ -20,6 +20,8 @@ import {
   cancelledOrders,
   refundCases,
   toPayOrders,
+  Thumb,
+  useCatalogThumbs,
 } from './ConsumerActivityPanels';
 
 /**
@@ -59,6 +61,7 @@ export function ShopperActivity({ userId }: { userId: string }) {
   const [reviews, setReviews] = useState<OpsReview[]>([]);
   const [signals, setSignals] = useState<ShopperSignals | null>(null);
   const [followed, setFollowed] = useState<CatalogBrand[]>([]);
+  const thumbs = useCatalogThumbs();
   const [addresses, setAddresses] = useState<StoredCustomerAddress[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -152,7 +155,7 @@ export function ShopperActivity({ userId }: { userId: string }) {
             to={(i) => `/admin/products/${encodeURIComponent(i.id)}/preview`}
             testId="shopper-saved-products"
           />
-          <SignalList title="SAVED BRANDS" items={signals?.savedBrands || []} empty="No saved brands." testId="shopper-saved-brands" />
+          <SignalList title="SAVED BRANDS" items={signals?.savedBrands || []} empty="No saved brands." thumbFor={thumbs.brand} testId="shopper-saved-brands" />
         </div>
       )}
       {tab === 'search' && <SearchHistoryPanel searches={signals?.searches || []} error={errors.signals} />}
@@ -163,6 +166,7 @@ export function ShopperActivity({ userId }: { userId: string }) {
             items={signals?.followedCreators || []}
             empty="Not following any creators."
             to={(i) => `/admin/creator-review?creatorId=${encodeURIComponent(i.id)}`}
+            thumbFor={thumbs.creator}
             testId="shopper-followed-creators"
           />
           <div style={S.panel} data-testid="shopper-followed-brands">
@@ -173,8 +177,9 @@ export function ShopperActivity({ userId }: { userId: string }) {
               <div style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 12, fontStyle: 'italic', padding: '16px 0' }}>Not following any brands.</div>
             ) : (
               followed.map((b) => (
-                <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '9px 0', borderTop: '1px solid #F1F3F5', fontSize: 11.5, fontWeight: 700 }}>
-                  <span>
+                <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid #F1F3F5', fontSize: 11.5, fontWeight: 700 }}>
+                  <Thumb src={b.logo} />
+                  <span style={{ flex: 1, minWidth: 0 }}>
                     {b.name} <span style={{ color: '#9CA3AF', fontWeight: 600 }}>· {b.category}</span>
                   </span>
                   {b.sellerId ? (

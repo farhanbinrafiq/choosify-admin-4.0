@@ -4620,7 +4620,10 @@ operationsRouter.post('/operations/shopper-signals/me/searches', ...requireAuth,
   }
   const current = operationsStore.getShopperSignals(req.userId!) || emptySignals(req.userId!);
   const now = new Date().toISOString();
-  const searches = [{ q, at: now }, ...current.searches.filter((s) => s.q.toLowerCase() !== q.toLowerCase())].slice(0, SEARCH_HISTORY_MAX);
+  // A repeated search moves to the top and counts how many times it was searched.
+  const prev = current.searches.find((s) => s.q.toLowerCase() === q.toLowerCase());
+  const count = (prev?.count || (prev ? 1 : 0)) + 1;
+  const searches = [{ q, at: now, count }, ...current.searches.filter((s) => s !== prev)].slice(0, SEARCH_HISTORY_MAX);
   const saved = operationsStore.saveShopperSignals({ ...current, searches, updatedAt: now });
   scheduleOperationsPersist();
   res.status(201).json({ success: true, data: saved.searches });
