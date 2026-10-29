@@ -266,6 +266,7 @@ export default function SellerProfile() {
       <AccountLifecycleBanner lifecycle={user?.lifecycle} />
       {claimId ? <ClaimReviewSection claimId={claimId} onDecided={() => void load()} /> : null}
       <ApplicationReviewSection
+        key={`top-${user?.partnerApplicationStatus || ''}`}
         applicationId={applicationId || undefined}
         match={{ type: 'seller', userId: sellerId || undefined }}
         accountCreatedAt={user?.createdAt}
@@ -332,6 +333,13 @@ export default function SellerProfile() {
                   titleStyle={S.panelTitle}
                 />
               ) : null}
+              <ApplicationReviewSection
+                key={`panel-${user?.partnerApplicationStatus || ''}`}
+                placement="panel"
+                match={{ type: 'seller', userId: sellerId || undefined }}
+                accountCreatedAt={user?.createdAt}
+                onDecided={() => void load()}
+              />
               <div style={S.panel} data-testid="account-lifecycle">
                 <div style={S.panelTitle}>ACCOUNT</div>
                 <div style={S.panelSub}>Seller account lifecycle from the auth service.</div>

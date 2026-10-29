@@ -266,6 +266,7 @@ export default function CreatorProfile() {
         <AdminEditModeStrip state={edit} />
         {claimId ? <ClaimReviewSection claimId={claimId} onDecided={() => void load()} /> : null}
         <ApplicationReviewSection
+          key={`top-${user?.partnerApplicationStatus || ''}`}
           applicationId={applicationId || undefined}
           match={{ type: 'creator', userId: targetUserId || undefined, catalogEntityId: creator?.id }}
           accountCreatedAt={user?.createdAt}
@@ -326,6 +327,7 @@ export default function CreatorProfile() {
       <AccountLifecycleBanner lifecycle={user?.lifecycle} />
       {claimId ? <ClaimReviewSection claimId={claimId} onDecided={() => void load()} /> : null}
       <ApplicationReviewSection
+        key={`top-${user?.partnerApplicationStatus || ''}`}
         applicationId={applicationId || undefined}
         match={{ type: 'creator', userId: targetUserId || undefined, catalogEntityId: creator?.id }}
         accountCreatedAt={user?.createdAt}
@@ -389,6 +391,13 @@ export default function CreatorProfile() {
                   titleStyle={S.panelTitle}
                 />
               ) : null}
+              <ApplicationReviewSection
+                key={`panel-${user?.partnerApplicationStatus || ''}`}
+                placement="panel"
+                match={{ type: 'creator', userId: targetUserId || undefined, catalogEntityId: creator.id }}
+                accountCreatedAt={user?.createdAt}
+                onDecided={() => void load()}
+              />
               <div style={S.panel}>
                 <div style={S.panelTitle}>ACCOUNT INFORMATION</div>
                 <div style={S.panelSub}>From the creator catalog record and the linked login account.</div>

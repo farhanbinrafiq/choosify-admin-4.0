@@ -1571,6 +1571,16 @@ export const operationsApi = {
     return result.application;
   },
 
+  /** POST /operations/partner-applications/:id/unapprove — approved -> pending, only while Marketplace Access is off. */
+  unapprovePartnerApplication: async (id: string, reason: string) => {
+    const result = await request<{ success: boolean; application: OpsPartnerApplication }>(
+      `/operations/partner-applications/${encodeURIComponent(id)}/unapprove`,
+      'POST',
+      { reason },
+    );
+    return result.application;
+  },
+
   /** POST /operations/partner-applications/:id/reject (requireAdmin). */
   rejectPartnerApplication: async (id: string, note?: string) => {
     const result = await request<{ success: boolean; application: OpsPartnerApplication }>(

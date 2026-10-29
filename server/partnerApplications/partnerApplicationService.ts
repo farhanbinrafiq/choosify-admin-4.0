@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import { catalogStore } from '../../lib/vercel-catalog/catalogStore';
 import { normalizeCreatorInput } from '../../lib/vercel-catalog/catalogEditorialContract';
 import { creatorSocialLinkProblem } from '../../shared/creatorProfileRules';
+import { brandIsMarketplaceVisible } from '../catalog/sellerWorkspace';
 import { db } from '../db/client';
 import { sellerProfiles, users } from '../db/schema';
 import { allocateNextChoosifyUserId } from '../auth/choosifyUserId';
@@ -591,6 +592,70 @@ export async function approvePartnerApplication(params: {
     console.error('[PartnerApplications] Failed to notify applicant of approval:', error);
   }
 
+  return updated;
+}
+
+/**
+ * Unapprove: an approved application goes back to pending review — only while
+ * Marketplace Access has NOT been granted (no marketplace-visible brand / no live
+ * creator profile). Reverses what approval did: the seller's brand ownership
+ * mark goes back to pending, and the account is locked again as "under review"
+ * (identity follows the application status). A reason is required and recorded.
+ */
+export async function unapprovePartnerApplication(params: {
+  applicationId: string;
+  adminUserId: string;
+  reason?: string;
+}): Promise<PartnerApplication> {
+  const app = await partnerApplicationStore.getById(params.applicationId);
+  if (!app) throw applicationError(404, 'NOT_FOUND', 'Application not found');
+  if (app.status !== 'approved') throw applicationError(409, 'NOT_APPROVED', `Only an approved application can be unapproved (this one is ${app.status}).`);
+  const reason = String(params.reason || '').trim();
+  if (reason.length < 10) throw applicationError(400, 'REASON_REQUIRED', 'Please give a reason of at least 10 characters.');
+  const userId = app.provisionedUserId || app.existingUserId || '';
+  if (userId) {
+    const live =
+      app.applicantType === 'seller'
+        ? (await catalogStore.listBrands()).some((b) => b.sellerId === userId && brandIsMarketplaceVisible(b))
+        : (await catalogStore.listCreators()).some((c) => c.userId === userId && c.status === 'live');
+    if (live) {
+      throw applicationError(
+        409,
+        'MARKETPLACE_ACCESS_ACTIVE',
+        'Marketplace Access is already granted. Suspend or remove Marketplace Access first, then unapprove.',
+      );
+    }
+  }
+  if (app.applicantType === 'seller' && app.catalogEntityId) {
+    const brand = await catalogStore.getBrand(app.catalogEntityId);
+    if (brand && brand.claimStatus === 'verified') {
+      await catalogStore.upsertBrand(normalizeBrandInput({ ...brand, claimStatus: 'pending' }, brand));
+    }
+  }
+  const updated = await partnerApplicationStore.update(params.applicationId, {
+    status: 'pending',
+    reviewedAt: '',
+    reviewNote: reason,
+    resubmissionRequested: false,
+    reviewHistory: appendHistory(app, { by: params.adminUserId, action: 'approval_withdrawn', note: reason }),
+  });
+  if (!updated) throw new Error('Failed to update application');
+  if (userId) {
+    try {
+      await notifyUser(userId, {
+        type: app.applicantType === 'seller' ? 'seller_update' : 'buyer_update',
+        category: app.applicantType === 'seller' ? 'seller' : 'buyer',
+        eventKey: 'account.access',
+        persona: app.applicantType === 'creator' ? 'creator' : 'seller',
+        title: 'Application back under review',
+        summary: reason,
+        actionUrl: app.applicantType === 'seller' ? '/admin/brand-profile' : '/admin/creator-profile',
+        metadata: { applicationId: app.id },
+      });
+    } catch (error) {
+      console.error('[PartnerApplications] Failed to notify applicant of unapprove:', error);
+    }
+  }
   return updated;
 }
 

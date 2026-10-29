@@ -69,6 +69,7 @@ const HISTORY_LABEL: Record<string, string> = {
   applicant_resubmitted: 'Applicant sent the changes',
   identity_verified: 'Approved (identity verified)',
   rejected: 'Rejected',
+  approval_withdrawn: 'Unapproved — back to review',
   legacy_linked: 'Linked to an existing account',
   legacy_provisioned: 'Account set up for review',
 };
@@ -84,8 +85,16 @@ export function ApplicationReviewSection({
   applicationId,
   match,
   accountCreatedAt,
+  placement = 'top',
   onDecided,
 }: {
+  /**
+   * 'top' = the review box above the profile, shown only while the application
+   * waits for a decision; 'panel' = the decided application (approved /
+   * rejected) inside Account Information, with Unapprove while Marketplace
+   * Access is off.
+   */
+  placement?: 'top' | 'panel';
   applicationId?: string;
   match?: { type: 'seller' | 'creator'; userId?: string; catalogEntityId?: string };
   /** users.createdAt — when the login account was created (sign-up). */
@@ -100,6 +109,7 @@ export function ApplicationReviewSection({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [none, setNone] = useState(false);
+  const [unapproveReason, setUnapproveReason] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -151,18 +161,24 @@ export function ApplicationReviewSection({
     }
   };
 
-  const box: React.CSSProperties = { background: '#fff', border: '2px solid var(--cms-accent)', borderRadius: 16, padding: 16, marginBottom: 16 };
+  const box: React.CSSProperties =
+    placement === 'top'
+      ? { background: '#fff', border: '2px solid var(--cms-accent)', borderRadius: 16, padding: 16, marginBottom: 16 }
+      : { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 14, padding: 16 };
   if (none) return null;
-  if (error) return <div style={{ ...box, color: '#DC2626', fontSize: 12, fontWeight: 700 }}>{error}</div>;
+  if (error) return placement === 'top' && applicationId ? <div style={{ ...box, color: '#DC2626', fontSize: 12, fontWeight: 700 }}>{error}</div> : null;
   if (!app) {
-    return (
+    return placement === 'top' && applicationId ? (
       <div style={{ ...box, textAlign: 'center' }}>
         <Loader2 size={16} className="animate-spin" />
       </div>
-    );
+    ) : null;
   }
   const isCreator = app.applicantType === 'creator';
   const pending = app.status === 'pending';
+  // Review box on top only while undecided; the decided application lives in Account Information.
+  if (placement === 'top' && !pending) return null;
+  if (placement === 'panel' && pending) return null;
   const queueHref = `/admin/${isCreator ? 'creator' : 'seller'}-management?filter=requests`;
   const fields: Array<[string, string | undefined]> = [
     [isCreator ? 'Channel / creator name' : 'Business / brand name', app.businessOrChannelName],
@@ -189,22 +205,26 @@ export function ApplicationReviewSection({
   ];
 
   return (
-    <div style={box} data-testid="application-review-section">
+    <div style={box} data-testid={placement === 'top' ? 'application-review-section' : 'application-decided-panel'}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: 12 }}>
         <div>
           <div style={{ fontSize: 9.5, fontWeight: 800, color: '#9CA3AF', letterSpacing: '0.08em' }}>
-            NEW {isCreator ? 'CREATOR' : 'SELLER'} APPLICATION
+            {placement === 'top' ? `NEW ${isCreator ? 'CREATOR' : 'SELLER'} APPLICATION` : 'PARTNER APPLICATION'}
           </div>
           <div style={{ fontSize: 16, fontWeight: 800 }} data-testid="application-review-name">{app.businessOrChannelName}</div>
-          <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600 }}>
-            The account shown below is the applicant. Approval verifies the identity only — Marketplace Access is granted separately.
-          </div>
+          {placement === 'top' ? (
+            <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600 }}>
+              The account shown below is the applicant. Approval verifies the identity only — Marketplace Access is granted separately.
+            </div>
+          ) : null}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ padding: '3px 9px', borderRadius: 6, fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', ...(STATUS_TONE[app.status] || STATUS_TONE.pending) }} data-testid="application-review-status">
             {app.status === 'pending' && app.resubmissionRequested ? 'pending · changes requested' : app.status}
           </span>
-          <button type="button" style={btn} onClick={() => navigate(queueHref)}>← Requests</button>
+          {placement === 'top' ? (
+            <button type="button" style={btn} onClick={() => navigate(queueHref)}>← Requests</button>
+          ) : null}
         </div>
       </div>
 
@@ -319,6 +339,41 @@ export function ApplicationReviewSection({
               data-testid="application-keep-pending"
             >
               Keep pending
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {placement === 'panel' && app.status === 'approved' ? (
+        <div style={{ marginTop: 12, background: '#FAFBFC', border: '1px solid #EEF1F4', borderRadius: 8, padding: 12 }} data-testid="application-unapprove">
+          <label htmlFor="app-unapprove" style={{ fontSize: 9, fontWeight: 800, color: '#6B7280', display: 'block', marginBottom: 4 }}>
+            UNAPPROVE — SEND BACK TO REVIEW (REASON REQUIRED, SHOWN TO THE APPLICANT)
+          </label>
+          <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, marginBottom: 6 }}>
+            Only possible while Marketplace Access has not been granted. The account goes back to “under review” and the
+            review box returns to the top of this profile.
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <input
+              id="app-unapprove"
+              value={unapproveReason}
+              onChange={(e) => setUnapproveReason(e.target.value)}
+              maxLength={1000}
+              placeholder="e.g. Approved by mistake — we still need to verify the Facebook page."
+              style={{ flex: '1 1 260px', border: '1px solid #E8EDF2', borderRadius: 7, padding: '7px 8px', fontSize: 12 }}
+              data-testid="application-unapprove-reason"
+            />
+            <button
+              type="button"
+              style={{ ...btn, color: '#991B1B', borderColor: '#FCA5A5' }}
+              disabled={busy || unapproveReason.trim().length < 10}
+              onClick={() => {
+                if (window.confirm(`Unapprove ${app.businessOrChannelName} and send the application back to review?`)) {
+                  void act(() => operationsApi.unapprovePartnerApplication(app.id, unapproveReason.trim()), 'Unapproved — the application is back under review.', true);
+                }
+              }}
+              data-testid="application-unapprove-button"
+            >
+              Unapprove
             </button>
           </div>
         </div>

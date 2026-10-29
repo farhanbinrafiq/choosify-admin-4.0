@@ -11,6 +11,7 @@ import {
   sanitizeApplication,
   savePartnerAdminNotes,
   submitPartnerApplication,
+  unapprovePartnerApplication,
 } from './partnerApplicationService';
 import { Logger } from '../lib/logger';
 import { catalogStore } from '../../lib/vercel-catalog/catalogStore';
@@ -212,6 +213,30 @@ partnerApplicationRouter.post(
       res.status(status).json({
         success: false,
         error: error instanceof Error ? error.message : 'Reject failed',
+      });
+    }
+  },
+);
+
+/** Approved -> back to pending (only while Marketplace Access is not granted). Body: { reason }. */
+partnerApplicationRouter.post(
+  '/operations/partner-applications/:id/unapprove',
+  ...requireAdmin,
+  async (req, res) => {
+    try {
+      const updated = await unapprovePartnerApplication({
+        applicationId: req.params.id,
+        adminUserId: req.userId || req.user?.uid || '',
+        reason: typeof (req.body as { reason?: unknown })?.reason === 'string' ? (req.body as { reason: string }).reason : undefined,
+      });
+      Logger.audit('partner_application.unapproved', { actorId: req.userId, applicationId: req.params.id });
+      res.json({ success: true, application: sanitizeApplication(updated) });
+    } catch (error) {
+      const status = (error as Error & { status?: number }).status || 500;
+      res.status(status).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unapprove failed',
+        code: (error as Error & { code?: string }).code,
       });
     }
   },
