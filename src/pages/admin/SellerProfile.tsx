@@ -378,6 +378,7 @@ export default function SellerProfile() {
                   <MarketplaceAccessSection
                     entityType="brand"
                     brand={b}
+                    applicationStatus={user?.partnerApplicationStatus}
                     onChanged={(u) => setBrands((list) => list.map((x) => (x.id === (u as CatalogBrand).id ? (u as CatalogBrand) : x)))}
                   />
                 </div>

@@ -20,6 +20,8 @@ interface MarketplaceAccessPanelProps {
   canManageMarketplaceAccess?: boolean;
   /** Optional authoritative status label (e.g. Active / Suspended / Inactive / Revoked). */
   statusLabel?: string;
+  /** The partner application's status ('pending' / 'rejected' / 'approved'); drives the not-granted wording. */
+  applicationStatus?: string | null;
 }
 
 type AccessBucket = 'not_granted' | 'active' | 'suspended_like' | 'revoked' | 'unmanaged';
@@ -68,6 +70,7 @@ export const MarketplaceAccessPanel: React.FC<MarketplaceAccessPanelProps> = ({
   isProcessing,
   canManageMarketplaceAccess = false,
   statusLabel,
+  applicationStatus,
 }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [reason, setReason] = useState('');
@@ -123,7 +126,11 @@ export const MarketplaceAccessPanel: React.FC<MarketplaceAccessPanelProps> = ({
       ) : bucket === 'not_granted' ? (
         <div className="space-y-2">
           <p className="text-[11px] text-app-text-secondary font-semibold m-0">
-            This {entityType} has been identity-approved but has not yet been granted Marketplace Access.
+            {applicationStatus === 'pending'
+              ? `This ${entityType}'s partner application is still pending review — approve it in the review box at the top of this profile before granting Marketplace Access.`
+              : applicationStatus === 'rejected'
+                ? `This ${entityType}'s partner application was rejected. Marketplace Access has not been granted.`
+                : `This ${entityType} has been identity-approved but has not yet been granted Marketplace Access.`}
           </p>
           <button
             onClick={onGrant}

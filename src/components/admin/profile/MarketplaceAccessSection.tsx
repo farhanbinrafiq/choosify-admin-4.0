@@ -31,11 +31,14 @@ export function MarketplaceAccessSection({
   brand,
   creator,
   onChanged,
+  applicationStatus,
 }: {
   entityType: 'brand' | 'creator';
   brand?: CatalogBrand;
   creator?: CatalogCreator;
   onChanged: (updated: CatalogBrand | CatalogCreator) => void;
+  /** The owner's partner application status, so "not granted" is explained correctly. */
+  applicationStatus?: string | null;
 }) {
   const { profile } = useAuth();
   const canManage = profile?.role === 'admin' || profile?.role === 'super_admin';
@@ -95,6 +98,7 @@ export function MarketplaceAccessSection({
         isProcessing={access.isProcessing}
         canManageMarketplaceAccess={canManage}
         statusLabel={statusLabel}
+        applicationStatus={applicationStatus}
       />
       <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: '10px 14px', fontSize: 11.5, fontWeight: 700 }} data-testid="marketplace-access-current">
         {active ? (

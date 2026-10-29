@@ -94,6 +94,8 @@ export default function CreatorProfile() {
   const [user, setUser] = useState<UserDetail | null>(null);
   const [guides, setGuides] = useState<GuideManageRow[]>([]);
   const [liveGuides, setLiveGuides] = useState<CatalogGuide[]>([]);
+  // The link(s) given on the partner application (older applications stored one "primary social" only).
+  const [appSocial, setAppSocial] = useState<{ links?: Record<string, string | undefined>; primary?: string } | null>(null);
   const [posted, setPosted] = useState<OpsReview[]>([]);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
 
@@ -124,6 +126,15 @@ export default function CreatorProfile() {
       const cid = matched?.id || creatorId;
       setGuides(manage.filter((g) => g.creatorId === cid && g.publisherType !== 'brand'));
       setLiveGuides(publicGuides.filter((g) => g.creatorId === cid));
+      operationsApi
+        .listPartnerApplications()
+        .then((all) => {
+          const a = all
+            .filter((x) => x.applicantType === 'creator' && (x.catalogEntityId === cid || (uid && x.provisionedUserId === uid)))
+            .sort((x, y) => y.createdAt.localeCompare(x.createdAt))[0];
+          setAppSocial(a ? { links: a.socialLinks, primary: a.socialPrimary } : null);
+        })
+        .catch(() => setAppSocial(null));
       if (uid) {
         try {
           setPosted(await operationsApi.listReviews({ userId: uid }));
@@ -390,6 +401,38 @@ export default function CreatorProfile() {
                   {kv('PARTNER APPLICATION', user?.partnerApplicationStatus || '—', false, true)}
                   {kv('ACCOUNT MARKETPLACE ACCESS', user ? (user.marketplaceAccess ? 'On' : 'Off') : '—', false, true)}
                   {kv('IDENTITY VERIFIED', user ? (user.identityVerified ? 'Yes' : 'No') : '—', false, true)}
+                  {kv(
+                    'SOCIAL LINKS',
+                    (() => {
+                      const names: Record<string, string> = { facebook: 'Facebook', youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram', linkedin: 'LinkedIn' };
+                      const seen = new Set<string>();
+                      const links: Array<[string, string]> = [];
+                      const add = (label: string, url?: string) => {
+                        const u = String(url || '').trim();
+                        if (u && !seen.has(u.toLowerCase())) {
+                          seen.add(u.toLowerCase());
+                          links.push([label, u]);
+                        }
+                      };
+                      const own = (creator.socialLinks || {}) as Record<string, unknown>;
+                      for (const k of Object.keys(names)) add(names[k], typeof own[k] === 'string' ? (own[k] as string) : undefined);
+                      for (const k of Object.keys(names)) add(names[k], appSocial?.links?.[k]);
+                      if (appSocial?.primary) add('From application', appSocial.primary);
+                      return links.length ? (
+                        <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }} data-testid="creator-social-links">
+                          {links.map(([label, url]) => (
+                            <a key={url} href={url} target="_blank" rel="noopener noreferrer nofollow" style={{ color: '#2563EB', fontWeight: 700, textDecoration: 'none', overflowWrap: 'anywhere' as const }}>
+                              {label} ↗
+                            </a>
+                          ))}
+                        </span>
+                      ) : (
+                        'None given'
+                      );
+                    })(),
+                    false,
+                    true,
+                  )}
                   {kv('PUBLIC HANDLE', publicHandle ? `@${publicHandle}` : 'None', false, true)}
                   {kv(
                     'PUBLIC PROFILE',
@@ -402,7 +445,7 @@ export default function CreatorProfile() {
                 </div>
                 {creator.bio ? <div style={{ marginTop: 14, fontSize: '11.5px', color: '#374151', fontWeight: 600, lineHeight: 1.6 }}>{creator.bio}</div> : null}
               </div>
-              <MarketplaceAccessSection entityType="creator" creator={creator} onChanged={(u) => setCreator(u as CatalogCreator)} />
+              <MarketplaceAccessSection entityType="creator" creator={creator} applicationStatus={user?.partnerApplicationStatus} onChanged={(u) => setCreator(u as CatalogCreator)} />
               {/* Handle management (history + staff override) only while editing, or when opened from a handle request. */}
               {showHandles && (edit.editing || searchParams.get('tab') === 'handle') ? (
                 <EntityHandlePanel
