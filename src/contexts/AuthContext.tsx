@@ -11,6 +11,8 @@ import {
 import { getCanonicalAdminCategories } from '../lib/storefrontCategories';
 import { refreshAccessToken } from '../services/authRefresh';
 
+export const WELCOME_BACK_KEY = 'choosify_account_reactivated';
+
 export type UserRole =
   | 'super_admin'
   | 'admin'
@@ -460,6 +462,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       marketplaceAccess?: boolean;
       partnerApplicationId?: string | null;
       resubmissionRequested?: boolean;
+      accountReactivated?: boolean;
     };
 
     if (!response.ok || !payload.accessToken) {
@@ -468,6 +471,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     localStorage.setItem(AUTH_TOKEN_KEY, payload.accessToken);
+    if (payload.accountReactivated) {
+      // Signing in ended an inactive / in-deletion period — WelcomeBackBanner shows it once.
+      try {
+        sessionStorage.setItem(WELCOME_BACK_KEY, '1');
+      } catch {}
+    }
     const role = toUserRole(payload.role || '', fallbackRole);
     let nextProfile: UserProfile = {
       id: payload.uid || '',

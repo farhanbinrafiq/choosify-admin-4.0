@@ -1,4 +1,5 @@
 import { reconcileVerifiedBadgesOnce } from "./server/claims/verifiedBadgeReconcile";
+import { anonymizeDueAccounts } from "./server/auth/accountLifecycle";
 import path from "path";
 import express from "express";
 import { createServer } from "http";
@@ -73,6 +74,13 @@ async function startServer() {
     Logger.error("verified badge reconciliation failed", { message: error instanceof Error ? error.message : String(error) }),
   );
   markApplicationReady();
+  // Accounts past their 90-day deletion window are anonymized (now, then every 6 hours).
+  const runAnonymization = () =>
+    anonymizeDueAccounts().catch((error) =>
+      Logger.error("account anonymization run failed", { message: error instanceof Error ? error.message : String(error) }),
+    );
+  void runAnonymization();
+  setInterval(() => void runAnonymization(), 6 * 60 * 60 * 1000).unref();
 
   // Plain HTTP server (no Socket.IO) — realtime messaging uses Firestore onSnapshot.
   const httpServer = createServer(app);

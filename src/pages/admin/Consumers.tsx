@@ -179,7 +179,7 @@ const PAGE_SIZE = 25;
  */
 const NEW_CONSUMER_WINDOW_DAYS = 30;
 
-type ConsumerStatusFilter = 'all' | 'new' | 'flagged';
+type ConsumerStatusFilter = 'all' | 'new' | 'flagged' | 'archived';
 
 /** Only real, backend-supported consumer states — see the lifecycle audit
  *  comment above for why Active/Inactive/Suspended/Banned are excluded. */
@@ -187,6 +187,8 @@ const CONSUMER_STATUS_TABS: { key: ConsumerStatusFilter; label: string }[] = [
   { key: 'all', label: 'All Consumers' },
   { key: 'new', label: 'New Consumers' },
   { key: 'flagged', label: 'Flagged' },
+  // Account lifecycle (inactive / in deletion) — these accounts appear only here.
+  { key: 'archived', label: 'Inactive / In Deletion' },
 ];
 
 /**
@@ -380,10 +382,12 @@ export default function ConsumersPage() {
   // (consumer view only — see lifecycle audit for why Active/Inactive/
   // Suspended/Banned are not offered).
   const statusFiltered = useMemo(() => {
-    if (!isConsumerView || statusFilter === 'all') return baseFiltered;
-    if (statusFilter === 'new') return baseFiltered.filter((u) => isRecentlyRegistered(u));
-    if (statusFilter === 'flagged') return baseFiltered.filter((u) => flaggedConsumerIds.has(u.uid));
-    return baseFiltered;
+    if (!isConsumerView) return baseFiltered;
+    if (statusFilter === 'archived') return baseFiltered.filter((u) => u.lifecycleState);
+    const live = baseFiltered.filter((u) => !u.lifecycleState);
+    if (statusFilter === 'new') return live.filter((u) => isRecentlyRegistered(u));
+    if (statusFilter === 'flagged') return live.filter((u) => flaggedConsumerIds.has(u.uid));
+    return live;
   }, [baseFiltered, isConsumerView, statusFilter, isRecentlyRegistered, flaggedConsumerIds]);
 
   const finalFiltered = useMemo(() => {
@@ -482,14 +486,19 @@ export default function ConsumersPage() {
   // (before search), same basis as roleCounts, so badges reflect "how many
   // in this role group" rather than "how many on the current page".
   const statusCounts = useMemo(() => {
-    if (!isConsumerView) return { all: 0, new: 0, flagged: 0 };
+    if (!isConsumerView) return { all: 0, new: 0, flagged: 0, archived: 0 };
     let newCount = 0;
     let flaggedCount = 0;
+    let archived = 0;
     for (const u of baseFiltered) {
+      if (u.lifecycleState) {
+        archived += 1;
+        continue;
+      }
       if (isRecentlyRegistered(u)) newCount += 1;
       if (flaggedConsumerIds.has(u.uid)) flaggedCount += 1;
     }
-    return { all: baseFiltered.length, new: newCount, flagged: flaggedCount };
+    return { all: baseFiltered.length - archived, new: newCount, flagged: flaggedCount, archived };
   }, [baseFiltered, isConsumerView, isRecentlyRegistered, flaggedConsumerIds]);
 
   const staffRoleBreakdown = useMemo(() => {
@@ -527,6 +536,10 @@ export default function ConsumersPage() {
    *  on precedence). Returns null (renders as honest "—") otherwise. */
   const consumerStatusBadge = (u: UserDirectoryEntry): { label: string; bg: string; fg: string } | null => {
     if (!isConsumerView) return null;
+    if (u.lifecycleState === 'pending_deletion')
+      return { label: `In deletion${u.deletionDueAt ? ` · ${new Date(u.deletionDueAt).toLocaleDateString()}` : ''}`, bg: 'rgba(220,38,38,0.12)', fg: '#DC2626' };
+    if (u.lifecycleState === 'anonymized') return { label: 'Deleted', bg: 'rgba(220,38,38,0.12)', fg: '#DC2626' };
+    if (u.lifecycleState === 'inactive') return { label: 'Account inactive', bg: 'rgba(217,119,6,0.12)', fg: '#B45309' };
     if (flaggedConsumerIds.has(u.uid)) return { label: 'Flagged', bg: 'rgba(220,38,38,0.12)', fg: '#DC2626' };
     if (isRecentlyRegistered(u)) return { label: 'New', bg: 'rgba(37,99,235,0.12)', fg: '#2563EB' };
     return null;

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState, CSSProperties } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { AccountLifecycleBanner, AccountLifecycleControls } from '../../components/admin/profile/AccountLifecycleControls';
 import { ProfileModeSwitch, ShopperActivity } from '../../components/admin/profile/ShopperActivity';
 import { profileReturnTarget } from '../../lib/profileReturn';
 import { useAuth } from '../../contexts/AuthContext';
@@ -262,6 +263,7 @@ export default function SellerProfile() {
       </div>
 
       <AdminEditModeStrip state={edit} />
+      <AccountLifecycleBanner lifecycle={user?.lifecycle} />
       {claimId ? <ClaimReviewSection claimId={claimId} onDecided={() => void load()} /> : null}
       {applicationId ? <ApplicationReviewSection applicationId={applicationId} onDecided={() => void load()} /> : null}
 
@@ -415,6 +417,7 @@ export default function SellerProfile() {
           {shownTab === 'ads' && <AdsDealsPanel ownerUserId={sellerId} brands={brands} editing={edit.editing} />}
 
           {shownTab === 'activity' && <AccountActivityPanel userId={sellerId} ownerLabel="this seller account" />}
+          {shownTab === 'activity' && <AccountLifecycleControls userId={sellerId} ownerLabel="this seller account" onChanged={() => void load()} />}
 
           {shownTab === 'features' && (
             <AccountEntitlementsPanel

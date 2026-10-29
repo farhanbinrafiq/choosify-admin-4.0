@@ -1135,6 +1135,12 @@ export const operationsStore = {
     return entry;
   },
   listShopperSignals: () => state.shopperSignals.slice(),
+  /** Account anonymization: drops the shopper's saved items and searches. */
+  removeShopperSignals: (userId: string) => {
+    const before = state.shopperSignals.length;
+    state.shopperSignals = state.shopperSignals.filter((x) => x.userId !== userId);
+    if (state.shopperSignals.length !== before) touch();
+  },
   getShopperSignals: (userId: string) => state.shopperSignals.find((x) => x.userId === userId) || null,
   saveShopperSignals: (signals: import('./types').OpsShopperSignals) => {
     const idx = state.shopperSignals.findIndex((x) => x.userId === signals.userId);

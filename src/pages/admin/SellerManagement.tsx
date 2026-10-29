@@ -12,6 +12,7 @@ import { Avatar } from '../../components/shared/Avatar';
 import { PartnerApplicationReviewActions, PartnerApprovedNotice } from '../../components/admin/PartnerApplicationReviewActions';
 import { OwnershipClaimsQueue } from '../../components/admin/claims/OwnershipClaimsQueue';
 import { PartnerRequestsTable } from '../../components/admin/claims/PartnerRequestsTable';
+import { AccountStatePill } from '../../components/admin/profile/AccountLifecycleControls';
 import { CommunityProfilesPanel, SuggestedBrandsPanel, countPendingBrandSuggestions } from '../../components/admin/claims/CommunityProfilesPanel';
 
 /**
@@ -50,6 +51,7 @@ type SellerFilter =
   | 'active'
   | 'suspended'
   | 'inactive'
+  | 'archived'
   | 'flagged';
 
 interface SellerRow {
@@ -66,6 +68,9 @@ interface SellerRow {
   inactive: boolean;
   flagged: boolean;
   createdAt: string | null;
+  /** Account inactive / in deletion (account lifecycle, not Marketplace Access). */
+  lifecycle?: UserDirectoryEntry['lifecycleState'];
+  deletionDueAt?: string | null;
 }
 
 const FILTER_TABS: { key: SellerFilter; label: string }[] = [
@@ -77,8 +82,9 @@ const FILTER_TABS: { key: SellerFilter; label: string }[] = [
   { key: 'suggested', label: 'Suggested Brands' },
   { key: 'active', label: 'Active Sellers' },
   { key: 'flagged', label: 'Flagged' },
-  { key: 'inactive', label: 'Inactive' },
+  { key: 'inactive', label: 'Marketplace Inactive' },
   { key: 'suspended', label: 'Suspended' },
+  { key: 'archived', label: 'Inactive / In Deletion' },
 ];
 
 export default function SellerManagement() {
@@ -200,6 +206,8 @@ export default function SellerManagement() {
         suspended,
         inactive,
         flagged,
+        lifecycle: user?.lifecycleState,
+        deletionDueAt: user?.deletionDueAt ?? null,
         createdAt: ownedBrands.reduce<string | null>((earliest, b) => {
           if (!b.createdAt) return earliest;
           if (!earliest || b.createdAt < earliest) return b.createdAt;
@@ -210,24 +218,27 @@ export default function SellerManagement() {
     return rows;
   }, [brands, usersById, flaggedSellerIds, flaggedBrandIds]);
 
+  // Inactive / in-deletion accounts live only in their own tab.
+  const liveSellers = useMemo(() => sellers.filter((s) => !s.lifecycle), [sellers]);
   const counts = useMemo(
     () => ({
-      all: sellers.length,
-      verified: sellers.filter((s) => s.verified).length,
+      all: liveSellers.length,
+      verified: liveSellers.filter((s) => s.verified).length,
       requests: requests.length,
       claims: openClaimCount ?? claims.length,
       community: brands.filter((b) => b.origin === 'community' && !b.sellerId).length,
       suggested: suggestedCount,
-      active: sellers.filter((s) => s.active).length,
-      flagged: sellers.filter((s) => s.flagged).length,
-      inactive: sellers.filter((s) => s.inactive).length,
-      suspended: sellers.filter((s) => s.suspended).length,
+      active: liveSellers.filter((s) => s.active).length,
+      flagged: liveSellers.filter((s) => s.flagged).length,
+      inactive: liveSellers.filter((s) => s.inactive).length,
+      suspended: liveSellers.filter((s) => s.suspended).length,
+      archived: sellers.length - liveSellers.length,
     }),
-    [sellers, requests, claims, brands, openClaimCount],
+    [sellers, liveSellers, requests, claims, brands, openClaimCount],
   );
 
   const filtered = useMemo(() => {
-    let rows = sellers;
+    let rows = filter === 'archived' ? sellers.filter((s) => s.lifecycle) : liveSellers;
     if (filter === 'verified') rows = rows.filter((s) => s.verified);
     else if (filter === 'active') rows = rows.filter((s) => s.active);
     else if (filter === 'flagged') rows = rows.filter((s) => s.flagged);
@@ -355,11 +366,12 @@ export default function SellerManagement() {
               Active
             </span>
           )}
-          {s.inactive && !s.suspended && (
+          {s.inactive && !s.suspended && !s.lifecycle && (
             <span className="px-2 py-0.5 text-[8px] font-black uppercase rounded border bg-slate-500/10 text-slate-500 border-slate-500/20">
-              Inactive
+              Marketplace Inactive
             </span>
           )}
+          <AccountStatePill state={s.lifecycle} deletionDueAt={s.deletionDueAt} />
         </div>
       ),
     },

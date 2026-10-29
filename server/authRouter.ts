@@ -61,6 +61,13 @@ import {
   upsertUserProfileExtras,
 } from './auth/userProfileExtras';
 import { parseAccountUsername } from './auth/accountUsername';
+import {
+  LifecycleError,
+  deactivateAccount,
+  getAccountLifecycle,
+  reactivateAccount,
+  requestAccountDeletion,
+} from './auth/accountLifecycle';
 import { AUTH_ERROR_CODES, sendAuthError } from './auth/authErrors';
 import { recordLogin } from './analytics/eventHooks';
 import { recordFailedAuthAttempt } from './lib/abuseProtection';
@@ -181,6 +188,12 @@ authRouter.post('/auth/login', validate({ body: LoginBodySchema }), async (req, 
       return;
     }
 
+    const lifecycle = reactivateOnSignIn(req, user.id);
+    if (lifecycle.blocked) {
+      res.status(401).json({ error: 'This account has been deleted.', code: 'ACCOUNT_DELETED' });
+      return;
+    }
+
     const accessToken = signAccessToken({
       id: user.id,
       email: user.email,
@@ -224,6 +237,7 @@ authRouter.post('/auth/login', validate({ body: LoginBodySchema }), async (req, 
       choosifyUserId: choosifyUserId || null,
       hasPassword: true,
       changeNextLogin: extras?.changeNextLogin === true,
+      ...(lifecycle.reactivated ? { accountReactivated: true } : {}),
       ...publicLifecycleFields(life),
       ...(extras?.lastNameChangedAt && { lastNameChangedAt: extras.lastNameChangedAt }),
       ...(extras?.username && { username: extras.username }),
@@ -370,6 +384,11 @@ async function finalizeLoginSession(
   user: typeof users.$inferSelect,
   mode: string,
 ): Promise<void> {
+  const lifecycle = reactivateOnSignIn(req, user.id);
+  if (lifecycle.blocked) {
+    res.status(401).json({ error: 'This account has been deleted.', code: 'ACCOUNT_DELETED' });
+    return;
+  }
   const accessToken = signAccessToken({
     id: user.id,
     email: user.email,
@@ -410,6 +429,7 @@ async function finalizeLoginSession(
     choosifyUserId: choosifyUserId || null,
     changeNextLogin: extras?.changeNextLogin === true,
     ...publicLifecycleFields(life),
+    ...(lifecycle.reactivated ? { accountReactivated: true } : {}),
     ...(extras?.lastNameChangedAt && { lastNameChangedAt: extras.lastNameChangedAt }),
     ...(extras?.username && { username: extras.username }),
     ...(extras?.website && { website: extras.website }),
@@ -852,6 +872,172 @@ authRouter.put('/auth/me/addresses', ...requireAuth, (req, res) => {
   const saved = upsertUserProfileExtras({ userId: req.userId, addresses: result.value });
   res.json({ success: true, data: saved.addresses ?? [] });
 });
+
+// ── Account lifecycle: inactive / in deletion (see server/auth/accountLifecycle.ts) ──
+const requireSuperAdmin = [authenticateRequest, requireRole(ROLES.SUPER_ADMIN)];
+
+function sendLifecycleError(res: import('express').Response, error: unknown, fallback: string) {
+  if (error instanceof LifecycleError) {
+    res.status(error.status).json({ success: false, error: error.message, code: error.code });
+    return;
+  }
+  Logger.warn(fallback, { error: error instanceof Error ? error.message : String(error) });
+  res.status(500).json({ success: false, error: fallback });
+}
+
+async function lifecycleTarget(req: import('express').Request, res: import('express').Response) {
+  const userId = String(req.params.userId || '').trim();
+  if (!userId || userId === req.userId) {
+    res.status(403).json({ success: false, error: 'You cannot change your own account here.', code: 'SELF_TARGET' });
+    return null;
+  }
+  const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  const target = rows[0];
+  if (!target) {
+    res.status(404).json({ success: false, error: 'Account not found' });
+    return null;
+  }
+  if (toUserRole(target.role) === ROLES.SUPER_ADMIN) {
+    res.status(403).json({ success: false, error: 'Super Admin accounts cannot be made inactive or deleted here.', code: 'PROTECTED_ACCOUNT' });
+    return null;
+  }
+  return target;
+}
+
+const staffActor = (req: import('express').Request) => ({ id: String(req.userId || ''), name: req.user?.displayName || undefined });
+
+authRouter.post('/auth/admin/users/:userId/deactivate', ...requireSuperAdmin, async (req, res) => {
+  const target = await lifecycleTarget(req, res);
+  if (!target) return;
+  try {
+    const body = (req.body || {}) as { reason?: unknown; internalNote?: unknown };
+    const life = await deactivateAccount(target.id, { reason: body.reason, internalNote: body.internalNote, by: 'admin', actor: staffActor(req) });
+    recordAccountActivity(req, {
+      userId: target.id,
+      type: 'account_deactivated',
+      category: 'admin',
+      actor: 'staff',
+      summary: 'Account made inactive by Choosify',
+      staffNote: life.reason,
+    });
+    Logger.audit('account.deactivated', { actorId: req.userId, targetId: target.id });
+    res.json({ success: true, data: life });
+  } catch (error) {
+    sendLifecycleError(res, error, 'Could not make the account inactive');
+  }
+});
+
+authRouter.post('/auth/admin/users/:userId/delete', ...requireSuperAdmin, async (req, res) => {
+  const target = await lifecycleTarget(req, res);
+  if (!target) return;
+  try {
+    const body = (req.body || {}) as { reason?: unknown; internalNote?: unknown };
+    const life = await requestAccountDeletion(target.id, { reason: body.reason, internalNote: body.internalNote, by: 'admin', actor: staffActor(req) });
+    recordAccountActivity(req, {
+      userId: target.id,
+      type: 'account_deletion_started',
+      category: 'admin',
+      actor: 'staff',
+      summary: `Account put in deletion by Choosify — deleted on ${String(life.deletionDueAt).slice(0, 10)} unless the owner signs in again`,
+      staffNote: `${life.reason}${life.internalNote ? ` · Internal: ${life.internalNote}` : ''}`,
+    });
+    Logger.audit('account.deletion_started', { actorId: req.userId, targetId: target.id, deletionDueAt: life.deletionDueAt });
+    res.json({ success: true, data: life });
+  } catch (error) {
+    sendLifecycleError(res, error, 'Could not put the account in deletion');
+  }
+});
+
+authRouter.post('/auth/admin/users/:userId/reactivate', ...requireSuperAdmin, async (req, res) => {
+  const target = await lifecycleTarget(req, res);
+  if (!target) return;
+  try {
+    const life = reactivateAccount(target.id, { by: 'admin', actor: staffActor(req), note: (req.body as { note?: unknown } | undefined)?.note });
+    recordAccountActivity(req, { userId: target.id, type: 'account_reactivated', category: 'admin', actor: 'staff', summary: 'Account reactivated by Choosify' });
+    Logger.audit('account.reactivated', { actorId: req.userId, targetId: target.id });
+    res.json({ success: true, data: life });
+  } catch (error) {
+    sendLifecycleError(res, error, 'Could not reactivate the account');
+  }
+});
+
+/** Only shoppers, sellers and creators can make their own account inactive / ask for deletion. */
+function selfServiceLifecycleAllowed(req: import('express').Request): boolean {
+  const role = toUserRole(req.userRole || req.user?.role);
+  return role === ROLES.USER || role === ROLES.SELLER || role === ROLES.VERIFIED_SELLER || role === ROLES.CREATOR;
+}
+
+/** The owner takes a break: inactive until they sign in again. */
+authRouter.post('/auth/me/deactivate', ...requireAuth, async (req, res) => {
+  if (!req.userId) {
+    res.status(401).json({ success: false, error: 'Authentication required' });
+    return;
+  }
+  if (!selfServiceLifecycleAllowed(req)) {
+    res.status(403).json({ success: false, error: 'Staff accounts are managed by a Super Admin.', code: 'STAFF_ACCOUNT' });
+    return;
+  }
+  try {
+    const life = await deactivateAccount(req.userId, { reason: (req.body as { reason?: unknown } | undefined)?.reason, by: 'self', actor: { id: req.userId } });
+    recordAccountActivity(req, { userId: req.userId, type: 'account_deactivated', category: 'account', summary: 'You made your account inactive' });
+    clearRefreshTokenCookie(res);
+    res.json({ success: true, data: { state: life.state } });
+  } catch (error) {
+    sendLifecycleError(res, error, 'Could not make your account inactive');
+  }
+});
+
+/** The owner asks to delete their account: in deletion now, anonymized after 90 days unless they sign in again. */
+authRouter.post('/auth/me/delete', ...requireAuth, async (req, res) => {
+  if (!req.userId) {
+    res.status(401).json({ success: false, error: 'Authentication required' });
+    return;
+  }
+  if (!selfServiceLifecycleAllowed(req)) {
+    res.status(403).json({ success: false, error: 'Staff accounts are managed by a Super Admin.', code: 'STAFF_ACCOUNT' });
+    return;
+  }
+  try {
+    const life = await requestAccountDeletion(req.userId, { reason: (req.body as { reason?: unknown } | undefined)?.reason, by: 'self', actor: { id: req.userId } });
+    recordAccountActivity(req, {
+      userId: req.userId,
+      type: 'account_deletion_requested',
+      category: 'account',
+      summary: `You asked to delete your account — it will be deleted on ${String(life.deletionDueAt).slice(0, 10)} unless you sign in again`,
+    });
+    notifyAdminsOfDeletionRequest(req.userId).catch(() => undefined);
+    clearRefreshTokenCookie(res);
+    res.json({ success: true, data: { state: life.state, deletionDueAt: life.deletionDueAt } });
+  } catch (error) {
+    sendLifecycleError(res, error, 'Could not submit your deletion request');
+  }
+});
+
+async function notifyAdminsOfDeletionRequest(userId: string): Promise<void> {
+  const { notifyRoles } = await import('./communication/systemNotify');
+  await notifyRoles(['super_admin'], {
+    type: 'system_alert',
+    category: 'admin',
+    eventKey: 'staff.support_activity',
+    persona: 'staff',
+    title: 'Account deletion requested',
+    summary: 'A user asked to delete their account. It is inactive now and will be anonymized after 90 days unless they sign in again.',
+    actionUrl: `/admin/consumers/${encodeURIComponent(userId)}`,
+    metadata: { userId },
+  });
+}
+
+/** Sign-in during the inactive / deletion window reactivates the account. */
+function reactivateOnSignIn(req: import('express').Request, userId: string): { blocked: boolean; reactivated: boolean } {
+  const life = getAccountLifecycle(userId);
+  if (life.state === 'anonymized') return { blocked: true, reactivated: false };
+  if (life.state === 'inactive' || life.state === 'pending_deletion') {
+    reactivateAccount(userId, { by: 'login', actor: { id: userId } });
+    recordAccountActivity(req, { userId, type: 'account_reactivated', category: 'account', summary: 'Your account was reactivated when you signed in' });
+    return { blocked: false, reactivated: true };
+  }
+  return { blocked: false, reactivated: false };
+}
 
 authRouter.post('/auth/impersonate/start', ...requireAuth, async (req, res) => {
   const actorRole = req.userRole;
@@ -2149,7 +2335,14 @@ authRouter.get('/auth/users/directory', ...requireAdmin, async (_req, res) => {
         createdAt: users.createdAt,
       })
       .from(users);
-    res.json({ success: true, data: rows });
+    // Account lifecycle for the management lists' "Inactive / In deletion" tabs.
+    res.json({
+      success: true,
+      data: rows.map((r) => {
+        const life = getAccountLifecycle(r.uid);
+        return life.state ? { ...r, lifecycleState: life.state, deletionDueAt: life.deletionDueAt ?? null } : r;
+      }),
+    });
   } catch (error) {
     Logger.warn('choosify user directory failed', {
       error: error instanceof Error ? error.message : String(error),
@@ -2198,6 +2391,7 @@ authRouter.get('/auth/users/:userId', ...requireAdmin, async (req, res) => {
         phoneSource: accountPhone ? 'account' : applicationPhone ? 'partner_application' : null,
         // The shopper's saved storefront addresses (admin-only endpoint).
         addresses: getUserProfileExtras(user.id)?.addresses ?? [],
+        lifecycle: getAccountLifecycle(user.id),
         ...status,
       },
     });

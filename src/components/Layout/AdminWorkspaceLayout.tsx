@@ -5,6 +5,7 @@ import { useImpersonation } from '../../contexts/ImpersonationContext';
 import { useEntitlements } from '../../contexts/EntitlementsContext';
 import { UserProfileDropdown } from '../account/UserProfileDropdown';
 import { NotificationBellDropdown } from '../account/NotificationBellDropdown';
+import { WelcomeBackBanner } from '../account/WelcomeBackBanner';
 import { DashboardHeaderMessageButton } from '../account/DashboardHeaderMessageButton';
 import { GlobalDashboardSearch } from '../common/GlobalDashboardSearch';
 import { AdminPageSkeleton } from '../common/skeletons';
@@ -298,6 +299,7 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
           </div>
         ) : null}
 
+        <WelcomeBackBanner />
         <main className="admin-workspace__content">
           <Suspense fallback={<AdminPageSkeleton variant="generic" />}>{children}</Suspense>
         </main>

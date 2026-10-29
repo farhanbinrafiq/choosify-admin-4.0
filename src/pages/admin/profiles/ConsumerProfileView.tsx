@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState, CSSProperties } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { AccountLifecycleBanner, AccountLifecycleControls } from '../../../components/admin/profile/AccountLifecycleControls';
+import { AccountActivityPanel } from '../../../components/admin/profile/AccountActivityPanel';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useRbac } from '../../../contexts/RbacContext';
 import { useImpersonation } from '../../../contexts/ImpersonationContext';
@@ -62,6 +64,7 @@ const TABS: Array<{ key: string; label: string; icon: string }> = [
   { key: 'reviews', label: 'Reviews & Score', icon: '⭐' },
   { key: 'saved', label: 'Saved Brands & Products', icon: '♡' },
   { key: 'search', label: 'Search History', icon: '⌕' },
+  { key: 'activity', label: 'Activity Log', icon: '⏱' },
   { key: 'brands', label: 'Followed Brands & Creators', icon: '♦' },
 ];
 
@@ -284,6 +287,7 @@ export default function ConsumerProfileView() {
       </div>
 
       <AdminEditModeStrip state={edit} />
+      <AccountLifecycleBanner lifecycle={account?.lifecycle} />
 
       <div style={S.grid} className="cpv-grid">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -381,6 +385,9 @@ export default function ConsumerProfileView() {
           {activeTab === 'returns' && <ReturnsPanel returns={returns} error={sectionErrors.returns} />}
           {activeTab === 'refunds' && <RefundsPanel returns={returns} error={sectionErrors.returns} />}
           {activeTab === 'warranty' && <WarrantyPanel claims={claims} error={sectionErrors.warranty} />}
+
+          {activeTab === 'activity' && account?.uid ? <AccountActivityPanel userId={account.uid} ownerLabel="this account" /> : null}
+          {activeTab === 'activity' && account?.uid ? <AccountLifecycleControls userId={account.uid} ownerLabel="this account" onChanged={() => void load(true)} /> : null}
 
           {activeTab === 'reviews' && <ReviewsPanel direction="posted" reviews={reviews} error={sectionErrors.reviews} emptyText="This shopper has not posted any reviews." />}
 

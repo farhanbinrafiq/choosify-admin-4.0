@@ -14,6 +14,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { formatRoleLabel, getAvatarUrl, getMyProfilePath } from '../../lib/userDisplay';
 import ChangePasswordForm from '../../components/account/ChangePasswordForm';
+import AccountStatusCard from '../../components/account/AccountStatusCard';
 import {
   getNotificationPreferences,
   updateNotificationPreferences,
@@ -205,7 +206,11 @@ function SignOutOtherDevices() {
   );
 }
 
+const SELF_SERVICE_ROLES = new Set(['user', 'seller', 'verified_seller', 'creator']);
+
 function SecuritySection() {
+  const { profile } = useAuth();
+  const selfService = SELF_SERVICE_ROLES.has(String(profile?.role || '').toLowerCase());
   return (
     <div className="space-y-4">
       <div className={card}>
@@ -220,6 +225,7 @@ function SecuritySection() {
         </p>
       </div>
       <SignOutOtherDevices />
+      {selfService ? <AccountStatusCard /> : null}
     </div>
   );
 }

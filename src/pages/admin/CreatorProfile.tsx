@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState, CSSProperties } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { AccountLifecycleBanner, AccountLifecycleControls } from '../../components/admin/profile/AccountLifecycleControls';
 import { ProfileModeSwitch, ShopperActivity } from '../../components/admin/profile/ShopperActivity';
 import { profileReturnTarget } from '../../lib/profileReturn';
 import { useAuth } from '../../contexts/AuthContext';
@@ -305,6 +306,7 @@ export default function CreatorProfile() {
       </div>
 
       <AdminEditModeStrip state={edit} />
+      <AccountLifecycleBanner lifecycle={user?.lifecycle} />
       {claimId ? <ClaimReviewSection claimId={claimId} onDecided={() => void load()} /> : null}
       {applicationId ? <ApplicationReviewSection applicationId={applicationId} onDecided={() => void load()} /> : null}
 
@@ -539,6 +541,7 @@ export default function CreatorProfile() {
             ))}
 
           {shownTab === 'activity' && (targetUserId ? <AccountActivityPanel userId={targetUserId} ownerLabel="this creator account" /> : <UnavailablePanel title="ACTIVITY LOG" message="This creator profile is not linked to a login account, so there is no account activity." />)}
+          {shownTab === 'activity' && targetUserId ? <AccountLifecycleControls userId={targetUserId} ownerLabel="this creator account" onChanged={() => void load()} /> : null}
 
           {shownTab === 'features' &&
             (targetUserId ? (

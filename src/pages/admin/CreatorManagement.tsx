@@ -12,6 +12,7 @@ import { Avatar } from '../../components/shared/Avatar';
 import { PartnerApplicationReviewActions, PartnerApprovedNotice } from '../../components/admin/PartnerApplicationReviewActions';
 import { OwnershipClaimsQueue } from '../../components/admin/claims/OwnershipClaimsQueue';
 import { PartnerRequestsTable } from '../../components/admin/claims/PartnerRequestsTable';
+import { AccountStatePill } from '../../components/admin/profile/AccountLifecycleControls';
 import { CommunityProfilesPanel } from '../../components/admin/claims/CommunityProfilesPanel';
 
 /**
@@ -38,7 +39,7 @@ import { CommunityProfilesPanel } from '../../components/admin/claims/CommunityP
  *    permanently stuck at 0. Not reintroduced here.
  */
 
-type CreatorFilter = 'all' | 'pending' | 'requests' | 'claims' | 'community' | 'active' | 'flagged' | 'inactive';
+type CreatorFilter = 'all' | 'pending' | 'requests' | 'claims' | 'community' | 'active' | 'flagged' | 'inactive' | 'archived';
 
 interface CreatorRow {
   id: string;
@@ -52,6 +53,9 @@ interface CreatorRow {
   verified: boolean;
   flagged: boolean;
   createdAt: string;
+  /** Account inactive / in deletion (account lifecycle, not the profile status). */
+  lifecycle?: UserDirectoryEntry['lifecycleState'];
+  deletionDueAt?: string | null;
 }
 
 const FILTER_TABS: { key: CreatorFilter; label: string }[] = [
@@ -62,7 +66,8 @@ const FILTER_TABS: { key: CreatorFilter; label: string }[] = [
   { key: 'community', label: 'Community Creators Profiles' },
   { key: 'active', label: 'Active Creators' },
   { key: 'flagged', label: 'Flagged' },
-  { key: 'inactive', label: 'Inactive' },
+  { key: 'inactive', label: 'Marketplace Inactive' },
+  { key: 'archived', label: 'Inactive / In Deletion' },
 ];
 
 export default function CreatorManagement() {
@@ -146,27 +151,32 @@ export default function CreatorManagement() {
           flagged:
             flaggedCreatorIds.has(c.id) || (c.userId ? flaggedCreatorIds.has(c.userId) : false),
           createdAt: c.createdAt,
+          lifecycle: user?.lifecycleState,
+          deletionDueAt: user?.deletionDueAt ?? null,
         };
       }),
     [creators, usersById, flaggedCreatorIds],
   );
 
+  // Inactive / in-deletion accounts live only in their own tab.
+  const liveRows = useMemo(() => rows.filter((r) => !r.lifecycle), [rows]);
   const counts = useMemo(
     () => ({
-      all: rows.length,
-      pending: rows.filter((r) => r.status === 'draft').length,
+      all: liveRows.length,
+      pending: liveRows.filter((r) => r.status === 'draft').length,
       requests: requests.length,
       claims: openClaimCount ?? claims.length,
       community: creators.filter((c) => c.origin === 'community' && !c.userId).length,
-      active: rows.filter((r) => r.status === 'live').length,
-      flagged: rows.filter((r) => r.flagged).length,
-      inactive: rows.filter((r) => r.status === 'archived').length,
+      active: liveRows.filter((r) => r.status === 'live').length,
+      flagged: liveRows.filter((r) => r.flagged).length,
+      inactive: liveRows.filter((r) => r.status === 'archived').length,
+      archived: rows.length - liveRows.length,
     }),
-    [rows, requests, claims, creators, openClaimCount],
+    [rows, liveRows, requests, claims, creators, openClaimCount],
   );
 
   const filtered = useMemo(() => {
-    let list = rows;
+    let list = filter === 'archived' ? rows.filter((r) => r.lifecycle) : liveRows;
     if (filter === 'pending') list = list.filter((r) => r.status === 'draft');
     else if (filter === 'active') list = list.filter((r) => r.status === 'live');
     else if (filter === 'inactive') list = list.filter((r) => r.status === 'archived');
@@ -261,9 +271,12 @@ export default function CreatorManagement() {
       header: 'Status',
       sortValue: (r) => r.status,
       render: (r) => (
-        <span className={`px-2 py-0.5 text-[8px] font-black uppercase rounded border ${statusStyle[r.status]}`}>
-          {statusLabel[r.status]}
-        </span>
+        <div className="flex flex-wrap gap-1">
+          <span className={`px-2 py-0.5 text-[8px] font-black uppercase rounded border ${statusStyle[r.status]}`}>
+            {statusLabel[r.status]}
+          </span>
+          <AccountStatePill state={r.lifecycle} deletionDueAt={r.deletionDueAt} />
+        </div>
       ),
     },
     {

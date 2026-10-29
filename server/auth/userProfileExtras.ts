@@ -28,6 +28,8 @@ export type UserProfileExtras = {
    * so staff can read it without the storefront's location dataset.
    */
   addresses?: StoredCustomerAddress[];
+  /** Account lifecycle (inactive / in deletion / anonymized) — see server/auth/accountLifecycle.ts. */
+  lifecycle?: unknown;
   updatedAt: string;
 };
 
@@ -120,6 +122,11 @@ function ensureHydrated(): void {
   } catch (error) {
     console.warn('[AuthProfileExtras] Failed to load:', error);
   }
+}
+
+export function listAllUserProfileExtras(): UserProfileExtras[] {
+  ensureHydrated();
+  return state.extras.slice();
 }
 
 export function getUserProfileExtras(userId: string): UserProfileExtras | null {

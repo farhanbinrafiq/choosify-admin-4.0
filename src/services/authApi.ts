@@ -4,17 +4,17 @@ const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefi
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
-function doFetch(path: string, method: HttpMethod, token: string | null) {
+function doFetch(path: string, method: HttpMethod, token: string | null, body?: unknown) {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
-  return fetch(`${API_BASE}${path}`, { method, headers });
+  return fetch(`${API_BASE}${path}`, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 }
 
-async function request<T>(path: string, method: HttpMethod = 'GET'): Promise<T> {
+async function request<T>(path: string, method: HttpMethod = 'GET', payload?: unknown): Promise<T> {
   // This module used to read its own token straight from localStorage and
   // never retried a 401 — every other service module (operationsApi.ts,
   // catalogApi.ts, mediaUpload.ts) already goes through authRefresh.ts's
@@ -24,12 +24,12 @@ async function request<T>(path: string, method: HttpMethod = 'GET'): Promise<T> 
   // page transparently refreshed and kept working. Aligned to the same
   // canonical pattern — no new refresh mechanism, no special-cased retry.
   const token = getStoredAccessToken();
-  let response = await doFetch(path, method, token);
+  let response = await doFetch(path, method, token, payload);
 
   if (response.status === 401 && token) {
     const refreshed = await refreshAccessToken();
     if (refreshed) {
-      response = await doFetch(path, method, refreshed);
+      response = await doFetch(path, method, refreshed, payload);
     }
   }
 
@@ -52,6 +52,9 @@ export interface UserDirectoryEntry {
    *  logo/placeholder. Directory UIs must derive their own initials/neutral
    *  placeholder when this is absent, not persist or expect one here. */
   avatarUrl?: string | null;
+  /** Account lifecycle state, when the account is inactive / in deletion / anonymized. */
+  lifecycleState?: 'inactive' | 'pending_deletion' | 'anonymized';
+  deletionDueAt?: string | null;
   /** Real users.createdAt (registration timestamp) — canonical, not derived. */
   createdAt?: string;
 }
@@ -84,7 +87,28 @@ export interface UserDetail extends UserDirectoryEntry {
   profileStatusSecondary?: string | null;
   /** The shopper's saved storefront addresses (admin user-detail endpoint only). */
   addresses?: StoredCustomerAddress[];
+  /** Account lifecycle (inactive / in deletion). */
+  lifecycle?: AccountLifecycle;
 }
+
+export type AccountLifecycleState = 'inactive' | 'pending_deletion' | 'anonymized';
+export type AccountLifecycle = {
+  state?: AccountLifecycleState;
+  reason?: string;
+  internalNote?: string;
+  requestedBy?: 'self' | 'admin';
+  at?: string;
+  deletionDueAt?: string;
+  history: Array<{
+    at: string;
+    action: 'deactivated' | 'deletion_requested' | 'reactivated' | 'anonymized';
+    by: 'self' | 'admin' | 'login' | 'system';
+    actorId?: string;
+    actorName?: string;
+    reason?: string;
+    internalNote?: string;
+  }>;
+};
 
 /** A storefront address as saved on the account, with a readable summary for staff. */
 export type StoredCustomerAddress = {
@@ -123,6 +147,17 @@ export const authApi = {
   getUserDetail: async (userId: string): Promise<UserDetail> => {
     return request<UserDetail>(`/auth/users/${encodeURIComponent(userId)}`);
   },
+  /** Super Admin: account lifecycle (inactive / in deletion / reactivate). */
+  deactivateUser: async (userId: string, payload: { reason: string; internalNote?: string }) =>
+    request<AccountLifecycle>(`/auth/admin/users/${encodeURIComponent(userId)}/deactivate`, 'POST', payload),
+  deleteUser: async (userId: string, payload: { reason: string; internalNote: string }) =>
+    request<AccountLifecycle>(`/auth/admin/users/${encodeURIComponent(userId)}/delete`, 'POST', payload),
+  reactivateUser: async (userId: string, payload: { note?: string }) =>
+    request<AccountLifecycle>(`/auth/admin/users/${encodeURIComponent(userId)}/reactivate`, 'POST', payload),
+  /** The signed-in owner: take a break (inactive) / ask to delete (90-day window). */
+  deactivateMe: async (reason: string) => request<{ state: string }>('/auth/me/deactivate', 'POST', { reason }),
+  requestMyDeletion: async (reason: string) =>
+    request<{ state: string; deletionDueAt?: string }>('/auth/me/delete', 'POST', { reason }),
   /** Admin lookup of a single account by Choosify User ID (CF-##### or numeric). Throws if not found. */
   searchUser: async (q: string): Promise<UserSearchResult> => {
     return request<UserSearchResult>(`/auth/users/search?q=${encodeURIComponent(q)}`);
