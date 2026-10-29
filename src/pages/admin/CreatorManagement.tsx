@@ -50,6 +50,8 @@ interface CreatorRow {
   email: string;
   avatarUrl: string | null;
   status: 'draft' | 'live' | 'archived';
+  /** Has a partner application still waiting for a decision (shown under Requests). */
+  applied: boolean;
   verified: boolean;
   flagged: boolean;
   createdAt: string;
@@ -58,15 +60,24 @@ interface CreatorRow {
   deletionDueAt?: string | null;
 }
 
+/**
+ * One place per creator:
+ * - Requests: applied, application not decided yet
+ * - Under Review ('pending'): approved, Marketplace Access not granted yet
+ * - All Creators: given Marketplace Access (Active + Suspended)
+ * - Active: live on the marketplace · Suspended ('inactive'): access suspended / removed
+ * - Inactive / In Deletion ('archived'): account lifecycle, nowhere else
+ * (Keys kept so existing ?filter= links keep working.)
+ */
 const FILTER_TABS: { key: CreatorFilter; label: string }[] = [
   { key: 'all', label: 'All Creators' },
-  { key: 'pending', label: 'Pending Review' },
   { key: 'requests', label: 'Requests' },
+  { key: 'pending', label: 'Under Review' },
+  { key: 'active', label: 'Active Creators' },
+  { key: 'inactive', label: 'Suspended' },
   { key: 'claims', label: 'Ownership Claims' },
   { key: 'community', label: 'Community Creators Profiles' },
-  { key: 'active', label: 'Active Creators' },
   { key: 'flagged', label: 'Flagged' },
-  { key: 'inactive', label: 'Marketplace Inactive' },
   { key: 'archived', label: 'Inactive / In Deletion' },
 ];
 
@@ -79,6 +90,16 @@ export default function CreatorManagement() {
   const [creators, setCreators] = useState<CatalogCreator[]>([]);
   const [users, setUsers] = useState<UserDirectoryEntry[]>([]);
   const [requests, setRequests] = useState<OpsPartnerApplication[]>([]);
+  // Creator ids / account ids with an application still waiting for a decision.
+  const appliedKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const r of requests) {
+      if (r.catalogEntityId) keys.add(r.catalogEntityId);
+      if (r.provisionedUserId) keys.add(r.provisionedUserId);
+      if (r.existingUserId) keys.add(r.existingUserId);
+    }
+    return keys;
+  }, [requests]);
   const [justApproved, setJustApproved] = useState<OpsPartnerApplication | null>(null);
   const [claims, setClaims] = useState<OpsVerification[]>([]);
   /** Refreshed by the claims queue after a review, so the tab count stays current. */
@@ -147,6 +168,7 @@ export default function CreatorManagement() {
           email: user?.email || c.email || '—',
           avatarUrl: c.avatar || user?.avatarUrl || null,
           status: c.status,
+          applied: c.status === 'draft' && (appliedKeys.has(c.id) || (c.userId ? appliedKeys.has(c.userId) : false)),
           verified: !!c.verifiedStatus,
           flagged:
             flaggedCreatorIds.has(c.id) || (c.userId ? flaggedCreatorIds.has(c.userId) : false),
@@ -155,15 +177,18 @@ export default function CreatorManagement() {
           deletionDueAt: user?.deletionDueAt ?? null,
         };
       }),
-    [creators, usersById, flaggedCreatorIds],
+    [creators, usersById, flaggedCreatorIds, appliedKeys],
   );
 
   // Inactive / in-deletion accounts live only in their own tab.
   const liveRows = useMemo(() => rows.filter((r) => !r.lifecycle), [rows]);
+  const underReview = (r: CreatorRow) => r.status === 'draft' && !r.applied;
+  const onMarketplace = (r: CreatorRow) => r.status !== 'draft';
   const counts = useMemo(
     () => ({
-      all: liveRows.length,
-      pending: liveRows.filter((r) => r.status === 'draft').length,
+      total: liveRows.length,
+      all: liveRows.filter(onMarketplace).length,
+      pending: liveRows.filter(underReview).length,
       requests: requests.length,
       claims: openClaimCount ?? claims.length,
       community: creators.filter((c) => c.origin === 'community' && !c.userId).length,
@@ -177,7 +202,8 @@ export default function CreatorManagement() {
 
   const filtered = useMemo(() => {
     let list = filter === 'archived' ? rows.filter((r) => r.lifecycle) : liveRows;
-    if (filter === 'pending') list = list.filter((r) => r.status === 'draft');
+    if (filter === 'all') list = list.filter(onMarketplace);
+    else if (filter === 'pending') list = list.filter(underReview);
     else if (filter === 'active') list = list.filter((r) => r.status === 'live');
     else if (filter === 'inactive') list = list.filter((r) => r.status === 'archived');
     else if (filter === 'flagged') list = list.filter((r) => r.flagged);
@@ -193,7 +219,7 @@ export default function CreatorManagement() {
       if (sort === 'new') return b.createdAt.localeCompare(a.createdAt);
       return a.createdAt.localeCompare(b.createdAt);
     });
-  }, [rows, filter, search, sort]);
+  }, [rows, liveRows, filter, search, sort]);
 
   useEffect(() => setPage(1), [filter, search]);
 
@@ -227,9 +253,9 @@ export default function CreatorManagement() {
   };
 
   const statusLabel: Record<CreatorRow['status'], string> = {
-    draft: 'Pending Review',
+    draft: 'Under Review',
     live: 'Active',
-    archived: 'Inactive',
+    archived: 'Suspended',
   };
   const statusStyle: Record<CreatorRow['status'], string> = {
     draft: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
@@ -273,7 +299,7 @@ export default function CreatorManagement() {
       render: (r) => (
         <div className="flex flex-wrap gap-1">
           <span className={`px-2 py-0.5 text-[8px] font-black uppercase rounded border ${statusStyle[r.status]}`}>
-            {statusLabel[r.status]}
+            {r.applied ? 'Applied' : statusLabel[r.status]}
           </span>
           <AccountStatePill state={r.lifecycle} deletionDueAt={r.deletionDueAt} />
         </div>
@@ -313,19 +339,19 @@ export default function CreatorManagement() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="aws-page-card p-4">
           <div className="text-[10px] font-bold text-app-text-secondary uppercase tracking-widest">Total Creators</div>
-          <div className="text-2xl font-black mt-1.5">{counts.all}</div>
+          <div className="text-2xl font-black mt-1.5">{counts.total}</div>
         </div>
         <div className="aws-page-card p-4">
           <div className="text-[10px] font-bold text-app-text-secondary uppercase tracking-widest">Active Creators</div>
           <div className="text-2xl font-black mt-1.5 text-emerald-500">{counts.active}</div>
         </div>
         <div className="aws-page-card p-4">
-          <div className="text-[10px] font-bold text-app-text-secondary uppercase tracking-widest">Pending Review</div>
-          <div className="text-2xl font-black mt-1.5 text-app-accent">{counts.pending}</div>
+          <div className="text-[10px] font-bold text-app-text-secondary uppercase tracking-widest">Requests</div>
+          <div className="text-2xl font-black mt-1.5 text-app-accent">{counts.requests}</div>
         </div>
         <div className="aws-page-card p-4">
-          <div className="text-[10px] font-bold text-app-text-secondary uppercase tracking-widest">Flagged</div>
-          <div className="text-2xl font-black mt-1.5 text-amber-600">{counts.flagged}</div>
+          <div className="text-[10px] font-bold text-app-text-secondary uppercase tracking-widest">Under Review</div>
+          <div className="text-2xl font-black mt-1.5 text-amber-600">{counts.pending}</div>
         </div>
       </div>
 
