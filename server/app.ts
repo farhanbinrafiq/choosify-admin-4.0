@@ -145,6 +145,25 @@ export function createApp(): Express {
   const mediaMount = getMediaStaticMount();
   app.use(mediaMount.urlPrefix, createCorsMiddleware(), express.static(mediaMount.root, { fallthrough: false, maxAge: "7d" }));
 
+  // The dashboard and the API are never search results. Registered after the
+  // media mount, so uploaded media (the product photos choosify.bd shows)
+  // stays indexable. Crawling is allowed so crawlers can see the noindex.
+  app.use((_req, res, next) => {
+    res.setHeader("X-Robots-Tag", "noindex, nofollow");
+    next();
+  });
+  app.get("/robots.txt", (_req, res) => {
+    res.type("text/plain").send(
+      [
+        "# dashboard.choosify.bd: seller/admin dashboard and API.",
+        "# Pages and API responses carry X-Robots-Tag: noindex. Media stays indexable.",
+        "User-agent: *",
+        "Allow: /",
+        "",
+      ].join("\n"),
+    );
+  });
+
   // Meta webhooks need the raw body for signature verification (before JSON parser)
   app.post(
     "/api/webhooks/meta",
