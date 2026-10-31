@@ -63,7 +63,15 @@ export type BrandComparisonResult = {
   filter: {
     category: string;
     ratingTolerance: number;
-    fallbackTier: 'primary' | 'tier-0.5' | 'parent-category' | 'none';
+    /**
+     * The least-similar tier that contributed a candidate:
+     * primary / tier-0.5 / same-category = same brand category (rating within
+     * the configured tolerance / within 0.5 / any rating); parent-category =
+     * same top-level category family; shared-products = sells products in a
+     * category this brand also covers. 'none' = no genuinely similar brand
+     * (the storefront then hides the section).
+     */
+    fallbackTier: 'primary' | 'tier-0.5' | 'same-category' | 'parent-category' | 'shared-products' | 'none';
   };
 };
 
@@ -264,41 +272,33 @@ async function brandPriceRanges(): Promise<Map<string, { min: number; max: numbe
   return ranges;
 }
 
-function rankBrandCandidates(
-  current: CatalogBrand,
-  pool: CatalogBrand[],
-  productCounts: Map<string, number>,
-  max: number,
-): CatalogBrand[] {
-  const currentCount = productCounts.get(current.id) || 0;
-  const scored = pool.map((b) => {
-    const overlap = b.category === current.category ? 0 : 1;
-    const ratingProximity = Math.abs((b.ratings ?? 0) - (current.ratings ?? 0));
-    const count = productCounts.get(b.id) || 0;
-    const countSimilarity = Math.abs(count - currentCount);
-    return { brand: b, overlap, ratingProximity, count, countSimilarity };
-  });
-  scored.sort((a, b) => {
-    if (a.overlap !== b.overlap) return a.overlap - b.overlap;
-    if (a.ratingProximity !== b.ratingProximity) return a.ratingProximity - b.ratingProximity;
-    if (a.count !== b.count) return b.count - a.count;
-    return a.countSimilarity - b.countSimilarity;
-  });
-  const seen = new Set<string>([current.id]);
-  const result: CatalogBrand[] = [];
-  for (const row of scored) {
-    if (seen.has(row.brand.id)) continue;
-    seen.add(row.brand.id);
-    result.push(row.brand);
-    if (result.length >= max) break;
-  }
-  return result;
-}
+type CategoryRow = { id: string; slug?: string; name?: string; parentId?: string | null };
 
 /**
- * Brand Quick Comparison — overlapping category, rating within tolerance,
- * marketplace-visible only. Falls back ±0.3 -> ±0.5 -> same/shared parent
- * category, closest rating, per spec.
+ * A brand's category is stored as free text (usually the category name, sometimes
+ * an id or slug). Resolve it to a catalog category, preferring a top-level one when
+ * names collide (e.g. "Electronics" is also a subcategory under Auctions).
+ */
+function makeCategoryResolver(categories: CategoryRow[]) {
+  const norm = (v: unknown) => String(v ?? '').trim().toLowerCase();
+  return (raw: unknown): CategoryRow | undefined => {
+    const key = norm(raw);
+    if (!key) return undefined;
+    const hits = categories.filter((c) => norm(c.id) === key || norm(c.slug) === key || norm(c.name) === key);
+    return hits.find((c) => !c.parentId) ?? hits[0];
+  };
+}
+
+/** Similarity tiers, most similar first. A brand that fits none is never offered. */
+const BRAND_TIERS = ['primary', 'tier-0.5', 'same-category', 'parent-category', 'shared-products'] as const;
+type BrandTier = (typeof BRAND_TIERS)[number];
+
+/**
+ * Brand Quick Comparison — only genuinely similar, marketplace-visible brands:
+ * same category (closest rating first), then the same top-level category family,
+ * then brands selling products in a category this brand also covers. Never falls
+ * back to unrelated brands: with no similar brand the result has no candidates
+ * and the storefront hides the section.
  */
 export async function getBrandComparison(brandId: string): Promise<BrandComparisonResult | null> {
   const config = getCompareConfig();
@@ -309,43 +309,62 @@ export async function getBrandComparison(brandId: string): Promise<BrandComparis
   const pool = brands.filter((b) => b.id !== current.id && brandIsMarketplaceVisible(b));
   const productCounts = await brandProductCounts();
   const priceRanges = await brandPriceRanges();
+  const resolveCategory = makeCategoryResolver(((await catalogStore.listCategories()) || []) as CategoryRow[]);
 
-  const withinRating = (b: CatalogBrand, tolerance: number) =>
-    Math.abs((b.ratings ?? 0) - (current.ratings ?? 0)) <= tolerance;
-
-  let fallbackTier: BrandComparisonResult['filter']['fallbackTier'] = 'primary';
-  const sameCategory = pool.filter((b) => b.category === current.category);
-  let matched = sameCategory.filter((b) => withinRating(b, config.brandRatingTolerance));
-  let tolerance = config.brandRatingTolerance;
-
-  if (matched.length < 3) {
-    const wider = sameCategory.filter((b) => withinRating(b, 0.5));
-    if (wider.length > matched.length) {
-      matched = wider;
-      fallbackTier = 'tier-0.5';
-      tolerance = 0.5;
-    }
+  // Top-level product categories each brand actually sells in.
+  const productCategories = new Map<string, Set<string>>();
+  for (const p of await catalogStore.listProducts()) {
+    if (!p.brandId || !p.categoryId) continue;
+    if (!productCategories.has(p.brandId)) productCategories.set(p.brandId, new Set());
+    productCategories.get(p.brandId)!.add(p.categoryId);
   }
 
-  if (matched.length < 3) {
-    // Parent/shared-category tier: any marketplace-visible brand, closest rating.
-    if (pool.length > matched.length) {
-      matched = pool;
-      fallbackTier = 'parent-category';
+  const profile = (b: CatalogBrand) => {
+    const cat = resolveCategory(b.category);
+    const family = cat ? cat.parentId || cat.id : undefined;
+    const covers = new Set(productCategories.get(b.id) ?? []);
+    if (family) covers.add(family);
+    return { catKey: cat ? cat.id : String(b.category ?? '').trim().toLowerCase(), family, covers };
+  };
+  const me = profile(current);
+  const ratingGap = (b: CatalogBrand) => Math.abs((b.ratings ?? 0) - (current.ratings ?? 0));
+
+  const tierOf = (b: CatalogBrand): BrandTier | null => {
+    const them = profile(b);
+    if (me.catKey && them.catKey === me.catKey) {
+      if (ratingGap(b) <= config.brandRatingTolerance) return 'primary';
+      if (ratingGap(b) <= 0.5) return 'tier-0.5';
+      return 'same-category';
     }
-  }
+    if (me.family && them.family === me.family) return 'parent-category';
+    for (const c of them.covers) if (me.covers.has(c)) return 'shared-products';
+    return null;
+  };
 
-  const candidates = rankBrandCandidates(current, matched, productCounts, config.maxComparisonCards - 1);
+  const currentCount = productCounts.get(current.id) || 0;
+  const ranked = pool
+    .map((brand) => ({ brand, tier: tierOf(brand) }))
+    .filter((row): row is { brand: CatalogBrand; tier: BrandTier } => row.tier !== null)
+    .map((row) => ({ ...row, count: productCounts.get(row.brand.id) || 0 }))
+    .sort(
+      (a, b) =>
+        BRAND_TIERS.indexOf(a.tier) - BRAND_TIERS.indexOf(b.tier) ||
+        ratingGap(a.brand) - ratingGap(b.brand) ||
+        b.count - a.count ||
+        Math.abs(a.count - currentCount) - Math.abs(b.count - currentCount),
+    )
+    .slice(0, Math.max(0, config.maxComparisonCards - 1));
 
+  const worstTier = ranked.length ? ranked[ranked.length - 1].tier : undefined;
   return {
-    current: toBrandCard(current, productCounts.get(current.id) || 0, priceRanges.get(current.id), true),
-    candidates: candidates.map((b) =>
-      toBrandCard(b, productCounts.get(b.id) || 0, priceRanges.get(b.id), false),
+    current: toBrandCard(current, currentCount, priceRanges.get(current.id), true),
+    candidates: ranked.map(({ brand }) =>
+      toBrandCard(brand, productCounts.get(brand.id) || 0, priceRanges.get(brand.id), false),
     ),
     filter: {
       category: current.category,
-      ratingTolerance: tolerance,
-      fallbackTier: candidates.length ? fallbackTier : 'none',
+      ratingTolerance: worstTier === 'primary' ? config.brandRatingTolerance : 0.5,
+      fallbackTier: worstTier ?? 'none',
     },
   };
 }
