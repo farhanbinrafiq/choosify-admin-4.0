@@ -109,6 +109,11 @@ export type CommunityProfileInput = {
   description?: string;
   overview?: string;
   logo?: string;
+  /** The unframed upload behind `logo` and how it was framed (shared profile-image
+   *  adjustment), so staff can re-adjust later. Brand logoOriginal/logoCrop,
+   *  creator avatarOriginal/avatarCrop. A logo sent without them clears both. */
+  logoOriginal?: string;
+  logoCrop?: unknown;
   coverImage?: string;
   website?: string;
   socialLinks?: Record<string, unknown>;
@@ -154,6 +159,19 @@ const httpUrl = (v: string | undefined, field: string): string => {
 };
 
 /**
+ * Original + framing for the logo (brand) / profile photo (creator). Without an
+ * original the logo was set without the adjust step, so any stored framing no
+ * longer matches it and is cleared (null = clear in the catalog normalizers).
+ */
+function logoAdjustFields(input: Pick<CommunityProfileInput, 'logoOriginal' | 'logoCrop'>, field: 'logo' | 'avatar') {
+  const original = httpUrl(input.logoOriginal, 'Original image');
+  const crop = original && input.logoCrop && typeof input.logoCrop === 'object' ? input.logoCrop : null;
+  return field === 'logo'
+    ? { logoOriginal: original, logoCrop: crop }
+    : { avatarOriginal: original, avatarCrop: crop };
+}
+
+/**
  * Create a community profile (staff only — caller checks cms:edit). Returns the
  * duplicate list instead of creating when likely duplicates exist and the
  * admin has not acknowledged them.
@@ -189,6 +207,7 @@ export async function createCommunityProfile(
         description: String(input.description || '').trim(),
         tagline: '',
         logo: httpUrl(input.logo, 'Logo'),
+        ...logoAdjustFields(input, 'logo'),
         coverImage: httpUrl(input.coverImage, 'Cover image'),
         website,
         socialLinks,
@@ -229,6 +248,7 @@ export async function createCommunityProfile(
     category: categoryLabel || undefined,
     bio: String(input.description || '').trim(),
     avatar: httpUrl(input.logo, 'Profile photo'),
+    ...logoAdjustFields(input, 'avatar'),
     coverImage: httpUrl(input.coverImage, 'Cover image'),
     socialLinks,
     location: String(input.location || '').trim() || undefined,
@@ -292,6 +312,7 @@ export async function updateCommunityProfile(
           categoryId,
           description: sent('description') ? String(input.description || '').trim() : brand.description,
           logo: sent('logo') ? httpUrl(input.logo, 'Logo') : brand.logo,
+          ...(sent('logo') ? logoAdjustFields(input, 'logo') : {}),
           coverImage: sent('coverImage') ? httpUrl(input.coverImage, 'Cover image') : brand.coverImage,
           website: sent('website') ? httpUrl(input.website, 'Website') : brand.website,
           socialLinks,
@@ -316,6 +337,7 @@ export async function updateCommunityProfile(
           name,
           bio: sent('description') ? String(input.description || '').trim() : creator.bio,
           avatar: sent('logo') ? httpUrl(input.logo, 'Profile photo') : creator.avatar,
+          ...(sent('logo') ? logoAdjustFields(input, 'avatar') : {}),
           coverImage: sent('coverImage') ? httpUrl(input.coverImage, 'Cover image') : creator.coverImage,
           socialLinks,
           location: sent('location') ? String(input.location || '').trim() || undefined : creator.location,

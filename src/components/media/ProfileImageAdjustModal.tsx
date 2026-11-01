@@ -48,9 +48,23 @@ export type ProfileImageAdjustModalProps = {
   /** Resume a previous adjustment against this SAME source image (see module doc). */
   initialCrop?: ProfileImageCropParams | null;
   accentColor?: string;
+  /**
+   * Let the image zoom out past "fill the frame" so a whole mark fits inside it,
+   * leaving (transparent) space around it — for logos whose artwork runs to the
+   * edges. Off by default: avatars and covers always fill their frame.
+   */
+  allowFitInside?: boolean;
+  /**
+   * The saved image is shown inside a circle elsewhere (e.g. the round logo badge
+   * on storefront brand cards): draw that circle over the frame and preview it.
+   */
+  roundGuide?: boolean;
   onCancel: () => void;
   onSave: (result: ProfileImageAdjustResult) => void;
 };
+
+/** How far below "whole image fits" the zoom may go (adds a margin around the mark). */
+const FIT_INSIDE_MIN_FACTOR = 0.6;
 
 const DEFAULT_PRESETS: ProfileImageAspectPreset[] = [{ id: 'square', label: 'Square', ratio: 1 }];
 
@@ -83,9 +97,16 @@ export function ProfileImageAdjustModal({
   transparentOutput,
   initialCrop,
   accentColor = '#EF3C23',
+  allowFitInside = false,
+  roundGuide = false,
   onCancel,
   onSave,
 }: ProfileImageAdjustModalProps) {
+  /** Smallest allowed scale for a frame: fill it, or (allowFitInside) fit inside it with a margin. */
+  const minScaleFor = (vw: number, vh: number, w: number, h: number) =>
+    allowFitInside ? Math.min(vw / w, vh / h) * FIT_INSIDE_MIN_FACTOR : Math.max(vw / w, vh / h);
+  /** Offset limit: a larger image must keep covering the frame; a smaller one stays inside it. */
+  const maxOffset = (disp: number, view: number) => Math.abs(disp - view) / 2;
   const presets = shape === 'circle' ? [DEFAULT_PRESETS[0]] : aspectPresets;
   const [natural, setNatural] = useState({ w: 1, h: 1 });
   const [preset, setPreset] = useState<ProfileImageAspectPreset>(presets[0]);
@@ -137,9 +158,9 @@ export function ProfileImageAdjustModal({
     const k = viewMax / prev;
     const vw = preset.ratio >= 1 ? viewMax : viewMax * preset.ratio;
     const vh = preset.ratio >= 1 ? viewMax / preset.ratio : viewMax;
-    const s = Math.max(Math.max(vw / natural.w, vh / natural.h), scale * k);
-    const maxX = Math.max(0, (natural.w * s - vw) / 2);
-    const maxY = Math.max(0, (natural.h * s - vh) / 2);
+    const s = Math.max(minScaleFor(vw, vh, natural.w, natural.h), scale * k);
+    const maxX = maxOffset(natural.w * s, vw);
+    const maxY = maxOffset(natural.h * s, vh);
     setScale(s);
     setOffset((o) => ({ x: Math.min(maxX, Math.max(-maxX, o.x * k)), y: Math.min(maxY, Math.max(-maxY, o.y * k)) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -184,9 +205,9 @@ export function ProfileImageAdjustModal({
         const vh = p.ratio >= 1 ? viewMax / p.ratio : viewMax;
         const legacyW = p.ratio >= 1 ? BASE_VIEW_MAX : BASE_VIEW_MAX * p.ratio;
         const k = vw / (savedW || legacyW);
-        const s = Math.max(Math.max(vw / w, vh / h), initialCrop.scale * k);
-        const maxX = Math.max(0, (w * s - vw) / 2);
-        const maxY = Math.max(0, (h * s - vh) / 2);
+        const s = Math.max(minScaleFor(vw, vh, w, h), initialCrop.scale * k);
+        const maxX = maxOffset(w * s, vw);
+        const maxY = maxOffset(h * s, vh);
         setPreset(p);
         setScale(s);
         setOffset({
@@ -234,10 +255,8 @@ export function ProfileImageAdjustModal({
 
   const clampOffset = useCallback(
     (x: number, y: number, nextScale: number, vw = viewW, vh = viewH) => {
-      const dispW = natural.w * nextScale;
-      const dispH = natural.h * nextScale;
-      const maxX = Math.max(0, (dispW - vw) / 2);
-      const maxY = Math.max(0, (dispH - vh) / 2);
+      const maxX = maxOffset(natural.w * nextScale, vw);
+      const maxY = maxOffset(natural.h * nextScale, vh);
       return {
         x: Math.min(maxX, Math.max(-maxX, x)),
         y: Math.min(maxY, Math.max(-maxY, y)),
@@ -274,8 +293,13 @@ export function ProfileImageAdjustModal({
     setDragging(false);
   };
 
-  const zoomMin = minCoverScale;
-  const zoomMax = Math.max(zoomMin * 4, zoomMin + 0.01);
+  const zoomMin = minScaleFor(viewW, viewH, natural.w, natural.h);
+  const zoomMax = Math.max(minCoverScale * 4, zoomMin + 0.01);
+  /** Whole image visible inside the frame (allowFitInside only). */
+  const onFitWhole = () => {
+    setScale(Math.min(viewW / natural.w, viewH / natural.h));
+    setOffset({ x: 0, y: 0 });
+  };
 
   const setScaleClamped = useCallback(
     (next: number) => {
@@ -360,7 +384,10 @@ export function ProfileImageAdjustModal({
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4"
+          // Above the page dialogs it opens from (community profile forms are z-[1000]).
+          // Portalled into <body>, outside the app root that carries the app font: set it here.
+          className="fixed inset-0 z-[1100] flex items-center justify-center p-3 sm:p-4"
+          style={{ fontFamily: 'var(--font-sans)' }}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -442,6 +469,21 @@ export function ProfileImageAdjustModal({
                   style={{ boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.85)' }}
                   aria-hidden
                 />
+                {roundGuide && !loadFailed && (
+                  // Where the round badge clips the saved image: the whole frame is
+                  // fitted into a circle whose diameter is the frame's long side.
+                  <svg className="pointer-events-none absolute inset-0" width={viewW} height={viewH} aria-hidden data-testid="profile-image-round-guide">
+                    <circle
+                      cx={viewW / 2}
+                      cy={viewH / 2}
+                      r={Math.max(viewW, viewH) / 2 - 1}
+                      fill="none"
+                      stroke={accentColor}
+                      strokeWidth={1.5}
+                      strokeDasharray="5 4"
+                    />
+                  </svg>
+                )}
               </div>
             </div>
 
@@ -496,6 +538,17 @@ export function ProfileImageAdjustModal({
                   <RotateCcw className="w-3.5 h-3.5" />
                 </button>
               </div>
+              {allowFitInside && (
+                <button
+                  type="button"
+                  onClick={onFitWhole}
+                  disabled={loadFailed}
+                  className="mt-2 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-bold text-slate-600 hover:border-slate-300 disabled:opacity-40"
+                  data-testid="profile-image-fit-whole"
+                >
+                  Fit whole image
+                </button>
+              )}
               <div className="mt-2.5 flex items-center gap-3">
                 {/* Live preview of the saved result at display size — the same
                     transform as the frame above, scaled down (no second cropper). */}
@@ -522,8 +575,40 @@ export function ProfileImageAdjustModal({
                     <span className="text-[9px] font-extrabold uppercase tracking-wide text-[#9CA3AF]">Preview</span>
                   </div>
                 )}
+                {roundGuide && !loadFailed && (
+                  // Same result as the storefront's round badge: the saved image
+                  // fitted (never cropped by CSS) inside a white circle.
+                  <div className="shrink-0 flex flex-col items-center gap-1" data-testid="profile-image-round-preview">
+                    <div
+                      className="relative overflow-hidden rounded-full bg-white"
+                      style={{ width: PREVIEW_LONG, height: PREVIEW_LONG, boxShadow: '0 2px 6px rgba(15,23,42,0.18)' }}
+                      aria-hidden
+                    >
+                      <div
+                        className="absolute overflow-hidden"
+                        style={{ width: previewW, height: previewH, left: (PREVIEW_LONG - previewW) / 2, top: (PREVIEW_LONG - previewH) / 2 }}
+                      >
+                        <img
+                          src={imageSrc}
+                          alt=""
+                          draggable={false}
+                          className="pointer-events-none absolute max-w-none"
+                          style={{
+                            width: natural.w * scale * previewK,
+                            height: natural.h * scale * previewK,
+                            left: ((viewW - natural.w * scale) / 2 + offset.x) * previewK,
+                            top: ((viewH - natural.h * scale) / 2 + offset.y) * previewK,
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <span className="text-[9px] font-extrabold uppercase tracking-wide text-[#9CA3AF]">On cards</span>
+                  </div>
+                )}
                 <div className="text-[10px] text-[#9CA3AF] font-semibold">
                   Drag the photo to reposition. Zoom with the buttons or slider. Reset re-centres it.
+                  {allowFitInside ? ' Zoom out or use Fit whole image so nothing is cut off.' : ''}
+                  {roundGuide ? ' The dashed circle shows what the round badge keeps.' : ''}
                 </div>
               </div>
             </div>

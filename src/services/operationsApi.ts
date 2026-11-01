@@ -1,4 +1,5 @@
 import { getStoredAccessToken, refreshAccessToken, reportFeatureEntitlementDenied } from './authRefresh';
+import type { ProfileImageCropParams } from '../../shared/media/profileImageCrop';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || '/api/v1';
 
@@ -681,6 +682,10 @@ export interface CommunityProfileInput {
   categoryId?: string;
   description?: string;
   logo?: string;
+  /** Unframed upload behind `logo` + how it was framed, so it can be re-adjusted.
+   *  Send both with every `logo` (omitting them clears the stored framing). */
+  logoOriginal?: string;
+  logoCrop?: ProfileImageCropParams | null;
   coverImage?: string;
   website?: string;
   socialLinks?: Record<string, string>;

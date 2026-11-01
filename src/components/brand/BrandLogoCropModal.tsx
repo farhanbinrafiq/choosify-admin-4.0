@@ -47,6 +47,10 @@ export function BrandLogoCropModal({ open, imageSrc, initialCrop, onCancel, onSa
       aspectPresets={ASPECT_PRESETS}
       outputLongSide={800}
       transparentOutput
+      // Logos are shown in a round badge on brand cards and often run to the
+      // image edges: allow zooming out so the whole mark fits, and show the circle.
+      allowFitInside
+      roundGuide
       accentColor="#EF3C23"
       onCancel={onCancel}
       onSave={onSave}

@@ -11,7 +11,10 @@ import {
 } from '../../../services/operationsApi';
 import type { CatalogBrand, CatalogCategory, CatalogCreator } from '../../../types/catalog';
 import { getPublishedStorefrontUrl } from '../../../lib/storefrontUrls';
-import { uploadBrandImage, uploadCreatorImage } from '../../../services/mediaUpload';
+import { dataUrlToFile, uploadBrandImage, uploadCreatorImage } from '../../../services/mediaUpload';
+import { BrandLogoCropModal } from '../../brand/BrandLogoCropModal';
+import { ProfileImageAdjustModal, type ProfileImageAdjustResult } from '../../media/ProfileImageAdjustModal';
+import type { ProfileImageCropParams } from '../../../../shared/media/profileImageCrop';
 import { TagPillInput } from '../ListInputs';
 
 /**
@@ -42,6 +45,9 @@ type CommunityProfileFields = {
   category: string;
   description: string;
   logo: string;
+  /** Unframed upload behind `logo` and its framing (empty/undefined = never adjusted). */
+  logoOriginal: string;
+  logoCrop?: ProfileImageCropParams;
   coverImage: string;
   website: string;
   location: string;
@@ -72,6 +78,8 @@ function profileFieldsOf(entityType: 'brand' | 'creator', r: CatalogBrand | Cata
       category: String(b.category || ''),
       description: String(b.description || ''),
       logo: String(b.logo || ''),
+      logoOriginal: String(b.logoOriginal || ''),
+      logoCrop: b.logoCrop,
       coverImage: String(b.coverImage || ''),
       website: String(b.website || ''),
       location: String((b.overview as { address?: string } | undefined)?.address || ''),
@@ -87,6 +95,8 @@ function profileFieldsOf(entityType: 'brand' | 'creator', r: CatalogBrand | Cata
     category: String((c as { category?: string }).category || ''),
     description: String(c.bio || ''),
     logo: String(c.avatar || ''),
+    logoOriginal: String(c.avatarOriginal || ''),
+    logoCrop: c.avatarCrop,
     coverImage: String(c.coverImage || ''),
     website: '',
     location: String(c.location || ''),
@@ -339,6 +349,8 @@ function CommunityProfileDialog({
   );
   const [description, setDescription] = useState(start?.description || '');
   const [logo, setLogo] = useState(start?.logo || '');
+  const [logoOriginal, setLogoOriginal] = useState(start?.logoOriginal || '');
+  const [logoCrop, setLogoCrop] = useState<ProfileImageCropParams | undefined>(start?.logoCrop);
   const [coverImage, setCoverImage] = useState(start?.coverImage || '');
   const [website, setWebsite] = useState(start?.website || '');
   const [location, setLocation] = useState(start?.location || '');
@@ -357,6 +369,12 @@ function CommunityProfileDialog({
   // Any edit invalidates a previous duplicate check.
   useEffect(() => setDuplicates(null), [name, website, cleanSocials]);
   const trackUpload = (busyNow: boolean) => setUploading((n) => Math.max(0, n + (busyNow ? 1 : -1)));
+  // Always sent together: the server clears a stored framing when a logo arrives without it.
+  const logoFields = {
+    logo: logo.trim(),
+    logoOriginal: logo.trim() ? logoOriginal : '',
+    logoCrop: logo.trim() && logoOriginal ? logoCrop ?? null : null,
+  };
 
   const submit = async () => {
     setBusy(true);
@@ -368,7 +386,7 @@ function CommunityProfileDialog({
           name: name.trim(),
           categoryId: categoryId || undefined,
           description: description.trim(),
-          logo: logo.trim(),
+          ...logoFields,
           coverImage: coverImage.trim(),
           website: website.trim(),
           location: location.trim(),
@@ -390,7 +408,7 @@ function CommunityProfileDialog({
         name: name.trim(),
         categoryId: categoryId || undefined,
         description: description.trim(),
-        logo: logo.trim(),
+        ...logoFields,
         coverImage: coverImage.trim(),
         website: website.trim(),
         location: location.trim(),
@@ -411,7 +429,7 @@ function CommunityProfileDialog({
   const canSubmit = name.trim().length >= 2 && (!isBrand || categoryId) && !busy && uploading === 0;
   const uploadImage = isBrand ? uploadBrandImage : uploadCreatorImage;
   // A click outside never closes the form; × / Cancel ask first when something was entered.
-  const snapshot = JSON.stringify([name, categoryId, description, logo, coverImage, website, location, cleanSocials, tags, priceRange]);
+  const snapshot = JSON.stringify([name, categoryId, description, logo, logoCrop, coverImage, website, location, cleanSocials, tags, priceRange]);
   const [initialSnapshot] = useState(snapshot);
   const requestClose = () => {
     if (snapshot !== initialSnapshot && !window.confirm('Discard the information you entered? It will not be saved.')) return;
@@ -466,8 +484,23 @@ function CommunityProfileDialog({
               value={logo}
               wide={false}
               upload={uploadImage}
-              onChange={setLogo}
+              onChange={(url) => {
+                setLogo(url);
+                // Removed (or replaced without adjusting): the old framing no longer applies.
+                setLogoOriginal('');
+                setLogoCrop(undefined);
+              }}
               onBusy={trackUpload}
+              adjust={{
+                kind: isBrand ? 'logo' : 'avatar',
+                originalValue: logoOriginal,
+                cropValue: logoCrop,
+                onAdjusted: (url, meta) => {
+                  setLogo(url);
+                  setLogoOriginal(meta.originalUrl);
+                  setLogoCrop(meta.crop);
+                },
+              }}
             />
             <ImageUploadField
               id="cp-cover"
@@ -570,6 +603,16 @@ function CommunityProfileDialog({
   );
 }
 
+/** Logo / profile-photo framing through the shared profile-image adjustment (same tool as Brand / Creator Studio). */
+type ImageAdjustConfig = {
+  /** `logo` = brand logo framing (shapes, fit-inside, round-badge guide); `avatar` = round creator photo. */
+  kind: 'logo' | 'avatar';
+  /** Unframed upload behind the current image, when one is stored. */
+  originalValue?: string;
+  cropValue?: ProfileImageCropParams;
+  onAdjusted: (url: string, meta: { originalUrl: string; crop: ProfileImageCropParams }) => void;
+};
+
 /** Logo / cover picker: uploads the chosen image file (no pasted links) and previews it. */
 function ImageUploadField({
   id,
@@ -579,6 +622,7 @@ function ImageUploadField({
   upload,
   onChange,
   onBusy,
+  adjust,
 }: {
   id: string;
   title: string;
@@ -587,15 +631,18 @@ function ImageUploadField({
   upload: (file: File) => Promise<string>;
   onChange: (url: string) => void;
   onBusy: (busy: boolean) => void;
+  /** When set, a chosen file is framed before upload and the image can be re-adjusted later. */
+  adjust?: ImageAdjustConfig;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const pick = async (file: File) => {
+  const [cropSrc, setCropSrc] = useState('');
+  const run = async (work: () => Promise<void>) => {
     setBusy(true);
     onBusy(true);
     setError(null);
     try {
-      onChange(await upload(file));
+      await work();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed.');
     } finally {
@@ -603,6 +650,30 @@ function ImageUploadField({
       onBusy(false);
     }
   };
+  const pick = (file: File) => {
+    if (!adjust) {
+      void run(async () => onChange(await upload(file)));
+      return;
+    }
+    // Frame first, upload after (the raw file is never published as-is).
+    const reader = new FileReader();
+    reader.onload = () => setCropSrc(String(reader.result || ''));
+    reader.onerror = () => setError('Could not read this file.');
+    reader.readAsDataURL(file);
+  };
+  // Re-adjust against the stored original. Older images have none: the image itself is the original.
+  const openAdjust = () => setCropSrc(adjust?.originalValue || value);
+  const saveAdjusted = (result: ProfileImageAdjustResult) => {
+    const source = cropSrc;
+    setCropSrc('');
+    void run(async () => {
+      const url = await upload(dataUrlToFile(result.dataUrl, `${adjust!.kind}.png`));
+      // A fresh pick's original exists only in the browser — upload it once so it can be re-adjusted later.
+      const originalUrl = source.startsWith('data:') ? await upload(dataUrlToFile(source, `${adjust!.kind}-original.png`)) : source;
+      adjust!.onAdjusted(url, { originalUrl, crop: result.crop });
+    });
+  };
+  const resumeCrop = cropSrc && cropSrc === adjust?.originalValue ? adjust?.cropValue : null;
   return (
     <div data-testid={`${id}-field`}>
       <div className={label}>{title}</div>
@@ -613,7 +684,12 @@ function ImageUploadField({
         }`}
       >
         {value ? (
-          <img src={value} alt="" className="h-full w-full object-cover" data-testid={`${id}-preview`} />
+          <img
+            src={value}
+            alt=""
+            className={`h-full w-full ${adjust?.kind === 'logo' ? 'object-contain bg-white' : 'object-cover'}`}
+            data-testid={`${id}-preview`}
+          />
         ) : (
           <span className="flex flex-col items-center gap-1 text-[10px] font-bold text-app-text-secondary">
             <ImagePlus className="w-4 h-4" /> Upload image
@@ -641,6 +717,11 @@ function ImageUploadField({
         <label htmlFor={id} className="cursor-pointer text-app-accent">
           {value ? 'Replace' : 'Choose file'}
         </label>
+        {adjust && value && !busy && (
+          <button type="button" className="text-app-accent" onClick={openAdjust} data-testid={`${id}-adjust`}>
+            Adjust
+          </button>
+        )}
         {value && !busy && (
           <button type="button" className="text-red-600" onClick={() => onChange('')}>
             Remove
@@ -648,6 +729,29 @@ function ImageUploadField({
         )}
       </div>
       {error && <div className="mt-1 text-[10.5px] font-bold text-red-600">{error}</div>}
+      {adjust?.kind === 'logo' && (
+        <BrandLogoCropModal
+          open={Boolean(cropSrc)}
+          imageSrc={cropSrc}
+          initialCrop={resumeCrop}
+          onCancel={() => setCropSrc('')}
+          onSave={saveAdjusted}
+        />
+      )}
+      {adjust?.kind === 'avatar' && (
+        <ProfileImageAdjustModal
+          open={Boolean(cropSrc)}
+          imageSrc={cropSrc}
+          initialCrop={resumeCrop}
+          title="Edit profile photo"
+          helpText="Drag to reposition. Zoom in/out or use the slider."
+          shape="circle"
+          outputLongSide={256}
+          accentColor="#EF3C23"
+          onCancel={() => setCropSrc('')}
+          onSave={saveAdjusted}
+        />
+      )}
     </div>
   );
 }
@@ -960,6 +1064,7 @@ function suggestionFields(l: OpsLead): CommunityProfileFields {
     category: l.categoryName || '',
     description: s.description || '',
     logo: s.logo || '',
+    logoOriginal: '',
     coverImage: s.coverImage || '',
     website: l.website || '',
     location: s.location || l.country || '',
