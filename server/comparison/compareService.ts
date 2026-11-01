@@ -246,8 +246,13 @@ function toBrandCard(
   };
 }
 
-async function brandProductCounts(): Promise<Map<string, number>> {
-  const products = await catalogStore.listProducts();
+/** Products a shopper can actually see (drafts, unpublished and hidden-brand products excluded). */
+async function publicBrandProducts(brands: CatalogBrand[]): Promise<CatalogProduct[]> {
+  const byId = new Map(brands.map((b) => [b.id, b]));
+  return (await catalogStore.listProducts()).filter((p) => isProductPubliclyEligible(p, byId.get(p.brandId)));
+}
+
+function brandProductCounts(products: CatalogProduct[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const p of products) {
     counts.set(p.brandId, (counts.get(p.brandId) || 0) + 1);
@@ -255,9 +260,8 @@ async function brandProductCounts(): Promise<Map<string, number>> {
   return counts;
 }
 
-/** Real per-brand min/max price derived from that brand's actual catalog products (never invented). */
-async function brandPriceRanges(): Promise<Map<string, { min: number; max: number }>> {
-  const products = await catalogStore.listProducts();
+/** Real per-brand min/max price derived from that brand's public catalog products (never invented). */
+function brandPriceRanges(products: CatalogProduct[]): Map<string, { min: number; max: number }> {
   const ranges = new Map<string, { min: number; max: number }>();
   for (const p of products) {
     if (typeof p.price !== 'number') continue;
@@ -307,13 +311,14 @@ export async function getBrandComparison(brandId: string): Promise<BrandComparis
   if (!current) return null;
 
   const pool = brands.filter((b) => b.id !== current.id && brandIsMarketplaceVisible(b));
-  const productCounts = await brandProductCounts();
-  const priceRanges = await brandPriceRanges();
+  const products = await publicBrandProducts(brands);
+  const productCounts = brandProductCounts(products);
+  const priceRanges = brandPriceRanges(products);
   const resolveCategory = makeCategoryResolver(((await catalogStore.listCategories()) || []) as CategoryRow[]);
 
-  // Top-level product categories each brand actually sells in.
+  // Top-level product categories each brand publicly sells in.
   const productCategories = new Map<string, Set<string>>();
-  for (const p of await catalogStore.listProducts()) {
+  for (const p of products) {
     if (!p.brandId || !p.categoryId) continue;
     if (!productCategories.has(p.brandId)) productCategories.set(p.brandId, new Set());
     productCategories.get(p.brandId)!.add(p.categoryId);
