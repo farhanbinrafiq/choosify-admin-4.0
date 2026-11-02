@@ -216,6 +216,10 @@ export const partnerApplications = pgTable('partner_applications', {
   phone: varchar('phone', { length: 24 }).notNull(),
   businessOrChannelName: varchar('business_or_channel_name', { length: 160 }).notNull(),
   category: varchar('category', { length: 120 }).notNull(),
+  /** Seller brands: Category Management ids from the two-level picker + "couldn't find it" text (migration 0014). */
+  categoryId: varchar('category_id', { length: 64 }),
+  subcategoryId: varchar('subcategory_id', { length: 120 }),
+  categoryRequest: varchar('category_request', { length: 80 }),
   city: varchar('city', { length: 80 }).notNull(),
   website: varchar('website', { length: 320 }),
   niche: varchar('niche', { length: 160 }),

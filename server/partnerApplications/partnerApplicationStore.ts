@@ -18,6 +18,10 @@ export type PartnerApplication = {
   /** Seller: store/brand name. Creator: channel/creator name. */
   businessOrChannelName: string;
   category: string;
+  /** Seller: two-level picker choice (Category Management ids) + "couldn't find it" text. */
+  categoryId?: string;
+  subcategoryId?: string;
+  categoryRequest?: string;
   city: string;
   website?: string;
   /** Creator-specific */
@@ -58,6 +62,9 @@ function rowToApplication(row: Row): PartnerApplication {
     phone: row.phone,
     businessOrChannelName: row.businessOrChannelName,
     category: row.category,
+    categoryId: row.categoryId || undefined,
+    subcategoryId: row.subcategoryId || undefined,
+    categoryRequest: row.categoryRequest || undefined,
     city: row.city,
     website: row.website || undefined,
     niche: row.niche || undefined,
@@ -137,6 +144,9 @@ export const partnerApplicationStore = {
         phone: input.phone,
         businessOrChannelName: input.businessOrChannelName,
         category: input.category,
+        categoryId: input.categoryId,
+        subcategoryId: input.subcategoryId,
+        categoryRequest: input.categoryRequest,
         city: input.city,
         website: input.website,
         niche: input.niche,

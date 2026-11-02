@@ -43,6 +43,7 @@ const MEDIA_KIND_LABEL: Record<StoryMediaKind, string> = {
 };
 import { BrandImageUploadField } from './BrandImageUploadField';
 import { TagPillInput } from '../../components/admin/ListInputs';
+import { CategoryPicker } from '../../components/catalog/CategoryPicker';
 import { BrandProfilePresentation } from '../../components/brand-profile';
 import type { BrandStudioBridge } from '../../components/brand-profile/BrandProfileHero';
 
@@ -311,8 +312,12 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                 <input className={input} value={d.brandName} onChange={(e) => patch({ brandName: e.target.value })} placeholder="e.g. Walton" />
               </div>
               <div>
-                <div className={label}>Category</div>
-                <BrandCategorySelect className={input} value={d.category} onChange={(category) => patch({ category })} />
+                <BrandCategoryPicker
+                  inputClassName={input}
+                  labelClassName={label}
+                  value={d}
+                  onChange={(next) => patch(next)}
+                />
               </div>
             </div>
             <div>
@@ -1412,6 +1417,44 @@ function StoresEditor({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * Brand category: type what you sell and pick Main › Subcategory (the main
+ * category is filled in from the subcategory), or browse. A brand whose stored
+ * label matches no main category shows it until the owner picks one.
+ */
+function BrandCategoryPicker({
+  value,
+  onChange,
+  inputClassName,
+  labelClassName,
+}: {
+  value: { category: string; categoryId?: string; subcategoryId?: string; categoryRequest?: string };
+  onChange: (next: { category: string; categoryId: string; subcategoryId: string; categoryRequest: string }) => void;
+  inputClassName: string;
+  labelClassName: string;
+}) {
+  const { categories } = useAuth();
+  // Older brands store only the name: find its main category so the picker shows it.
+  const categoryId =
+    value.categoryId || categories.find((c) => !c.parentId && c.name === (value.category || '').trim())?.id || '';
+  return (
+    <div>
+      <CategoryPicker
+        categories={categories}
+        value={{ categoryId, subcategoryId: value.subcategoryId || '', categoryRequest: value.categoryRequest || '' }}
+        onChange={(next) =>
+          onChange({ ...next, category: categories.find((c) => c.id === next.categoryId)?.name || (next.categoryId ? value.category : '') })
+        }
+        inputClassName={inputClassName}
+        labelClassName={labelClassName}
+      />
+      {!categoryId && value.category ? (
+        <p className="mt-1 text-[10px] text-app-text-secondary">Current: {value.category} — pick a category to update it.</p>
+      ) : null}
     </div>
   );
 }

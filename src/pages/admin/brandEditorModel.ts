@@ -192,6 +192,9 @@ export function mapCatalogBrandToModel(brand: CatalogBrand): BrandCMSModel {
     coverImage: brand.coverImage || '',
     tagline: brand.tagline || '',
     category: brand.category || '',
+    categoryId: brand.categoryId || '',
+    subcategoryId: brand.subcategoryId || '',
+    categoryRequest: brand.categoryRequest || '',
     website: brand.website || '',
     description: brand.description || '',
     brandStory: brand.story || '',
@@ -334,6 +337,8 @@ export function brandModelToCanonicalPatch(m: BrandCMSModel): Partial<CatalogBra
 
   const patch: Partial<CatalogBrand> = {
     category: s(m.category),
+    // The server validates the main › subcategory pair and fills in the names.
+    ...(m.categoryId ? { categoryId: m.categoryId, subcategoryId: m.subcategoryId || '', categoryRequest: s(m.categoryRequest || '') } : {}),
     description: s(m.description),
     logo: s(m.logo || m.logoUrl || ''),
     logoOriginal: s(m.logoOriginal || ''),

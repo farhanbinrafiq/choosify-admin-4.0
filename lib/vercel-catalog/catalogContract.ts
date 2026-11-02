@@ -961,6 +961,9 @@ export const normalizeSiteInput = (payload: unknown, existing?: SiteConfig): Sit
     storefrontCurationAudit: existing?.storefrontCurationAudit,
     // Community-profile copy has its own endpoint; a full-site save carries it forward.
     communityProfiles: existing?.communityProfiles,
+    // Server-written migration markers: a site save must never drop them, or a
+    // category staff deleted would be re-added on the next start.
+    catalogMigrations: existing?.catalogMigrations,
     updatedAt: nowIso(),
   };
 };

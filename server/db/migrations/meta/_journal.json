@@ -99,6 +99,13 @@
       "when": 1788760000000,
       "tag": "0013_public_handle_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788770000000,
+      "tag": "0014_brand_category_choice",
+      "breakpoints": true
     }
   ]
 }

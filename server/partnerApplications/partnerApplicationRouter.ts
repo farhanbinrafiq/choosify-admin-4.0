@@ -73,6 +73,10 @@ partnerApplicationRouter.post('/auth/partner-apply', async (req, res) => {
       phone: String(body.phone || ''),
       businessOrChannelName: String(body.businessOrChannelName || body.storeName || ''),
       category: String(body.category || ''),
+      // Seller two-level category picker (validated in the service).
+      categoryId: body.categoryId ? String(body.categoryId) : undefined,
+      subcategoryId: body.subcategoryId ? String(body.subcategoryId) : undefined,
+      categoryRequest: body.categoryRequest ? String(body.categoryRequest).slice(0, 80) : undefined,
       city: String(body.city || ''),
       website: body.website ? String(body.website) : undefined,
       niche: body.niche ? String(body.niche) : undefined,

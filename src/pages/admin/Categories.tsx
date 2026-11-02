@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Modal } from '../../components/ui/Modal';
+import { CategoryRequestsPanel } from '../../components/admin/catalog/CategoryRequestsPanel';
 
 const AVAILABLE_ICONS = [
   { name: 'Shirt', label: 'Fashion & Shirts', icon: Shirt },
@@ -454,6 +455,9 @@ export default function CategoriesPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Brands that couldn't find their category (shown only while some are waiting). */}
+      <CategoryRequestsPanel refreshKey={categories.length} />
 
       {/* ── Studio header (reference) ── */}
       <div style={S.headerBar}>

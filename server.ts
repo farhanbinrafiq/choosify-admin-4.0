@@ -8,6 +8,7 @@ import { bootstrapConversationEventSubscribers } from "./server/messaging/conver
 import { ensureConversationMemoryHydrated } from "./server/messaging/conversations/conversationMemoryBackend";
 import { attachOperationsPersistence, ensureOperationsHydrated } from "./server/operations/operationsPersistence";
 import { ensureCatalogSeedData } from "./lib/vercel-catalog/catalogStore";
+import { ensureCategoryAdditions } from "./lib/vercel-catalog/categoryAdditions";
 import { Logger } from "./server/lib/logger";
 import { markApplicationReady } from "./server/lib/readiness";
 import { logStartupDiagnostics } from "./server/lib/startupDiagnostics";
@@ -91,6 +92,10 @@ async function startServer() {
   ensureConversationMemoryHydrated();
   bootstrapConversationEventSubscribers();
   await ensureCatalogSeedData();
+  // One-time taxonomy additions (e.g. "Gifts & Occasions"); never edits or re-adds deleted categories.
+  await ensureCategoryAdditions().catch((error) =>
+    Logger.error("category additions failed", { message: error instanceof Error ? error.message : String(error) }),
+  );
   // One-time: the Verified badge now needs an approved document verification.
   await reconcileVerifiedBadgesOnce().catch((error) =>
     Logger.error("verified badge reconciliation failed", { message: error instanceof Error ? error.message : String(error) }),

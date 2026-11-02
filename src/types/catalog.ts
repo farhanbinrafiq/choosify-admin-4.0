@@ -187,6 +187,11 @@ export interface CatalogBrand {
   ownershipSource?: 'claim' | 'seller_onboarding' | 'creator_onboarding' | 'admin_assigned';
   /** Canonical Category Management id (the `category` text stays as the display label). */
   categoryId?: string;
+  /** Subcategory under categoryId (a category whose parentId is categoryId) and its display name. */
+  subcategoryId?: string;
+  subcategoryName?: string;
+  /** What the owner/staff typed when no category fitted; reviewed in Category Management. */
+  categoryRequest?: string;
   /**
    * Public storefront visibility. Seller drafts default false until Marketplace Access is ON.
    * Seeded / platform brands default true. Kept in sync with marketplaceStatus:
@@ -519,6 +524,8 @@ export interface SiteConfig {
   websiteAssets?: SiteWebsiteAssets;
   /** Editorial CTA/banner strips — Website Manager → CTA & Banners. Not paid/sponsored placements (see CatalogPlacement). */
   ctaBanners?: CtaBannerItem[];
+  /** One-time catalog data migrations already applied (CATEGORY_ADDITION_MIGRATIONS ids). Server-written only. */
+  catalogMigrations?: string[];
   /**
    * Community Claimable Profiles copy (editable, reviewable — not hard-coded
    * legal text). Written only via PUT /catalog/site/community-profiles.

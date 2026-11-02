@@ -347,12 +347,16 @@ export async function getBrandComparison(brandId: string): Promise<BrandComparis
   };
 
   const currentCount = productCounts.get(current.id) || 0;
+  // Same subcategory (e.g. Footwear vs Footwear) ranks first among same-category brands.
+  const sameSub = (b: CatalogBrand) => Boolean(current.subcategoryId) && b.subcategoryId === current.subcategoryId;
+  const sameCategoryTiers = new Set<BrandTier>(['primary', 'tier-0.5', 'same-category']);
   const ranked = pool
     .map((brand) => ({ brand, tier: tierOf(brand) }))
     .filter((row): row is { brand: CatalogBrand; tier: BrandTier } => row.tier !== null)
     .map((row) => ({ ...row, count: productCounts.get(row.brand.id) || 0 }))
     .sort(
       (a, b) =>
+        Number(sameCategoryTiers.has(b.tier) && sameSub(b.brand)) - Number(sameCategoryTiers.has(a.tier) && sameSub(a.brand)) ||
         BRAND_TIERS.indexOf(a.tier) - BRAND_TIERS.indexOf(b.tier) ||
         ratingGap(a.brand) - ratingGap(b.brand) ||
         b.count - a.count ||

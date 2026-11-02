@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { ChoosifyLogo } from '../components/common/ChoosifyLogo';
 import { AdminAuthShell, AdminAuthTrustRow } from '../components/auth/AdminAuthShell';
 import { getCanonicalAdminCategories } from '../lib/storefrontCategories';
+import { CategoryPicker, EMPTY_CATEGORY_CHOICE, type CategoryChoice } from '../components/catalog/CategoryPicker';
 import { getPublishedStorefrontUrl } from '../lib/storefrontUrls';
 
 const STOREFRONT_TERMS_URL = 'https://choosify.bd/terms';
@@ -105,6 +106,8 @@ export default function SellerSignupPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [category, setCategory] = useState('');
+  // Sellers: two-level picker (type what you sell → Main › Subcategory).
+  const [categoryChoice, setCategoryChoice] = useState<CategoryChoice>(EMPTY_CATEGORY_CHOICE);
   const [city, setCity] = useState('');
   const [website, setWebsite] = useState('');
   const [niche, setNiche] = useState('');
@@ -148,6 +151,13 @@ export default function SellerSignupPage() {
       cancelled = true;
     };
   }, [claimIntentId]);
+
+  // Main + subcategories for the seller picker (code list until the live list loads).
+  const pickerCategories = useMemo(
+    () => (categories?.length ? categories : getCanonicalAdminCategories()).filter((row) => row.enabled !== false),
+    [categories],
+  );
+  const sellerMainName = pickerCategories.find((c) => c.id === categoryChoice.categoryId)?.name || '';
 
   const categoryOptions = useMemo(() => {
     const source = (categories?.length ? categories : getCanonicalAdminCategories()).filter(
@@ -198,7 +208,7 @@ export default function SellerSignupPage() {
       setError('Passwords do not match.');
       return;
     }
-    if (!category.trim()) {
+    if (applicantType === 'seller' ? !sellerMainName : !category.trim()) {
       setError(
         applicantType === 'creator'
           ? 'Please select your primary content category.'
@@ -241,7 +251,14 @@ export default function SellerSignupPage() {
         displayName: displayName.trim(),
         phone: `+880${digits.replace(/^0+/, '')}`,
         businessOrChannelName: businessOrChannelName.trim(),
-        category: category.trim(),
+        category: applicantType === 'seller' ? sellerMainName : category.trim(),
+        ...(applicantType === 'seller'
+          ? {
+              categoryId: categoryChoice.categoryId,
+              subcategoryId: categoryChoice.subcategoryId || undefined,
+              categoryRequest: categoryChoice.categoryRequest.trim() || undefined,
+            }
+          : {}),
         city: city.trim(),
         website: website.trim() || undefined,
         niche: applicantType === 'creator' ? niche.trim() : undefined,
@@ -520,9 +537,10 @@ export default function SellerSignupPage() {
 
               <FormSection title={isCreator ? 'Content details' : 'Business details'}>
                 <div className={col2}>
+                  {isCreator ? (
                   <div>
                     <label className={fieldLabel}>
-                      {isCreator ? 'PRIMARY CATEGORY' : 'BUSINESS CATEGORY'}
+                      PRIMARY CATEGORY
                     </label>
                     <select
                       value={category}
@@ -538,6 +556,17 @@ export default function SellerSignupPage() {
                       ))}
                     </select>
                   </div>
+                  ) : (
+                  <CategoryPicker
+                    categories={pickerCategories}
+                    value={categoryChoice}
+                    onChange={setCategoryChoice}
+                    label="BUSINESS CATEGORY"
+                    required
+                    inputClassName={selectClass}
+                    labelClassName={fieldLabel}
+                  />
+                  )}
                   <div>
                     <label className={fieldLabel}>CITY</label>
                     <div className={fieldWrap}>

@@ -273,6 +273,9 @@ const brandSchema = z.object({
   ownershipVerifiedAt: z.string().optional(),
   ownershipSource: z.enum(['claim', 'seller_onboarding', 'creator_onboarding', 'admin_assigned']).optional(),
   categoryId: z.string().optional(),
+  subcategoryId: z.string().optional(),
+  subcategoryName: z.string().optional(),
+  categoryRequest: z.string().optional(),
   /** Public storefront visibility. Seller drafts default false. */
   marketplaceAccess: z.boolean().optional(),
   /** ES-005 Marketplace Access lifecycle state; marketplaceAccess is kept in sync with it. */
@@ -637,6 +640,12 @@ export const normalizeBrandInput = (
       ? (raw.ownershipSource as CatalogBrand['ownershipSource'])
       : existing?.ownershipSource,
     categoryId: toString(raw.categoryId, existing?.categoryId ?? '') || undefined,
+    // Subcategory (child of categoryId) + its display name; '' clears both.
+    subcategoryId: toString(raw.subcategoryId, existing?.subcategoryId ?? '') || undefined,
+    subcategoryName:
+      (raw.subcategoryId === '' ? '' : toString(raw.subcategoryName, existing?.subcategoryName ?? '').trim().slice(0, 80)) || undefined,
+    // "Couldn't find my category" text, reviewed in Category Management; '' clears it.
+    categoryRequest: toString(raw.categoryRequest, existing?.categoryRequest ?? '').trim().slice(0, 80) || undefined,
     marketplaceAccess:
       typeof raw.marketplaceAccess === 'boolean'
         ? raw.marketplaceAccess

@@ -680,6 +680,10 @@ export interface CommunityProfileInput {
   entityType: 'brand' | 'creator';
   name: string;
   categoryId?: string;
+  /** Brands: subcategory under categoryId ('' = whole main category). */
+  subcategoryId?: string;
+  /** Brands: "couldn't find my category" text, reviewed in Category Management. */
+  categoryRequest?: string;
   description?: string;
   logo?: string;
   /** Unframed upload behind `logo` + how it was framed, so it can be re-adjusted.

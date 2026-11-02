@@ -93,6 +93,10 @@ interface AuthContextType {
     businessOrChannelName: string;
     phone: string;
     category: string;
+    /** Seller two-level category picker: Category Management ids + "couldn't find it" text. */
+    categoryId?: string;
+    subcategoryId?: string;
+    categoryRequest?: string;
     city: string;
     website?: string;
     password: string;
@@ -601,6 +605,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     businessOrChannelName: string;
     phone: string;
     category: string;
+    /** Seller two-level category picker: Category Management ids + "couldn't find it" text. */
+    categoryId?: string;
+    subcategoryId?: string;
+    categoryRequest?: string;
     city: string;
     website?: string;
     password: string;
@@ -628,6 +636,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         storeName: input.businessOrChannelName.trim(),
         phone: input.phone.trim(),
         category: input.category.trim(),
+        categoryId: input.categoryId || undefined,
+        subcategoryId: input.subcategoryId || undefined,
+        categoryRequest: input.categoryRequest?.trim() || undefined,
         city: input.city.trim(),
         website: input.website?.trim() || undefined,
         niche: input.niche?.trim() || undefined,

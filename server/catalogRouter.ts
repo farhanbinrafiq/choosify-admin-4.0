@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { BrandCategoryError, withResolvedBrandCategory } from './catalog/brandCategoryChoice';
 import { recordAccountActivity } from './accountActivity/accountActivity';
 import { recordAudit, withPublicOwnership } from './claims/ownershipClaims';
 import { brandProfileIsDiscoverable, createCommunityProfile, deleteCommunityProfile, findCommunityDuplicates, updateCommunityProfile, isCommunityOwnerlessBrand, type CommunityProfileInput } from './claims/communityProfiles';
@@ -786,6 +787,10 @@ async function buildBrandNormalizeContext(excludeBrandId?: string) {
 function sendCatalogWriteError(res: Response, error: unknown, fallback: string) {
   if (error instanceof CatalogHandleError) {
     res.status(error.status).json({ success: false, error: error.message, code: error.code });
+    return;
+  }
+  if (error instanceof BrandCategoryError) {
+    res.status(400).json({ success: false, error: error.message, code: error.code });
     return;
   }
   res.status(400).json({ error: validationErrorMessage(error, fallback) });
@@ -2318,7 +2323,7 @@ catalogRouter.post('/catalog/brands', ...requireBrandStudioBrandWrite, async (re
   try {
     const context = await buildBrandNormalizeContext();
     const isStaffCreate = hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions);
-    const clean = stripServerControlledOwnership(req.body, 'sellerId', isStaffCreate);
+    const clean = await withResolvedBrandCategory(stripServerControlledOwnership(req.body, 'sellerId', isStaffCreate));
     const staffOwner = isStaffCreate ? String(clean.sellerId || '').trim() : '';
     const payload =
       userIsSellerRole(req) && req.userId && !isStaffCreate
@@ -2377,7 +2382,11 @@ catalogRouter.put('/catalog/brands/:id', ...requireBrandStudioBrandWrite, locked
     const normalized = preserveBrandPrivilegedFieldsOnUpdate(
       req,
       existing,
-      normalizeBrandInput({ ...stripServerControlledOwnership(req.body, 'sellerId'), id: req.params.id }, existing, context),
+      normalizeBrandInput(
+        { ...(await withResolvedBrandCategory(stripServerControlledOwnership(req.body, 'sellerId'), existing)), id: req.params.id },
+        existing,
+        context,
+      ),
     );
     await assertSlugChangeAllowed({
       entityType: 'brand',
@@ -2424,7 +2433,11 @@ catalogRouter.patch('/catalog/brands/:id', ...requireBrandStudioBrandWrite, lock
     const normalized = preserveBrandPrivilegedFieldsOnUpdate(
       req,
       existing,
-      normalizeBrandInput({ ...existing, ...stripServerControlledOwnership(req.body, 'sellerId'), id: req.params.id }, existing, context),
+      normalizeBrandInput(
+        { ...existing, ...(await withResolvedBrandCategory(stripServerControlledOwnership(req.body, 'sellerId'), existing)), id: req.params.id },
+        existing,
+        context,
+      ),
     );
     await assertSlugChangeAllowed({
       entityType: 'brand',

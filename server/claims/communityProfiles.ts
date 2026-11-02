@@ -7,6 +7,7 @@ import type { CatalogBrand } from '../../src/types/catalog';
 import type { CatalogCreator } from '../../lib/vercel-catalog/catalogEditorialTypes';
 import { ClaimError, activeOwnershipClaims, entityLockKeys, loadEntity, ownerOf, recordAudit, type ClaimEntityType } from './ownershipClaims';
 import { withRecordLocks } from '../catalog/recordLock';
+import { BrandCategoryError, resolveBrandCategoryChoice } from '../catalog/brandCategoryChoice';
 import { slugForAutomatedCreation } from '../publicHandles/publicHandleCatalog';
 
 /**
@@ -137,6 +138,9 @@ export type CommunityProfileInput = {
   type: ClaimEntityType;
   name: string;
   categoryId?: string;
+  /** Brands: subcategory under categoryId ('' = whole main category) + "couldn't find it" text. */
+  subcategoryId?: string;
+  categoryRequest?: string;
   description?: string;
   overview?: string;
   logo?: string;
@@ -189,6 +193,16 @@ const httpUrl = (v: string | undefined, field: string): string => {
   return t;
 };
 
+/** A brand's validated category choice, with picker errors reported as 400s. */
+async function brandCategoryFields(input: Pick<CommunityProfileInput, 'categoryId' | 'subcategoryId' | 'categoryRequest'>) {
+  try {
+    return await resolveBrandCategoryChoice(input);
+  } catch (e) {
+    if (e instanceof BrandCategoryError) throw new ClaimError(400, e.code, e.message);
+    throw e;
+  }
+}
+
 /**
  * Original + framing for the logo (brand) / profile photo (creator). Without an
  * original the logo was set without the adjust step, so any stored framing no
@@ -219,12 +233,14 @@ export async function createCommunityProfile(
   if (duplicates.length && !input.acknowledgeDuplicates) return { created: null, duplicates };
 
   let categoryLabel = '';
-  if (input.categoryId) {
+  // Brands: validated main › subcategory choice (+ "couldn't find it" text).
+  const brandCategory = input.type === 'brand' ? await brandCategoryFields(input) : null;
+  if (brandCategory) {
+    categoryLabel = brandCategory.category;
+  } else if (input.categoryId) {
     const cat = (await catalogStore.listCategories()).find((c) => c.id === input.categoryId);
     if (!cat) throw new ClaimError(400, 'INVALID_CATEGORY', 'Choose a category from Category Management');
     categoryLabel = cat.name;
-  } else if (input.type === 'brand') {
-    throw new ClaimError(400, 'CATEGORY_REQUIRED', 'Choose the brand category');
   }
 
   const provenance = { origin: 'community' as const, createdByStaffId: req.userId, claimStatus: 'community' as const, verifiedStatus: false };
@@ -233,8 +249,7 @@ export async function createCommunityProfile(
     const brand = normalizeBrandInput(
       {
         name,
-        category: categoryLabel,
-        categoryId: input.categoryId,
+        ...brandCategory,
         description: String(input.description || '').trim(),
         tagline: '',
         logo: httpUrl(input.logo, 'Logo'),
@@ -327,20 +342,20 @@ export async function updateCommunityProfile(
     let saved: CatalogBrand | CatalogCreator;
     if (type === 'brand') {
       const brand = existing as CatalogBrand;
-      let category = brand.category;
-      let categoryId = brand.categoryId;
-      if (input.categoryId && input.categoryId !== brand.categoryId) {
-        const cat = (await catalogStore.listCategories()).find((c) => c.id === input.categoryId);
-        if (!cat) throw new ClaimError(400, 'INVALID_CATEGORY', 'Choose a category from Category Management');
-        category = cat.name;
-        categoryId = cat.id;
-      }
+      // Category fields change only when the form sends them (validated main › subcategory).
+      const categoryFields =
+        sent('categoryId') || sent('subcategoryId') || sent('categoryRequest')
+          ? await brandCategoryFields({
+              categoryId: input.categoryId ?? brand.categoryId,
+              subcategoryId: sent('subcategoryId') ? input.subcategoryId : brand.subcategoryId,
+              categoryRequest: sent('categoryRequest') ? input.categoryRequest : brand.categoryRequest,
+            })
+          : {};
       const next = normalizeBrandInput(
         {
           ...brand,
           name,
-          category,
-          categoryId,
+          ...categoryFields,
           description: sent('description') ? String(input.description || '').trim() : brand.description,
           logo: sent('logo') ? httpUrl(input.logo, 'Logo') : brand.logo,
           ...(sent('logo') ? logoAdjustFields(input, 'logo') : {}),

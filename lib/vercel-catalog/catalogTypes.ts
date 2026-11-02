@@ -184,6 +184,11 @@ export interface CatalogBrand {
   ownershipSource?: 'claim' | 'seller_onboarding' | 'creator_onboarding' | 'admin_assigned';
   /** Canonical Category Management id (the `category` text stays as the display label). */
   categoryId?: string;
+  /** Subcategory under categoryId (a category whose parentId is categoryId) and its display name. */
+  subcategoryId?: string;
+  subcategoryName?: string;
+  /** What the owner/staff typed when no category fitted; reviewed in Category Management. */
+  categoryRequest?: string;
   /** Public storefront visibility. Seller drafts default false. */
   marketplaceAccess?: boolean;
   createdAt: string;
@@ -438,6 +443,8 @@ export type SiteConfig = {
    * Community Claimable Profiles copy (editable, reviewable — not hard-coded
    * legal text). Written only via PUT /catalog/site/community-profiles.
    */
+  /** One-time catalog data migrations already applied (CATEGORY_ADDITION_MIGRATIONS ids). Server-written only. */
+  catalogMigrations?: string[];
   communityProfiles?: {
     brandDisclaimer?: string;
     creatorDisclaimer?: string;

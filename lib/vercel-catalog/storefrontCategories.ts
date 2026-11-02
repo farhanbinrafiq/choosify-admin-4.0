@@ -1,7 +1,7 @@
 import type { CatalogCategory } from './catalogTypes';
 
 /** Bump when the storefront category tree changes. */
-export const CATEGORY_CATALOG_VERSION = '2026-10-11';
+export const CATEGORY_CATALOG_VERSION = '2026-11-02';
 
 /**
  * The platform's 26 main categories — the same taxonomy the storefront shows.
@@ -216,6 +216,14 @@ export const STOREFRONT_CATEGORY_DEFS = [
     description: "Reservations and appointments.",
     displayOrder: 25,
   },
+  {
+    id: "cat-gifts",
+    slug: "gifts-occasions",
+    name: "Gifts & Occasions",
+    icon: "Gift",
+    description: "Gift items, hampers, personalised and corporate gifts, flowers and party supplies.",
+    displayOrder: 26,
+  },
 ] as const;
 
 /**
@@ -359,6 +367,114 @@ export const STOREFRONT_SUBCATEGORY_DEFS: ReadonlyArray<{
   { id: "sub-bookings-appointments-massage-appointment", slug: "bookings-appointments-massage-appointment", name: "Massage Appointment", parentId: "cat-bookings", displayOrder: 2 },
   { id: "sub-bookings-appointments-therapy-appointment", slug: "bookings-appointments-therapy-appointment", name: "Therapy Appointment", parentId: "cat-bookings", displayOrder: 3 },
   { id: "sub-bookings-appointments-gym-membership", slug: "bookings-appointments-gym-membership", name: "Gym Membership", parentId: "cat-bookings", displayOrder: 4 },
+  // 2026-11-02: "Gifts & Occasions" + subcategories major marketplaces carry that were missing.
+  { id: "sub-gifts-occasions-gift-items-showpieces", slug: "gifts-occasions-gift-items-showpieces", name: "Gift Items & Showpieces", parentId: "cat-gifts", displayOrder: 0 },
+  { id: "sub-gifts-occasions-gift-hampers-baskets", slug: "gifts-occasions-gift-hampers-baskets", name: "Gift Hampers & Baskets", parentId: "cat-gifts", displayOrder: 1 },
+  { id: "sub-gifts-occasions-personalised-custom-gifts", slug: "gifts-occasions-personalised-custom-gifts", name: "Personalised & Custom Gifts", parentId: "cat-gifts", displayOrder: 2 },
+  { id: "sub-gifts-occasions-corporate-gifts", slug: "gifts-occasions-corporate-gifts", name: "Corporate Gifts", parentId: "cat-gifts", displayOrder: 3 },
+  { id: "sub-gifts-occasions-festival-eid-gifts", slug: "gifts-occasions-festival-eid-gifts", name: "Festival & Eid Gifts", parentId: "cat-gifts", displayOrder: 4 },
+  { id: "sub-gifts-occasions-flowers-bouquets", slug: "gifts-occasions-flowers-bouquets", name: "Flowers & Bouquets", parentId: "cat-gifts", displayOrder: 5 },
+  { id: "sub-gifts-occasions-party-supplies-decorations", slug: "gifts-occasions-party-supplies-decorations", name: "Party Supplies & Decorations", parentId: "cat-gifts", displayOrder: 6 },
+  { id: "sub-gifts-occasions-greeting-cards-gift-wrap", slug: "gifts-occasions-greeting-cards-gift-wrap", name: "Greeting Cards & Gift Wrap", parentId: "cat-gifts", displayOrder: 7 },
+  { id: "sub-fashion-lifestyle-kids-fashion", slug: "fashion-lifestyle-kids-fashion", name: "Kids' Fashion", parentId: "cat-fashion", displayOrder: 5 },
+  { id: "sub-fashion-lifestyle-traditional-ethnic-wear", slug: "fashion-lifestyle-traditional-ethnic-wear", name: "Traditional & Ethnic Wear", parentId: "cat-fashion", displayOrder: 6 },
+  { id: "sub-fashion-lifestyle-modest-wear-hijab-abaya", slug: "fashion-lifestyle-modest-wear-hijab-abaya", name: "Modest Wear (Hijab & Abaya)", parentId: "cat-fashion", displayOrder: 7 },
+  { id: "sub-fashion-lifestyle-innerwear-sleepwear", slug: "fashion-lifestyle-innerwear-sleepwear", name: "Innerwear & Sleepwear", parentId: "cat-fashion", displayOrder: 8 },
+  { id: "sub-fashion-lifestyle-watches", slug: "fashion-lifestyle-watches", name: "Watches", parentId: "cat-fashion", displayOrder: 9 },
+  { id: "sub-fashion-lifestyle-eyewear", slug: "fashion-lifestyle-eyewear", name: "Eyewear", parentId: "cat-fashion", displayOrder: 10 },
+  { id: "sub-jewelry-luxury-fashion-artificial-jewellery", slug: "jewelry-luxury-fashion-artificial-jewellery", name: "Fashion & Artificial Jewellery", parentId: "cat-jewelry", displayOrder: 5 },
+  { id: "sub-beauty-health-pharmacy-fragrances-perfumes", slug: "beauty-health-pharmacy-fragrances-perfumes", name: "Fragrances & Perfumes", parentId: "cat-beauty", displayOrder: 5 },
+  { id: "sub-beauty-health-pharmacy-personal-care", slug: "beauty-health-pharmacy-personal-care", name: "Personal Care", parentId: "cat-beauty", displayOrder: 6 },
+  { id: "sub-beauty-health-pharmacy-health-supplements-wellness", slug: "beauty-health-pharmacy-health-supplements-wellness", name: "Health Supplements & Wellness", parentId: "cat-beauty", displayOrder: 7 },
+  { id: "sub-beauty-health-pharmacy-medical-devices", slug: "beauty-health-pharmacy-medical-devices", name: "Medical Devices", parentId: "cat-beauty", displayOrder: 8 },
+  { id: "sub-electronics-mobile-computer-accessories", slug: "electronics-mobile-computer-accessories", name: "Mobile & Computer Accessories", parentId: "cat-tech", displayOrder: 5 },
+  { id: "sub-electronics-smart-watches-wearables", slug: "electronics-smart-watches-wearables", name: "Smart Watches & Wearables", parentId: "cat-tech", displayOrder: 6 },
+  { id: "sub-electronics-smart-home-networking", slug: "electronics-smart-home-networking", name: "Smart Home & Networking", parentId: "cat-tech", displayOrder: 7 },
+  { id: "sub-home-furniture-appliances-bedding-bath", slug: "home-furniture-appliances-bedding-bath", name: "Bedding & Bath", parentId: "cat-home", displayOrder: 6 },
+  { id: "sub-home-furniture-appliances-cleaning-laundry", slug: "home-furniture-appliances-cleaning-laundry", name: "Cleaning & Laundry", parentId: "cat-home", displayOrder: 7 },
+  { id: "sub-home-furniture-appliances-garden-plants", slug: "home-furniture-appliances-garden-plants", name: "Garden & Plants", parentId: "cat-home", displayOrder: 8 },
+  { id: "sub-home-furniture-appliances-tools-hardware", slug: "home-furniture-appliances-tools-hardware", name: "Tools & Hardware", parentId: "cat-home", displayOrder: 9 },
+  { id: "sub-home-furniture-appliances-storage-organisation", slug: "home-furniture-appliances-storage-organisation", name: "Storage & Organisation", parentId: "cat-home", displayOrder: 10 },
+  { id: "sub-home-furniture-appliances-handicrafts-handloom", slug: "home-furniture-appliances-handicrafts-handloom", name: "Handicrafts & Handloom", parentId: "cat-home", displayOrder: 11 },
+  { id: "sub-grocery-food-snacks-instant-food", slug: "grocery-food-snacks-instant-food", name: "Snacks & Instant Food", parentId: "cat-food", displayOrder: 5 },
+  { id: "sub-grocery-food-cooking-essentials", slug: "grocery-food-cooking-essentials", name: "Cooking Essentials", parentId: "cat-food", displayOrder: 6 },
+  { id: "sub-grocery-food-bakery-cakes-sweets", slug: "grocery-food-bakery-cakes-sweets", name: "Bakery, Cakes & Sweets", parentId: "cat-food", displayOrder: 7 },
+  { id: "sub-grocery-food-organic-health-food", slug: "grocery-food-organic-health-food", name: "Organic & Health Food", parentId: "cat-food", displayOrder: 8 },
+  { id: "sub-grocery-food-restaurants-home-kitchens", slug: "grocery-food-restaurants-home-kitchens", name: "Restaurants & Home Kitchens", parentId: "cat-food", displayOrder: 9 },
+  { id: "sub-baby-kids-toys-maternity-care", slug: "baby-kids-toys-maternity-care", name: "Maternity Care", parentId: "cat-baby", displayOrder: 5 },
+  { id: "sub-sports-fitness-outdoor-sportswear", slug: "sports-fitness-outdoor-sportswear", name: "Sportswear", parentId: "cat-sporting", displayOrder: 5 },
+  { id: "sub-automotive-motorbikes-accessories", slug: "automotive-motorbikes-accessories", name: "Motorbikes & Accessories", parentId: "cat-automotive", displayOrder: 5 },
+  { id: "sub-books-education-arts-religious-books-items", slug: "books-education-arts-religious-books-items", name: "Religious Books & Items", parentId: "cat-books", displayOrder: 5 },
+  { id: "sub-pets-agriculture-pet-care-grooming", slug: "pets-agriculture-pet-care-grooming", name: "Pet Care & Grooming", parentId: "cat-pets", displayOrder: 5 },
+  { id: "sub-professional-home-services-interior-design", slug: "professional-home-services-interior-design", name: "Interior Design", parentId: "cat-services", displayOrder: 5 },
+  { id: "sub-professional-home-services-pest-control", slug: "professional-home-services-pest-control", name: "Pest Control", parentId: "cat-services", displayOrder: 6 },
+  { id: "sub-professional-home-services-cleaning-services", slug: "professional-home-services-cleaning-services", name: "Cleaning Services", parentId: "cat-services", displayOrder: 7 },
+  { id: "sub-professional-home-services-laundry-dry-cleaning", slug: "professional-home-services-laundry-dry-cleaning", name: "Laundry & Dry Cleaning", parentId: "cat-services", displayOrder: 8 },
+  { id: "sub-professional-home-services-printing-packaging", slug: "professional-home-services-printing-packaging", name: "Printing & Packaging", parentId: "cat-services", displayOrder: 9 },
+  { id: "sub-professional-home-services-courier-delivery", slug: "professional-home-services-courier-delivery", name: "Courier & Delivery", parentId: "cat-services", displayOrder: 10 },
+  { id: "sub-professional-home-services-tutoring-coaching", slug: "professional-home-services-tutoring-coaching", name: "Tutoring & Coaching", parentId: "cat-services", displayOrder: 11 },
+  { id: "sub-professional-home-services-salon-beauty-services", slug: "professional-home-services-salon-beauty-services", name: "Salon & Beauty Services", parentId: "cat-services", displayOrder: 12 },
+];
+
+/**
+ * Taxonomy additions applied ONCE to an existing catalog (ensureCategoryAdditions):
+ * a category is added only if no category with the same id, slug, or name under
+ * the same parent exists, and each migration id is recorded so a category staff
+ * later delete is never re-added. Never edits or removes existing categories.
+ */
+export const CATEGORY_ADDITION_MIGRATIONS: ReadonlyArray<{ id: string; categoryIds: readonly string[] }> = [
+  {
+    id: '2026-11-02-gifts-occasions-and-gaps',
+    categoryIds: [
+      "cat-gifts",
+      "sub-gifts-occasions-gift-items-showpieces",
+      "sub-gifts-occasions-gift-hampers-baskets",
+      "sub-gifts-occasions-personalised-custom-gifts",
+      "sub-gifts-occasions-corporate-gifts",
+      "sub-gifts-occasions-festival-eid-gifts",
+      "sub-gifts-occasions-flowers-bouquets",
+      "sub-gifts-occasions-party-supplies-decorations",
+      "sub-gifts-occasions-greeting-cards-gift-wrap",
+      "sub-fashion-lifestyle-kids-fashion",
+      "sub-fashion-lifestyle-traditional-ethnic-wear",
+      "sub-fashion-lifestyle-modest-wear-hijab-abaya",
+      "sub-fashion-lifestyle-innerwear-sleepwear",
+      "sub-fashion-lifestyle-watches",
+      "sub-fashion-lifestyle-eyewear",
+      "sub-jewelry-luxury-fashion-artificial-jewellery",
+      "sub-beauty-health-pharmacy-fragrances-perfumes",
+      "sub-beauty-health-pharmacy-personal-care",
+      "sub-beauty-health-pharmacy-health-supplements-wellness",
+      "sub-beauty-health-pharmacy-medical-devices",
+      "sub-electronics-mobile-computer-accessories",
+      "sub-electronics-smart-watches-wearables",
+      "sub-electronics-smart-home-networking",
+      "sub-home-furniture-appliances-bedding-bath",
+      "sub-home-furniture-appliances-cleaning-laundry",
+      "sub-home-furniture-appliances-garden-plants",
+      "sub-home-furniture-appliances-tools-hardware",
+      "sub-home-furniture-appliances-storage-organisation",
+      "sub-home-furniture-appliances-handicrafts-handloom",
+      "sub-grocery-food-snacks-instant-food",
+      "sub-grocery-food-cooking-essentials",
+      "sub-grocery-food-bakery-cakes-sweets",
+      "sub-grocery-food-organic-health-food",
+      "sub-grocery-food-restaurants-home-kitchens",
+      "sub-baby-kids-toys-maternity-care",
+      "sub-sports-fitness-outdoor-sportswear",
+      "sub-automotive-motorbikes-accessories",
+      "sub-books-education-arts-religious-books-items",
+      "sub-pets-agriculture-pet-care-grooming",
+      "sub-professional-home-services-interior-design",
+      "sub-professional-home-services-pest-control",
+      "sub-professional-home-services-cleaning-services",
+      "sub-professional-home-services-laundry-dry-cleaning",
+      "sub-professional-home-services-printing-packaging",
+      "sub-professional-home-services-courier-delivery",
+      "sub-professional-home-services-tutoring-coaching",
+      "sub-professional-home-services-salon-beauty-services",
+    ],
+  },
 ];
 
 export const CANONICAL_CATEGORY_IDS = new Set(

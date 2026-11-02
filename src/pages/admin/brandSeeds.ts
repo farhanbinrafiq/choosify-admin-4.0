@@ -110,6 +110,10 @@ export interface BrandCMSModel {
   coverImage: string;
   tagline: string;
   category: string;
+  /** Category Management ids behind `category` (main) + optional subcategory, and "couldn't find it" text. */
+  categoryId?: string;
+  subcategoryId?: string;
+  categoryRequest?: string;
   socialFbUrl: string;
   socialInstaUrl: string;
   socialTiktokUrl: string;

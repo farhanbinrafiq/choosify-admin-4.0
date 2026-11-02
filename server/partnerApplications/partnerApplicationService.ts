@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { BrandCategoryError, resolveBrandCategoryChoice } from '../catalog/brandCategoryChoice';
 import { operationsStore } from '../operations/operationsStore';
 import { scheduleOperationsPersist } from '../operations/operationsPersistence';
 import { ClaimError, createOwnershipClaim, loadEntity, ownerOf, publicOwnership, activeOwnershipClaims, type ClaimEntityType } from '../claims/ownershipClaims';
@@ -31,6 +32,10 @@ export type PartnerApplyInput = {
   phone: string;
   businessOrChannelName: string;
   category: string;
+  /** Seller: two-level picker choice; when present it decides `category` (validated). */
+  categoryId?: string;
+  subcategoryId?: string;
+  categoryRequest?: string;
   city: string;
   website?: string;
   niche?: string;
@@ -113,10 +118,47 @@ function appendHistory(
   ];
 }
 
+/**
+ * Seller applications from the two-level picker: validate the main › subcategory
+ * pair and store its ids (the main category's name stays in `category`). Older
+ * clients send only the category text, which is kept as-is.
+ */
+async function applicationCategory(input: PartnerApplyInput) {
+  if (input.applicantType !== 'seller' || !input.categoryId) return { category: input.category.trim() };
+  try {
+    const r = await resolveBrandCategoryChoice(input);
+    return { category: r.category, categoryId: r.categoryId, subcategoryId: r.subcategoryId || undefined, categoryRequest: r.categoryRequest || undefined };
+  } catch (e) {
+    if (e instanceof BrandCategoryError) {
+      const err = new Error(e.message);
+      (err as Error & { status?: number }).status = 400;
+      throw err;
+    }
+    throw e;
+  }
+}
+
+/** At approval: re-validate (categories may have changed since sign-up); fall back to the text category. */
+async function sellerBrandCategory(params: { categoryId?: string; subcategoryId?: string; categoryRequest?: string }) {
+  try {
+    return await resolveBrandCategoryChoice(params);
+  } catch {
+    try {
+      // The subcategory may have been removed: keep the main category and the request text.
+      return await resolveBrandCategoryChoice({ categoryId: params.categoryId, categoryRequest: params.categoryRequest });
+    } catch {
+      return {};
+    }
+  }
+}
+
 async function createSellerIdentityBrand(params: {
   sellerUserId: string;
   name: string;
   category: string;
+  categoryId?: string;
+  subcategoryId?: string;
+  categoryRequest?: string;
   website?: string;
   email: string;
   phone: string;
@@ -127,6 +169,7 @@ async function createSellerIdentityBrand(params: {
     id,
     name: params.name,
     category: params.category,
+    ...(params.categoryId ? await sellerBrandCategory(params) : {}),
     website: params.website || '',
     sellerId: params.sellerUserId,
     marketplaceAccess: false,
@@ -295,6 +338,9 @@ async function provisionPartnerUser(params: {
           sellerUserId: userId,
           name: params.app.businessOrChannelName,
           category: params.app.category,
+          categoryId: params.app.categoryId,
+          subcategoryId: params.app.subcategoryId,
+          categoryRequest: params.app.categoryRequest,
           website: params.app.website,
           email: params.app.email,
           phone: params.app.phone,
@@ -395,7 +441,7 @@ export async function submitPartnerApplication(input: PartnerApplyInput): Promis
     displayName: input.displayName.trim(),
     phone: input.phone.trim(),
     businessOrChannelName: input.businessOrChannelName.trim(),
-    category: input.category.trim(),
+    ...(await applicationCategory(input)),
     city: input.city.trim(),
     website: input.website?.trim() || undefined,
     niche: input.niche?.trim() || undefined,

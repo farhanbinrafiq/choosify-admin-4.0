@@ -16,6 +16,7 @@ import { BrandLogoCropModal } from '../../brand/BrandLogoCropModal';
 import { ProfileImageAdjustModal, type ProfileImageAdjustResult } from '../../media/ProfileImageAdjustModal';
 import type { ProfileImageCropParams } from '../../../../shared/media/profileImageCrop';
 import { TagPillInput } from '../ListInputs';
+import { CategoryPicker, type CategoryChoice } from '../../catalog/CategoryPicker';
 
 /**
  * Community profiles — public-information discovery profiles staff create for
@@ -43,6 +44,11 @@ type CommunityProfileFields = {
   name: string;
   categoryId: string;
   category: string;
+  /** Subcategory under categoryId ('' = whole main category). */
+  subcategoryId: string;
+  subcategoryName: string;
+  /** "Couldn't find my category" text for staff review. */
+  categoryRequest: string;
   description: string;
   logo: string;
   /** Unframed upload behind `logo` and its framing (empty/undefined = never adjusted). */
@@ -76,6 +82,9 @@ function profileFieldsOf(entityType: 'brand' | 'creator', r: CatalogBrand | Cata
       name: b.name,
       categoryId: String(b.categoryId || ''),
       category: String(b.category || ''),
+      subcategoryId: String(b.subcategoryId || ''),
+      subcategoryName: String(b.subcategoryName || ''),
+      categoryRequest: String(b.categoryRequest || ''),
       description: String(b.description || ''),
       logo: String(b.logo || ''),
       logoOriginal: String(b.logoOriginal || ''),
@@ -93,6 +102,9 @@ function profileFieldsOf(entityType: 'brand' | 'creator', r: CatalogBrand | Cata
     name: c.name,
     categoryId: '',
     category: String((c as { category?: string }).category || ''),
+    subcategoryId: '',
+    subcategoryName: '',
+    categoryRequest: '',
     description: String(c.bio || ''),
     logo: String(c.avatar || ''),
     logoOriginal: String(c.avatarOriginal || ''),
@@ -193,7 +205,10 @@ export function CommunityProfilesPanel({ entityType }: { entityType: 'brand' | '
               id: r.id,
               name: r.name,
               slug: r.slug,
-              category: String((r as { category?: string }).category || '—'),
+              category:
+                [String((r as { category?: string }).category || ''), String((r as { subcategoryName?: string }).subcategoryName || '')]
+                  .filter(Boolean)
+                  .join(' › ') || '—',
               createdAt: String(r.createdAt || ''),
               state: stateLabel,
               stateTone: tone,
@@ -203,7 +218,8 @@ export function CommunityProfilesPanel({ entityType }: { entityType: 'brand' | '
             };
           }),
       );
-      setCategories(cats.filter((c) => !c.parentId && c.enabled !== false));
+      // Main + subcategories: the picker searches both.
+      setCategories(cats.filter((c) => c.enabled !== false));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load community profiles.');
     } finally {
@@ -429,9 +445,12 @@ function CommunityProfileDialog({
 }) {
   const start = editing ?? prefill ?? null;
   const [name, setName] = useState(start?.name || '');
-  const [categoryId, setCategoryId] = useState(
-    start ? start.categoryId || categories.find((c) => c.name === start.category)?.id || '' : '',
-  );
+  const [categoryChoice, setCategoryChoice] = useState<CategoryChoice>(() => ({
+    categoryId: start ? start.categoryId || categories.find((c) => !c.parentId && c.name === start.category)?.id || '' : '',
+    subcategoryId: start?.subcategoryId || '',
+    categoryRequest: start?.categoryRequest || '',
+  }));
+  const categoryId = categoryChoice.categoryId;
   const [description, setDescription] = useState(start?.description || '');
   const [logo, setLogo] = useState(start?.logo || '');
   const [logoOriginal, setLogoOriginal] = useState(start?.logoOriginal || '');
@@ -447,6 +466,13 @@ function CommunityProfileDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isBrand = entityType === 'brand';
+  const categoryFields = isBrand
+    ? {
+        categoryId: categoryId || undefined,
+        subcategoryId: categoryChoice.subcategoryId,
+        categoryRequest: categoryChoice.categoryRequest.trim(),
+      }
+    : { categoryId: categoryId || undefined };
   const cleanSocials = useMemo(
     () => Object.fromEntries(Object.entries(socials).filter(([, v]) => v.trim()).map(([k, v]) => [k, v.trim()])),
     [socials],
@@ -469,7 +495,7 @@ function CommunityProfileDialog({
         const saved = await operationsApi.updateCommunityProfile(editing.id, {
           entityType,
           name: name.trim(),
-          categoryId: categoryId || undefined,
+          ...categoryFields,
           description: description.trim(),
           ...logoFields,
           coverImage: coverImage.trim(),
@@ -491,7 +517,7 @@ function CommunityProfileDialog({
       }
       const input = {
         name: name.trim(),
-        categoryId: categoryId || undefined,
+        ...categoryFields,
         description: description.trim(),
         ...logoFields,
         coverImage: coverImage.trim(),
@@ -514,7 +540,7 @@ function CommunityProfileDialog({
   const canSubmit = name.trim().length >= 2 && (!isBrand || categoryId) && !busy && uploading === 0;
   const uploadImage = isBrand ? uploadBrandImage : uploadCreatorImage;
   // A click outside never closes the form; × / Cancel ask first when something was entered.
-  const snapshot = JSON.stringify([name, categoryId, description, logo, logoCrop, coverImage, website, location, cleanSocials, tags, priceRange]);
+  const snapshot = JSON.stringify([name, categoryChoice, description, logo, logoCrop, coverImage, website, location, cleanSocials, tags, priceRange]);
   const [initialSnapshot] = useState(snapshot);
   const requestClose = () => {
     if (snapshot !== initialSnapshot && !window.confirm('Discard the information you entered? It will not be saved.')) return;
@@ -546,17 +572,14 @@ function CommunityProfileDialog({
             <input id="cp-name" className={input} value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
           </div>
           {isBrand && (
-            <div>
-              <label className={label} htmlFor="cp-cat">Category *</label>
-              <select id="cp-cat" className={input} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-                <option value="">Choose a category</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <CategoryPicker
+              categories={categories}
+              value={categoryChoice}
+              onChange={setCategoryChoice}
+              required
+              inputClassName={input}
+              labelClassName={label}
+            />
           )}
           <div>
             <label className={label} htmlFor="cp-desc">Short description</label>
@@ -1147,6 +1170,9 @@ function suggestionFields(l: OpsLead): CommunityProfileFields {
     name: l.brandName,
     categoryId: l.categoryId || '',
     category: l.categoryName || '',
+    subcategoryId: '',
+    subcategoryName: '',
+    categoryRequest: '',
     description: s.description || '',
     logo: s.logo || '',
     logoOriginal: '',
@@ -1188,7 +1214,8 @@ export function SuggestedBrandsPanel({ onCountChange }: { onCountChange?: (n: nu
       const [all, cats] = await Promise.all([operationsApi.listLeads(), catalogApi.listCategories()]);
       const rows = all.filter((l) => l.inquiryType === 'suggest_brand');
       setLeads(rows);
-      setCategories(cats.filter((c) => !c.parentId && c.enabled !== false));
+      // Main + subcategories: the picker searches both.
+      setCategories(cats.filter((c) => c.enabled !== false));
       onCountChange?.(countPendingBrandSuggestions(rows));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load brand suggestions.');
