@@ -108,6 +108,37 @@ function profileFieldsOf(entityType: 'brand' | 'creator', r: CatalogBrand | Cata
 const input = 'w-full bg-white border border-app-border rounded-lg px-3 py-2 text-xs outline-none focus:border-app-accent';
 const label = 'block text-[9.5px] font-black uppercase tracking-wider text-app-text-secondary mb-1';
 
+type CommunitySort = 'name-asc' | 'name-desc' | 'newest' | 'oldest' | 'category';
+const SORT_OPTIONS: { value: CommunitySort; label: string; brandOnly?: boolean }[] = [
+  { value: 'name-asc', label: 'Name A–Z' },
+  { value: 'name-desc', label: 'Name Z–A' },
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+  { value: 'category', label: 'Category, then A–Z', brandOnly: true },
+];
+const SORT_STORAGE_KEY = 'choosify_community_profiles_sort';
+
+/** Alphabetical key: case/accent-insensitive, ignoring leading symbols ("-Suchi Shoili" sorts under S). */
+const nameKey = (name: string) => name.replace(/^[^\p{L}\p{N}]+/u, '').trim() || name;
+const byName = (a: { name: string }, b: { name: string }) =>
+  nameKey(a.name).localeCompare(nameKey(b.name), undefined, { sensitivity: 'base', numeric: true });
+
+function sortRows<T extends { name: string; createdAt: string; category: string }>(rows: T[], sort: CommunitySort): T[] {
+  const out = [...rows];
+  switch (sort) {
+    case 'name-desc':
+      return out.sort((a, b) => byName(b, a));
+    case 'newest':
+      return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || byName(a, b));
+    case 'oldest':
+      return out.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || byName(a, b));
+    case 'category':
+      return out.sort((a, b) => a.category.localeCompare(b.category, undefined, { sensitivity: 'base' }) || byName(a, b));
+    default:
+      return out.sort(byName);
+  }
+}
+
 export function CommunityProfilesPanel({ entityType }: { entityType: 'brand' | 'creator' }) {
   const [rows, setRows] = useState<Row[]>([]);
   const [categories, setCategories] = useState<CatalogCategory[]>([]);
@@ -122,6 +153,26 @@ export function CommunityProfilesPanel({ entityType }: { entityType: 'brand' | '
   const canDelete = ['super_admin', 'admin'].includes(String(profile?.role || ''));
   const [notice, setNotice] = useState<string | null>(null);
   const publicBase = `${getPublishedStorefrontUrl()}/${entityType === 'brand' ? 'brands' : 'creators'}`;
+  const sortOptions = SORT_OPTIONS.filter((o) => !o.brandOnly || entityType === 'brand');
+  // Alphabetical by default; the chosen order is remembered in this browser.
+  const [sort, setSort] = useState<CommunitySort>(() => {
+    try {
+      const saved = localStorage.getItem(`${SORT_STORAGE_KEY}:${entityType}`) as CommunitySort | null;
+      if (saved && sortOptions.some((o) => o.value === saved)) return saved;
+    } catch {
+      // storage unavailable
+    }
+    return 'name-asc';
+  });
+  const changeSort = (next: CommunitySort) => {
+    setSort(next);
+    try {
+      localStorage.setItem(`${SORT_STORAGE_KEY}:${entityType}`, next);
+    } catch {
+      // storage unavailable
+    }
+  };
+  const sortedRows = useMemo(() => sortRows(rows, sort), [rows, sort]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -150,8 +201,7 @@ export function CommunityProfilesPanel({ entityType }: { entityType: 'brand' | '
               claimPending: state === 'claim_pending',
               profile,
             };
-          })
-          .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+          }),
       );
       setCategories(cats.filter((c) => !c.parentId && c.enabled !== false));
     } catch (e) {
@@ -203,15 +253,48 @@ export function CommunityProfilesPanel({ entityType }: { entityType: 'brand' | '
         ) : rows.length === 0 ? (
           <p className="p-10 text-center text-xs text-app-text-secondary">No community profiles yet.</p>
         ) : (
+          <>
+          <div className="px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 border-b border-app-border bg-slate-50/60">
+            <span className="text-[11px] font-bold text-app-text-secondary" data-testid="community-count">
+              {rows.length} {entityType === 'brand' ? 'brand' : 'creator'} profile{rows.length === 1 ? '' : 's'}
+            </span>
+            <label className="flex items-center gap-2 text-[10.5px] font-bold text-app-text-secondary">
+              Sort
+              <select
+                value={sort}
+                onChange={(e) => changeSort(e.target.value as CommunitySort)}
+                className="bg-white border border-app-border rounded-lg px-2 py-1.5 text-[11px] font-bold text-app-text-primary outline-none focus:border-app-accent"
+                data-testid="community-sort"
+              >
+                {sortOptions.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <div className="divide-y divide-app-border">
-            {rows.map((r) => (
+            {sortedRows.map((r, index) => (
               <div key={r.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-3" data-testid="community-profile-row">
+                {/* Serial, photo and name stay on one line on every screen size. */}
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                <span
+                  className="w-7 shrink-0 text-[11px] font-black tabular-nums text-app-text-secondary text-right"
+                  data-testid="community-row-serial"
+                >
+                  {index + 1}.
+                </span>
                 <div
                   className={`h-11 w-11 shrink-0 overflow-hidden border border-app-border bg-slate-100 ${entityType === 'creator' ? 'rounded-full' : 'rounded-lg'}`}
                   data-testid="community-row-photo"
                 >
                   {r.profile.logo ? (
-                    <img src={r.profile.logo} alt="" className="h-full w-full object-cover" />
+                    <img
+                      src={r.profile.logo}
+                      alt=""
+                      className={`h-full w-full ${entityType === 'brand' ? 'object-contain bg-white' : 'object-cover'}`}
+                    />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-[11px] font-black text-slate-500">{r.name.slice(0, 2).toUpperCase()}</div>
                   )}
@@ -221,6 +304,7 @@ export function CommunityProfilesPanel({ entityType }: { entityType: 'brand' | '
                   <div className="text-[10.5px] text-app-text-secondary">
                     {entityType === 'brand' ? `${r.category} · ` : ''}/{r.slug} · created {r.createdAt.slice(0, 10) || '—'}
                   </div>
+                </div>
                 </div>
                 <span className={`text-[9px] font-black uppercase px-2 py-1 rounded shrink-0 w-max ${r.stateTone}`}>{r.state}</span>
                 <div className="flex flex-wrap gap-1.5 shrink-0">
@@ -266,6 +350,7 @@ export function CommunityProfilesPanel({ entityType }: { entityType: 'brand' | '
               </div>
             ))}
           </div>
+          </>
         )}
       </div>
 
