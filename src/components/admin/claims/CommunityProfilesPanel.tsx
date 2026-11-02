@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ExternalLink, Eye, Globe, ImagePlus, Loader2, MapPin, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { AlertTriangle, ExternalLink, Eye, Globe, ImagePlus, Loader2, MapPin, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { catalogApi } from '../../../services/catalogApi';
 import { useAuth } from '../../../contexts/AuthContext';
 import {
@@ -151,6 +151,30 @@ function sortRows<T extends { name: string; createdAt: string; category: string 
   }
 }
 
+/** Lower-case letters/digits only (Bangla marks kept) — "Aarong", "aarong.", "-Aarong" all match. */
+const searchKey = (v: string) => v.toLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, '');
+
+/** A blank create form with just the name filled in (from the list search). */
+function emptyProfileFields(name: string): CommunityProfileFields {
+  return {
+    name,
+    categoryId: '',
+    category: '',
+    subcategoryId: '',
+    subcategoryName: '',
+    categoryRequest: '',
+    description: '',
+    logo: '',
+    logoOriginal: '',
+    coverImage: '',
+    website: '',
+    location: '',
+    socials: {},
+    tags: [],
+    priceRange: '',
+  };
+}
+
 export function CommunityProfilesPanel({ entityType }: { entityType: 'brand' | 'creator' }) {
   const [rows, setRows] = useState<Row[]>([]);
   const [categories, setCategories] = useState<CatalogCategory[]>([]);
@@ -185,6 +209,14 @@ export function CommunityProfilesPanel({ entityType }: { entityType: 'brand' | '
     }
   };
   const sortedRows = useMemo(() => sortRows(rows, sort), [rows, sort]);
+  // Search before creating: name, profile URL or category (case/symbol-insensitive).
+  const [query, setQuery] = useState('');
+  const [createName, setCreateName] = useState('');
+  const visibleRows = useMemo(() => {
+    const q = searchKey(query);
+    if (!q) return sortedRows;
+    return sortedRows.filter((r) => [r.name, r.slug, r.category].some((v) => searchKey(v).includes(q)));
+  }, [sortedRows, query]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -242,7 +274,10 @@ export function CommunityProfilesPanel({ entityType }: { entityType: 'brand' | '
         </div>
         <button
           type="button"
-          onClick={() => setCreating(true)}
+          onClick={() => {
+            setCreateName('');
+            setCreating(true);
+          }}
           className="inline-flex items-center gap-1.5 bg-app-accent text-white rounded-lg px-3.5 py-2 text-[11px] font-black shrink-0"
           data-testid="community-create-open"
         >
@@ -272,8 +307,21 @@ export function CommunityProfilesPanel({ entityType }: { entityType: 'brand' | '
           <>
           <div className="px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 border-b border-app-border bg-slate-50/60">
             <span className="text-[11px] font-bold text-app-text-secondary" data-testid="community-count">
-              {rows.length} {entityType === 'brand' ? 'brand' : 'creator'} profile{rows.length === 1 ? '' : 's'}
+              {query.trim() ? `${visibleRows.length} of ${rows.length}` : rows.length} {entityType === 'brand' ? 'brand' : 'creator'} profile
+              {rows.length === 1 ? '' : 's'}
             </span>
+            <label className="relative flex-1 min-w-[180px] max-w-[340px]">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-app-text-secondary" />
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={`Search ${entityType === 'brand' ? 'brands' : 'creators'} — check before creating`}
+                aria-label={`Search community ${entityType} profiles`}
+                className="w-full bg-white border border-app-border rounded-lg pl-8 pr-2 py-1.5 text-[11.5px] outline-none focus:border-app-accent"
+                data-testid="community-search"
+              />
+            </label>
             <label className="flex items-center gap-2 text-[10.5px] font-bold text-app-text-secondary">
               Sort
               <select
@@ -290,8 +338,26 @@ export function CommunityProfilesPanel({ entityType }: { entityType: 'brand' | '
               </select>
             </label>
           </div>
+          {query.trim() && visibleRows.length === 0 && (
+            <div className="p-6 text-center" data-testid="community-search-empty">
+              <p className="text-xs text-app-text-secondary">
+                No community {entityType} profile matches “{query.trim()}” — it hasn't been created yet.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setCreateName(query.trim());
+                  setCreating(true);
+                }}
+                className="mt-3 inline-flex items-center gap-1.5 bg-app-accent text-white rounded-lg px-3 py-1.5 text-[11px] font-black"
+                data-testid="community-search-create"
+              >
+                <Plus className="w-3.5 h-3.5" /> Create “{query.trim()}”
+              </button>
+            </div>
+          )}
           <div className="divide-y divide-app-border">
-            {sortedRows.map((r, index) => (
+            {visibleRows.map((r, index) => (
               <div key={r.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-3" data-testid="community-profile-row">
                 {/* Serial, photo and name stay on one line on every screen size. */}
                 <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -377,9 +443,11 @@ export function CommunityProfilesPanel({ entityType }: { entityType: 'brand' | '
           entityType={entityType}
           categories={categories}
           editing={editing ? { id: editing.id, ...editing.profile } : null}
+          prefill={!editing && createName ? emptyProfileFields(createName) : null}
           onClose={() => {
             setCreating(false);
             setEditing(null);
+            setCreateName('');
           }}
           onSaved={(name, slug) => {
             setNotice(editing ? `Community profile “${name}” updated.` : `Community profile “${name}” created — ${publicBase}/${slug}`);

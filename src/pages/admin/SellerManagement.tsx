@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { TabCount } from '../../components/admin/TabCount';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { profileReturnState } from '../../lib/profileReturn';
 import { Search, Loader2, AlertCircle, ShieldCheck, ExternalLink } from 'lucide-react';
@@ -86,6 +87,9 @@ const FILTER_TABS: { key: SellerFilter; label: string }[] = [
   { key: 'suspended', label: 'Suspended' },
   { key: 'archived', label: 'Inactive / In Deletion' },
 ];
+
+/** Tabs whose items wait on staff — their count shows as a coloured badge while non-zero. */
+const ACTION_TABS = new Set<string>(['requests', 'claims', 'suggested', 'flagged']);
 
 export default function SellerManagement() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -436,7 +440,8 @@ export default function SellerManagement() {
               filter === t.key ? 'bg-app-accent text-white' : 'text-app-text-secondary hover:bg-[#F1F3F5]'
             }`}
           >
-            {t.label} ({counts[t.key as keyof typeof counts] ?? 0})
+            {t.label}
+            <TabCount count={counts[t.key as keyof typeof counts] ?? 0} needsAction={ACTION_TABS.has(t.key)} active={filter === t.key} />
           </button>
         ))}
       </div>
