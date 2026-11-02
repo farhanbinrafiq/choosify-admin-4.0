@@ -382,6 +382,7 @@ export const STOREFRONT_SUBCATEGORY_DEFS: ReadonlyArray<{
   { id: "sub-fashion-lifestyle-innerwear-sleepwear", slug: "fashion-lifestyle-innerwear-sleepwear", name: "Innerwear & Sleepwear", parentId: "cat-fashion", displayOrder: 8 },
   { id: "sub-fashion-lifestyle-watches", slug: "fashion-lifestyle-watches", name: "Watches", parentId: "cat-fashion", displayOrder: 9 },
   { id: "sub-fashion-lifestyle-eyewear", slug: "fashion-lifestyle-eyewear", name: "Eyewear", parentId: "cat-fashion", displayOrder: 10 },
+  { id: "sub-fashion-lifestyle-leather-goods", slug: "fashion-lifestyle-leather-goods", name: "Leather Goods", parentId: "cat-fashion", displayOrder: 11 },
   { id: "sub-jewelry-luxury-fashion-artificial-jewellery", slug: "jewelry-luxury-fashion-artificial-jewellery", name: "Fashion & Artificial Jewellery", parentId: "cat-jewelry", displayOrder: 5 },
   { id: "sub-beauty-health-pharmacy-fragrances-perfumes", slug: "beauty-health-pharmacy-fragrances-perfumes", name: "Fragrances & Perfumes", parentId: "cat-beauty", displayOrder: 5 },
   { id: "sub-beauty-health-pharmacy-personal-care", slug: "beauty-health-pharmacy-personal-care", name: "Personal Care", parentId: "cat-beauty", displayOrder: 6 },
@@ -473,6 +474,12 @@ export const CATEGORY_ADDITION_MIGRATIONS: ReadonlyArray<{ id: string; categoryI
       "sub-professional-home-services-courier-delivery",
       "sub-professional-home-services-tutoring-coaching",
       "sub-professional-home-services-salon-beauty-services",
+    ],
+  },
+  {
+    id: '2026-11-02b-leather-goods',
+    categoryIds: [
+      "sub-fashion-lifestyle-leather-goods",
     ],
   },
 ];

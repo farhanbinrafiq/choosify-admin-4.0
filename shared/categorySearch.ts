@@ -42,6 +42,7 @@ export const CATEGORY_SEARCH_WORDS: Record<string, string[]> = {
   'sub-fashion-lifestyle-kids-fashion': ['kids clothing', 'kids wear', 'children clothes', 'baby dress'],
   'sub-fashion-lifestyle-innerwear-sleepwear': ['innerwear', 'lingerie', 'nightwear', 'pajama', 'underwear'],
   'sub-fashion-lifestyle-watches': ['watch', 'watches', 'ঘড়ি'],
+  'sub-fashion-lifestyle-leather-goods': ['leather', 'leather goods', 'leather products', 'wallet', 'belt', 'leather bag', 'leather shoes', 'handcrafted leather', 'চামড়া'],
   'sub-fashion-lifestyle-eyewear': ['eyeglass', 'eyeglasses', 'glasses', 'sunglass', 'sunglasses', 'optical', 'lens', 'চশমা'],
   'cat-jewelry': ['jewellery', 'jewelry', 'jewelleries', 'ornament', 'গহনা', 'অলংকার'],
   'sub-jewelry-luxury-fashion-artificial-jewellery': ['artificial', 'imitation', 'fashion jewellery', 'earring', 'necklace', 'bangle', 'ring'],
