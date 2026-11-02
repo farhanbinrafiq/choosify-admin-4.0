@@ -33,14 +33,45 @@ export function websiteDomain(raw: string | undefined | null): string {
   }
 }
 
-/** host + first path segment, lower-cased (facebook.com/abcbrand). */
-function socialKey(raw: string | undefined | null): string {
+/**
+ * Path words that only say what KIND of page follows, never whose page it is
+ * (linkedin.com/company/<x>, youtube.com/c/<x>, facebook.com/pages/<x>/<id>).
+ * Comparing these instead of the handle made every LinkedIn company page
+ * "match" every other one.
+ */
+const SOCIAL_PATH_PREFIXES = new Set([
+  'company', 'in', 'school', 'showcase', 'pub', // LinkedIn
+  'c', 'channel', 'user', // YouTube
+  'pages', 'pg', 'people', 'groups', 'p', // Facebook
+]);
+const SOCIAL_HOST_ALIASES: Record<string, string> = { 'fb.com': 'facebook.com', 'fb.me': 'facebook.com', 'youtu.be': 'youtube.com' };
+
+/**
+ * The account a social link points at — host + handle, lower-cased
+ * (facebook.com/abcbrand, linkedin.com/abcbrand, facebook.com/id:123). '' when
+ * the link names no specific account (a bare domain, a share or watch link).
+ */
+export function socialKey(raw: string | undefined | null): string {
   const v = String(raw || '').trim();
   if (!v) return '';
   try {
     const u = new URL(/^https?:\/\//i.test(v) ? v : `https://${v}`);
-    const seg = u.pathname.split('/').filter(Boolean)[0] || '';
-    return `${u.hostname.toLowerCase().replace(/^(www\.|m\.)/, '')}/${seg.toLowerCase()}`;
+    const rawHost = u.hostname.toLowerCase().replace(/^(www\.|m\.|mobile\.|web\.)/, '');
+    const host = SOCIAL_HOST_ALIASES[rawHost] || rawHost;
+    const segs = u.pathname.split('/').filter(Boolean).map((s) => decodeURIComponent(s).toLowerCase());
+    // facebook.com/profile.php?id=123 — the id is the account.
+    if (host === 'facebook.com' && segs[0] === 'profile.php') {
+      const id = u.searchParams.get('id');
+      return id ? `${host}/id:${id}` : '';
+    }
+    let i = 0;
+    while (i < segs.length - 1 && SOCIAL_PATH_PREFIXES.has(segs[i])) i += 1;
+    if (SOCIAL_PATH_PREFIXES.has(segs[i] ?? '')) return '';
+    // facebook.com/pages/<name>/<numeric id>: the id identifies the page.
+    if (host === 'facebook.com' && segs[0] === 'pages' && /^\d+$/.test(segs[i + 1] ?? '')) return `${host}/id:${segs[i + 1]}`;
+    const handle = (segs[i] || '').replace(/^@/, '');
+    if (!handle || ['watch', 'share', 'sharer.php', 'posts', 'reel', 'reels', 'video', 'videos', 'shorts', 'hashtag'].includes(handle)) return '';
+    return `${host}/${handle}`;
   } catch {
     return '';
   }
@@ -51,7 +82,7 @@ function socialKeysOf(links: Record<string, unknown> | undefined): string[] {
   const keys: string[] = [];
   for (const k of CREATOR_SOCIAL_PLATFORM_KEYS) {
     const key = socialKey(links[k] as string);
-    if (key && key.split('/')[1]) keys.push(key);
+    if (key) keys.push(key);
   }
   return keys;
 }
