@@ -98,6 +98,62 @@ export const CATEGORY_SEARCH_WORDS: Record<string, string[]> = {
   'sub-pets-agriculture-pet-care-grooming': ['pet care', 'grooming', 'pet grooming', 'pet hotel', 'pet boarding', 'cat care', 'dog care'],  'cat-digital': ['digital', 'software', 'online'],
 };
 
+/** More search words (2026-11-02 audit of ~120 common seller/shopper terms), merged with the list above. */
+const MORE_SEARCH_WORDS: Record<string, string[]> = {
+  'sub-beauty-health-pharmacy-makeup': ['cosmetics', 'cosmetic', 'lipstick', 'lip', 'nail polish', 'nail', 'foundation', 'kajal', 'eyeliner', 'mascara', 'compact powder', 'makeup', 'মেকআপ'],
+  'sub-beauty-health-pharmacy-skincare': ['skin care', 'skincare', 'skin', 'face wash', 'facewash', 'serum', 'sunscreen', 'sunblock', 'moisturizer', 'moisturiser', 'cream', 'lotion', 'toner', 'face mask', 'k-beauty', 'korean skincare'],
+  'sub-beauty-health-pharmacy-hair-care': ['hair oil', 'shampoo', 'conditioner', 'hair color', 'hair colour', 'hair serum'],
+  'sub-beauty-health-pharmacy-mens-grooming': ['beard', 'beard oil', 'trimmer', 'shaving', 'razor', 'grooming'],
+  'sub-beauty-health-pharmacy-herbal-unani-homeopathy': ['herbal', 'ayurvedic', 'ayurveda', 'unani', 'homeopathy', 'homeopathic', 'natural remedy', 'kabiraji', 'হোমিওপ্যাথি'],
+  'sub-beauty-health-pharmacy-medical-devices': ['hearing aid', 'wheelchair', 'bp machine', 'blood pressure', 'glucometer', 'thermometer', 'nebulizer', 'oximeter'],
+  'sub-beauty-health-pharmacy-personal-care': ['toothpaste', 'toothbrush', 'dental', 'dental care', 'oral care', 'deodorant'],
+  'sub-beauty-health-pharmacy-otc-medicines': ['medicine', 'pharmacy', 'ঔষধ', 'ওষুধ'],
+  'sub-baby-kids-toys-baby-care': ['diaper', 'diapers', 'baby wipes', 'baby lotion', 'baby soap'],
+  'sub-baby-kids-toys-baby-feeding': ['baby food', 'feeder', 'baby bottle', 'formula milk'],
+  'sub-baby-kids-toys-toys': ['toy car', 'rc car', 'doll', 'lego', 'action figure', 'kids toys'],
+  'sub-baby-kids-toys-educational-toys': ['board game', 'puzzle', 'learning toys', 'montessori'],
+  'sub-electronics-gadgets-accessories': ['gadget', 'gadgets', 'gadget accessories', 'gadgets & accessories', 'accessories', 'tech accessories', 'smart gadgets', 'mobile accessories', 'electronic accessories'],
+  'sub-electronics-audio': ['headphone', 'headphones', 'earphone', 'earbuds', 'earbud', 'airpods', 'speaker', 'speakers', 'bluetooth speaker', 'soundbox', 'neckband'],
+  'cat-mobile': ['tablet', 'ipad', 'feature phone', 'used phone'],
+  'sub-electronics-tv-entertainment': ['smart tv', 'android tv', 'led tv'],
+  'sub-gaming-entertainment-gaming-consoles': ['ps5', 'ps4', 'playstation', 'xbox', 'nintendo', 'console'],
+  'sub-gaming-entertainment-video-games': ['esports', 'e-sports', 'game top up', 'gaming'],
+  'sub-home-furniture-appliances-furniture': ['sofa', 'bed', 'bed frame', 'table', 'chair', 'wardrobe', 'almirah', 'dining table', 'shelf', 'আসবাব'],
+  'sub-home-furniture-appliances-home-decor': ['carpet', 'rug', 'doormat', 'mat', 'wall clock', 'decor items'],
+  'sub-home-furniture-appliances-lighting': ['lights', 'light', 'lamp', 'led light', 'bulb', 'chandelier', 'fairy lights'],
+  'sub-home-furniture-appliances-bedding-bath': ['mosquito net', 'mattress', 'bed cover', 'quilt'],
+  'cat-appliances': ['rice cooker', 'microwave', 'iron', 'water purifier', 'geyser', 'kettle'],
+  'sub-grocery-food-beverages': ['tea', 'coffee', 'juice', 'soft drink', 'drinks', 'water', 'cha', 'চা', 'কফি'],
+  'sub-grocery-food-dairy-eggs': ['milk', 'butter', 'cheese', 'yogurt', 'doi', 'ghee', 'দুধ', 'ডিম'],
+  'sub-grocery-food-cooking-essentials': ['spices', 'spice', 'masala', 'salt', 'sugar', 'মসলা'],
+  'sub-grocery-food-organic-health-food': ['dates', 'khejur', 'dry fruits', 'nuts', 'almond', 'খেজুর'],
+  'sub-grocery-food-snacks-instant-food': ['frozen food', 'frozen', 'ready to cook', 'nuggets'],
+  'sub-fashion-lifestyle-traditional-ethnic-wear': ['three piece', '3 piece', 'lungi', 'gamcha', 'fatua', 'kurta', 'thri piece'],
+  'sub-fashion-lifestyle-womens-fashion': ['boutique', 'ladies wear', 'womens clothing', 'gown'],
+  'sub-fashion-lifestyle-bags-luggage': ['wallet', 'small bag', 'chest bag', 'sling bag', 'crossbody', 'clutch', 'ladies clutch', 'clutch bag', 'hand bag', 'handbag', 'purse', 'tote', 'laptop bag', 'school bag', 'travel bag', 'luggage', 'trolley'],
+  'sub-fashion-lifestyle-leather-goods': ['wallet', 'leather wallet', 'leather belt', 'leather jacket', 'chest bag'],
+  'sub-sports-fitness-outdoor-sports': ['cricket', 'cricket bat', 'football', 'badminton', 'tennis', 'sports equipment', 'jersey'],
+  'sub-books-education-arts-musical-instruments': ['guitar', 'piano', 'tabla', 'violin', 'drum', 'ukulele', 'harmonium'],
+  'sub-pets-agriculture-agriculture': ['fertilizer', 'fertiliser', 'pesticide', 'farming', 'agro', 'compost'],
+  'sub-pets-agriculture-pet-accessories': ['cat litter', 'litter', 'pet toys', 'cage', 'aquarium'],
+  'sub-professional-home-services-repair-maintenance': ['plumber', 'electrician', 'ac repair', 'ac service', 'appliance repair', 'mobile repair', 'carpenter', 'painter'],
+  'sub-professional-home-services-it-services': ['website development', 'web development', 'website', 'app development', 'software development', 'web design'],
+  'sub-professional-home-services-graphic-design-branding': ['graphic design', 'logo design', 'branding', 'designer', 'ui ux', 'creative design'],
+  'sub-professional-home-services-tailoring-alterations': ['tailor', 'tailoring', 'alteration', 'darji', 'stitching', 'custom tailoring', 'দর্জি'],
+  'sub-professional-home-services-salon-beauty-services': ['mehendi', 'mehndi', 'mehedi artist', 'makeup artist', 'bridal makeup'],
+  'sub-events-wedding-decoration': ['decorator', 'event decoration', 'stage decoration', 'holud decoration'],
+  'sub-travel-hospitality-vehicle-rental': ['rent a car', 'car rental', 'car rent', 'microbus rent'],
+  'sub-real-estate-rent-property': ['flat rent', 'to-let', 'to let', 'apartment rent', 'house rent', 'বাসা ভাড়া'],
+  'cat-business': ['company', 'business', 'corporate', 'firm', 'enterprise', 'startup'],
+  'sub-business-corporate-e-commerce-online-marketplace': ['ecommerce', 'e-commerce', 'e-commerce marketplace', 'online shop', 'online store', 'online marketplace', 'marketplace', 'f-commerce', 'online business'],
+  'sub-business-corporate-saas-software-company': ['saas', 'software company', 'software firm', 'tech company', 'it company', 'platform'],
+  'sub-business-corporate-corporate-conglomerate': ['corporate', 'conglomerate', 'group of companies', 'limited company', 'ltd'],
+  'sub-business-corporate-b2b-company': ['b2b', 'b2b company', 'supplier', 'manufacturer company', 'trading company'],
+  'sub-business-corporate-marketing-creative-agency': ['agency', 'marketing agency', 'creative agency', 'ad agency', 'advertising agency', 'pr agency'],
+  'sub-business-corporate-design-house': ['design house', 'design studio', 'fashion house', 'design firm'],
+  'sub-business-corporate-consultancy-advisory': ['consultancy', 'consultant', 'advisory', 'consulting', 'business consultant'],
+};
+
 // \p{M} keeps Bangla vowel signs inside the word (জুতা is one word, not জ + ত).
 const tokenise = (v: string) =>
   v
@@ -107,7 +163,15 @@ const tokenise = (v: string) =>
     .filter((t) => t.length > 0);
 
 /** Singular form for comparison (shoes → shoe, boxes → box); short words untouched. */
-const singular = (t: string) => (t.length > 4 && t.endsWith('es') ? t.slice(0, -2) : t.length > 3 && t.endsWith('s') ? t.slice(0, -1) : t);
+/** Singular forms for comparison (shoes -> shoe, spices -> spice, accessories -> accessory); short words untouched. */
+const singulars = (t: string): string[] => {
+  const out = [t];
+  if (t.length > 4 && t.endsWith('ies')) out.push(`${t.slice(0, -3)}y`);
+  if (t.length > 4 && t.endsWith('es')) out.push(t.slice(0, -2));
+  if (t.length > 3 && t.endsWith('s')) out.push(t.slice(0, -1));
+  return out;
+};
+const sameWord = (a: string, b: string) => singulars(a).some((x) => singulars(b).includes(x));
 
 /** How well `query` matches a label/word list: phrase > all words > some words (prefix-aware). */
 function matchScore(query: string, haystack: string[]): number {
@@ -120,7 +184,7 @@ function matchScore(query: string, haystack: string[]): number {
   const qTokens = tokenise(q);
   const hTokens = new Set(phrases.flatMap(tokenise));
   // A typed word matches a word that equals it, is its singular/plural, or that it begins (typing "shoe" finds "shoes").
-  const hit = (t: string) => [...hTokens].some((h) => h === t || singular(h) === singular(t) || (t.length >= 3 && h.startsWith(t)));
+  const hit = (t: string) => [...hTokens].some((h) => h === t || sameWord(h, t) || (t.length >= 3 && h.startsWith(t)));
   const hits = qTokens.filter(hit).length;
   if (!hits) return 0;
   return hits === qTokens.length ? 50 : 20 * (hits / qTokens.length);
@@ -134,7 +198,7 @@ export function searchCategories(categories: SearchableCategory[], query: string
   const live = categories.filter((c) => c.enabled !== false);
   const mains = live.filter((c) => !c.parentId);
   const byId = new Map(mains.map((m) => [m.id, m]));
-  const words = (c: SearchableCategory) => [c.name, ...(CATEGORY_SEARCH_WORDS[c.id] ?? [])];
+  const words = (c: SearchableCategory) => [c.name, ...(CATEGORY_SEARCH_WORDS[c.id] ?? []), ...(MORE_SEARCH_WORDS[c.id] ?? [])];
   const out: CategoryMatch[] = [];
   for (const main of mains) {
     const s = matchScore(query, words(main));
