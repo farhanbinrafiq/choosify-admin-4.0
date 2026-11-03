@@ -422,6 +422,9 @@ export const STOREFRONT_SUBCATEGORY_DEFS: ReadonlyArray<{
   { id: "sub-fashion-lifestyle-mens-innerwear", slug: "fashion-lifestyle-mens-innerwear", name: "Men's Innerwear", parentId: "cat-fashion", displayOrder: 17 },
   { id: "sub-fashion-lifestyle-swimwear-beachwear", slug: "fashion-lifestyle-swimwear-beachwear", name: "Swimwear & Beachwear", parentId: "cat-fashion", displayOrder: 18 },
   { id: "sub-fashion-lifestyle-shapewear", slug: "fashion-lifestyle-shapewear", name: "Shapewear", parentId: "cat-fashion", displayOrder: 19 },
+  { id: "sub-fashion-lifestyle-panjabi-sherwani", slug: "fashion-lifestyle-panjabi-sherwani", name: "Panjabi & Sherwani", parentId: "cat-fashion", displayOrder: 20 },
+  { id: "sub-fashion-lifestyle-sarees-blouses", slug: "fashion-lifestyle-sarees-blouses", name: "Sarees & Blouses", parentId: "cat-fashion", displayOrder: 21 },
+  { id: "sub-fashion-lifestyle-salwar-kameez-three-piece", slug: "fashion-lifestyle-salwar-kameez-three-piece", name: "Salwar Kameez & Three Piece", parentId: "cat-fashion", displayOrder: 22 },
   { id: "sub-jewelry-luxury-fashion-artificial-jewellery", slug: "jewelry-luxury-fashion-artificial-jewellery", name: "Fashion & Artificial Jewellery", parentId: "cat-jewelry", displayOrder: 5 },
   { id: "sub-beauty-health-pharmacy-fragrances-perfumes", slug: "beauty-health-pharmacy-fragrances-perfumes", name: "Fragrances & Perfumes", parentId: "cat-beauty", displayOrder: 5 },
   { id: "sub-beauty-health-pharmacy-personal-care", slug: "beauty-health-pharmacy-personal-care", name: "Personal Care", parentId: "cat-beauty", displayOrder: 6 },
@@ -561,6 +564,14 @@ export const CATEGORY_ADDITION_MIGRATIONS: ReadonlyArray<{ id: string; categoryI
       "sub-fashion-lifestyle-mens-innerwear",
       "sub-fashion-lifestyle-swimwear-beachwear",
       "sub-fashion-lifestyle-shapewear",
+    ],
+  },
+  {
+    id: '2026-11-03c-panjabi-saree-salwar',
+    categoryIds: [
+      "sub-fashion-lifestyle-panjabi-sherwani",
+      "sub-fashion-lifestyle-sarees-blouses",
+      "sub-fashion-lifestyle-salwar-kameez-three-piece",
     ],
   },
 ];
