@@ -18,10 +18,10 @@ export type CategoryMatch = {
 /** Extra search words (English + common Bangla) keyed by category id. */
 export const CATEGORY_SEARCH_WORDS: Record<string, string[]> = {
   'cat-gifts': ['gift', 'gifts', 'present', 'উপহার', 'গিফট', 'occasion'],
-  'sub-gifts-occasions-gift-items-showpieces': ['showpiece', 'souvenir', 'decor gift', 'gift shop', 'gift item'],
+  'sub-gifts-occasions-gift-items-showpieces': ['showpiece', 'decor gift', 'gift shop', 'gift item'],
   'sub-gifts-occasions-gift-hampers-baskets': ['hamper', 'basket', 'gift box', 'box'],
   'sub-gifts-occasions-personalised-custom-gifts': ['personalized', 'custom', 'customised', 'customized', 'name print', 'engraved', 'photo frame'],
-  'sub-gifts-occasions-corporate-gifts': ['corporate', 'office gift', 'promotional', 'branded merchandise', 'crest'],
+  'sub-gifts-occasions-corporate-gifts': ['corporate', 'office gift', 'promotional', 'branded merchandise'],
   'sub-gifts-occasions-festival-eid-gifts': ['eid', 'puja', 'boishakh', 'christmas', 'festival', 'ঈদ'],
   'sub-gifts-occasions-flowers-bouquets': ['flower', 'flowers', 'bouquet', 'florist', 'ফুল'],
   'sub-gifts-occasions-party-supplies-decorations': ['party', 'birthday', 'balloon', 'decoration'],
@@ -45,7 +45,7 @@ export const CATEGORY_SEARCH_WORDS: Record<string, string[]> = {
   'sub-fashion-lifestyle-leather-goods': ['leather', 'leather goods', 'leather products', 'wallet', 'belt', 'leather bag', 'leather shoes', 'handcrafted leather', 'চামড়া'],
   'sub-fashion-lifestyle-eyewear': ['eyeglass', 'eyeglasses', 'glasses', 'sunglass', 'sunglasses', 'optical', 'lens', 'চশমা'],
   'cat-jewelry': ['jewellery', 'jewelry', 'jewelleries', 'ornament', 'গহনা', 'অলংকার'],
-  'sub-jewelry-luxury-fashion-artificial-jewellery': ['artificial', 'imitation', 'fashion jewellery', 'earring', 'necklace', 'bangle', 'ring'],
+  'sub-jewelry-luxury-fashion-artificial-jewellery': ['artificial', 'imitation', 'fashion jewellery', 'costume jewellery'],
   'sub-jewelry-luxury-gold': ['gold', 'সোনা'],
   'sub-jewelry-luxury-silver': ['silver', 'রুপা'],
   'cat-beauty': ['beauty', 'cosmetics', 'health', 'pharmacy', 'medicine'],
@@ -154,6 +154,31 @@ const MORE_SEARCH_WORDS: Record<string, string[]> = {
   'sub-business-corporate-consultancy-advisory': ['consultancy', 'consultant', 'advisory', 'consulting', 'business consultant'],
 };
 
+/** Accessories, jewellery by type, souvenirs and gift terms (2026-11-03 audit), merged with the lists above. */
+const ACCESSORY_SEARCH_WORDS: Record<string, string[]> = {
+  'sub-fashion-lifestyle-mens-accessories': ["men's accessories", 'mens accessories', 'men accessories', 'cufflinks', 'cufflink', 'tie pin', 'tie clip', 'money clip', 'keychain', 'key chain', 'key ring', 'keyring', 'handkerchief', 'necktie', 'bow tie', 'men belt'],
+  'sub-fashion-lifestyle-lighters-smoking-accessories': ['lighter', 'lighters', 'zippo', 'gas lighter', 'torch lighter', 'jet lighter', 'electric lighter', 'cigarette box', 'cigarette case', 'cigar case', 'cigar box', 'ashtray', 'hookah', 'shisha', 'smoking accessories', 'smoking pipe', 'matchbox', 'match box', 'rolling paper', 'লাইটার'],
+  'sub-fashion-lifestyle-hair-accessories': ['hair accessories', 'hair clip', 'claw clip', 'hair pin', 'hairpin', 'hair band', 'hairband', 'headband', 'scrunchie', 'scrunchies', 'hair tie', 'tiara'],
+  'sub-fashion-lifestyle-caps-hats-scarves': ['cap', 'caps', 'hat', 'hats', 'beanie', 'bucket hat', 'baseball cap', 'scarf', 'scarves', 'muffler', 'shawl', 'stole', 'bandana', 'টুপি'],
+  'sub-jewelry-luxury-mens-jewellery': ["men's jewellery", "men's jewelry", 'mens jewellery', 'mens jewelry', 'men jewellery', "men's bracelet", 'mens bracelet', 'men bracelet', 'leather bracelet', 'mens ring', 'mens chain', 'kada', 'stainless steel jewellery', 'titanium ring', 'mens jewelries'],
+  'sub-jewelry-luxury-bracelets-bangles': ['bracelet', 'bracelets', 'bangle', 'bangles', 'churi', 'charm bracelet', 'cuff bracelet', 'চুড়ি'],
+  'sub-jewelry-luxury-rings': ['ring', 'rings', 'finger ring', 'stone ring', 'engagement ring', 'couple ring', 'wedding ring', 'আংটি'],
+  'sub-jewelry-luxury-necklaces-chains-pendants': ['necklace', 'necklaces', 'chain', 'neck chain', 'gold chain', 'pendant', 'locket', 'choker', 'mala', 'হার'],
+  'sub-jewelry-luxury-earrings-nose-pins': ['earring', 'earrings', 'ear ring', 'studs', 'jhumka', 'jhumki', 'nose pin', 'nosepin', 'nose ring', 'nakfool', 'কানের দুল', 'নাকফুল'],
+  'sub-jewelry-luxury-handmade-beaded-jewellery': ['handmade jewellery', 'handmade jewelry', 'beaded jewellery', 'beaded jewelry', 'beads', 'terracotta jewellery', 'oxidised jewellery', 'oxidized jewelry', 'tribal jewellery', 'resin jewellery', 'fabric jewellery'],
+  'sub-jewelry-luxury-gemstones-birthstones': ['gemstone', 'gemstones', 'gem stone', 'birthstone', 'birth stone', 'ruby', 'emerald', 'sapphire', 'pearl', 'rashi stone', 'রত্ন পাথর'],
+  'sub-jewelry-luxury-luxury-pens-accessories': ['luxury pen', 'luxury pens', 'designer pen', 'luxury lighter', 'luxury accessories', 'cigar accessories', 'luxury cufflinks', 'mont blanc', 'montblanc', 'parker pen'],
+  'sub-gifts-occasions-souvenirs-keepsakes': ['souvenir', 'souvenirs', 'souveniers', 'souvenier', 'keepsake', 'keepsakes', 'fridge magnet', 'travel souvenir', 'tourist souvenir', 'স্যুভেনির'],
+  'sub-gifts-occasions-crests-trophies-awards': ['crest', 'crests', 'memento', 'trophy', 'trophies', 'award', 'awards', 'medal', 'medals', 'plaque', 'shield', 'ক্রেস্ট'],
+  'sub-gifts-occasions-collectibles-miniatures': ['collectible', 'collectibles', 'collection', 'miniature', 'miniatures', 'figurine', 'figurines', 'die cast', 'diecast', 'model car', 'scale model', 'coin collection', 'stamp collection'],
+  'sub-home-furniture-appliances-candles-home-fragrance': ['candle', 'candles', 'scented candle', 'incense', 'incense sticks', 'agarbatti', 'diffuser', 'reed diffuser', 'room freshener', 'air freshener', 'aroma', 'bakhoor', 'আগরবাতি'],
+  'sub-fashion-lifestyle-fashion-accessories': ['umbrella', 'gloves', 'safety pin'],
+  'sub-fashion-lifestyle-innerwear-sleepwear': ['socks', 'stockings'],
+  'sub-jewelry-luxury-fashion-artificial-jewellery': ['anklet', 'anklets', 'nupur', 'payel', 'brooch', 'jewellery', 'jewelry', 'jewelries', 'jewellries', 'jewelleries', 'গয়না'],
+  'sub-home-furniture-appliances-kitchen-dining': ['mug', 'mugs', 'cup', 'plate', 'crockery'],
+  'sub-books-education-arts-religious-books-items': ['janamaz', 'jainamaz', 'prayer mat', 'tasbih', 'tasbeeh', 'quran stand', 'rehal', 'attar'],
+};
+
 // \p{M} keeps Bangla vowel signs inside the word (জুতা is one word, not জ + ত).
 const tokenise = (v: string) =>
   v
@@ -198,7 +223,12 @@ export function searchCategories(categories: SearchableCategory[], query: string
   const live = categories.filter((c) => c.enabled !== false);
   const mains = live.filter((c) => !c.parentId);
   const byId = new Map(mains.map((m) => [m.id, m]));
-  const words = (c: SearchableCategory) => [c.name, ...(CATEGORY_SEARCH_WORDS[c.id] ?? []), ...(MORE_SEARCH_WORDS[c.id] ?? [])];
+  const words = (c: SearchableCategory) => [
+    c.name,
+    ...(CATEGORY_SEARCH_WORDS[c.id] ?? []),
+    ...(MORE_SEARCH_WORDS[c.id] ?? []),
+    ...(ACCESSORY_SEARCH_WORDS[c.id] ?? []),
+  ];
   const out: CategoryMatch[] = [];
   for (const main of mains) {
     const s = matchScore(query, words(main));
