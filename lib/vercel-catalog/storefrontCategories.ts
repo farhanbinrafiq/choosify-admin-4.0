@@ -418,6 +418,10 @@ export const STOREFRONT_SUBCATEGORY_DEFS: ReadonlyArray<{
   { id: "sub-gifts-occasions-crests-trophies-awards", slug: "gifts-occasions-crests-trophies-awards", name: "Crests, Trophies & Awards", parentId: "cat-gifts", displayOrder: 9 },
   { id: "sub-gifts-occasions-collectibles-miniatures", slug: "gifts-occasions-collectibles-miniatures", name: "Collectibles & Miniatures", parentId: "cat-gifts", displayOrder: 10 },
   { id: "sub-home-furniture-appliances-candles-home-fragrance", slug: "home-furniture-appliances-candles-home-fragrance", name: "Candles & Home Fragrance", parentId: "cat-home", displayOrder: 12 },
+  { id: "sub-fashion-lifestyle-lingerie-bras", slug: "fashion-lifestyle-lingerie-bras", name: "Lingerie & Bras", parentId: "cat-fashion", displayOrder: 16 },
+  { id: "sub-fashion-lifestyle-mens-innerwear", slug: "fashion-lifestyle-mens-innerwear", name: "Men's Innerwear", parentId: "cat-fashion", displayOrder: 17 },
+  { id: "sub-fashion-lifestyle-swimwear-beachwear", slug: "fashion-lifestyle-swimwear-beachwear", name: "Swimwear & Beachwear", parentId: "cat-fashion", displayOrder: 18 },
+  { id: "sub-fashion-lifestyle-shapewear", slug: "fashion-lifestyle-shapewear", name: "Shapewear", parentId: "cat-fashion", displayOrder: 19 },
   { id: "sub-jewelry-luxury-fashion-artificial-jewellery", slug: "jewelry-luxury-fashion-artificial-jewellery", name: "Fashion & Artificial Jewellery", parentId: "cat-jewelry", displayOrder: 5 },
   { id: "sub-beauty-health-pharmacy-fragrances-perfumes", slug: "beauty-health-pharmacy-fragrances-perfumes", name: "Fragrances & Perfumes", parentId: "cat-beauty", displayOrder: 5 },
   { id: "sub-beauty-health-pharmacy-personal-care", slug: "beauty-health-pharmacy-personal-care", name: "Personal Care", parentId: "cat-beauty", displayOrder: 6 },
@@ -548,6 +552,15 @@ export const CATEGORY_ADDITION_MIGRATIONS: ReadonlyArray<{ id: string; categoryI
       "sub-gifts-occasions-crests-trophies-awards",
       "sub-gifts-occasions-collectibles-miniatures",
       "sub-home-furniture-appliances-candles-home-fragrance",
+    ],
+  },
+  {
+    id: '2026-11-03b-lingerie-innerwear-swimwear',
+    categoryIds: [
+      "sub-fashion-lifestyle-lingerie-bras",
+      "sub-fashion-lifestyle-mens-innerwear",
+      "sub-fashion-lifestyle-swimwear-beachwear",
+      "sub-fashion-lifestyle-shapewear",
     ],
   },
 ];
