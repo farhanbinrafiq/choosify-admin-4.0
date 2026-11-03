@@ -162,6 +162,24 @@ const roleBadgeStyle = (role: string): CSSProperties => {
   };
 };
 
+/** Small outline tag for a shopper's other role ("Also Creator" / "Also Seller") in the Consumers tab. */
+const alsoRoleTagStyle = (role: string): CSSProperties => {
+  const g = roleGroup(role);
+  const fg = g === 'Creator' ? '#16A34A' : ACCENT;
+  return {
+    color: fg,
+    border: `1px solid ${g === 'Creator' ? 'rgba(34,197,94,0.45)' : 'color-mix(in srgb, var(--cms-accent) 45%, transparent)'}`,
+    background: 'transparent',
+    fontSize: 8.5,
+    fontWeight: 800,
+    letterSpacing: '0.03em',
+    textTransform: 'uppercase',
+    padding: '2px 6px',
+    borderRadius: 5,
+    whiteSpace: 'nowrap',
+  };
+};
+
 /** Grouped, display-friendly role label ('user' → 'Consumer'). */
 const roleLabel = (role: string): string => {
   const g = roleGroup(role);
@@ -855,7 +873,21 @@ export default function ConsumersPage() {
                           </div>
                         </div>
                       </td>
-                      <td style={S.td}><span style={roleBadgeStyle(u.role)}>{roleLabel(u.role)}</span></td>
+                      <td style={S.td}>
+                        {/* One account can shop and also sell or create. In the Consumers tab
+                            everyone is labelled by the role this tab is about (Consumer), with
+                            their other role as a small tag; other tabs keep their own role. */}
+                        {isConsumerView ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                            <span style={roleBadgeStyle('user')} data-testid="row-role-badge">Consumer</span>
+                            {(roleGroup(u.role) === 'Seller' || roleGroup(u.role) === 'Creator') && (
+                              <span style={alsoRoleTagStyle(u.role)} data-testid="row-also-role">Also {roleGroup(u.role)}</span>
+                            )}
+                          </span>
+                        ) : (
+                          <span style={roleBadgeStyle(u.role)} data-testid="row-role-badge">{roleLabel(u.role)}</span>
+                        )}
+                      </td>
                       <td style={S.tdMuted}><span style={S.empty}>—</span></td>
                       <td style={S.tdMuted}><span style={S.empty}>—</span></td>
                       <td style={S.tdMuted}>
