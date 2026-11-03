@@ -430,6 +430,10 @@ export const STOREFRONT_SUBCATEGORY_DEFS: ReadonlyArray<{
   { id: "sub-fashion-lifestyle-formal-dress-shoes", slug: "fashion-lifestyle-formal-dress-shoes", name: "Formal & Dress Shoes", parentId: "cat-fashion", displayOrder: 25 },
   { id: "sub-fashion-lifestyle-womens-footwear", slug: "fashion-lifestyle-womens-footwear", name: "Women's Footwear", parentId: "cat-fashion", displayOrder: 26 },
   { id: "sub-fashion-lifestyle-sneakers-sports-shoes", slug: "fashion-lifestyle-sneakers-sports-shoes", name: "Sneakers & Sports Shoes", parentId: "cat-fashion", displayOrder: 27 },
+  { id: "sub-fashion-lifestyle-ties-bow-ties-cufflinks", slug: "fashion-lifestyle-ties-bow-ties-cufflinks", name: "Ties, Bow Ties & Cufflinks", parentId: "cat-fashion", displayOrder: 28 },
+  { id: "sub-fashion-lifestyle-gowns-party-wear", slug: "fashion-lifestyle-gowns-party-wear", name: "Gowns & Party Wear", parentId: "cat-fashion", displayOrder: 29 },
+  { id: "sub-fashion-lifestyle-bridal-wedding-wear", slug: "fashion-lifestyle-bridal-wedding-wear", name: "Bridal & Wedding Wear", parentId: "cat-fashion", displayOrder: 30 },
+  { id: "sub-fashion-lifestyle-costumes-cosplay", slug: "fashion-lifestyle-costumes-cosplay", name: "Costumes & Cosplay", parentId: "cat-fashion", displayOrder: 31 },
   { id: "sub-jewelry-luxury-fashion-artificial-jewellery", slug: "jewelry-luxury-fashion-artificial-jewellery", name: "Fashion & Artificial Jewellery", parentId: "cat-jewelry", displayOrder: 5 },
   { id: "sub-beauty-health-pharmacy-fragrances-perfumes", slug: "beauty-health-pharmacy-fragrances-perfumes", name: "Fragrances & Perfumes", parentId: "cat-beauty", displayOrder: 5 },
   { id: "sub-beauty-health-pharmacy-personal-care", slug: "beauty-health-pharmacy-personal-care", name: "Personal Care", parentId: "cat-beauty", displayOrder: 6 },
@@ -587,6 +591,15 @@ export const CATEGORY_ADDITION_MIGRATIONS: ReadonlyArray<{ id: string; categoryI
       "sub-fashion-lifestyle-formal-dress-shoes",
       "sub-fashion-lifestyle-womens-footwear",
       "sub-fashion-lifestyle-sneakers-sports-shoes",
+    ],
+  },
+  {
+    id: '2026-11-03e-ties-party-bridal-costumes',
+    categoryIds: [
+      "sub-fashion-lifestyle-ties-bow-ties-cufflinks",
+      "sub-fashion-lifestyle-gowns-party-wear",
+      "sub-fashion-lifestyle-bridal-wedding-wear",
+      "sub-fashion-lifestyle-costumes-cosplay",
     ],
   },
 ];

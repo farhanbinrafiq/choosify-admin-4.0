@@ -36,7 +36,7 @@ export const CATEGORY_SEARCH_WORDS: Record<string, string[]> = {
   'sub-travel-hospitality-accommodation-booking': ['hotel', 'hotel booking', 'room booking', 'resort', 'guest house'],
   'sub-fashion-lifestyle-footwear': ['shoe', 'shoes', 'sandal', 'boot', 'slipper', 'জুতা', 'fashion shoes', 'fashion footwear', 'footwear brand', 'kids shoes'],
   'sub-fashion-lifestyle-bags-luggage': ['bag', 'handbag', 'backpack', 'wallet', 'luggage', 'ব্যাগ'],
-  'sub-fashion-lifestyle-fashion-accessories': ['accessories', 'belt', 'cap', 'scarf', 'tie'],
+  'sub-fashion-lifestyle-fashion-accessories': ['accessories', 'belt', 'cap', 'scarf'],
   'sub-fashion-lifestyle-traditional-ethnic-wear': ['ethnic', 'ethnic wear', 'traditional', 'traditional wear', 'traditional dress', 'traditional clothing', 'deshi', 'deshi wear'],
   'sub-fashion-lifestyle-modest-wear-hijab-abaya': ['hijab', 'abaya', 'borka', 'burqa', 'niqab', 'modest', 'হিজাব'],
   'sub-fashion-lifestyle-kids-fashion': ['kids clothing', 'kids wear', 'children clothes', 'baby dress'],
@@ -129,7 +129,7 @@ const MORE_SEARCH_WORDS: Record<string, string[]> = {
   'sub-grocery-food-organic-health-food': ['dates', 'khejur', 'dry fruits', 'nuts', 'almond', 'খেজুর'],
   'sub-grocery-food-snacks-instant-food': ['frozen food', 'frozen', 'ready to cook', 'nuggets'],
   'sub-fashion-lifestyle-traditional-ethnic-wear': ['lungi', 'gamcha', 'fatua', 'লুঙ্গি', 'গামছা'],
-  'sub-fashion-lifestyle-womens-fashion': ['boutique', 'ladies wear', 'womens clothing', 'gown'],
+  'sub-fashion-lifestyle-womens-fashion': ['boutique', 'ladies wear', 'womens clothing'],
   'sub-fashion-lifestyle-bags-luggage': ['wallet', 'small bag', 'chest bag', 'sling bag', 'crossbody', 'clutch', 'ladies clutch', 'clutch bag', 'hand bag', 'handbag', 'purse', 'tote', 'laptop bag', 'school bag', 'travel bag', 'luggage', 'trolley'],
   'sub-fashion-lifestyle-leather-goods': ['wallet', 'leather wallet', 'leather belt', 'leather jacket', 'chest bag'],
   'sub-sports-fitness-outdoor-sports': ['cricket', 'cricket bat', 'football', 'badminton', 'tennis', 'sports equipment', 'jersey'],
@@ -156,7 +156,11 @@ const MORE_SEARCH_WORDS: Record<string, string[]> = {
 
 /** Accessories, jewellery by type, souvenirs and gift terms (2026-11-03 audit), merged with the lists above. */
 const ACCESSORY_SEARCH_WORDS: Record<string, string[]> = {
-  'sub-fashion-lifestyle-mens-accessories': ["men's accessories", 'mens accessories', 'men accessories', 'cufflinks', 'cufflink', 'tie pin', 'tie clip', 'money clip', 'keychain', 'key chain', 'key ring', 'keyring', 'handkerchief', 'necktie', 'bow tie', 'men belt'],
+  'sub-fashion-lifestyle-mens-accessories': ["men's accessories", 'mens accessories', 'men accessories', 'money clip', 'keychain', 'key chain', 'key ring', 'keyring', 'handkerchief', 'men belt'],
+  'sub-fashion-lifestyle-ties-bow-ties-cufflinks': ['tie', 'ties', 'necktie', 'neck tie', 'neckties', 'bow tie', 'bowtie', 'bow ties', 'bow', 'cufflinks', 'cufflink', 'cuff links', 'tie pin', 'tie clip', 'tie bar', 'pocket square', 'pocket squares', 'suspenders', 'braces', 'lapel pin', 'টাই'],
+  'sub-fashion-lifestyle-gowns-party-wear': ['gown', 'gowns', 'evening gown', 'ball gown', 'party gown', 'party dress', 'party dresses', 'party wear', 'partywear', 'party outfit', 'cocktail dress', 'gala', 'gala night', 'galla night', 'gala dress', 'prom', 'prom dress', 'evening wear', 'evening dress', 'night out dress', 'পার্টি ড্রেস', 'গাউন'],
+  'sub-fashion-lifestyle-bridal-wedding-wear': ['bridal wear', 'bridal dress', 'bridal gown', 'bridal outfit', 'bridal lehenga', 'bridal saree', 'wedding dress', 'wedding gown', 'wedding lehenga', 'wedding saree', 'wedding outfit', 'wedding wear', 'wedding collection', 'groom wear', 'groom outfit', 'holud outfit', 'holud saree', 'gaye holud dress', 'mehendi outfit', 'বিয়ের পোশাক', 'বিয়ের শাড়ি'],
+  'sub-fashion-lifestyle-costumes-cosplay': ['costume', 'costumes', 'cosplay', 'cosplayer', 'fancy dress', 'halloween', 'halloween costume', 'kids costume', 'anime cosplay', 'theatre costume', 'drama costume', 'stage costume', 'mascot costume', 'dress up', 'superhero costume'],
   'sub-fashion-lifestyle-lighters-smoking-accessories': ['lighter', 'lighters', 'zippo', 'gas lighter', 'torch lighter', 'jet lighter', 'electric lighter', 'cigarette box', 'cigarette case', 'cigar case', 'cigar box', 'ashtray', 'hookah', 'shisha', 'smoking accessories', 'smoking pipe', 'matchbox', 'match box', 'rolling paper', 'লাইটার'],
   'sub-fashion-lifestyle-hair-accessories': ['hair accessories', 'hair clip', 'claw clip', 'hair pin', 'hairpin', 'hair band', 'hairband', 'headband', 'scrunchie', 'scrunchies', 'hair tie', 'tiara'],
   'sub-fashion-lifestyle-caps-hats-scarves': ['cap', 'caps', 'hat', 'hats', 'beanie', 'bucket hat', 'baseball cap', 'scarf', 'scarves', 'muffler', 'shawl', 'stole', 'bandana', 'টুপি'],
