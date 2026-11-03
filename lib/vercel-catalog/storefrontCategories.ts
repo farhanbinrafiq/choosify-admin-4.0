@@ -425,6 +425,11 @@ export const STOREFRONT_SUBCATEGORY_DEFS: ReadonlyArray<{
   { id: "sub-fashion-lifestyle-panjabi-sherwani", slug: "fashion-lifestyle-panjabi-sherwani", name: "Panjabi & Sherwani", parentId: "cat-fashion", displayOrder: 20 },
   { id: "sub-fashion-lifestyle-sarees-blouses", slug: "fashion-lifestyle-sarees-blouses", name: "Sarees & Blouses", parentId: "cat-fashion", displayOrder: 21 },
   { id: "sub-fashion-lifestyle-salwar-kameez-three-piece", slug: "fashion-lifestyle-salwar-kameez-three-piece", name: "Salwar Kameez & Three Piece", parentId: "cat-fashion", displayOrder: 22 },
+  { id: "sub-fashion-lifestyle-bespoke-custom-tailoring", slug: "fashion-lifestyle-bespoke-custom-tailoring", name: "Bespoke & Custom Tailoring", parentId: "cat-fashion", displayOrder: 23 },
+  { id: "sub-fashion-lifestyle-suits-blazers-formal-wear", slug: "fashion-lifestyle-suits-blazers-formal-wear", name: "Suits, Blazers & Formal Wear", parentId: "cat-fashion", displayOrder: 24 },
+  { id: "sub-fashion-lifestyle-formal-dress-shoes", slug: "fashion-lifestyle-formal-dress-shoes", name: "Formal & Dress Shoes", parentId: "cat-fashion", displayOrder: 25 },
+  { id: "sub-fashion-lifestyle-womens-footwear", slug: "fashion-lifestyle-womens-footwear", name: "Women's Footwear", parentId: "cat-fashion", displayOrder: 26 },
+  { id: "sub-fashion-lifestyle-sneakers-sports-shoes", slug: "fashion-lifestyle-sneakers-sports-shoes", name: "Sneakers & Sports Shoes", parentId: "cat-fashion", displayOrder: 27 },
   { id: "sub-jewelry-luxury-fashion-artificial-jewellery", slug: "jewelry-luxury-fashion-artificial-jewellery", name: "Fashion & Artificial Jewellery", parentId: "cat-jewelry", displayOrder: 5 },
   { id: "sub-beauty-health-pharmacy-fragrances-perfumes", slug: "beauty-health-pharmacy-fragrances-perfumes", name: "Fragrances & Perfumes", parentId: "cat-beauty", displayOrder: 5 },
   { id: "sub-beauty-health-pharmacy-personal-care", slug: "beauty-health-pharmacy-personal-care", name: "Personal Care", parentId: "cat-beauty", displayOrder: 6 },
@@ -572,6 +577,16 @@ export const CATEGORY_ADDITION_MIGRATIONS: ReadonlyArray<{ id: string; categoryI
       "sub-fashion-lifestyle-panjabi-sherwani",
       "sub-fashion-lifestyle-sarees-blouses",
       "sub-fashion-lifestyle-salwar-kameez-three-piece",
+    ],
+  },
+  {
+    id: '2026-11-03d-tailoring-suits-shoes',
+    categoryIds: [
+      "sub-fashion-lifestyle-bespoke-custom-tailoring",
+      "sub-fashion-lifestyle-suits-blazers-formal-wear",
+      "sub-fashion-lifestyle-formal-dress-shoes",
+      "sub-fashion-lifestyle-womens-footwear",
+      "sub-fashion-lifestyle-sneakers-sports-shoes",
     ],
   },
 ];
