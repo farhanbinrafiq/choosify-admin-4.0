@@ -9,6 +9,7 @@ import { detectBrandablePlatform } from '../src/lib/creatorReviewPlatform';
 import { resolveFacebookShareUrl } from './lib/facebookShareResolver';
 import { recordFacebookShareResolveAttempt } from './lib/abuseProtection';
 import { catalogStore, defaultHomepage } from '../lib/vercel-catalog/catalogStore';
+import { searchCategories } from '../shared/categorySearch';
 import {
   normalizeBrandInput,
   normalizeBrandPostInput,
@@ -1469,6 +1470,33 @@ catalogRouter.get('/catalog/categories', async (_req, res) => {
     res.json({ data: categories });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list categories' });
+  }
+});
+
+/**
+ * Public: which categories a shopper's search words point to ("shoes" → Fashion & Lifestyle ›
+ * Footwear), using the same English + Bangla search words as the category picker. The
+ * storefront uses it to show brands that offer what was searched for, even when no product
+ * matches yet. Registered before /catalog/categories/:id so "match" is not read as an id.
+ */
+catalogRouter.get('/catalog/categories/match', async (req, res) => {
+  try {
+    const q = String(req.query.q ?? '').trim().slice(0, 80);
+    if (!q) {
+      res.json({ data: [] });
+      return;
+    }
+    const categories = (await catalogStore.listCategories()) as Array<{ id: string; name: string; slug?: string; parentId?: string | null; enabled?: boolean }>;
+    const data = searchCategories(categories, q, 8).map((m) => ({
+      mainId: m.main.id,
+      mainName: m.main.name,
+      subId: m.sub?.id ?? null,
+      subName: m.sub?.name ?? null,
+      score: Math.round(m.score),
+    }));
+    res.json({ data });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to match categories' });
   }
 });
 
