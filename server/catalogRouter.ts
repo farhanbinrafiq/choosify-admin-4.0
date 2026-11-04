@@ -2783,7 +2783,19 @@ const MAX_ACTIVE_DEALS_BANNERS = 5;
 
 async function readHomepageWithDealsBanners() {
   const current = await catalogStore.getHomepage().catch(() => defaultHomepage());
-  return normalizeHomepageInput(current, current);
+  const normalized = normalizeHomepageInput(current, current);
+  // Normalizing stamps updatedAt = now on every banner; a READ must not change timestamps (and the
+  // write routes below persist this object, which re-stamped untouched banners). Restore the stored
+  // timestamps — the route that actually changes a banner stamps that banner itself.
+  const stored = new Map((current.dealsBanners ?? []).map((b) => [b.id, b]));
+  return {
+    ...normalized,
+    updatedAt: current.updatedAt ?? normalized.updatedAt,
+    dealsBanners: (normalized.dealsBanners ?? []).map((b) => {
+      const s = stored.get(b.id);
+      return s ? { ...b, createdAt: s.createdAt ?? b.createdAt, updatedAt: s.updatedAt ?? b.updatedAt } : b;
+    }),
+  };
 }
 
 function activeDealsBannerCount(

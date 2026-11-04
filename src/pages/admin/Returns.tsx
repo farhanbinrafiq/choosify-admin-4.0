@@ -474,7 +474,7 @@ export default function ReturnsPage() {
                                 {ret.returnTrackingId}
                               </span>
                             ) : (
-                              <span className="text-app-text-disabled font-bold lowercase italic">waiting generation</span>
+                              <span className="text-app-text-disabled font-bold lowercase italic">not recorded yet</span>
                             )}
                           </td>
                           <td className="p-4 font-extrabold font-mono text-app-text-primary">
@@ -486,17 +486,8 @@ export default function ReturnsPage() {
                             </Badge>
                           </td>
                           <td className="p-4 text-right space-x-2">
-                            {ret.returnTrackingId && (
-                              <a
-                                href={`https://track.pathao.com/ret/${ret.returnTrackingId}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className={secondaryBtn + ' inline-flex items-center space-x-1'}
-                              >
-                                <ExternalLink className="w-3.5 h-3.5" />
-                                <span>Track</span>
-                              </a>
-                            )}
+                            {/* Return tracking is a manual record from the courier receipt (no courier
+                                integration) — no "live tracking" link is offered. */}
                             <button
                               onClick={() => openCase(ret.id)}
                               className={secondaryBtn}

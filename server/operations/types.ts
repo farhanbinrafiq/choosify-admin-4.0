@@ -444,6 +444,10 @@ export interface OpsReturnRequest {
   refundStatus: OpsRefundStatus;
   returnTrackingId?: string;
   returnCourier?: string;
+  /** 'manual' = typed in from the courier receipt (no courier integration exists). */
+  returnTrackingSource?: 'manual';
+  returnTrackingRecordedAt?: string;
+  returnTrackingRecordedBy?: string;
   pickupDate?: string;
   deliveryDate?: string;
   /** Seller/admin-writable, buyer-readable decision log (existing behavior, unchanged). */

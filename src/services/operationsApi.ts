@@ -1470,13 +1470,14 @@ export const operationsApi = {
     );
     return result.data;
   },
-  generateReturnLabel: async (id: string) => {
+  /** Records the real courier + tracking number of the return parcel (manual record — no courier integration). */
+  recordReturnShipment: async (id: string, courier: string, trackingNumber: string) => {
     const result = await request<{
       data: import('../contexts/ReturnsContext').ReturnRequest;
-      labelUrl: string;
       trackingId: string;
       courier: string;
-    }>(`/operations/returns/${encodeURIComponent(id)}/label`, 'POST', {});
+      source: 'manual';
+    }>(`/operations/returns/${encodeURIComponent(id)}/label`, 'POST', { courier, trackingNumber });
     return result;
   },
   /** Creates a real Dispute case server-side (server/operations disputes) and links this return to it -- no client-fabricated id. */

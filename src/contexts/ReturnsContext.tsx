@@ -42,6 +42,9 @@ export interface ReturnRequest {
   refundStatus: 'pending' | 'processed' | 'failed';
   returnTrackingId?: string;
   returnCourier?: string;
+  /** 'manual' = typed in from the courier receipt; Choosify has no courier integration. */
+  returnTrackingSource?: 'manual';
+  returnTrackingRecordedAt?: string;
   pickupDate?: string;
   deliveryDate?: string;
   /** Seller/admin-writable, buyer-readable decision log (existing behavior). */
@@ -71,7 +74,7 @@ interface ReturnsContextType {
   addReturnNote: (id: string, note: string) => Promise<ReturnRequest>;
   addInternalNote: (id: string, note: string) => Promise<ReturnRequest>;
   updateReturnStatus: (id: string, newStatus: ReturnRequest['status']) => Promise<ReturnRequest>;
-  generateReturnLabel: (id: string) => Promise<{ labelUrl: string; trackingId: string; courier: string }>;
+  recordReturnShipment: (id: string, courier: string, trackingNumber: string) => Promise<{ trackingId: string; courier: string }>;
   linkReturnToDispute: (returnId: string, reason?: string) => Promise<ReturnRequest>;
 }
 
@@ -203,13 +206,11 @@ export const ReturnsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return saved;
   };
 
-  const generateReturnLabel = async (id: string): Promise<{ labelUrl: string; trackingId: string; courier: string }> => {
-    // The label, tracking ID and courier are generated server-side — never
-    // fabricate them client-side, since the row saved here must match what
-    // the backend actually persisted.
-    const result = await operationsApi.generateReturnLabel(id);
+  const recordReturnShipment = async (id: string, courier: string, trackingNumber: string): Promise<{ trackingId: string; courier: string }> => {
+    // Nothing is generated: the courier name and tracking number come from the real courier receipt.
+    const result = await operationsApi.recordReturnShipment(id, courier, trackingNumber);
     setReturnRequests((prev) => upsertLocal(prev, result.data));
-    return { labelUrl: result.labelUrl, trackingId: result.trackingId, courier: result.courier };
+    return { trackingId: result.trackingId, courier: result.courier };
   };
 
   const linkReturnToDispute = async (returnId: string, reason?: string): Promise<ReturnRequest> => {
@@ -232,7 +233,7 @@ export const ReturnsProvider: React.FC<{ children: React.ReactNode }> = ({ child
         addReturnNote,
         addInternalNote,
         updateReturnStatus,
-        generateReturnLabel,
+        recordReturnShipment,
         linkReturnToDispute,
       }}
     >

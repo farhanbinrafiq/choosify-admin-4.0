@@ -3040,22 +3040,37 @@ operationsRouter.post('/operations/returns/:id/label', ...requireAuth, (req, res
     return;
   }
 
-  const trackingId = `PATHAO-RET-${Math.floor(100000 + Math.random() * 900000)}`;
-  const courier = 'Pathao Delivery';
-  const labelUrl = `https://api.choosify.bd/logistics/label/${trackingId}`;
-
+  // Records the return shipment the seller/staff actually booked. Choosify has NO courier
+  // integration, so nothing is generated here: the courier name and tracking number must be the
+  // real ones from the courier's own receipt, and the record is marked as a manual entry (never
+  // presented as live tracking). Previously this invented a "PATHAO-RET-<random>" number and a
+  // non-existent label URL.
+  const courier = String(req.body?.courier ?? '').trim().replace(/\s+/g, ' ');
+  const trackingId = String(req.body?.trackingNumber ?? '').trim();
+  if (!courier || courier.length > 60) {
+    res.status(400).json({ error: 'Enter the courier the parcel was handed to (max 60 characters)' });
+    return;
+  }
+  if (!/^[A-Za-z0-9][A-Za-z0-9\-_/ .]{2,59}$/.test(trackingId)) {
+    res.status(400).json({ error: 'Enter the tracking / consignment number from the courier receipt (3–60 letters, numbers, - _ / .)' });
+    return;
+  }
+  const now = new Date().toISOString();
   const saved = operationsStore.updateReturn(req.params.id, {
     returnTrackingId: trackingId,
     returnCourier: courier,
-    notes: [...existing.notes, `Prepaid Return Label generated with tracking ID ${trackingId}.`],
+    returnTrackingSource: 'manual',
+    returnTrackingRecordedAt: now,
+    returnTrackingRecordedBy: req.userId,
+    notes: [...existing.notes, `Return shipment recorded manually: ${courier}, tracking ${trackingId}.`],
   });
   scheduleOperationsPersist();
   res.json({
     success: true,
     data: saved,
-    labelUrl,
     trackingId,
     courier,
+    source: 'manual',
   });
 });
 

@@ -65,7 +65,7 @@ export default function ReturnCaseDetail() {
     addReturnNote,
     addInternalNote,
     updateReturnStatus,
-    generateReturnLabel,
+    recordReturnShipment,
     linkReturnToDispute,
   } = useReturns();
   const { orders } = useOrders();
@@ -78,6 +78,8 @@ export default function ReturnCaseDetail() {
   const [internalNoteInput, setInternalNoteInput] = useState('');
   const [refundInput, setRefundInput] = useState<number>(0);
   const [rejectReasonInput, setRejectReasonInput] = useState('');
+  const [shipCourier, setShipCourier] = useState('');
+  const [shipTracking, setShipTracking] = useState('');
   const [isRejecting, setIsRejecting] = useState(false);
   const [requiresReturnInput, setRequiresReturnInput] = useState(true);
   const [zoomImg, setZoomImg] = useState<string | null>(null);
@@ -207,7 +209,13 @@ export default function ReturnCaseDetail() {
             <div style={card}>
               <div style={sectionTitle}>Return Shipment</div>
               <div style={fieldRow}><span className="text-slate-500">Courier</span><span className="font-bold">{ret.returnCourier}</span></div>
-              <div style={{ ...fieldRow, borderBottom: 'none' }}><span className="text-slate-500">Tracking ID</span><span className="font-mono">{ret.returnTrackingId}</span></div>
+              <div style={fieldRow}><span className="text-slate-500">Tracking ID</span><span className="font-mono">{ret.returnTrackingId}</span></div>
+              <div style={{ ...fieldRow, borderBottom: 'none' }}>
+                <span className="text-slate-500">Source</span>
+                <span className="text-[11px] font-semibold text-slate-600" data-testid="return-tracking-source">
+                  Manual record from the courier receipt — not live tracking
+                </span>
+              </div>
             </div>
           )}
 
@@ -414,14 +422,31 @@ export default function ReturnCaseDetail() {
                 </>
               ) : (
                 <>
-                  <p className="text-xs text-slate-500 mb-3">This case requires the item back before a refund. Print a label, then mark shipped once the buyer dispatches it.</p>
+                  <p className="text-xs text-slate-500 mb-3">This case requires the item back before a refund. When the parcel is handed to a courier, record the courier and the tracking number from its receipt, then mark it shipped.</p>
                   <div className="flex flex-col gap-2">
+                    <input
+                      value={shipCourier}
+                      onChange={(e) => setShipCourier(e.target.value)}
+                      placeholder="Courier (e.g. Pathao, RedX, Steadfast)"
+                      maxLength={60}
+                      data-testid="return-ship-courier"
+                      className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs"
+                    />
+                    <input
+                      value={shipTracking}
+                      onChange={(e) => setShipTracking(e.target.value)}
+                      placeholder="Tracking / consignment number"
+                      maxLength={60}
+                      data-testid="return-ship-tracking"
+                      className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 font-mono text-xs"
+                    />
                     <button
-                      disabled={actionBusy === 'label'}
-                      onClick={() => act(() => generateReturnLabel(ret.id), 'label')}
+                      disabled={actionBusy === 'label' || !shipCourier.trim() || !shipTracking.trim()}
+                      onClick={() => act(() => recordReturnShipment(ret.id, shipCourier, shipTracking), 'label')}
+                      data-testid="return-ship-record"
                       className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg bg-slate-100 text-slate-700 disabled:opacity-40"
                     >
-                      <Printer className="w-3.5 h-3.5" /> Print Return Label
+                      <Printer className="w-3.5 h-3.5" /> Record return shipment
                     </button>
                     <button
                       disabled={actionBusy === 'transit'}
