@@ -1,3 +1,4 @@
+import { authedFetch } from './authRefresh';
 const API_BASE =
   ((import.meta as ImportMeta & { env?: Record<string, string> }).env?.VITE_API_BASE_URL as
     | string
@@ -114,7 +115,7 @@ function authHeaders(): Record<string, string> {
 }
 
 async function request<T>(path: string, method: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await authedFetch(`${API_BASE}${path}`, {
     method,
     headers: authHeaders(),
     credentials: 'include',

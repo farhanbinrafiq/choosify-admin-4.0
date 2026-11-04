@@ -14,7 +14,7 @@
  *   seller's books) and `getCashbookDetail(bookId, ownerUserId)` — no mutation.
  */
 
-import { reportFeatureEntitlementDenied } from './authRefresh';
+import { reportFeatureEntitlementDenied, authedFetch } from './authRefresh';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || '/api/v1';
 const AUTH_TOKEN_KEY = 'choosify_auth_token';
@@ -48,7 +48,7 @@ async function request<T>(
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await authedFetch(`${API_BASE}${path}`, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,

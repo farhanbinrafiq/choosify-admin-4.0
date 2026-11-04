@@ -86,6 +86,7 @@ import {
   type ProfileStatusFacts,
   type ResolvedProfileStatus,
 } from '../../../lib/profileStatus';
+import { authedFetch } from '../../../services/authRefresh';
 
 type ProfileEntityKind = 'consumer' | 'seller' | 'brand' | 'order' | 'creator' | 'admin';
 
@@ -547,7 +548,7 @@ export default function UnifiedProfileShell() {
     }
     void (async () => {
       try {
-        const res = await fetch(`/api/v1/auth/users/${encodeURIComponent(lookupUid)}`, {
+        const res = await authedFetch(`/api/v1/auth/users/${encodeURIComponent(lookupUid)}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const body = (await res.json().catch(() => ({}))) as {

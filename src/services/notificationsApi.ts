@@ -1,3 +1,4 @@
+import { authedFetch } from './authRefresh';
 /**
  * In-app Notification Center client.
  * Hits the existing communication domain at `/api/notifications` (not `/api/v1`).
@@ -81,7 +82,7 @@ async function request<T>(path: string, method: 'GET' | 'POST' | 'PATCH' | 'PUT'
     Authorization: `Bearer ${token}`,
   };
 
-  const response = await fetch(`${COMM_API_BASE}${path}`, {
+  const response = await authedFetch(`${COMM_API_BASE}${path}`, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,

@@ -20,6 +20,7 @@ import {
   updateNotificationPreferences,
   type NotificationPreferences,
 } from '../../services/notificationsApi';
+import { authedFetch } from '../../services/authRefresh';
 
 /**
  * Settings — the signed-in person's own account behaviour, security and
@@ -157,7 +158,7 @@ function SignOutOtherDevices() {
     setResult(null);
     try {
       const token = localStorage.getItem(AUTH_TOKEN_KEY);
-      const res = await fetch(`${API_BASE}/auth/sessions/revoke-others`, {
+      const res = await authedFetch(`${API_BASE}/auth/sessions/revoke-others`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         credentials: 'include',

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { FileText, Loader2 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { operationsApi, type OpsVerification, type VerificationDocRequest } from '../../../services/operationsApi';
-import { getStoredAccessToken } from '../../../services/authRefresh';
+import { getStoredAccessToken, authedFetch } from '../../../services/authRefresh';
 import {
   PROFILE_PHOTO_DOCUMENT,
   missingClaimDocuments,
@@ -32,7 +32,7 @@ async function fetchVerificationBlob(url: string): Promise<Blob | null> {
     return null; // public URL (e.g. the profile photo) — open directly
   }
   const path = url.slice(url.indexOf('/catalog/media/private/'));
-  const res = await fetch(`${API_BASE}${path}`, { headers: { Authorization: `Bearer ${getStoredAccessToken() || ''}` } });
+  const res = await authedFetch(`${API_BASE}${path}`, { headers: { Authorization: `Bearer ${getStoredAccessToken() || ''}` } });
   if (!res.ok) throw new Error(res.status === 403 ? 'You are not allowed to open this document.' : 'The document could not be opened.');
   return res.blob();
 }

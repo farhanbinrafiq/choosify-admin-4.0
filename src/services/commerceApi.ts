@@ -1,3 +1,4 @@
+import { authedFetch } from './authRefresh';
 /**
  * Client Commerce API — Sprint 5–6 (IS-010 Sprint 8–9).
  * Thin wrapper over /api/v1 cart + checkout + orders + lifecycle.
@@ -22,7 +23,7 @@ async function commerceFetch<T>(
   options: RequestInit & { token?: string } = {},
 ): Promise<{ ok: boolean; status: number; body: T }> {
   const { token, headers, ...rest } = options;
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await (token ? authedFetch : fetch)(`${API_BASE}${path}`, {
     ...rest,
     headers: {
       'Content-Type': 'application/json',

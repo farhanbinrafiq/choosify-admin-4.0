@@ -38,6 +38,7 @@ import {
 import { getQuickAccessForRole } from '../../lib/dashboardSearchQuickAccess';
 import { GlobalSearchShell } from './GlobalSearchShell';
 import { DashboardSearchSkeleton } from './skeletons';
+import { authedFetch } from '../../services/authRefresh';
 
 
 type DashboardSearchGroup =
@@ -287,7 +288,7 @@ export function GlobalDashboardSearch(props: {
       try {
         const q = normalizeDashboardSearchQuery(query);
         const url = `/api/v1/search?q=${encodeURIComponent(q)}&limitPerGroup=5`;
-        const res = await fetch(url, {
+        const res = await authedFetch(url, {
           signal: controller.signal,
           headers: { Authorization: `Bearer ${liveToken}` },
         });

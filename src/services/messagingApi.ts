@@ -4,14 +4,14 @@
  */
 
 import { getAuthToken } from '../lib/commerceOrderAdapter';
-import { reportFeatureEntitlementDenied } from './authRefresh';
+import { reportFeatureEntitlementDenied, authedFetch } from './authRefresh';
 
 const base = '/api/v1';
 
 async function authJson<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getAuthToken();
   if (!token) throw new Error('Authentication required for messaging');
-  const res = await fetch(`${base}${path}`, {
+  const res = await authedFetch(`${base}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -321,7 +321,7 @@ export const messagingApi = {
 export async function searchDirectoryUsers(q: string): Promise<DirectoryUser[]> {
   const token = getAuthToken();
   if (!token) throw new Error('Authentication required');
-  const res = await fetch(
+  const res = await authedFetch(
     `${base}/operations/users?context=messaging&q=${encodeURIComponent(q)}`,
     { headers: { Authorization: `Bearer ${token}` } },
   );

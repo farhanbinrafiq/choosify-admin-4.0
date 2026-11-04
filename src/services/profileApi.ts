@@ -1,3 +1,4 @@
+import { authedFetch } from './authRefresh';
 /**
  * Account details (display name / username / phone) — PATCH /auth/profile.
  * Self-edit omits `userId`; staff editing another account passes `userId`
@@ -34,14 +35,14 @@ export const profileApi = {
   /** Current values: the signed-in account (no userId) or, for staff, another account. */
   getAccountDetails: async (userId?: string): Promise<AccountDetails> => {
     const res = userId
-      ? await fetch(`${API_BASE}/auth/users/${encodeURIComponent(userId)}`, { headers: headers(), credentials: 'include' })
-      : await fetch(`${API_BASE}/auth/me`, { headers: headers(), credentials: 'include' });
+      ? await authedFetch(`${API_BASE}/auth/users/${encodeURIComponent(userId)}`, { headers: headers(), credentials: 'include' })
+      : await authedFetch(`${API_BASE}/auth/me`, { headers: headers(), credentials: 'include' });
     const d = await parse<{ displayName?: string; username?: string; phone?: string | null }>(res, 'Could not load account details');
     return { displayName: d.displayName || '', username: d.username || '', phone: d.phone || '' };
   },
 
   updateAccountDetails: async (patch: AccountDetailsPatch, opts?: { userId?: string; adminOverride?: boolean }) => {
-    const res = await fetch(`${API_BASE}/auth/profile`, {
+    const res = await authedFetch(`${API_BASE}/auth/profile`, {
       method: 'PATCH',
       headers: headers(),
       credentials: 'include',

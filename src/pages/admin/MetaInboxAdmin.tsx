@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search, Send, RefreshCw, AlertTriangle, ArrowLeft, MessageCircleMore } from 'lucide-react';
 import { getAuthToken } from '../../lib/commerceOrderAdapter';
+import { authedFetch } from '../../services/authRefresh';
 
 /**
  * Super Admin Meta Inbox — platform-level view onto the SAME Meta/omni
@@ -86,7 +87,7 @@ const STATUS_META: Record<ConvStatus, { label: string; pill: string }> = {
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getAuthToken();
-  const res = await fetch(path, {
+  const res = await (token ? authedFetch : fetch)(path, {
     ...init,
     headers: {
       'Content-Type': 'application/json',

@@ -15,6 +15,7 @@ import { useTrust } from "../../contexts/TrustContext";
 import BrandEditStudio from "./BrandEditStudio";
 import { DataTable, DataTableColumn } from "../../components/ui/DataTable";
 import { BulkActionBar, BulkAction } from "../../components/ui/BulkActionBar";
+import { authedFetch } from '../../services/authRefresh';
 
 const AUTH_TOKEN_KEY = "choosify_auth_token";
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || "/api/v1";
@@ -107,7 +108,7 @@ export default function BrandsStudioList() {
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
     setBrandsFetchLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/catalog/brands`, {
+      const response = await authedFetch(`${API_BASE}/catalog/brands`, {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
       if (!response.ok) throw new Error("Failed to load brands");
@@ -134,7 +135,7 @@ export default function BrandsStudioList() {
   const handleDeleteBrand = async (id: string) => {
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
     try {
-      const response = await fetch(`${API_BASE}/catalog/brands/${id}`, {
+      const response = await authedFetch(`${API_BASE}/catalog/brands/${id}`, {
         method: "DELETE",
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
@@ -162,7 +163,7 @@ export default function BrandsStudioList() {
     try {
       const results = await Promise.all(
         ids.map((id) =>
-          fetch(`${API_BASE}/catalog/brands/${id}`, {
+          authedFetch(`${API_BASE}/catalog/brands/${id}`, {
             method: "PATCH",
             headers: {
               "Content-Type": "application/json",
