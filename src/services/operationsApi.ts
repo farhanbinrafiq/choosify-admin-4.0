@@ -344,7 +344,8 @@ export interface ShopperSignals {
   savedProducts: ShopperSignalItem[];
   savedBrands: ShopperSignalItem[];
   followedCreators: ShopperSignalItem[];
-  searches: Array<{ q: string; at: string; count?: number }>;
+  /** hiddenAt: cleared by the shopper from their own view (kept for staff). */
+  searches: Array<{ q: string; at: string; count?: number; hiddenAt?: string }>;
   updatedAt: string;
 }
 

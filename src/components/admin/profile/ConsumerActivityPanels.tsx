@@ -328,9 +328,9 @@ export function SignalList({
   );
 }
 
-export function SearchHistoryPanel({ searches, error }: { searches: Array<{ q: string; at: string; count?: number }>; error?: string }) {
+export function SearchHistoryPanel({ searches, error }: { searches: Array<{ q: string; at: string; count?: number; hiddenAt?: string }>; error?: string }) {
   return (
-    <Panel title="SEARCH HISTORY" sub="Recent storefront searches while signed in (newest first, last 50). ×N = searched N times; the date is the latest search." error={error}>
+    <Panel title="SEARCH HISTORY" sub="Recent storefront searches while signed in (newest first, last 50). ×N = searched N times; the date is the latest search. Searches the shopper cleared from their own view stay here, marked “Cleared by shopper”." error={error}>
       <div data-testid="consumer-search-history">
         {!searches.length ? (
           <div style={C.empty}>No searches recorded.</div>
@@ -342,6 +342,11 @@ export function SearchHistoryPanel({ searches, error }: { searches: Array<{ q: s
                 {(s.count || 1) > 1 ? (
                   <span data-testid="search-count" title={`Searched ${s.count} times`} style={{ ...C.pill, marginLeft: 8, background: '#FFF1EC', color: '#EF3C23', textTransform: 'none' }}>
                     ×{s.count}
+                  </span>
+                ) : null}
+                {s.hiddenAt ? (
+                  <span data-testid="search-cleared" title={`The shopper cleared this from their own search history on ${new Date(s.hiddenAt).toLocaleString()}`} style={{ ...C.pill, marginLeft: 8, background: '#F1F3F5', color: '#6B7280', textTransform: 'none' }}>
+                    Cleared by shopper · {new Date(s.hiddenAt).toLocaleDateString()}
                   </span>
                 ) : null}
               </span>

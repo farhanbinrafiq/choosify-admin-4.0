@@ -4577,8 +4577,12 @@ function emptySignals(userId: string): import('./operations/types').OpsShopperSi
   return { userId, savedProducts: [], savedBrands: [], followedCreators: [], searches: [], updatedAt: new Date().toISOString() };
 }
 
+/** The shopper's own view never includes searches they cleared (staff still see them). */
+const visibleSearches = (searches: import('./operations/types').OpsShopperSignals['searches']) => searches.filter((s) => !s.hiddenAt);
+
 operationsRouter.get('/operations/shopper-signals/me', ...requireAuth, (req, res) => {
-  res.json({ success: true, data: operationsStore.getShopperSignals(req.userId!) || emptySignals(req.userId!) });
+  const signals = operationsStore.getShopperSignals(req.userId!) || emptySignals(req.userId!);
+  res.json({ success: true, data: { ...signals, searches: visibleSearches(signals.searches) } });
 });
 
 /** Replace one list with the storefront's current set (keeps the original saved date per id). */
@@ -4620,23 +4624,29 @@ operationsRouter.post('/operations/shopper-signals/me/searches', ...requireAuth,
   }
   const current = operationsStore.getShopperSignals(req.userId!) || emptySignals(req.userId!);
   const now = new Date().toISOString();
-  // A repeated search moves to the top and counts how many times it was searched.
+  // A repeated search moves to the top and counts how many times it was searched; searching a
+  // term the shopper had cleared makes it visible to them again (the count carries on).
   const prev = current.searches.find((s) => s.q.toLowerCase() === q.toLowerCase());
   const count = (prev?.count || (prev ? 1 : 0)) + 1;
   const searches = [{ q, at: now, count }, ...current.searches.filter((s) => s !== prev)].slice(0, SEARCH_HISTORY_MAX);
   const saved = operationsStore.saveShopperSignals({ ...current, searches, updatedAt: now });
   scheduleOperationsPersist();
-  res.status(201).json({ success: true, data: saved.searches });
+  res.status(201).json({ success: true, data: visibleSearches(saved.searches) });
 });
 
 /** Remove one search (?q=) or clear the whole history. */
 operationsRouter.delete('/operations/shopper-signals/me/searches', ...requireAuth, (req, res) => {
+  // "Clear" only clears the shopper's own view: entries are marked hidden, not deleted, so staff
+  // keep the search record (account deletion still removes everything).
   const current = operationsStore.getShopperSignals(req.userId!) || emptySignals(req.userId!);
   const q = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : '';
-  const searches = q ? current.searches.filter((s) => s.q.toLowerCase() !== q) : [];
-  const saved = operationsStore.saveShopperSignals({ ...current, searches, updatedAt: new Date().toISOString() });
+  const now = new Date().toISOString();
+  const searches = current.searches.map((s) =>
+    !s.hiddenAt && (!q || s.q.toLowerCase() === q) ? { ...s, hiddenAt: now } : s,
+  );
+  const saved = operationsStore.saveShopperSignals({ ...current, searches, updatedAt: now });
   scheduleOperationsPersist();
-  res.json({ success: true, data: saved.searches });
+  res.json({ success: true, data: visibleSearches(saved.searches) });
 });
 
 operationsRouter.get('/operations/shopper-signals/:userId', ...requireAuth, (req, res) => {

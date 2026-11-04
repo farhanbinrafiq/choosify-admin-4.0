@@ -889,7 +889,8 @@ export interface OpsShopperSignals {
   savedBrands: OpsShopperSignalItem[];
   followedCreators: OpsShopperSignalItem[];
   /** count = how many times this query was searched (absent on older entries = 1). */
-  searches: Array<{ q: string; at: string; count?: number }>;
+  /** hiddenAt: the shopper cleared it from their own view; Choosify keeps the record (staff still see it). */
+  searches: Array<{ q: string; at: string; count?: number; hiddenAt?: string }>;
   updatedAt: string;
 }
 
