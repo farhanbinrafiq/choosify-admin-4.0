@@ -181,7 +181,7 @@ const ACCESSORY_SEARCH_WORDS: Record<string, string[]> = {
   'sub-fashion-lifestyle-bespoke-custom-tailoring': ['bespoke', 'bespoke tailoring', 'bespoke tailor', 'bespoke suit', 'bespoke shirt', 'custom tailoring', 'custom tailor', 'custom suit', 'custom made', 'custom made clothing', 'made to measure', 'made-to-measure', 'mtm', 'sartorial', 'sartorial tailoring', 'tailor made', 'tailor-made', 'tailored suit', 'custom shirt'],
   'sub-fashion-lifestyle-suits-blazers-formal-wear': ['suit', 'suits', 'blazer', 'blazers', 'tuxedo', 'formal suit', 'wedding suit', 'groom suit', 'business suit', 'three piece suit', '3 piece suit', 'two piece suit', 'coat', 'sport coat', 'formal wear', 'formalwear', 'স্যুট', 'কোট', 'ব্লেজার'],
   'sub-fashion-lifestyle-formal-dress-shoes': ['formal shoes', 'dress shoes', 'oxford', 'oxfords', 'oxford shoes', 'derby', 'derby shoes', 'brogue', 'brogues', 'monk strap', 'monk shoes', 'loafer', 'loafers', 'chelsea boots', 'office shoes', 'party shoes', 'wedding shoes', 'formal footwear'],
-  'sub-fashion-lifestyle-womens-footwear': ["women's footwear", 'womens footwear', 'ladies shoes', 'ladies footwear', 'heels', 'high heels', 'heel', 'block heels', 'stilettos', 'wedges', 'flats', 'ballet flats', 'pumps', 'ladies sandals', 'mules'],
+  'sub-fashion-lifestyle-womens-footwear': ["women's footwear", 'womens footwear', 'shoes', 'ladies shoes', 'ladies footwear', 'heels', 'high heels', 'heel', 'block heels', 'stilettos', 'wedges', 'flats', 'ballet flats', 'pumps', 'ladies sandals', 'mules'],
   'sub-fashion-lifestyle-sneakers-sports-shoes': ['sneaker', 'sneakers', 'sports shoes', 'running shoes', 'trainers', 'canvas shoes', 'casual shoes', 'gym shoes', 'football boots', 'cricket shoes', 'walking shoes'],
   'sub-fashion-lifestyle-panjabi-sherwani': ['panjabi', 'panjabis', 'punjabi', 'eid panjabi', 'kabli', 'kabli panjabi', 'kabuli', 'panjabi pajama', 'kurta', 'mens kurta', "men's kurta", 'kurta pajama', 'sherwani', 'wedding sherwani', 'groom sherwani', 'achkan', 'koti', 'waistcoat', 'nehru coat', 'mujib coat', 'jubba', 'jubbah', 'thobe', 'pagri', 'turban', 'পাঞ্জাবি', 'শেরওয়ানি', 'কাবলি', 'কোটি'],
   'sub-fashion-lifestyle-sarees-blouses': ['saree', 'sarees', 'sari', 'jamdani', 'jamdani saree', 'katan', 'katan saree', 'silk saree', 'tant', 'tant saree', 'cotton saree', 'muslin', 'muslin saree', 'benarasi', 'banarasi', 'half silk', 'tangail saree', 'rajshahi silk', 'blouse', 'saree blouse', 'readymade blouse', 'শাড়ি', 'জামদানি', 'ব্লাউজ'],
@@ -217,16 +217,37 @@ const singulars = (t: string): string[] => {
 const sameWord = (a: string, b: string) => singulars(a).some((x) => singulars(b).includes(x));
 
 /** How well `query` matches a label/word list: phrase > all words > some words (prefix-aware). */
-function matchScore(query: string, haystack: string[]): number {
+/**
+ * wholeWords: for a finished search (storefront), not live typing (picker). Only an exact phrase,
+ * a phrase made of the same whole words, or whole-word / singular-plural matches count — never a
+ * word start or a fragment ("pet" must not match "petticoat" or "carpet").
+ */
+function matchScore(query: string, haystack: string[], wholeWords = false): number {
   const q = query.trim().toLowerCase();
   if (!q) return 0;
   const phrases = haystack.map((h) => h.toLowerCase());
   if (phrases.some((h) => h === q)) return 100;
-  if (phrases.some((h) => h.startsWith(q))) return 80;
-  if (phrases.some((h) => h.includes(q))) return 60;
   const qTokens = tokenise(q);
+  if (wholeWords) {
+    // Same words, singular/plural alike ("pet foods" = "pet food"): as good as a phrase start.
+    const sameTokens = (h: string) => { const t = tokenise(h); return t.length === qTokens.length && t.every((x, i) => sameWord(x, qTokens[i])); };
+    if (phrases.some(sameTokens)) return 80;
+  } else {
+    if (phrases.some((h) => h.startsWith(q))) return 80;
+    if (phrases.some((h) => h.includes(q))) return 60;
+  }
+  if (wholeWords) {
+    // Strong only when every searched word is in the category's own name (phrases[0]):
+    // "shoes" → "Formal & Dress Shoes". A word that only sits inside a longer search phrase
+    // ("saree" in "saree petticoat", "laptop" in "laptop bag") is a weak hint, below the
+    // threshold the storefront uses.
+    const inTokens = (tokens: Set<string>) => qTokens.every((t) => [...tokens].some((h) => h === t || sameWord(h, t)));
+    if (inTokens(new Set(tokenise(phrases[0] ?? '')))) return 50;
+    return inTokens(new Set(phrases.flatMap(tokenise))) ? 40 : 0;
+  }
   const hTokens = new Set(phrases.flatMap(tokenise));
-  // A typed word matches a word that equals it, is its singular/plural, or that it begins (typing "shoe" finds "shoes").
+  // A typed word matches a word that equals it, is its singular/plural, or that it begins
+  // (typing "shoe" finds "shoes").
   const hit = (t: string) => [...hTokens].some((h) => h === t || sameWord(h, t) || (t.length >= 3 && h.startsWith(t)));
   const hits = qTokens.filter(hit).length;
   if (!hits) return 0;
@@ -237,7 +258,7 @@ function matchScore(query: string, haystack: string[]): number {
  * Ranked Main › Subcategory matches for `query` (empty query = no matches; the
  * picker then shows the browse list). Disabled categories are never offered.
  */
-export function searchCategories(categories: SearchableCategory[], query: string, limit = 12): CategoryMatch[] {
+export function searchCategories(categories: SearchableCategory[], query: string, limit = 12, opts: { wholeWords?: boolean } = {}): CategoryMatch[] {
   const live = categories.filter((c) => c.enabled !== false);
   const mains = live.filter((c) => !c.parentId);
   const byId = new Map(mains.map((m) => [m.id, m]));
@@ -249,15 +270,15 @@ export function searchCategories(categories: SearchableCategory[], query: string
   ];
   const out: CategoryMatch[] = [];
   for (const main of mains) {
-    const s = matchScore(query, words(main));
+    const s = matchScore(query, words(main), opts.wholeWords);
     if (s > 0) out.push({ main, score: s + 1 }); // a main ranks just above an equally good sub
   }
   for (const sub of live.filter((c) => c.parentId)) {
     const main = byId.get(String(sub.parentId));
     if (!main) continue;
-    const own = matchScore(query, words(sub));
+    const own = matchScore(query, words(sub), opts.wholeWords);
     // A sub also matches weakly through its main ("fashion" lists Footwear too).
-    const viaMain = matchScore(query, words(main)) * 0.4;
+    const viaMain = matchScore(query, words(main), opts.wholeWords) * 0.4;
     const s = Math.max(own, viaMain);
     if (s > 0) out.push({ main, sub, score: s });
   }

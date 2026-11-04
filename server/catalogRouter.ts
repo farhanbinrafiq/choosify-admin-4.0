@@ -1487,7 +1487,9 @@ catalogRouter.get('/catalog/categories/match', async (req, res) => {
       return;
     }
     const categories = (await catalogStore.listCategories()) as Array<{ id: string; name: string; slug?: string; parentId?: string | null; enabled?: boolean }>;
-    const data = searchCategories(categories, q, 8).map((m) => ({
+    // ?mode=words = a finished storefront search: whole words only ("pet" ≠ "petticoat").
+    const wholeWords = String(req.query.mode ?? '') === 'words';
+    const data = searchCategories(categories, q, 8, { wholeWords }).map((m) => ({
       mainId: m.main.id,
       mainName: m.main.name,
       subId: m.sub?.id ?? null,
