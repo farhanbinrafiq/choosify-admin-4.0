@@ -28,6 +28,8 @@ export type HomepageCatalog = {
   guides: PickItem[];
   categories: PickItem[];
   product: (id: string) => PickItem | undefined;
+  /** Products loaded so far (first page + searches), name order. */
+  productList: PickItem[];
   searchProducts: (q: string) => Promise<PickItem[]>;
   resolveProducts: (ids: string[]) => void;
 };
@@ -99,7 +101,8 @@ export function useHomepageCatalog(): HomepageCatalog {
     [products],
   );
 
-  return { ...base, product: (id) => products.get(id), searchProducts, resolveProducts };
+  const productList = useMemo(() => [...products.values()].filter((p) => !p.label.startsWith('Missing')).sort((a, b) => a.label.localeCompare(b.label)), [products]);
+  return { ...base, product: (id) => products.get(id), productList, searchProducts, resolveProducts };
 }
 
 /** Lookup in a loaded list; unknown ids show as Missing once the catalog has loaded. */

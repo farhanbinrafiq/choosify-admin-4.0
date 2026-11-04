@@ -7,7 +7,7 @@
  * Save Draft never changes the public site; Publish creates a new immutable version; restoring an
  * old version publishes a NEW version copied from it; Reset Defaults only changes the draft.
  */
-import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ClipboardCopy, Eye, History, ImagePlus, Loader2, Monitor, Plus, RotateCcw, Smartphone, Trash2, Upload, X } from 'lucide-react';
 import {
   BRAND_ASSET_SLOTS,
@@ -25,16 +25,21 @@ import {
 import { uploadSiteAssetImage } from '../../../services/mediaUpload';
 import { HomepageEditor, HomepageOutline } from './HomepageStudio';
 import type { HomepageStudioContent } from './homepageModel';
+import { HeaderEditor, HeaderOutline } from './HeaderStudio';
+import { FooterEditor, FooterOutline } from './FooterStudio';
+import { SocialEditor, SocialOutline } from './SocialStudio';
+import type { FooterContent, NavigationContent, SocialContent } from './siteModel';
 
-// Existing live-saving Deals Banners editor (NOT versioned yet; see the warning on its tab).
-const DealsBannersStudio = lazy(() => import('../DealsBannersStudio'));
-
-type TabKey = 'overview' | 'homepage' | 'deals_banners' | 'company' | 'brand_assets' | 'history';
+// Deals Banners are edited inside the versioned Homepage (Today's Deals section) since Phase 3;
+// the old live-saving editor tab is retired.
+type TabKey = 'overview' | 'homepage' | 'navigation' | 'footer' | 'social' | 'company' | 'brand_assets' | 'history';
 
 const TABS: Array<{ key: TabKey; label: string }> = [
   { key: 'overview', label: 'Overview' },
   { key: 'homepage', label: 'Homepage' },
-  { key: 'deals_banners', label: 'Deals Banners (live)' },
+  { key: 'navigation', label: 'Header & Navigation' },
+  { key: 'footer', label: 'Footer' },
+  { key: 'social', label: 'Social Links' },
   { key: 'company', label: 'Company Settings' },
   { key: 'brand_assets', label: 'Brand Assets' },
   { key: 'history', label: 'Publish History' },
@@ -55,12 +60,12 @@ const DOCUMENT_LABELS: Record<string, string> = {
 
 /** Where each document becomes editable / visible on the storefront (approved phase plan). */
 const DOCUMENT_PHASE: Record<string, string> = {
-  company: 'Editable now · storefront uses it from Phase 3',
-  brand_assets: 'Editable now · storefront uses it from Phase 3',
+  company: 'Editable · footer contact, offices, identifiers and copyright follow it once published',
+  brand_assets: 'Editable · header and footer logos follow it once published',
   homepage: 'Editable · the storefront homepage follows it once published',
-  navigation: 'Read-only · editable in Phase 3',
-  footer: 'Read-only · editable in Phase 3',
-  social: 'Read-only · editable in Phase 3',
+  navigation: 'Editable · the storefront header follows it once published',
+  footer: 'Editable · the storefront footer follows it once published',
+  social: 'Editable · footer social icons follow it once published',
   seo: 'Read-only · editable in Phase 5',
 };
 
@@ -176,6 +181,7 @@ function DocumentWorkspace<T>({
   onPublished,
   storefrontPreview = false,
   previewLabel = 'Live preview of your edits',
+  wide = false,
 }: {
   docKey: string;
   caps: WebsiteCapabilities;
@@ -187,6 +193,8 @@ function DocumentWorkspace<T>({
   /** Draft preview opens the real storefront (/cms-preview) instead of the raw preview link. */
   storefrontPreview?: boolean;
   previewLabel?: string;
+  /** Storefront-mirror editors take the full width; outline + history go below. */
+  wide?: boolean;
 }) {
   const [doc, setDoc] = useState<WebsiteDocument<T> | null>(null);
   const [working, setWorking] = useState<T | null>(null);
@@ -372,8 +380,8 @@ function DocumentWorkspace<T>({
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="rounded-xl border border-[#E8EDF2] bg-white p-4">
+      <div className={wide ? 'grid gap-4' : 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]'}>
+        <div className={wide ? 'min-w-0' : 'rounded-xl border border-[#E8EDF2] bg-white p-4'}>
           <Editor
             value={working}
             disabled={!!busy}
@@ -403,7 +411,7 @@ function DocumentWorkspace<T>({
             )}
           </div>
         </div>
-        <div className="space-y-4">
+        <div className={wide ? 'grid gap-4 lg:grid-cols-2' : 'space-y-4'}>
           <div className="rounded-xl border border-[#E8EDF2] bg-white p-4">
             <div className="mb-2 text-[10.5px] font-extrabold uppercase tracking-wide text-[#6B7280]">{previewLabel}</div>
             <Preview value={working} />
@@ -782,7 +790,7 @@ function Overview({ docs, onOpen }: { docs: WebsiteDocumentSummary[]; onOpen: (k
             {docs.map((d) => (
               <tr key={d.key} className="border-t border-[#F1F3F5]" data-testid={`ws-doc-${d.key}`}>
                 <td className="px-4 py-2.5 font-bold text-[#111827]">
-                  {d.key === 'company' || d.key === 'brand_assets' || d.key === 'homepage' ? (
+                  {TABS.some((t) => t.key === d.key) ? (
                     <button type="button" className="text-[#2563EB] hover:underline" onClick={() => onOpen(d.key as TabKey)}>{DOCUMENT_LABELS[d.key] ?? d.key}</button>
                   ) : (
                     DOCUMENT_LABELS[d.key] ?? d.key
@@ -868,29 +876,57 @@ export default function WebsiteStudio() {
           Preview={HomepageOutline}
           previewLabel="Page outline (top to bottom)"
           storefrontPreview
+          wide
           onPublished={() => refresh().catch(() => undefined)}
         />
       );
-    if (tab === 'deals_banners')
+    if (tab === 'navigation')
       return (
-        <div className="space-y-3" data-testid="ws-deals-banners">
-          <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[12px] text-red-800" role="alert" data-testid="ws-deals-live-warning">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <div>
-              <div className="font-extrabold">Saves LIVE: changes appear on the public homepage immediately.</div>
-              <div className="font-semibold">
-                Deals Banners are not version-controlled yet. There is no draft, preview, publish step, history or rollback here, so double-check before saving.
-                Bringing them into the Website Studio draft / preview / publish / version-history workflow is a planned improvement.
-              </div>
-              <div className="mt-1 font-semibold">
-                Note: the original sample banners created at setup (stock photos, ids deals-banner-1 to 4) are hidden by the storefront even when marked Active. Replace their image or delete them.
-              </div>
-            </div>
-          </div>
-          <Suspense fallback={<div className="flex items-center gap-2 py-10 text-[12px] font-bold text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</div>}>
-            <DealsBannersStudio />
-          </Suspense>
-        </div>
+        <DocumentWorkspace<NavigationContent>
+          key="navigation"
+          docKey="navigation"
+          caps={caps}
+          title="Header & Navigation"
+          description="The announcement bar and the menu in the storefront header (desktop row and phone menu). Publishing updates every page."
+          Editor={HeaderEditor}
+          Preview={HeaderOutline}
+          previewLabel="Header outline"
+          storefrontPreview
+          wide
+          onPublished={() => refresh().catch(() => undefined)}
+        />
+      );
+    if (tab === 'footer')
+      return (
+        <DocumentWorkspace<FooterContent>
+          key="footer"
+          docKey="footer"
+          caps={caps}
+          title="Footer"
+          description="Footer text, link columns, payment methods, app badges, delivery partners and which blocks show. Publishing updates every page."
+          Editor={FooterEditor}
+          Preview={FooterOutline}
+          previewLabel="Footer outline"
+          storefrontPreview
+          wide
+          onPublished={() => refresh().catch(() => undefined)}
+        />
+      );
+    if (tab === 'social')
+      return (
+        <DocumentWorkspace<SocialContent>
+          key="social"
+          docKey="social"
+          caps={caps}
+          title="Social Links"
+          description="The social network icons in the footer of every page."
+          Editor={SocialEditor}
+          Preview={SocialOutline}
+          previewLabel="Social links"
+          storefrontPreview
+          wide
+          onPublished={() => refresh().catch(() => undefined)}
+        />
       );
     if (tab === 'company')
       return (

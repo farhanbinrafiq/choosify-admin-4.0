@@ -38,7 +38,14 @@ async function request<T>(path: string, method: HttpMethod = 'GET', body?: unkno
   return parsed.data as T;
 }
 
-export type WebsiteCapabilities = { canEdit: boolean; canPublish: boolean; canPublishLegal: boolean };
+export type PaymentCapability = { id: string; label: string; available: boolean; reason: string };
+export type WebsiteCapabilities = {
+  canEdit: boolean;
+  canPublish: boolean;
+  canPublishLegal: boolean;
+  /** What checkout can really take on this server (the footer may only show available ones). */
+  paymentMethods?: PaymentCapability[];
+};
 
 export type WebsiteDocumentSummary = {
   key: string;

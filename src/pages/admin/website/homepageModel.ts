@@ -32,10 +32,22 @@ export type HomepageSectionId =
 
 export type HomepageSection = { id: HomepageSectionId; isVisible: boolean; title: string; subtitle: string };
 
+/** Today's Deals carousel card (homepage only). */
+export type HomepageDealsBanner = {
+  id: string;
+  image: string;
+  destinationType: 'product' | 'brand' | 'custom-url';
+  destinationRef: string;
+  brandName: string;
+  brandLogoUrl: string;
+  isActive: boolean;
+};
+
 export type HomepageStudioContent = {
   version: 2;
   heroVisible: boolean;
   slides: HomepageSlide[];
+  dealsBanners: HomepageDealsBanner[];
   sections: HomepageSection[];
   topCategories: Array<{ id: string; label: string }>;
   featuredProductIds: string[];
@@ -43,7 +55,7 @@ export type HomepageStudioContent = {
   featuredGuideIds: string[];
 };
 
-export const HOMEPAGE_LIMITS = { slides: 6, categories: 6, products: 8, brands: 12, guides: 12 } as const;
+export const HOMEPAGE_LIMITS = { slides: 6, categories: 6, products: 8, brands: 12, guides: 12, dealsBanners: 10, activeDealsBanners: 5 } as const;
 
 export const SECTION_INFO: Record<
   HomepageSectionId,
@@ -72,7 +84,7 @@ export const SECTION_INFO: Record<
     name: "Today's Deals",
     defaultTitle: "Today's Deals",
     heading: true,
-    note: 'Shows the active Deals Banners. Those are managed in the “Deals Banners” tab, which saves live (not versioned yet).',
+    note: 'Horizontal carousel of wide image banners (up to 5) linking to products, brands or pages — edited right here and published with the homepage.',
   },
   compare: { name: 'Compare', defaultTitle: '', heading: false, note: 'The “Compare anything” block. It has no heading to edit.' },
   recommended: {
