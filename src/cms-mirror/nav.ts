@@ -69,6 +69,7 @@ export const PAGE_KEY_TO_PATH: Record<string, string> = {
   promoCodes: '/admin/coupons',
   auditLogs: '/admin/audit-logs',
   websiteCmsStudio: '/admin/website-cms',
+  websiteStudio: '/admin/website-studio',
   dealsManager: '/admin/deals',
   curationDeals: '/admin/storefront-curation/deals',
   curationAssurance: '/admin/storefront-curation/assurance',
@@ -144,6 +145,7 @@ export function resolveAdminPageKey(pathname: string): string | null {
     return 'shipmentOperations';
   }
   if (pathname.startsWith('/admin/logistics')) return 'shipmentOperations';
+  if (pathname.startsWith('/admin/website-studio')) return 'websiteStudio';
   if (pathname.startsWith('/admin/website-cms') || pathname.startsWith('/admin/cms')) return 'websiteCmsStudio';
   if (pathname === '/admin/deals' || pathname.startsWith('/admin/deals/')) return 'dealsManager';
   if (pathname.startsWith('/admin/storefront-curation/deals')) return 'curationDeals';
@@ -227,7 +229,7 @@ export const ROLE_ALLOWED_PAGE_KEYS: Record<string, string[] | null> = {
   moderator: ['dashboard', 'moderationCenter', 'reviews', 'messages', 'metaInboxAdmin', 'adminProfile', 'settings'],
   finance_manager: ['dashboard', 'payouts', 'feeCharges', 'finance', 'adminProfile', 'settings'],
   support_agent: ['dashboard', 'messages', 'metaInboxAdmin', 'reviews', 'adminProfile', 'settings'],
-  marketing_manager: ['dashboard', 'adsDealsStudio', 'promoCodes', 'websiteCmsStudio', 'adminProfile', 'settings'],
+  marketing_manager: ['dashboard', 'adsDealsStudio', 'promoCodes', 'websiteCmsStudio', 'websiteStudio', 'adminProfile', 'settings'],
 };
 
 export function allowedPageKeysForRole(role: string | undefined | null): string[] | null {
@@ -277,6 +279,11 @@ export const NAV_DEFS: CmsNavGroup[] = [
     items: [
       { key: 'contentStudio', label: 'Guide Management', tag: 'NEW', path: PAGE_KEY_TO_PATH.contentStudio },
     ],
+  },
+  {
+    // The public website itself (Website Studio — CMS with drafts, versions and rollback).
+    title: 'WEBSITE',
+    items: [{ key: 'websiteStudio', label: 'Website Studio', tag: 'NEW', path: PAGE_KEY_TO_PATH.websiteStudio }],
   },
   {
     // Advertising (paid) + Deals & Curation (editorial). Only pages that exist
@@ -364,6 +371,7 @@ export const PAGE_META: Record<string, [string, string]> = {
   planBilling: ['Plan & Billing', 'Your subscription plan, billing history, and usage'],
   adminProfile: ['My Profile', 'Account, security, RBAC scope, and preferences'],
   websiteCmsStudio: ['CTA & Banners', 'Manage editorial CTA/banner strips shown across the storefront'],
+  websiteStudio: ['Website Studio', 'The public website — drafts, versioned publishing and rollback'],
   dealsManager: ['Deals Manager', 'Seller-created deals and their lifecycle — moderation and promotion requests'],
   curationDeals: ['Deals Curation', 'Top Coupons, Popular Deal Categories and Brand Deals on the Deals page'],
   curationAssurance: ['Trust & Assurance', 'Per-page trust and assurance strips on the storefront'],
@@ -535,6 +543,7 @@ export const ADMIN_ONLY_PAGE_KEYS = [
   'monetizationCenter',
   'auditLogs',
   'websiteCmsStudio',
+  'websiteStudio',
   'curationDeals',
   'curationAssurance',
   'dealsManager',

@@ -114,6 +114,7 @@ const ROUTE_PERMISSION: Array<{ prefix: string; permission: PermissionKey }> = [
   { prefix: '/admin/categories', permission: 'taxonomy' },
   { prefix: '/admin/brand-posts', permission: 'content' },
   { prefix: '/admin/website-cms', permission: 'content' },
+  { prefix: '/admin/website-studio', permission: 'content' },
   { prefix: '/admin/cms-studio', permission: 'content' },
   { prefix: '/admin/deals-banners', permission: 'content' },
   { prefix: '/admin/reviews', permission: 'content' },

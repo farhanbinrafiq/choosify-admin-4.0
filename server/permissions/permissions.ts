@@ -9,6 +9,14 @@ export const PERMISSIONS = {
   SELLER_SUSPEND: 'seller:suspend',
   USER_MANAGE: 'user:manage',
   CMS_EDIT: 'cms:edit',
+  /**
+   * Website Studio: publish / roll back website documents (makes them public). Deliberately NOT
+   * implied by cms:edit and not granted to any role below — only SUPER_ADMIN holds it (via
+   * PERMISSION_VALUES). Editors with cms:edit can save drafts and request preview only.
+   */
+  CMS_PUBLISH: 'cms:publish',
+  /** Website Studio: publish / roll back LEGAL documents (Terms, Privacy). Super Admin only. */
+  CMS_LEGAL_PUBLISH: 'cms:legal_publish',
   /** Admin-only category tree mutation (IS-003 §52). */
   CATEGORY_MANAGE: 'category.manage',
   /** Admin-only attribute/variant schema mutation (IS-003 §52). */

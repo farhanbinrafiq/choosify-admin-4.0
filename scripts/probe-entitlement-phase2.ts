@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 /**
  * Feature Access & Entitlements — Phase 2A foundation probe.
  *
@@ -165,9 +166,12 @@ async function partTwoDatabase() {
 
   // ── schema / constraints ──
   const tables = await rows(sql`select count(*)::int n from information_schema.tables where table_schema='public' and table_type='BASE TABLE'`);
-  check(tables[0].n === 31, 'schema: 31 public tables', tables[0]);
+  // 31 through migration 0014; 0015 (Website Studio) adds website_documents, website_versions, website_pages.
+  check(tables[0].n === 34, 'schema: 34 public tables', tables[0]);
   const migrations = await rows(sql`select count(*)::int n from drizzle.__drizzle_migrations`);
-  check(migrations[0].n === 14, 'schema: 14 migrations', migrations[0]);
+  // Expected count comes from the migration journal, so a new migration does not make this probe stale.
+  const journalCount = (JSON.parse(readFileSync(new URL('../server/db/migrations/meta/_journal.json', import.meta.url), 'utf8')) as { entries: unknown[] }).entries.length;
+  check(migrations[0].n === journalCount, `schema: ${journalCount} migrations (journal)`, migrations[0]);
   const idx = (await rows(sql`select indexname from pg_indexes where schemaname='public' and tablename in ('account_entitlement_overrides','platform_feature_states','entitlement_audit_events') order by 1`)).map((r) => r.indexname);
   for (const name of [
     'account_entitlement_overrides_user_feature_unique',

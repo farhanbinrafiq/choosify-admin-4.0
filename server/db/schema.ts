@@ -809,3 +809,55 @@ export const subscriptionBillingDocuments = pgTable('subscription_billing_docume
   paymentUnique: uniqueIndex('subscription_billing_documents_payment_unique').on(table.subscriptionPaymentId),
   workspaceIdx: index('subscription_billing_documents_workspace_idx').on(table.workspaceId),
 }));
+
+/**
+ * Website Studio / CMS (migration 0015). One row per website document; the draft is
+ * never public. Published content lives only in website_versions.
+ */
+export const websiteDocuments = pgTable('website_documents', {
+  key: varchar('key', { length: 80 }).primaryKey(),
+  kind: varchar('kind', { length: 24 }).notNull(),
+  draft: jsonb('draft'),
+  draftRevision: integer('draft_revision').notNull().default(0),
+  draftBaseVersion: integer('draft_base_version'),
+  draftUpdatedAt: timestamp('draft_updated_at', { withTimezone: true }),
+  draftUpdatedByUserId: uuid('draft_updated_by_user_id'),
+  publishedVersion: integer('published_version'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Immutable, numbered published versions (migration 0015). UPDATE/DELETE are rejected by a
+ * trigger; publish, rollback and backfill each insert a new row. No FK on the actor column:
+ * the history must survive user deletion.
+ */
+export const websiteVersions = pgTable('website_versions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  documentKey: varchar('document_key', { length: 80 }).notNull().references(() => websiteDocuments.key, { onDelete: 'restrict' }),
+  version: integer('version').notNull(),
+  content: jsonb('content').notNull(),
+  source: varchar('source', { length: 16 }).$type<'publish' | 'rollback' | 'backfill'>().notNull(),
+  restoredFromVersion: integer('restored_from_version'),
+  changeNote: text('change_note').notNull(),
+  publishedByUserId: uuid('published_by_user_id'),
+  publishedAt: timestamp('published_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  documentVersionUnique: uniqueIndex('website_versions_document_version_unique').on(table.documentKey, table.version),
+  publishedAtIdx: index('website_versions_published_at_idx').on(table.publishedAt.desc()),
+}));
+
+/** Content-page routing (migration 0015). Content lives in the page's website document only. */
+export const websitePages = pgTable('website_pages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  slug: varchar('slug', { length: 120 }).notNull(),
+  documentKey: varchar('document_key', { length: 80 }).notNull().references(() => websiteDocuments.key, { onDelete: 'restrict' }),
+  pageType: varchar('page_type', { length: 16 }).$type<'system' | 'custom'>().notNull(),
+  status: varchar('status', { length: 16 }).$type<'draft' | 'published' | 'unpublished' | 'archived'>().notNull().default('draft'),
+  createdByUserId: uuid('created_by_user_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  slugUnique: uniqueIndex('website_pages_slug_unique').on(table.slug),
+  documentKeyUnique: uniqueIndex('website_pages_document_key_unique').on(table.documentKey),
+}));

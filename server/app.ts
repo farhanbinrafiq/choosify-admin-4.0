@@ -45,6 +45,7 @@ import { moderationRouter } from "./moderation/moderationRouter";
 import { searchRouter } from "./search/searchRouter";
 import { communicationRouter } from "./communication/communicationRouter";
 import { aiRouter } from "./ai/aiRouter";
+import { websiteRouter } from "./website/websiteRouter";
 import { emiRouter } from "./emi/emiRouter";
 import { healthRouter } from "./routes/health";
 import { diagnosticsRouter } from "./routes/diagnostics";
@@ -208,6 +209,7 @@ export function createApp(): Express {
   app.use("/api/emi", aiRateLimit);
   app.use("/api/v1/catalog/products", searchRateLimitMiddleware);
   app.use("/api/v1/catalog", catalogReadRateLimitMiddleware);
+  app.use("/api/v1/website", catalogReadRateLimitMiddleware);
   app.use("/api/v1/conversations", messagingRateLimit);
   app.use("/api/v1/support", messagingRateLimit);
   app.use("/api/v1/seller/social-inbox", messagingRateLimit);
@@ -227,6 +229,7 @@ export function createApp(): Express {
   app.use("/api", messagingRouter);
   app.use("/api", logisticsRouter);
   app.use("/api/v1", catalogRouter);
+  app.use("/api/v1", websiteRouter);
   app.use("/api/v1", dashboardSearchRouter);
   app.use("/api/v1", commerceRouter);
   app.use("/api/v1", commercePaymentsRouter);

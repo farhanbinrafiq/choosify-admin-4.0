@@ -120,6 +120,7 @@ const GuideManagementList = lazy(() => import('./pages/admin/GuideManagementList
 const GuideEditStudio = lazy(() => import('./pages/admin/GuideEditStudio'));
 
 const StorefrontCtaBanners = lazy(() => import('./pages/admin/StorefrontCtaBanners'));
+const WebsiteStudio = lazy(() => import('./pages/admin/website/WebsiteStudio'));
 const StorefrontDealsCuration = lazy(() => import('./pages/admin/StorefrontDealsCuration'));
 const StorefrontAssurance = lazy(() => import('./pages/admin/StorefrontAssurance'));
 
@@ -1073,6 +1074,21 @@ export default function App() {
               }
             />
             {/* Storefront Curation -> Deals (Top Coupons / Popular Deal Categories / Brand Deals) and Trust & Assurance strips. Super Admin only (RoleGuard + server). */}
+            {/* Website Studio (CMS foundation): drafts, versioned publishing, rollback. Server enforces cms:edit / cms:publish. */}
+            <Route
+              path="/admin/website-studio"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <WebsiteStudio />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/admin/storefront-curation/deals"
               element={
