@@ -27,7 +27,7 @@ const routeSuspenseFallback = <AdminPageSkeleton variant="generic" />;
 
 // Lazy load pages
 const Dashboard = lazy(() => import('./pages/admin/Dashboard'));
-const CMS = lazy(() => import('./pages/admin/CMS'));
+// Legacy homepage editor (pages/admin/CMS.tsx) retired: the homepage is edited in Website Studio.
 const Consumers = lazy(() => import('./pages/admin/Consumers'));
 const CashBookHub = lazy(() => import('./pages/admin/CashBookHub'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -1561,20 +1561,6 @@ export default function App() {
                     <AdminWorkspaceLayout>
                       <Suspense fallback={routeSuspenseFallback}>
                         <Categories />
-                      </Suspense>
-                    </AdminWorkspaceLayout>
-                  </RoleGuard>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/website-cms"
-              element={
-                <ProtectedRoute>
-                  <RoleGuard>
-                    <AdminWorkspaceLayout>
-                      <Suspense fallback={routeSuspenseFallback}>
-                        <CMS />
                       </Suspense>
                     </AdminWorkspaceLayout>
                   </RoleGuard>
