@@ -17,8 +17,9 @@
  *    homepage config: the stored catalog values ARE what the storefront renders.
  *  - company: the storefront displays hardcoded contact details (support@choosify.bd,
  *    +88 0141 0474014, USA + Bangladesh offices). The stored websiteName/supportEmail/supportPhone
- *    are not displayed anywhere. Legal name, copyright and business identifiers are left BLANK /
- *    unverified on purpose: the company is not yet incorporated.
+ *    are not displayed anywhere (owner confirmed support@choosify.bd, 2026-11-04). The copyright
+ *    holder is the live footer's "Choosify Technologies Ltd" (owner decision 2026-11-04: keep it).
+ *    Registered legal name and business identifiers stay BLANK / unverified.
  *  - brand assets: none are set live (storefront uses built-in files) → empty slots.
  *  - pages + legal documents: NOT backfilled (storefront keeps its built-in page content until
  *    Phase 4; legal documents are prepared there as drafts only).
@@ -60,7 +61,8 @@ const LIVE_COMPANY = {
     { id: 'bangladesh', label: 'Bangladesh Office', lines: ['House-744 & 746, Road-10, Avenue-4', 'Mirpur DOHS, Dhaka-1216', 'Bangladesh'], enabled: true },
   ],
   identifiers: { dbid: { value: '', verified: false }, tradeLicense: { value: '', verified: false } },
-  copyrightText: '',
+  // Footer renders "© {current year} {copyrightText}. All rights reserved." (as it does today).
+  copyrightText: 'Choosify Technologies Ltd',
 };
 
 const plan: Array<{ key: string; kind: WebsiteDocumentKind; content: unknown; from: string }> = [

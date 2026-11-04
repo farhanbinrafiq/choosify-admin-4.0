@@ -582,9 +582,9 @@ function CompanyEditor({ value, onChange, disabled }: EditorProps<CompanySetting
       </div>
 
       <div>
-        <label className={labelCls} htmlFor="ws-copyright">Copyright line</label>
-        <input id="ws-copyright" className={inputCls} disabled={disabled} value={value.copyrightText} placeholder="e.g. © Choosify. All rights reserved." onChange={(e) => set({ copyrightText: e.target.value })} />
-        <div className="mt-1 text-[11px] text-slate-500">Do not name a company entity that is not registered.</div>
+        <label className={labelCls} htmlFor="ws-copyright">Copyright holder</label>
+        <input id="ws-copyright" className={inputCls} disabled={disabled} value={value.copyrightText} placeholder="e.g. Choosify Technologies Ltd" onChange={(e) => set({ copyrightText: e.target.value })} />
+        <div className="mt-1 text-[11px] text-slate-500">The footer shows: © {new Date().getFullYear()} {value.copyrightText || '…'}. All rights reserved.</div>
       </div>
     </div>
   );
@@ -607,7 +607,9 @@ function CompanyPreview({ value }: { value: CompanySettings }) {
       {ids.map((k) => (
         <div key={k} className="mt-2 text-[11px] text-white/70">{k === 'dbid' ? 'DBID No' : 'Trade License No'}: {value.identifiers[k].value}</div>
       ))}
-      <div className="mt-3 border-t border-white/10 pt-2 text-[10.5px] text-white/50">{value.copyrightText || '(no copyright line)'}</div>
+      <div className="mt-3 border-t border-white/10 pt-2 text-[10.5px] text-white/50">
+        {value.copyrightText ? `© ${new Date().getFullYear()} ${value.copyrightText}. All rights reserved.` : '(no copyright holder set)'}
+      </div>
     </div>
   );
 }
