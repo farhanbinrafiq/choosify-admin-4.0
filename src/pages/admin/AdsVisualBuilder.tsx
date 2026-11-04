@@ -104,6 +104,12 @@ export default function AdsVisualBuilder() {
       : null;
   const listingLocked = Boolean(listingId) && formatId === 'deal_of_the_day';
 
+  // A success note from an earlier save must not sit next to a new, unsaved shape / position.
+  useEffect(() => {
+    setMessage(null);
+    setError(null);
+  }, [formatId, placementId]);
+
   const hydrateFromRecord = useCallback((ad: AdsApiRecord) => {
     setExisting(ad);
     const creative = (ad.creative || {}) as Record<string, string>;
@@ -617,6 +623,14 @@ export default function AdsVisualBuilder() {
                     </div>
                   ) : null}
                   {placementDef ? <div className="mb-2"><AdSlotSpec placement={placementDef} /></div> : null}
+                  {fitError && imageDims && placementDef?.creative ? (
+                    <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11.5px] font-semibold leading-snug text-amber-900" data-testid="ad-artwork-needed">
+                      New artwork needed for this shape. The current design is {imageDims.width}×{imageDims.height}px
+                      ({(imageDims.width / imageDims.height).toFixed(2)}:1) and cannot be shown in “{placementDef.slotLabel}”. Upload a{' '}
+                      {placementDef.creative.recommended.width}×{placementDef.creative.recommended.height}px version below, or switch back to a
+                      wide format. {isEdit ? 'The live ad keeps running unchanged until this is saved.' : ''}
+                    </div>
+                  ) : null}
                   <div className="text-[11px] font-bold text-[#374151] mb-1">
                     {mediaType === 'video' && formatId === 'hero_banner'
                       ? 'Hero Video URL (hosted mp4/webm)'
@@ -881,6 +895,18 @@ export default function AdsVisualBuilder() {
             )}
             {saving ? <Loader2 className="h-5 w-5 animate-spin text-[#EF3C23]" /> : null}
           </div>
+          {!saving && (error || message) ? (
+            <div
+              role="status"
+              aria-live="polite"
+              data-testid="ad-action-result"
+              className={`rounded-lg border px-3 py-2 text-[12px] font-semibold ${
+                error ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+              }`}
+            >
+              {error ? `Not saved — ${error}` : `✓ ${message}`}
+            </div>
+          ) : null}
         </div>
 
         {/* LIVE PREVIEW */}
@@ -944,6 +970,7 @@ export default function AdsVisualBuilder() {
                       ctaLabel: ctaLabel || undefined,
                       advertiserName: advertiserName || undefined,
                       logoUrl: logoUrl || undefined,
+                      hasDestination: destMode === 'external' ? Boolean(externalUrl.trim()) : Boolean(internalEntityId || listingId),
                     }}
                   />
                   <AdFitStatus placement={placementDef} width={imageDims?.width} height={imageDims?.height} />

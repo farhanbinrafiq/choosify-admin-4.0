@@ -3,7 +3,7 @@
  */
 
 import type { AdFormatDef, AdPlacementDef, AdPageKey } from '@/shared/ads/placementRegistry';
-import { reportFeatureEntitlementDenied } from './authRefresh';
+import { authedFetch } from './authRefresh';
 import type {
   DealFilterKey,
   DealListingType,
@@ -19,7 +19,6 @@ const API_BASE =
   ((import.meta as ImportMeta & { env?: Record<string, string> }).env?.VITE_API_BASE_URL as
     | string
     | undefined) || '/api/v1';
-const AUTH_TOKEN_KEY = 'choosify_auth_token';
 
 export type AdsApiRecord = {
   id: string;
@@ -150,13 +149,13 @@ function parseError(raw: string, status: number): string {
 }
 
 async function request<T>(path: string, method: string = 'GET', body?: unknown): Promise<T> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  const token = localStorage.getItem(AUTH_TOKEN_KEY);
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  const response = await fetch(`${API_BASE}${path}`, {
+  // Shared silent refresh-and-retry on 401 (authRefresh.ts). This module used to read the token
+  // straight from localStorage, so a dashboard tab left open past the access-token lifetime
+  // failed every Ads Studio save with a raw "Expired token" error. authedFetch also reports
+  // 403 feature-entitlement denials.
+  const response = await authedFetch(`${API_BASE}${path}`, {
     method,
-    headers,
+    headers: { 'Content-Type': 'application/json' },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
@@ -169,7 +168,6 @@ async function request<T>(path: string, method: string = 'GET', body?: unknown):
   }
 
   if (!response.ok) {
-    reportFeatureEntitlementDenied(response.status, raw);
     throw new Error(parsed.error || parseError(raw, response.status));
   }
   return (parsed.data !== undefined ? parsed.data : (parsed as unknown as T)) as T;

@@ -98,11 +98,11 @@ async function main() {
 
   // --- Registry: retired / unknown slots -------------------------------------------------------------
   check('retired slot (HOME_RIGHT_RAIL) cannot be chosen', (await create(sa, { formatId: 'vertical_card', placementId: 'HOME_RIGHT_RAIL', creative: { headline: 'x', imageUrl: portrait }, publishNow: true })).status === 400);
-  check('retired slot (BRANDS_BANNER) cannot be chosen', (await create(sa, { placementId: 'BRANDS_BANNER', publishNow: true })).status === 400);
+  check('retired slot (GUIDES_SIDEBAR) cannot be chosen', (await create(sa, { placementId: 'GUIDES_SIDEBAR', formatId: 'vertical_card', publishNow: true })).status === 400);
   check('unknown slot cannot be chosen', (await create(sa, { placementId: 'NOPE_SLOT', publishNow: true })).status === 400);
   check('public delivery for an unknown slot returns nothing', JSON.stringify(await delivery('NOPE_SLOT')) === '{}');
   const placements = (await call(sa, 'GET', '/ads/placements')).json?.data?.placements ?? [];
-  check('placement picker lists only real (active) slots', placements.length > 0 && placements.every((p: any) => p.active) && !placements.some((p: any) => ['HOME_RIGHT_RAIL', 'CATEGORY_CARD_FOOTER', 'BRANDS_BANNER', 'DEALS_FEATURED'].includes(p.placementId)));
+  check('placement picker lists only real (active) slots', placements.length > 0 && placements.every((p: any) => p.active) && !placements.some((p: any) => ['HOME_RIGHT_RAIL', 'CATEGORY_CARD_FOOTER', 'GUIDES_SIDEBAR', 'DEALS_FEATURED'].includes(p.placementId)));
   check('every active slot states section + recommended size', placements.every((p: any) => p.sectionLabel && (p.creative ? p.creative.recommended.width > 0 : true)));
 
   // --- Creative size checks ----------------------------------------------------------------------------
@@ -165,7 +165,7 @@ async function main() {
   check('signed-out cannot move ads (401)', (await call(null, 'POST', `/ads/${liveId}/move`, { placementId: 'BROWSE_BANNER' })).status === 401);
   const bad = await call(sa, 'POST', `/ads/${liveId}/move`, { placementId: 'BROWSE_SIDEBAR' });
   check('move into a slot that does not accept the format is refused', bad.status === 400 && /not allowed/.test(bad.json?.error || ''), bad.json);
-  check('move into a retired slot is refused', (await call(sa, 'POST', `/ads/${liveId}/move`, { placementId: 'BRANDS_BANNER' })).status === 400);
+  check('move into a retired slot is refused', (await call(sa, 'POST', `/ads/${liveId}/move`, { placementId: 'HOME_RIGHT_RAIL' })).status === 400);
   const mv = await call(sa, 'POST', `/ads/${liveId}/move`, { placementId: 'BROWSE_BANNER' });
   check('super admin moves the ad to the Products page banner', mv.status === 200 && mv.json?.data?.placementId === 'BROWSE_BANNER' && mv.json?.data?.status === 'active', mv.json);
   const hist = mv.json?.data?.metadata?.placementHistory ?? [];

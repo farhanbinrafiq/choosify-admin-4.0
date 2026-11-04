@@ -18,7 +18,10 @@ export type AdFormatId =
   | 'gradient_promo'
   | 'deal_of_the_day'
   | 'follow_brands_banner'
-  | 'category_promoted_slot';
+  | 'category_promoted_slot'
+  /** Sponsored Listing: promotes an EXISTING product / brand / deal / guide / creator; the card
+   *  is drawn from that record (its own photo, name, price) with a Sponsored label. */
+  | 'sponsored_listing';
 
 export type AdPageKey =
   | 'homepage'
@@ -30,7 +33,9 @@ export type AdPageKey =
   | 'deals'
   | 'product_detail'
   | 'guide_detail'
-  | 'guides';
+  | 'guides'
+  | 'search'
+  | 'compare';
 
 export type AdOrientation = 'horizontal' | 'vertical' | 'square' | 'embedded';
 
@@ -67,7 +72,15 @@ export type AdPlacementDef = {
   retiredReason?: string;
   /** Image requirements (absent for text-only / listing-bound formats). */
   creative?: AdCreativeSpec;
+  /** Sponsored Listing slots: which catalog records may be promoted here. */
+  entityTypes?: SponsoredEntityType[];
+  /** Density / frequency rule enforced by the storefront component (plain language). */
+  frequency?: string;
+  /** What shoppers see when nothing is booked. */
+  fallback?: string;
 };
+
+export type SponsoredEntityType = 'product' | 'brand' | 'deal' | 'guide' | 'creator';
 
 export type AdFormatDef = {
   formatId: AdFormatId;
@@ -134,14 +147,32 @@ export const AD_FORMATS: AdFormatDef[] = [
   },
 ];
 
-/** Wide designed banner shown whole (no crop), full content width. */
+/** Wide designed banner in a FIXED frame (4:1 desktop, 5:2 phone); the design is fitted whole. */
 const WIDE_BANNER: AdCreativeSpec = {
   display: 'natural',
-  recommended: { width: 2000, height: 600 },
+  recommended: { width: 2000, height: 500 },
   min: { width: 1200, height: 240 },
   ratioRange: [2, 8],
-  howShown: 'Shown whole (never cropped) across the full content width; height follows your image (about 360px tall at most on desktop, ~130–190px on phones). Put text large enough to read on a phone.',
+  howShown: 'Fixed banner frame: 4:1 across the content width on desktop (at most 300px tall) and 5:2 on phones. Your design is fitted whole — never cropped; any space it does not fill shows a soft blurred fill of the same image. Upload 4:1 (2000×500px) for an edge-to-edge banner. The orange CTA button sits on the right side, vertically centred — keep that area free of text.',
 };
+
+/** Wide sponsored banner slot above a listing grid (same 4:1 frame as Products / Deals). */
+const wideSlot = (placementId: string, pageKey: AdPageKey, pageLabel: string, sectionLabel: string): AdPlacementDef => ({
+  placementId,
+  pageKey,
+  pageLabel,
+  slotKey: 'sponsored_banner',
+  slotLabel: `${pageLabel} page sponsored banner`,
+  sectionLabel,
+  allowedFormats: ['follow_brands_banner', 'hero_banner'],
+  orientation: 'horizontal',
+  aspectRatio: '4:1',
+  mobileSupport: true,
+  desktopSupport: true,
+  ownerRoles: ['admin', 'seller', 'creator'],
+  active: true,
+  creative: WIDE_BANNER,
+});
 /** Portrait card image in side rails / feeds, cropped to a 3:4 frame. */
 const PORTRAIT_CARD: AdCreativeSpec = {
   display: 'cover',
@@ -202,7 +233,7 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
     sectionLabel: 'Homepage — wide sponsored banner after the Viral Today / Popular Products block',
     allowedFormats: ['follow_brands_banner', 'hero_banner'],
     orientation: 'horizontal',
-    aspectRatio: '10:3',
+    aspectRatio: '4:1',
     mobileSupport: true,
     desktopSupport: true,
     ownerRoles: ['admin', 'seller', 'creator'],
@@ -235,7 +266,7 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
     sectionLabel: 'Products & Services page — wide sponsored banner above the product grid',
     allowedFormats: ['follow_brands_banner', 'hero_banner'],
     orientation: 'horizontal',
-    aspectRatio: '10:3',
+    aspectRatio: '4:1',
     mobileSupport: true,
     desktopSupport: true,
     ownerRoles: ['admin', 'seller', 'creator'],
@@ -253,7 +284,7 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
     sectionLabel: 'Deals page — wide sponsored banner in the deals feed',
     allowedFormats: ['follow_brands_banner', 'hero_banner'],
     orientation: 'horizontal',
-    aspectRatio: '10:3',
+    aspectRatio: '4:1',
     mobileSupport: true,
     desktopSupport: true,
     ownerRoles: ['admin', 'seller', 'creator'],
@@ -281,7 +312,12 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
   sidebar('BRANDS_SIDEBAR', 'brands', 'Brands'),
   sidebar('CATEGORIES_SIDEBAR', 'categories', 'Categories'),
   sidebar('CREATORS_SIDEBAR', 'creators', 'Creators'),
-  sidebar('GUIDES_SIDEBAR', 'guides', 'Buying Guides'),
+  {
+    ...sidebar('GUIDES_SIDEBAR', 'guides', 'Buying Guides'),
+    sectionLabel: 'Retired',
+    active: false,
+    retiredReason: 'The old Buying Guides page is no longer routed (/guides opens Recommendations) — use the Recommendations banner or feed card.',
+  },
   {
     placementId: 'CATEGORY_CARD_FOOTER',
     pageKey: 'categories',
@@ -299,22 +335,11 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
     active: false,
     retiredReason: 'Category cards on the storefront have no promoted footer.',
   },
-  {
-    placementId: 'BRANDS_BANNER',
-    pageKey: 'brands',
-    pageLabel: 'Brands',
-    slotKey: 'banner',
-    slotLabel: 'Brands Banner',
-    sectionLabel: 'Retired',
-    allowedFormats: ['hero_banner', 'follow_brands_banner'],
-    orientation: 'horizontal',
-    aspectRatio: '21:9',
-    mobileSupport: true,
-    desktopSupport: true,
-    ownerRoles: ['admin'],
-    active: false,
-    retiredReason: 'The Brands page has no banner area — use the Brands side rail card.',
-  },
+  // Wide banners above the grid (mounted 2026-11-05 at the Super Admin's request).
+  wideSlot('BRANDS_BANNER', 'brands', 'Brands', 'Brands page — wide sponsored banner above the brands grid'),
+  wideSlot('CATEGORIES_BANNER', 'categories', 'Categories', 'Categories page — wide sponsored banner above the category grid'),
+  wideSlot('CREATORS_BANNER', 'creators', 'Creators', 'Creators page — wide sponsored banner above the creators grid'),
+  wideSlot('DISCOVER_BANNER', 'discover', 'Recommendations (Discover)', 'Recommendations page (also Buying Guides) — wide sponsored banner above the feed'),
   // —— Discover + product page ——
   {
     placementId: 'DISCOVER_FEED',

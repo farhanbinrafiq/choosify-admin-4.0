@@ -20,6 +20,8 @@ export type AdPreviewInput = {
   ctaLabel?: string;
   advertiserName?: string;
   logoUrl?: string;
+  /** false = no link set, so the storefront hides the CTA button. */
+  hasDestination?: boolean;
 };
 
 const chip = (name?: string) => (
@@ -105,23 +107,45 @@ export function AdSlotPreview({ placement, ad }: { placement: AdPlacementDef; ad
     );
   }
   if (placement.creative?.display === 'natural') {
+    // Same fixed frame as the storefront AdSlotBanner: 4:1 desktop / 5:2 phone, design fitted whole.
+    const frame = (aspect: string, testId?: string, phone = false) => (
+      <div className="relative w-full overflow-hidden rounded-xl" style={{ aspectRatio: aspect, background: '#0F1238' }}>
+        <img src={img} alt="" aria-hidden className="absolute inset-0 h-full w-full scale-110 object-cover blur-xl" style={{ opacity: 0.6 }} />
+        <img src={img} alt={ad.headline || ''} className="relative block h-full w-full object-contain" data-testid={testId} />
+        {chip(ad.advertiserName)}
+        {ad.ctaLabel && ad.hasDestination !== false ? (
+          <span
+            className="absolute z-[2] inline-flex items-center gap-1 font-extrabold uppercase tracking-wide shadow-md"
+            style={{
+              background: '#FF5B00',
+              color: '#FFFFFF',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              right: phone ? 6 : 10,
+              fontSize: phone ? 7 : 8.5,
+              padding: phone ? '2px 6px' : '4px 9px',
+              borderRadius: 6,
+            }}
+            data-testid={testId ? 'ad-preview-cta' : undefined}
+          >
+            {ad.ctaLabel} →
+          </span>
+        ) : null}
+      </div>
+    );
     return (
       <div className="space-y-3" data-testid="ad-preview-banner">
         <div>
-          <div className="mb-1 text-[10px] font-bold uppercase text-slate-500">Desktop (content width)</div>
-          <div className="relative mx-auto w-fit max-w-full overflow-hidden rounded-xl">
-            {chip(ad.advertiserName)}
-            <img src={img} alt={ad.headline || ''} className="block h-auto max-h-[360px] w-auto max-w-full object-contain" data-testid="ad-preview-image" />
-          </div>
+          <div className="mb-1 text-[10px] font-bold uppercase text-slate-500">Desktop — fixed 4:1 frame (max 300px tall)</div>
+          {frame('4 / 1', 'ad-preview-image')}
         </div>
         <div>
-          <div className="mb-1 text-[10px] font-bold uppercase text-slate-500">Phone (390px)</div>
-          <div className="relative mx-auto w-[60%] overflow-hidden rounded-xl">
-            {chip(ad.advertiserName)}
-            <img src={img} alt="" className="block h-auto w-full object-contain" />
-          </div>
+          <div className="mb-1 text-[10px] font-bold uppercase text-slate-500">Phone (390px) — fixed 5:2 frame</div>
+          <div className="mx-auto w-[60%]">{frame('5 / 2', undefined, true)}</div>
         </div>
-        <div className="text-[10.5px] text-slate-500">Shown exactly as uploaded — nothing is cropped or overlaid, so the text in your design is what shoppers read.</div>
+        <div className="text-[10.5px] text-slate-500">
+          Your design is fitted whole (never cropped) inside the fixed frame; space it does not fill shows a blurred fill. The orange CTA button sits on the right, vertically centred, when a label and destination are set.
+        </div>
       </div>
     );
   }
@@ -141,7 +165,11 @@ export function AdSlotPreview({ placement, ad }: { placement: AdPlacementDef; ad
         <div className="p-3">
           {format?.imageLed && ad.headline && <div className="text-[13px] font-extrabold text-[#1A1A2E]">{ad.headline}</div>}
           {ad.subtext && <div className="mt-0.5 text-[11.5px] text-[#6B7280]">{ad.subtext}</div>}
-          {ad.ctaLabel && <span className="mt-2 inline-block rounded-lg px-3 py-1.5 text-[11px] font-extrabold" style={{ background: '#FF5B00', color: '#FFFFFF' }}>{ad.ctaLabel}</span>}
+          {ad.ctaLabel && ad.hasDestination !== false ? (
+            <span className="mx-auto mt-2.5 flex w-fit items-center gap-1 rounded-lg px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-wide" style={{ background: '#FF5B00', color: '#FFFFFF' }} data-testid="ad-preview-card-cta">
+              {ad.ctaLabel} →
+            </span>
+          ) : null}
         </div>
       </div>
     </div>
