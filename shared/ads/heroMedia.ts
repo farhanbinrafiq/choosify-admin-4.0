@@ -32,6 +32,8 @@ export function assertSafeMediaUrl(url: string | undefined | null, field = 'medi
   ) {
     throw new Error(`${field} must not use javascript: or unsafe schemes`);
   }
+  // Our own uploaded media served by this app (relative path, e.g. local / dev uploads).
+  if (/^\/media\/[\w./-]+$/.test(trimmed)) return trimmed;
   try {
     const parsed = new URL(trimmed);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
