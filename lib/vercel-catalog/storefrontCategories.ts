@@ -434,6 +434,7 @@ export const STOREFRONT_SUBCATEGORY_DEFS: ReadonlyArray<{
   { id: "sub-fashion-lifestyle-gowns-party-wear", slug: "fashion-lifestyle-gowns-party-wear", name: "Gowns & Party Wear", parentId: "cat-fashion", displayOrder: 29 },
   { id: "sub-fashion-lifestyle-bridal-wedding-wear", slug: "fashion-lifestyle-bridal-wedding-wear", name: "Bridal & Wedding Wear", parentId: "cat-fashion", displayOrder: 30 },
   { id: "sub-fashion-lifestyle-costumes-cosplay", slug: "fashion-lifestyle-costumes-cosplay", name: "Costumes & Cosplay", parentId: "cat-fashion", displayOrder: 31 },
+  { id: "sub-beauty-health-pharmacy-cosmetics-beauty-products", slug: "beauty-health-pharmacy-cosmetics-beauty-products", name: "Cosmetics & Beauty Products", parentId: "cat-beauty", displayOrder: 10 },
   { id: "sub-jewelry-luxury-fashion-artificial-jewellery", slug: "jewelry-luxury-fashion-artificial-jewellery", name: "Fashion & Artificial Jewellery", parentId: "cat-jewelry", displayOrder: 5 },
   { id: "sub-beauty-health-pharmacy-fragrances-perfumes", slug: "beauty-health-pharmacy-fragrances-perfumes", name: "Fragrances & Perfumes", parentId: "cat-beauty", displayOrder: 5 },
   { id: "sub-beauty-health-pharmacy-personal-care", slug: "beauty-health-pharmacy-personal-care", name: "Personal Care", parentId: "cat-beauty", displayOrder: 6 },
@@ -600,6 +601,12 @@ export const CATEGORY_ADDITION_MIGRATIONS: ReadonlyArray<{ id: string; categoryI
       "sub-fashion-lifestyle-gowns-party-wear",
       "sub-fashion-lifestyle-bridal-wedding-wear",
       "sub-fashion-lifestyle-costumes-cosplay",
+    ],
+  },
+  {
+    id: '2026-11-04-cosmetics-beauty-products',
+    categoryIds: [
+      "sub-beauty-health-pharmacy-cosmetics-beauty-products",
     ],
   },
 ];
