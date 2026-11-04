@@ -22,11 +22,14 @@ export type AdPreviewInput = {
   logoUrl?: string;
   /** false = no link set, so the storefront hides the CTA button. */
   hasDestination?: boolean;
+  /** Draw headline + subtext over the image (storefront parity). */
+  showText?: boolean;
 };
 
-const chip = (name?: string) => (
-  <span className="absolute left-2 top-2 z-[2] rounded-md px-1.5 py-0.5 text-[9.5px] font-extrabold uppercase tracking-wide" style={{ background: 'rgba(0,0,0,.6)', color: '#FFFFFF' }}>
-    {name ? `Sponsored · ${name}` : 'Sponsored'}
+// Same label as the storefront: always just "Sponsored" (the design itself names the advertiser).
+const chip = (_name?: string) => (
+  <span className="absolute left-2 top-2 z-[2] rounded-md px-1.5 py-0.5 text-[9.5px] font-extrabold uppercase tracking-wide" style={{ background: 'rgba(0,0,0,.6)', color: '#FFFFFF' }} data-testid="ad-preview-chip">
+    Sponsored
   </span>
 );
 
@@ -177,6 +180,16 @@ export function AdSlotPreview({ placement, ad }: { placement: AdPlacementDef; ad
       <div className="relative w-full overflow-hidden rounded-xl" style={{ aspectRatio: aspect, background: '#0F1238' }}>
         <img src={img} alt="" aria-hidden className="absolute inset-0 h-full w-full scale-110 object-cover blur-xl" style={{ opacity: 0.6 }} />
         <img src={img} alt={ad.headline || ''} className="relative block h-full w-full object-contain" data-testid={testId} />
+        {ad.showText && (ad.headline || ad.subtext) ? (
+          <div
+            className="absolute inset-y-0 left-0 z-[1] flex flex-col justify-center"
+            style={{ width: phone ? '62%' : '55%', padding: phone ? '10px 8px 0' : '12px 14px 0', background: 'linear-gradient(90deg, rgba(0,0,0,.7), rgba(0,0,0,.4) 55%, transparent)' }}
+            data-testid={testId ? 'ad-preview-text' : undefined}
+          >
+            {ad.headline ? <div className="font-extrabold leading-tight" style={{ color: '#FFFFFF', fontSize: phone ? 8 : 12 }}>{ad.headline}</div> : null}
+            {ad.subtext ? <div style={{ color: 'rgba(255,255,255,.85)', fontSize: phone ? 6.5 : 8.5, marginTop: 2 }}>{ad.subtext}</div> : null}
+          </div>
+        ) : null}
         {chip(ad.advertiserName)}
         {ad.ctaLabel && ad.hasDestination !== false ? (
           <span
@@ -210,6 +223,11 @@ export function AdSlotPreview({ placement, ad }: { placement: AdPlacementDef; ad
         </div>
         <div className="text-[10.5px] text-slate-500">
           Your design is fitted whole (never cropped) inside the fixed frame; space it does not fill shows a blurred fill. The orange CTA button sits on the right, vertically centred, when a label and destination are set.
+          {ad.ctaLabel && ad.hasDestination === false ? (
+            <span className="mt-1 block font-semibold text-amber-700" data-testid="ad-preview-cta-hint">
+              The “{ad.ctaLabel}” button is hidden until you set a destination (step 3).
+            </span>
+          ) : null}
         </div>
       </div>
     );

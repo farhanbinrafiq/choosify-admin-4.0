@@ -60,10 +60,16 @@ export default function AdsVisualBuilder() {
   const [formatId, setFormatId] = useState<AdFormatId>(DEFAULT_FORMAT);
   const [pageKey, setPageKey] = useState('homepage');
   const [placementId, setPlacementId] = useState('HOME_HERO');
+  /** Exact spot on the page for wide banners ('' = the slot's default spot). */
+  const [pagePosition, setPagePosition] = useState('');
+  /** Other banner ads, to show which spots are already taken. */
+  const [otherAds, setOtherAds] = useState<AdsApiRecord[]>([]);
   const [advertiserName, setAdvertiserName] = useState('');
   const [headline, setHeadline] = useState('');
   const [subtext, setSubtext] = useState('');
   const [ctaLabel, setCtaLabel] = useState('Shop Now');
+  /** Image banners: draw headline + subtext over the image on the storefront. */
+  const [showText, setShowText] = useState(false);
   const [imageUrl, setImageUrl] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
   const [posterUrl, setPosterUrl] = useState('');
@@ -104,11 +110,38 @@ export default function AdsVisualBuilder() {
       : null;
   const listingLocked = Boolean(listingId) && formatId === 'deal_of_the_day';
 
+  useEffect(() => {
+    let alive = true;
+    adsApi.listBanners().then((rows) => alive && setOtherAds(rows)).catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Spot list follows the chosen slot: drop a spot that the new slot does not have.
+  useEffect(() => {
+    if (pagePosition && !placementDef?.positions?.some((p) => p.key === pagePosition)) setPagePosition('');
+  }, [placementDef, pagePosition]);
+
+  /** Live ads already in each spot of the chosen slot (this ad excluded). */
+  const spotOccupancy = useMemo(() => {
+    const map: Record<string, AdsApiRecord[]> = {};
+    if (!placementDef?.positions?.length) return map;
+    for (const a of otherAds) {
+      if (a.id === id || a.placementId !== placementDef.placementId) continue;
+      if (a.status !== 'active') continue; // only ads shoppers can see right now
+      const c = (a.creative || {}) as Record<string, unknown>;
+      const key = placementDef.positions.some((p) => p.key === c.pagePosition) ? String(c.pagePosition) : placementDef.defaultPosition || '';
+      (map[key] ||= []).push(a);
+    }
+    return map;
+  }, [otherAds, placementDef, id]);
+
   // A success note from an earlier save must not sit next to a new, unsaved shape / position.
   useEffect(() => {
     setMessage(null);
     setError(null);
-  }, [formatId, placementId]);
+  }, [formatId, placementId, pagePosition]);
 
   const hydrateFromRecord = useCallback((ad: AdsApiRecord) => {
     setExisting(ad);
@@ -117,10 +150,12 @@ export default function AdsVisualBuilder() {
     if (ad.formatId) setFormatId(ad.formatId as AdFormatId);
     if (ad.pageKey) setPageKey(ad.pageKey);
     if (ad.placementId) setPlacementId(ad.placementId);
+    setPagePosition(creative.pagePosition || '');
     setAdvertiserName(creative.advertiserName || '');
     setHeadline(creative.headline || ad.title || '');
     setSubtext(creative.body || creative.subtext || '');
     setCtaLabel(cta.label || 'Shop Now');
+    setShowText((ad.creative as Record<string, unknown> | undefined)?.showText === true);
     setImageUrl(creative.imageUrl || '');
     setVideoUrl(creative.videoUrl || '');
     setPosterUrl(creative.posterUrl || '');
@@ -283,7 +318,9 @@ export default function AdsVisualBuilder() {
         ? inferHeroMediaType(videoUrl || imageUrl, mediaType)
         : undefined;
     const creative: Record<string, unknown> = {
-      advertiserName: advertiserName || undefined,
+      pagePosition: placementDef?.positions?.length ? pagePosition || placementDef.defaultPosition : undefined,
+      showText: formatDef?.imageLed && fields.has('headline') ? showText : undefined,
+      advertiserName: fields.has('advertiser') ? advertiserName || undefined : undefined,
       headline: headline || undefined,
       body: subtext || undefined,
       subtext: subtext || undefined,
@@ -537,6 +574,17 @@ export default function AdsVisualBuilder() {
                     rows={2}
                     className="mt-1 w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px]"
                   />
+                </label>
+              ) : null}
+              {formatDef?.imageLed && fields.has('headline') && formatId !== 'hero_banner' ? (
+                <label className="flex items-start gap-2 sm:col-span-2 rounded-lg border border-[#E8EDF2] bg-[#F9FAFB] px-3 py-2 text-[11.5px] font-semibold text-[#374151]">
+                  <input type="checkbox" className="mt-0.5" checked={showText} onChange={(e) => setShowText(e.target.checked)} data-testid="ad-show-text" />
+                  <span>
+                    Show the headline and subtext on the banner
+                    <span className="block text-[10.5px] font-normal text-[#6B7280]">
+                      Off: your design is shown as it is and the headline is only its description for screen readers — use this when the artwork already contains its text.
+                    </span>
+                  </span>
                 </label>
               ) : null}
               {fields.has('ctaLabel') ? (
@@ -832,6 +880,47 @@ export default function AdsVisualBuilder() {
               ) : null}
               <span className="rounded bg-[#F3F4F6] px-2 py-1 font-mono">{placementId}</span>
             </div>
+            {placementDef?.positions?.length ? (
+              <div className="mt-3" data-testid="ad-position-picker">
+                <div className="text-[11px] font-bold text-[#374151]">Exact spot on the {placementDef.pageLabel} page</div>
+                <div className="mt-0.5 text-[10.5px] text-[#6B7280]">
+                  Spots are listed in page order. Different spots show separately; ads sharing a spot take turns (every 7 seconds).
+                </div>
+                <div className="mt-2 overflow-hidden rounded-lg border border-[#E8EDF2]">
+                  {placementDef.positions.map((pos, idx) => {
+                    const chosen = (pagePosition || placementDef.defaultPosition) === pos.key;
+                    const taken = spotOccupancy[pos.key] || [];
+                    return (
+                      <button
+                        key={pos.key}
+                        type="button"
+                        onClick={() => setPagePosition(pos.key)}
+                        data-testid={`ad-position-${pos.key}`}
+                        aria-pressed={chosen}
+                        className={`flex w-full items-center gap-3 px-3 py-2 text-left text-[11.5px] ${idx ? 'border-t border-[#E8EDF2]' : ''} ${
+                          chosen ? 'bg-[#FFF4EE]' : 'bg-white hover:bg-[#F9FAFB]'
+                        }`}
+                      >
+                        <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${chosen ? 'border-[#EF3C23] bg-[#EF3C23]' : 'border-[#CBD5E1]'}`}>
+                          {chosen ? <span className="h-1.5 w-1.5 rounded-full bg-white" /> : null}
+                        </span>
+                        <span className={`flex-1 ${chosen ? 'font-extrabold text-[#111827]' : 'font-semibold text-[#374151]'}`}>
+                          {pos.label}
+                          {pos.key === placementDef.defaultPosition ? <span className="ml-1 font-normal text-[#9CA3AF]">(default)</span> : null}
+                        </span>
+                        {taken.length ? (
+                          <span className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-800" title={taken.map((a) => a.advertisementReferenceId || a.title).join(', ')}>
+                            {taken.length} live ad{taken.length > 1 ? 's' : ''} here{chosen ? ' — will take turns' : ''}
+                          </span>
+                        ) : (
+                          <span className="shrink-0 text-[10px] font-semibold text-[#9CA3AF]">free</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <label className="block text-[11px] font-bold text-[#374151]">
                 Start (optional)
@@ -971,6 +1060,7 @@ export default function AdsVisualBuilder() {
                       advertiserName: advertiserName || undefined,
                       logoUrl: logoUrl || undefined,
                       hasDestination: destMode === 'external' ? Boolean(externalUrl.trim()) : Boolean(internalEntityId || listingId),
+                      showText: formatDef?.imageLed ? showText : false,
                     }}
                   />
                   <AdFitStatus placement={placementDef} width={imageDims?.width} height={imageDims?.height} />

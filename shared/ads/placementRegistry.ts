@@ -80,7 +80,45 @@ export type AdPlacementDef = {
   frequency?: string;
   /** What shoppers see when nothing is booked. */
   fallback?: string;
+  /** Wide banner slots: the exact spots on the page an ad can be pinned to (in page order).
+   *  Several ads in the same spot take turns; different spots show separately. */
+  positions?: AdPagePosition[];
+  /** Spot used when an ad has none chosen (where the slot always rendered before). */
+  defaultPosition?: string;
 };
+
+export type AdPagePosition = { key: string; label: string };
+
+/** Homepage spots follow the sections, so they stay right when Website Studio reorders them. */
+export const HOME_BANNER_POSITIONS: AdPagePosition[] = [
+  { key: 'after-hero', label: 'Top of page (under the hero)' },
+  { key: 'after-categories', label: 'After Top Categories' },
+  { key: 'after-popular-products', label: 'After Viral Today / Popular Products' },
+  { key: 'after-deals', label: "After Today's Deals" },
+  { key: 'after-compare', label: 'After Compare Anything' },
+  { key: 'after-guides', label: 'After Buying Guides' },
+  { key: 'after-featured-brands', label: 'After Featured Brands' },
+  { key: 'after-services', label: 'After Popular Services' },
+  { key: 'after-recently-viewed', label: 'After Recently Viewed (only when the shopper has history)' },
+  { key: 'page-end', label: 'End of page' },
+];
+
+/** Listing pages: above or below the results. */
+export const LISTING_BANNER_POSITIONS: AdPagePosition[] = [
+  { key: 'top', label: 'Top of results' },
+  { key: 'bottom', label: 'Bottom of results' },
+];
+
+/** The spot an ad really shows in: its chosen one if valid for the slot, else the slot default. */
+export function resolvePagePosition(slot: AdPlacementDef | undefined, chosen: unknown): string | undefined {
+  if (!slot?.positions?.length) return undefined;
+  const key = typeof chosen === 'string' ? chosen.trim() : '';
+  return slot.positions.some((p) => p.key === key) ? key : slot.defaultPosition;
+}
+
+export function pagePositionLabel(slot: AdPlacementDef | undefined, key: string | undefined): string | undefined {
+  return slot?.positions?.find((p) => p.key === key)?.label;
+}
 
 export type SponsoredEntityType = 'product' | 'brand' | 'deal' | 'guide' | 'creator';
 
@@ -181,6 +219,8 @@ const wideSlot = (placementId: string, pageKey: AdPageKey, pageLabel: string, se
   ownerRoles: ['admin', 'seller', 'creator'],
   active: true,
   creative: WIDE_BANNER,
+  positions: LISTING_BANNER_POSITIONS,
+  defaultPosition: 'top',
 });
 /** Portrait card image in side rails / feeds, cropped to a 3:4 frame. */
 const PORTRAIT_CARD: AdCreativeSpec = {
@@ -248,6 +288,8 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
     ownerRoles: ['admin', 'seller', 'creator'],
     active: true,
     creative: WIDE_BANNER,
+    positions: HOME_BANNER_POSITIONS,
+    defaultPosition: 'after-popular-products',
   },
   {
     placementId: 'HOME_RIGHT_RAIL',
@@ -281,6 +323,8 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
     ownerRoles: ['admin', 'seller', 'creator'],
     active: true,
     creative: WIDE_BANNER,
+    positions: LISTING_BANNER_POSITIONS,
+    defaultPosition: 'top',
   },
   sidebar('BROWSE_SIDEBAR', 'browse', 'Products & Services'),
   // —— Deals ——
@@ -299,6 +343,8 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
     ownerRoles: ['admin', 'seller', 'creator'],
     active: true,
     creative: WIDE_BANNER,
+    positions: LISTING_BANNER_POSITIONS,
+    defaultPosition: 'top',
   },
   sidebar('DEALS_SIDEBAR', 'deals', 'Deals'),
   {

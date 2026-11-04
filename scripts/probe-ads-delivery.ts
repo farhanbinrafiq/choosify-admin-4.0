@@ -122,7 +122,7 @@ async function main() {
   const hb = d1.json?.data?.slots?.HOME_FOLLOW_BRANDS ?? [];
   const pub = hb.find((a: any) => a.id === liveId);
   check('public delivery includes the active ad in HOME_FOLLOW_BRANDS', Boolean(pub), d1.json);
-  check('delivered as a whole (natural) banner with link + sponsor', pub?.display === 'natural' && pub?.link?.url === '/deals' && pub?.sponsorName === 'Probe Brand');
+  check('delivered as a whole (natural) banner with link; no stray advertiser name (format has none)', pub?.display === 'natural' && pub?.link?.url === '/deals' && pub?.sponsorName === undefined);
   const leaked = ['ownerId', 'ownerRole', 'status', 'metadata', 'review', 'sellerNote', 'advertisementReferenceId', 'dealTerms', 'createdAt'].filter((k) => pub && k in pub);
   check('public payload has NO private fields (owner, status, metadata, review, reference id…)', pub && leaked.length === 0, leaked);
   check('public delivery is cacheable for 30s', /max-age=30/.test(d1.headers.get('cache-control') || ''));

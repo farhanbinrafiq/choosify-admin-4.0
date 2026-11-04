@@ -16,7 +16,7 @@ import { join, normalize, sep } from 'node:path';
 import type { AdRecord } from './types';
 import { adsStore } from './adsStore';
 import { getMediaStaticMount } from '../lib/mediaStorage';
-import { AD_PLACEMENTS, checkCreativeFit, getAnyPlacementDef, getFormatDef, getPlacementDef } from '../../shared/ads/placementRegistry';
+import { AD_PLACEMENTS, checkCreativeFit, getAnyPlacementDef, getFormatDef, getPlacementDef, resolvePagePosition } from '../../shared/ads/placementRegistry';
 
 export type PublicAdLink = { type: 'product' | 'brand' | 'creator' | 'guide' | 'deal' | 'url'; id?: string; url?: string; external: boolean };
 
@@ -35,6 +35,10 @@ export type PublicAd = {
   ctaLabel?: string;
   sponsorName?: string;
   sponsorLogoUrl?: string;
+  /** Wide banners: the exact spot on the page (slot default when none chosen). */
+  position?: string;
+  /** Image banners: draw headline + subtext over the image. */
+  showText?: boolean;
   /** Category Promoted Slot: the category card this sponsor footer belongs to. */
   categoryId?: string;
   categoryName?: string;
@@ -106,6 +110,8 @@ export function deliveryProblems(ad: AdRecord, now = Date.now()): string[] {
   const img = ad.creative?.imageUrl;
   if (format?.imageLed && !SAFE_IMAGE(img)) out.push('Missing or invalid image');
   if (format?.formatId === 'cta_strip' && !String(ad.creative?.headline ?? '').trim()) out.push('CTA strip needs a headline');
+  const chosen = ad.creative?.pagePosition;
+  if (slot && chosen && !slot.positions?.some((p) => p.key === chosen)) out.push(`Position "${chosen}" does not exist on ${slot.pageLabel}`);
   if (format?.formatId === 'category_promoted_slot') {
     if (!String(ad.creative?.categoryId ?? '').trim()) out.push('Choose the category card this sponsor appears on');
     if (!String(ad.creative?.advertiserName ?? '').trim()) out.push('Category sponsor needs an advertiser name');
@@ -147,8 +153,11 @@ export function toPublicAd(ad: AdRecord, origin = ''): PublicAd {
     headline,
     subtext: str(c.subtext ?? c.body, 200),
     ctaLabel: str(ad.cta?.label, 30),
-    sponsorName: str(c.advertiserName, 60),
+    // Only formats that ask for an advertiser carry one (a stale name never leaks onto other formats).
+    sponsorName: format.fields.includes('advertiser') ? str(c.advertiserName, 60) : undefined,
+    showText: format.imageLed && c.showText === true ? true : undefined,
     sponsorLogoUrl: SAFE_IMAGE(c.logoUrl) ? absoluteMedia(c.logoUrl, origin) : undefined,
+    position: resolvePagePosition(slot, c.pagePosition),
     categoryId: format.formatId === 'category_promoted_slot' ? str(c.categoryId, 80) : undefined,
     categoryName: format.formatId === 'category_promoted_slot' ? str(c.categoryName ?? c.hostCategoryName, 120) : undefined,
     link: adLink(ad),

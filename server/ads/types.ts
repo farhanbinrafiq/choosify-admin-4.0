@@ -21,6 +21,10 @@ export type AdsStatus =
 export type AdsKind = 'deal' | 'promotion' | 'banner' | 'external';
 
 export type AdCreative = {
+  /** Wide banners: the exact spot on the page (registry positions); absent = slot default. */
+  pagePosition?: string;
+  /** Image banners: draw the headline + subtext over the image (off = they are the image's description only). */
+  showText?: boolean;
   headline?: string;
   body?: string;
   imageUrl?: string;

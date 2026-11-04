@@ -50,7 +50,7 @@ import {
 import type { AdCreative, AdRecord, AdsOwnerRole } from './types';
 import { deliverableAdsBySlot, deliveryProblems, probeImageSize, ACTIVE_SLOT_IDS } from './adDelivery';
 import { adsStore } from './adsStore';
-import { checkCreativeFit, getAnyPlacementDef, getFormatDef, getPlacementDef, assertFormatPlacementCompatible } from '../../shared/ads/placementRegistry';
+import { checkCreativeFit, getAnyPlacementDef, getFormatDef, getPlacementDef, assertFormatPlacementCompatible, resolvePagePosition } from '../../shared/ads/placementRegistry';
 
 /**
  * Measures the creative image on the SERVER (client-sent sizes are never trusted) and checks it
@@ -64,6 +64,12 @@ async function measuredCreative(creative: unknown, formatId: string | undefined,
   delete c.imageHeight;
   const format = getFormatDef(formatId);
   const slot = getPlacementDef(placementId);
+  if (c.pagePosition !== undefined) {
+    const pos = typeof c.pagePosition === 'string' ? c.pagePosition.trim() : '';
+    if (!pos || !slot?.positions?.length) delete c.pagePosition;
+    else if (!slot.positions.some((p) => p.key === pos)) throw new AdsError(`"${pos}" is not a position on the ${slot.pageLabel} page`, 400);
+    else c.pagePosition = pos;
+  }
   if (!format?.imageLed || typeof c.imageUrl !== 'string' || !c.imageUrl) return c;
   const size = await probeImageSize(c.imageUrl);
   if (size) {
@@ -167,11 +173,17 @@ adsRouter.post('/ads/:id/move', ...requireAdmin, async (req, res) => {
     const ad = (await adsStore.getAd(req.params.id)) as AdRecord | null;
     if (!ad) throw new AdsError('Ad not found', 404);
     if (ad.kind !== 'banner' && ad.kind !== 'external') throw new AdsError('Only banner / direct ads can be moved between slots', 400);
-    const to = String(req.body?.placementId || '');
-    if (to === ad.placementId) throw new AdsError('The ad is already in that slot', 409);
+    const to = String(req.body?.placementId || ad.placementId || '');
+    const wantPos = typeof req.body?.position === 'string' ? req.body.position.trim() : undefined;
+    const fromPos = resolvePagePosition(getPlacementDef(ad.placementId), ad.creative?.pagePosition) ?? null;
+    if (to === ad.placementId && (wantPos === undefined || wantPos === fromPos)) throw new AdsError('The ad is already in that slot', 409);
     const compat = assertFormatPlacementCompatible(ad.formatId, to);
     if ('error' in compat) throw new AdsError(compat.error, 400);
-    const creative = await measuredCreative(ad.creative, ad.formatId, to);
+    const base: AdCreative = { ...(ad.creative || {}) };
+    if (wantPos !== undefined) base.pagePosition = wantPos;
+    // Moving to another page keeps the spot only when that page has the same spot.
+    else if (base.pagePosition && !compat.placement.positions?.some((p) => p.key === base.pagePosition)) delete base.pagePosition;
+    const creative = await measuredCreative(base, ad.formatId, to);
     const format = getFormatDef(ad.formatId);
     if (format?.imageLed && compat.placement.creative && !(Number(creative?.imageWidth) > 0)) {
       throw new AdsError('The image size could not be read, so it cannot be checked for the new slot — upload the image again first.', 400);
@@ -179,7 +191,8 @@ adsRouter.post('/ads/:id/move', ...requireAdmin, async (req, res) => {
     const now = new Date().toISOString();
     const meta = (ad.metadata || {}) as Record<string, unknown>;
     const history = Array.isArray(meta.placementHistory) ? (meta.placementHistory as unknown[]) : [];
-    const entry = { at: now, by: actor.userId, from: ad.placementId ?? null, to, statusAtMove: ad.status };
+    const toPos = resolvePagePosition(compat.placement, creative?.pagePosition) ?? null;
+    const entry = { at: now, by: actor.userId, from: ad.placementId ?? null, to, fromPosition: fromPos, toPosition: toPos, statusAtMove: ad.status };
     const updated: AdRecord = {
       ...ad,
       placementId: to,
@@ -189,7 +202,7 @@ adsRouter.post('/ads/:id/move', ...requireAdmin, async (req, res) => {
       updatedAt: now,
     };
     await adsStore.upsertAd(updated);
-    Logger.audit('ads.placement_moved', { actorId: actor.userId, adId: ad.id, from: entry.from, to, status: ad.status });
+    Logger.audit('ads.placement_moved', { actorId: actor.userId, adId: ad.id, from: entry.from, to, fromPosition: fromPos, toPosition: toPos, status: ad.status });
     res.json({ success: true, data: { ...updated, delivery: { problems: deliveryProblems(updated) } } });
   } catch (error) {
     handleError(res, error);
