@@ -26,7 +26,7 @@ export const CATEGORY_SEARCH_WORDS: Record<string, string[]> = {
   'sub-gifts-occasions-flowers-bouquets': ['flower', 'flowers', 'bouquet', 'florist', 'ফুল'],
   'sub-gifts-occasions-party-supplies-decorations': ['party', 'birthday', 'balloon', 'decoration'],
   'sub-gifts-occasions-greeting-cards-gift-wrap': ['card', 'greeting', 'wrap', 'wrapping'],
-  'cat-fashion': ['clothing', 'clothes', 'apparel', 'fashion', 'পোশাক', 'জামা'],
+  'cat-fashion': ['fashion', 'fashion brand', 'lifestyle brand'],
   'sub-fashion-lifestyle-mens-fashion': ['shirt', 'tshirt', 't-shirt', 'pant', 'jeans', 'menswear', 'casualwear', 'casual wear', 'mens clothing', "men's clothing", 'mens wear', 'gents', 'trouser', 'trousers', 'chinos', 'formal shirt', 'formal pant', 'polo shirt'],
   'sub-fashion-lifestyle-womens-fashion': ['dress', 'tops', 'womenswear', 'ladies', 'casualwear', 'casual wear', 'western wear'],
   'cat-mobile': ['phone', 'smartphone', 'mobile', 'iphone', 'android', 'ফোন', 'মোবাইল'],
@@ -48,7 +48,7 @@ export const CATEGORY_SEARCH_WORDS: Record<string, string[]> = {
   'sub-jewelry-luxury-fashion-artificial-jewellery': ['artificial', 'imitation', 'fashion jewellery', 'costume jewellery'],
   'sub-jewelry-luxury-gold': ['gold', 'সোনা'],
   'sub-jewelry-luxury-silver': ['silver', 'রুপা'],
-  'cat-beauty': ['beauty', 'cosmetics', 'health', 'pharmacy', 'medicine'],
+  'cat-beauty': ['beauty', 'beauty brand'],
   'sub-beauty-health-pharmacy-fragrances-perfumes': ['perfume', 'fragrance', 'attar', 'itr', 'body spray', 'decant', 'আতর'],
   'sub-beauty-health-pharmacy-personal-care': ['soap', 'shampoo', 'toiletries', 'hygiene', 'sanitary'],
   'sub-beauty-health-pharmacy-health-supplements-wellness': ['supplement', 'vitamin', 'protein', 'wellness', 'herbal'],
@@ -65,23 +65,23 @@ export const CATEGORY_SEARCH_WORDS: Record<string, string[]> = {
   'sub-home-furniture-appliances-tools-hardware': ['tools', 'hardware', 'paint', 'electrical', 'plumbing'],
   'sub-home-furniture-appliances-handicrafts-handloom': ['handicraft', 'handmade', 'handloom', 'pottery', 'ceramic', 'nakshi', 'jute', 'bamboo', 'craft'],
   'sub-home-furniture-appliances-kitchen-dining': ['cookware', 'crockery', 'dinner set', 'utensil'],
-  'cat-food': ['food', 'grocery', 'খাবার', 'বাজার'],
+  'cat-food': ['food', 'খাবার'],
   'sub-grocery-food-bakery-cakes-sweets': ['cake', 'bakery', 'sweets', 'mishti', 'dessert', 'মিষ্টি', 'কেক'],
   'sub-grocery-food-restaurants-home-kitchens': ['restaurant', 'cafe', 'home kitchen', 'home cook', 'meal', 'food delivery', 'tiffin'],
   'sub-grocery-food-snacks-instant-food': ['snacks', 'chips', 'noodles', 'biscuit'],
   'sub-grocery-food-cooking-essentials': ['oil', 'rice', 'spice', 'masala', 'flour', 'chal', 'dal'],
   'sub-grocery-food-organic-health-food': ['organic', 'honey', 'ghee', 'healthy food', 'মধু'],
-  'cat-baby': ['baby', 'kids', 'child', 'toy', 'শিশু'],
-  'cat-books': ['book', 'books', 'education', 'art', 'বই'],
+  'cat-baby': ['baby', 'kids', 'child', 'children', 'শিশু'],
+  'cat-books': ['books education arts'],
   'sub-books-education-arts-religious-books-items': ['islamic', 'quran', 'prayer mat', 'tasbih', 'religious'],
   'cat-automotive': ['car', 'vehicle', 'auto'],
   'sub-automotive-motorbikes-accessories': ['motorbike', 'bike', 'motorcycle', 'helmet', 'scooter'],
-  'cat-sporting': ['sport', 'fitness', 'gym', 'outdoor'],
+  'cat-sporting': ['sport', 'sports', 'fitness'],
   'sub-sports-fitness-outdoor-sportswear': ['jersey', 'sportswear', 'activewear', 'trackpant'],
-  'cat-pets': ['pet', 'cat food', 'dog', 'agri'],
-  'cat-travel': ['travel', 'tour', 'hotel', 'resort'],
+  'cat-pets': ['pets and agriculture'],
+  'cat-travel': ['travel', 'travel agency'],
   'cat-events': ['event', 'wedding', 'biye', 'বিয়ে'],
-  'cat-services': ['service', 'repair'],
+  'cat-services': ['service', 'services', 'service provider'],
   'sub-professional-home-services-interior-design': ['interior', 'interior design', 'interior decor', 'interior decoration', 'renovation', 'ইন্টেরিয়র'],
   'sub-professional-home-services-pest-control': ['pest', 'pest control', 'termite', 'cockroach', 'mosquito', 'rat'],
   'sub-professional-home-services-cleaning-services': ['cleaning service', 'house cleaning', 'deep cleaning', 'sofa cleaning', 'tank cleaning'],
@@ -95,7 +95,7 @@ export const CATEGORY_SEARCH_WORDS: Record<string, string[]> = {
   'sub-professional-home-services-courier-delivery': ['courier', 'delivery', 'parcel', 'logistics', 'shipping'],
   'sub-professional-home-services-tutoring-coaching': ['tutor', 'tuition', 'coaching', 'teacher', 'home tutor', 'প্রাইভেট'],
   'sub-professional-home-services-salon-beauty-services': ['salon', 'parlour', 'parlor', 'beauty parlour', 'spa', 'haircut', 'makeover', 'bridal makeup', 'mehedi'],
-  'sub-pets-agriculture-pet-care-grooming': ['pet care', 'grooming', 'pet grooming', 'pet hotel', 'pet boarding', 'cat care', 'dog care'],  'cat-digital': ['digital', 'software', 'online'],
+  'sub-pets-agriculture-pet-care-grooming': ['pet care', 'grooming', 'pet grooming', 'pet hotel', 'pet boarding', 'cat care', 'dog care'],  'cat-digital': ['digital', 'digital products'],
 };
 
 /** More search words (2026-11-02 audit of ~120 common seller/shopper terms), merged with the list above. */
@@ -197,6 +197,43 @@ const ACCESSORY_SEARCH_WORDS: Record<string, string[]> = {
   'sub-books-education-arts-religious-books-items': ['janamaz', 'jainamaz', 'prayer mat', 'tasbih', 'tasbeeh', 'quran stand', 'rehal', 'attar'],
 };
 
+/** Words that belong to one part of a main category (2026-11-04 search audit): "clothing" means the clothing
+ * subcategories, not shoes / bags / watches; "pet" means the pet subcategories, not Agriculture. */
+const SPECIFIC_SEARCH_WORDS: Record<string, string[]> = {
+  'sub-fashion-lifestyle-mens-fashion': ['clothing', 'clothes', 'apparel', 'garments', 'dress', 'dresses', 'outfit', 'পোশাক', 'জামা', 'কাপড়'],
+  'sub-fashion-lifestyle-womens-fashion': ['clothing', 'clothes', 'apparel', 'garments', 'dress', 'dresses', 'outfit', 'পোশাক', 'জামা', 'কাপড়'],
+  'sub-fashion-lifestyle-kids-fashion': ['clothing', 'clothes', 'apparel', 'garments', 'dress', 'dresses', 'outfit', 'পোশাক', 'জামা', 'কাপড়'],
+  'sub-fashion-lifestyle-traditional-ethnic-wear': ['clothing', 'clothes', 'apparel', 'garments', 'dress', 'dresses', 'outfit', 'পোশাক', 'জামা', 'কাপড়'],
+  'sub-fashion-lifestyle-modest-wear-hijab-abaya': ['clothing', 'clothes', 'apparel', 'garments', 'dress', 'dresses', 'outfit', 'পোশাক', 'জামা', 'কাপড়'],
+  'sub-fashion-lifestyle-panjabi-sherwani': ['clothing', 'clothes', 'apparel', 'garments', 'dress', 'dresses', 'outfit', 'পোশাক', 'জামা', 'কাপড়'],
+  'sub-fashion-lifestyle-sarees-blouses': ['clothing', 'clothes', 'apparel', 'garments', 'dress', 'dresses', 'outfit', 'পোশাক', 'জামা', 'কাপড়'],
+  'sub-fashion-lifestyle-salwar-kameez-three-piece': ['clothing', 'clothes', 'apparel', 'garments', 'dress', 'dresses', 'outfit', 'পোশাক', 'জামা', 'কাপড়'],
+  'sub-fashion-lifestyle-suits-blazers-formal-wear': ['clothing', 'clothes', 'apparel', 'garments', 'dress', 'dresses', 'outfit', 'পোশাক', 'জামা', 'কাপড়'],
+  'sub-fashion-lifestyle-gowns-party-wear': ['clothing', 'clothes', 'apparel', 'garments', 'dress', 'dresses', 'outfit', 'পোশাক', 'জামা', 'কাপড়'],
+  'sub-fashion-lifestyle-bridal-wedding-wear': ['clothing', 'clothes', 'apparel', 'garments', 'dress', 'dresses', 'outfit', 'পোশাক', 'জামা', 'কাপড়'],
+  'sub-fashion-lifestyle-bespoke-custom-tailoring': ['clothing', 'clothes', 'apparel', 'garments', 'dress', 'dresses', 'outfit', 'পোশাক', 'জামা', 'কাপড়'],
+  'sub-pets-agriculture-pet-food': ['pet', 'pets', 'pet shop', 'pet store', 'dog', 'dogs', 'cat', 'cats', 'cat food', 'dog food', 'bird food', 'fish food'],
+  'sub-pets-agriculture-pet-accessories': ['pet', 'pets', 'pet shop', 'pet store', 'dog', 'cat', 'bird', 'fish', 'pet supplies'],
+  'sub-pets-agriculture-pet-care-grooming': ['pet', 'pets', 'dog', 'cat'],
+  'sub-pets-agriculture-veterinary': ['pet', 'pets', 'vet', 'pet doctor', 'animal hospital', 'dog', 'cat'],
+  'sub-pets-agriculture-agriculture': ['agri', 'agro', 'agriculture', 'farm', 'farming', 'krishi', 'কৃষি'],
+  'sub-books-education-arts-books': ['book', 'books', 'bookshop', 'book shop', 'bookstore', 'novel', 'বই'],
+  'sub-books-education-arts-online-courses': ['education', 'course', 'courses', 'online class', 'e-learning', 'learning'],
+  'sub-books-education-arts-arts-crafts': ['art', 'arts', 'artist', 'craft', 'crafts', 'handmade art', 'art supplies'],
+  'sub-home-furniture-appliances-paintings-wall-art': ['art', 'artwork', 'painting', 'paintings', 'artist', 'canvas', 'fine art'],
+  'sub-beauty-health-pharmacy-otc-medicines': ['medicine', 'medicines', 'pharmacy', 'drug store', 'health'],
+  'sub-beauty-health-pharmacy-health-supplements-wellness': ['health', 'healthcare', 'wellness', 'nutrition'],
+  'sub-beauty-health-pharmacy-medical-devices': ['health', 'healthcare', 'medical', 'medical equipment'],
+  'sub-beauty-health-pharmacy-skincare': ['cosmetics', 'beauty care'],
+  'sub-travel-hospitality-travel-packages': ['tour', 'tours', 'tour package', 'travel package', 'holiday package', 'trip'],
+  'sub-professional-home-services-repair-maintenance': ['repair', 'repairs', 'maintenance', 'servicing', 'mechanic'],
+  'sub-sports-fitness-outdoor-gym-equipment': ['gym', 'gym equipment', 'workout', 'exercise equipment', 'dumbbell', 'treadmill'],
+  'sub-sports-fitness-outdoor-camping': ['outdoor', 'outdoors', 'camping', 'hiking', 'trekking', 'tent'],
+  'sub-baby-kids-toys-toys': ['toy', 'toys', 'toy shop', 'খেলনা'],
+  'sub-grocery-food-grocery': ['grocery', 'groceries', 'grocery shop', 'supermarket', 'বাজার', 'মুদি'],
+  'sub-digital-products-software': ['software', 'app', 'apps', 'saas', 'license key'],
+};
+
 // \p{M} keeps Bangla vowel signs inside the word (জুতা is one word, not জ + ত).
 const tokenise = (v: string) =>
   v
@@ -222,7 +259,7 @@ const sameWord = (a: string, b: string) => singulars(a).some((x) => singulars(b)
  * a phrase made of the same whole words, or whole-word / singular-plural matches count — never a
  * word start or a fragment ("pet" must not match "petticoat" or "carpet").
  */
-function matchScore(query: string, haystack: string[], wholeWords = false): number {
+function matchScore(query: string, haystack: string[], wholeWords = false, isMain = false): number {
   const q = query.trim().toLowerCase();
   if (!q) return 0;
   const phrases = haystack.map((h) => h.toLowerCase());
@@ -242,7 +279,8 @@ function matchScore(query: string, haystack: string[], wholeWords = false): numb
     // ("saree" in "saree petticoat", "laptop" in "laptop bag") is a weak hint, below the
     // threshold the storefront uses.
     const inTokens = (tokens: Set<string>) => qTokens.every((t) => [...tokens].some((h) => h === t || sameWord(h, t)));
-    if (inTokens(new Set(tokenise(phrases[0] ?? '')))) return 50;
+    // A main category's name combines several areas, so one of its words alone stays weak.
+    if (inTokens(new Set(tokenise(phrases[0] ?? '')))) return isMain ? 40 : 50;
     return inTokens(new Set(phrases.flatMap(tokenise))) ? 40 : 0;
   }
   const hTokens = new Set(phrases.flatMap(tokenise));
@@ -267,10 +305,11 @@ export function searchCategories(categories: SearchableCategory[], query: string
     ...(CATEGORY_SEARCH_WORDS[c.id] ?? []),
     ...(MORE_SEARCH_WORDS[c.id] ?? []),
     ...(ACCESSORY_SEARCH_WORDS[c.id] ?? []),
+    ...(SPECIFIC_SEARCH_WORDS[c.id] ?? []),
   ];
   const out: CategoryMatch[] = [];
   for (const main of mains) {
-    const s = matchScore(query, words(main), opts.wholeWords);
+    const s = matchScore(query, words(main), opts.wholeWords, true);
     if (s > 0) out.push({ main, score: s + 1 }); // a main ranks just above an equally good sub
   }
   for (const sub of live.filter((c) => c.parentId)) {
@@ -278,7 +317,7 @@ export function searchCategories(categories: SearchableCategory[], query: string
     if (!main) continue;
     const own = matchScore(query, words(sub), opts.wholeWords);
     // A sub also matches weakly through its main ("fashion" lists Footwear too).
-    const viaMain = matchScore(query, words(main), opts.wholeWords) * 0.4;
+    const viaMain = matchScore(query, words(main), opts.wholeWords, true) * 0.4;
     const s = Math.max(own, viaMain);
     if (s > 0) out.push({ main, sub, score: s });
   }
