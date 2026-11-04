@@ -26,7 +26,7 @@ export const WEBSITE_DOCUMENT_KINDS: readonly WebsiteDocumentKind[] = [
 ];
 
 /** Kinds whose drafts can be edited through the API in the current phase. */
-export const EDITABLE_KINDS: ReadonlySet<WebsiteDocumentKind> = new Set(['company', 'brand_assets']);
+export const EDITABLE_KINDS: ReadonlySet<WebsiteDocumentKind> = new Set(['company', 'brand_assets', 'homepage']);
 
 export const KEY_PATTERN = /^[a-z][a-z0-9_]*(:[a-z0-9]+(-[a-z0-9]+)*)?$/;
 
@@ -261,10 +261,282 @@ export function validateBrandAssets(input: unknown): BrandAssets {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Homepage (Phase 2)
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * The homepage sections the storefront ACTUALLY renders (Web src/pages/HomePage.tsx), in its
+ * default order. `content` says what the Studio may configure for the section — only fields the
+ * storefront really reads are offered:
+ *  - categories: optional hand-picked categories (else: categories with the most products)
+ *  - products:   featuredProductIds (else: newest products). Shown inside "Viral Today" while that
+ *                section is visible; as its own "Popular Products" block when Viral Today is hidden.
+ *  - guides:     featuredGuideIds (else: newest guides)
+ *  - brands:     featuredBrandIds (else: daily rotation). Active ad placements still win.
+ *  - dealsBanners: content comes from the Deals Banners studio (not stored here)
+ *  - auto / static / personal: visibility, order and heading only
+ */
+export const HOMEPAGE_SECTIONS = [
+  { id: 'categories', name: 'Top Categories', defaultTitle: 'Top Categories', content: 'categories', heading: true },
+  { id: 'spotlight', name: 'Viral Today', defaultTitle: 'Viral Today', content: 'auto', heading: true },
+  { id: 'trending', name: 'Popular Products', defaultTitle: 'Popular Products', content: 'products', heading: true },
+  { id: 'deals', name: "Today's Deals", defaultTitle: "Today's Deals", content: 'dealsBanners', heading: true },
+  { id: 'compare', name: 'Compare', defaultTitle: '', content: 'static', heading: false },
+  { id: 'recommended', name: 'Top Buying Guides', defaultTitle: 'Top Buying Guides', content: 'guides', heading: true },
+  { id: 'featured-brands', name: 'Featured Brands', defaultTitle: 'Featured Brands', content: 'brands', heading: true },
+  { id: 'services', name: 'Popular Services', defaultTitle: 'Popular Services', content: 'static', heading: true },
+  { id: 'recently-viewed', name: 'Recently Viewed', defaultTitle: 'Recently Viewed', content: 'personal', heading: true },
+] as const;
+export type HomepageSectionId = (typeof HOMEPAGE_SECTIONS)[number]['id'];
+const SECTION_IDS = HOMEPAGE_SECTIONS.map((s) => s.id) as readonly string[];
+/** Stored ids the storefront never renders (kept out of the Studio). */
+export const DEPRECATED_HOMEPAGE_SECTIONS = ['creators', 'newsletter'];
+
+// The storefront shows 6 category tiles (icons, not photos), 8 products, 12 brands, 12 guides.
+export const HOMEPAGE_LIMITS = { slides: 6, categories: 6, products: 8, brands: 12, guides: 12 } as const;
+
+export type HomepageSlide = {
+  id: string;
+  /** Accessible name of the slide + its link (the hero shows media only, no text overlay). */
+  label: string;
+  linkUrl: string;
+  mediaType: 'image' | 'video';
+  mediaUrl: string;
+  /** Optional separate media for phones (same type). */
+  mobileMediaUrl: string;
+  /** Video only: still frame shown before the video plays. */
+  posterUrl: string;
+  alt: string;
+  /** Focal point (0–100 %) — which part of the image stays visible when cropped. */
+  focalX: number;
+  focalY: number;
+  isActive: boolean;
+};
+export type HomepageSection = { id: HomepageSectionId; isVisible: boolean; title: string; subtitle: string };
+/** A real catalog category; blank label = the category's own name. */
+export type HomepageCategoryPick = { id: string; label: string };
+export type HomepageStudio = {
+  version: 2;
+  heroVisible: boolean;
+  slides: HomepageSlide[];
+  /** In display order. */
+  sections: HomepageSection[];
+  topCategories: HomepageCategoryPick[];
+  featuredProductIds: string[];
+  featuredBrandIds: string[];
+  featuredGuideIds: string[];
+};
+
+export const DEFAULT_HOMEPAGE: HomepageStudio = {
+  version: 2,
+  heroVisible: true,
+  slides: [],
+  sections: HOMEPAGE_SECTIONS.map((s) => ({ id: s.id, isVisible: true, title: '', subtitle: '' })),
+  topCategories: [],
+  featuredProductIds: [],
+  featuredBrandIds: [],
+  featuredGuideIds: [],
+};
+
+/** Internal site path ("/deals?x=1") or https URL. Empty allowed. */
+export function linkUrl(v: unknown, field: string): string {
+  const t = text(v, field, 500);
+  if (!t) return '';
+  if (t.startsWith('/') && !t.startsWith('//')) {
+    if (/[\s<>"'`\\]/.test(t)) throw new WebsiteContentError('Invalid link', field);
+    return t;
+  }
+  let u: URL;
+  try {
+    u = new URL(t);
+  } catch {
+    throw new WebsiteContentError('Use a site path like /deals or an https:// link', field);
+  }
+  if (u.protocol !== 'https:') throw new WebsiteContentError('Only https:// links are allowed', field);
+  return u.toString();
+}
+
+const idList = (v: unknown, field: string, max: number): string[] => {
+  if (v === undefined || v === null) return [];
+  if (!Array.isArray(v)) throw new WebsiteContentError('Expected a list', field);
+  const out: string[] = [];
+  for (const [i, x] of v.entries()) {
+    const id = text(x, `${field}[${i}]`, 120);
+    if (id && !out.includes(id)) out.push(id);
+  }
+  if (out.length > max) throw new WebsiteContentError(`At most ${max}`, field);
+  return out;
+};
+
+const pct = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(100, Math.max(0, Math.round(v))) : 50);
+
+const VIDEO_EXT = /\.(mp4|webm)(\?|#|$)/i;
+const IMAGE_EXT = /\.(jpe?g|png|webp|gif|avif)(\?|#|$)/i;
+
+function slide(raw: unknown, i: number, ids: Set<string>): HomepageSlide {
+  const f = `slides[${i}]`;
+  const r = asObject(raw, f);
+  const id = (text(r.id, `${f}.id`, 40) || `slide-${i + 1}`).toLowerCase();
+  if (!/^[a-z0-9-]+$/.test(id)) throw new WebsiteContentError('Use letters, numbers and hyphens', `${f}.id`);
+  if (ids.has(id)) throw new WebsiteContentError('Duplicate slide id', `${f}.id`);
+  ids.add(id);
+  const mediaType = r.mediaType === 'video' ? 'video' : 'image';
+  const mediaUrl = assetUrl(r.mediaUrl, `${f}.mediaUrl`);
+  const mobileMediaUrl = assetUrl(r.mobileMediaUrl, `${f}.mobileMediaUrl`);
+  const posterUrl = mediaType === 'video' ? assetUrl(r.posterUrl, `${f}.posterUrl`) : '';
+  const check = (url: string, field: string) => {
+    if (!url) return;
+    if (mediaType === 'video' && IMAGE_EXT.test(url)) throw new WebsiteContentError('This is an image — choose "Image" or use an MP4/WebM video', field);
+    if (mediaType === 'image' && VIDEO_EXT.test(url)) throw new WebsiteContentError('This is a video — choose "Video" for this slide', field);
+  };
+  check(mediaUrl, `${f}.mediaUrl`);
+  check(mobileMediaUrl, `${f}.mobileMediaUrl`);
+  if (posterUrl && VIDEO_EXT.test(posterUrl)) throw new WebsiteContentError('The poster must be an image', `${f}.posterUrl`);
+  const isActive = bool(r.isActive, true);
+  const label = text(r.label, `${f}.label`, 120);
+  const alt = text(r.alt, `${f}.alt`, 160);
+  if (isActive) {
+    if (!mediaUrl) throw new WebsiteContentError('An active slide needs an image or video (or switch it off)', `${f}.mediaUrl`);
+    if (!label) throw new WebsiteContentError('Give the slide a name — screen readers announce it', `${f}.label`);
+    if (mediaType === 'image' && !alt) throw new WebsiteContentError('Add alt text describing the image', `${f}.alt`);
+  }
+  return {
+    id,
+    label,
+    linkUrl: linkUrl(r.linkUrl, `${f}.linkUrl`),
+    mediaType,
+    mediaUrl,
+    mobileMediaUrl,
+    posterUrl,
+    alt,
+    focalX: pct(r.focalX),
+    focalY: pct(r.focalY),
+    isActive,
+  };
+}
+
+/**
+ * Accepts the Studio shape (version 2) or the legacy catalog HomepageConfig the backfill imported,
+ * and returns the strict Studio shape. Legacy conversion preserves what shoppers see today:
+ *  - section order = the storefront's effective order (listed sections by `order`, then the
+ *    sections it renders that were never listed, in its default order);
+ *  - legacy `label`s were admin-only names, so headings stay the storefront defaults;
+ *  - legacy hero banners without media were skipped by the storefront → imported switched off;
+ *  - dealsBanners / featuredDealIds / featuredCreatorIds are not rendered from here → dropped.
+ */
+export function validateHomepage(input: unknown): HomepageStudio {
+  const o = asObject(input, 'homepage');
+  const legacy = o.version !== 2;
+  let src: Record<string, unknown> = o;
+  if (legacy) {
+    const sections = Array.isArray(o.sections) ? (o.sections as Array<Record<string, unknown>>) : [];
+    const norm = (id: unknown) => (id === 'viral-today' ? 'spotlight' : String(id ?? ''));
+    const listed = new Map<string, { order: number; visible: boolean }>();
+    for (const s of sections) {
+      const id = norm(s?.id);
+      if (SECTION_IDS.includes(id) && !listed.has(id)) listed.set(id, { order: Number(s.order) || 0, visible: s.isVisible !== false });
+    }
+    const hero = sections.find((s) => s?.id === 'hero');
+    const orderedIds = [
+      ...SECTION_IDS.filter((id) => listed.has(id)).sort((a, b) => listed.get(a)!.order - listed.get(b)!.order),
+      ...SECTION_IDS.filter((id) => !listed.has(id)),
+    ];
+    const banners = Array.isArray(o.heroBanners) ? (o.heroBanners as Array<Record<string, unknown>>) : [];
+    src = {
+      version: 2,
+      heroVisible: hero ? hero.isVisible !== false : true,
+      slides: [...banners]
+        .sort((a, b) => Number(a?.order ?? 0) - Number(b?.order ?? 0))
+        .map((b) => {
+          const isVideo = b?.mediaType === 'video';
+          const media = String((isVideo ? b?.mediaUrl || b?.backgroundVideo : b?.mediaUrl || b?.backgroundImage) ?? '');
+          return {
+            id: b?.id,
+            label: b?.headline || b?.ctaText || '',
+            linkUrl: b?.ctaUrl || '',
+            mediaType: isVideo ? 'video' : 'image',
+            mediaUrl: media,
+            posterUrl: isVideo ? b?.backgroundImage || '' : '',
+            alt: b?.headline || '',
+            isActive: b?.isActive !== false && Boolean(media),
+          };
+        }),
+      sections: orderedIds.map((id) => ({ id, isVisible: listed.get(id)?.visible ?? true, title: '', subtitle: '' })),
+      topCategories: Array.isArray(o.topCategories)
+        ? [...(o.topCategories as Array<Record<string, unknown>>)]
+            .sort((a, b) => Number(a?.order ?? 0) - Number(b?.order ?? 0))
+            .slice(0, HOMEPAGE_LIMITS.categories)
+            .map((c) => ({ id: c?.id, label: c?.label ?? '' }))
+        : [],
+      featuredProductIds: o.featuredProductIds,
+      featuredBrandIds: o.featuredBrandIds,
+      featuredGuideIds: o.featuredGuideIds,
+    };
+  }
+  const allowed = new Set(['version', 'heroVisible', 'slides', 'sections', 'topCategories', 'featuredProductIds', 'featuredBrandIds', 'featuredGuideIds']);
+  for (const k of Object.keys(src)) if (!allowed.has(k)) throw new WebsiteContentError('Unknown homepage setting', k);
+
+  const slidesRaw = src.slides === undefined ? [] : src.slides;
+  if (!Array.isArray(slidesRaw)) throw new WebsiteContentError('Expected a list', 'slides');
+  if (slidesRaw.length > HOMEPAGE_LIMITS.slides) throw new WebsiteContentError(`At most ${HOMEPAGE_LIMITS.slides} slides`, 'slides');
+  const slideIds = new Set<string>();
+  const slides = slidesRaw.map((s, i) => slide(s, i, slideIds));
+
+  const sectionsRaw = src.sections === undefined ? [] : src.sections;
+  if (!Array.isArray(sectionsRaw)) throw new WebsiteContentError('Expected a list', 'sections');
+  const seen = new Set<string>();
+  const sections: HomepageSection[] = [];
+  sectionsRaw.forEach((raw, i) => {
+    const f = `sections[${i}]`;
+    const r = asObject(raw, f);
+    const id = text(r.id, `${f}.id`, 40, true);
+    if (DEPRECATED_HOMEPAGE_SECTIONS.includes(id)) return; // never rendered by the storefront
+    const def = HOMEPAGE_SECTIONS.find((s) => s.id === id);
+    if (!def) throw new WebsiteContentError(`"${id}" is not a homepage section the website can show`, `${f}.id`);
+    if (seen.has(id)) throw new WebsiteContentError('Section listed twice', `${f}.id`);
+    seen.add(id);
+    sections.push({
+      id: def.id,
+      isVisible: bool(r.isVisible, true),
+      title: def.heading ? text(r.title, `${f}.title`, 60) : '',
+      subtitle: def.heading ? text(r.subtitle, `${f}.subtitle`, 160) : '',
+    });
+  });
+  // A section missing from the list keeps rendering on the storefront (after the listed ones),
+  // so it is added visibly here — the Studio always shows the full, real page.
+  for (const def of HOMEPAGE_SECTIONS) if (!seen.has(def.id)) sections.push({ id: def.id, isVisible: true, title: '', subtitle: '' });
+
+  const catsRaw = src.topCategories === undefined ? [] : src.topCategories;
+  if (!Array.isArray(catsRaw)) throw new WebsiteContentError('Expected a list', 'topCategories');
+  if (catsRaw.length > HOMEPAGE_LIMITS.categories) throw new WebsiteContentError(`At most ${HOMEPAGE_LIMITS.categories} categories`, 'topCategories');
+  const catIds = new Set<string>();
+  const topCategories = catsRaw.map((raw, i) => {
+    const f = `topCategories[${i}]`;
+    const r = asObject(raw, f);
+    const id = text(r.id, `${f}.id`, 120, true);
+    if (catIds.has(id)) throw new WebsiteContentError('Category picked twice', `${f}.id`);
+    catIds.add(id);
+    return { id, label: text(r.label, `${f}.label`, 40) };
+  });
+
+  return {
+    version: 2,
+    heroVisible: bool(src.heroVisible, true),
+    slides,
+    sections,
+    topCategories,
+    featuredProductIds: idList(src.featuredProductIds, 'featuredProductIds', HOMEPAGE_LIMITS.products),
+    featuredBrandIds: idList(src.featuredBrandIds, 'featuredBrandIds', HOMEPAGE_LIMITS.brands),
+    featuredGuideIds: idList(src.featuredGuideIds, 'featuredGuideIds', HOMEPAGE_LIMITS.guides),
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
 
 export function defaultsForKind(kind: WebsiteDocumentKind): unknown {
   if (kind === 'company') return structuredClone(DEFAULT_COMPANY);
   if (kind === 'brand_assets') return structuredClone(DEFAULT_BRAND_ASSETS);
+  if (kind === 'homepage') return structuredClone(DEFAULT_HOMEPAGE);
   return null;
 }
 
@@ -273,6 +545,7 @@ export function validateContent(kind: WebsiteDocumentKind, content: unknown): un
   assertSafeStructuredContent(content);
   if (kind === 'company') return validateCompany(content);
   if (kind === 'brand_assets') return validateBrandAssets(content);
+  if (kind === 'homepage') return validateHomepage(content);
   // Read-only kinds in this phase: only the generic safety checks above apply (used by backfill).
   if (content === null || typeof content !== 'object') throw new WebsiteContentError('Expected an object');
   return content;

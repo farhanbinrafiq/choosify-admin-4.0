@@ -40,6 +40,10 @@ import {
   saveDraft,
 } from './websiteStore';
 import { PREVIEW_TOKEN_TTL_SECONDS, signPreviewToken, verifyPreviewToken } from './previewTokens';
+import { checkHomepageReferences, getDraftStorefrontHomepage, invalidateHomepageCache } from './websiteHomepage';
+import { catalogStore } from '../../lib/vercel-catalog/catalogStore';
+import { siteForViewer } from '../storefront/curationAuth';
+import type { HomepageStudio } from './websiteContent';
 
 export const websiteRouter = Router();
 
@@ -64,6 +68,20 @@ function sendError(res: Response, error: unknown) {
   res.status(500).json({ error: 'Website Studio request failed', code: 'INTERNAL' });
 }
 
+/**
+ * Checks that must pass before content goes PUBLIC (publish and rollback). Draft saves skip them,
+ * so editors can work on a draft while, e.g., a picked product is being re-listed.
+ */
+async function publishBlockers(kind: WebsiteDocumentKind, content: unknown): Promise<string[]> {
+  if (kind === 'homepage') return checkHomepageReferences(content as HomepageStudio);
+  return [];
+}
+
+/** Clears server-side caches that serve published content, so the storefront updates at once. */
+function afterPublish(kind: WebsiteDocumentKind) {
+  if (kind === 'homepage') invalidateHomepageCache();
+}
+
 /** Resolves :key to its kind or answers 404. */
 function resolveKey(req: Request, res: Response): { key: string; kind: WebsiteDocumentKind } | null {
   const key = String(req.params.key || '').trim();
@@ -85,12 +103,26 @@ const revisionOf = (req: Request): number | null => {
   return Number.isInteger(r) && r >= 0 ? r : null;
 };
 
+/**
+ * Content as the editor shows it. The homepage baseline was imported in the legacy catalog shape;
+ * it is shown normalised to the Studio shape (read-only — stored rows are never rewritten here).
+ * Anything that fails today's validation is returned as stored so nothing is hidden.
+ */
+function presentable(kind: WebsiteDocumentKind, content: unknown): unknown {
+  if (kind !== 'homepage' || content === null || content === undefined) return content;
+  try {
+    return validateContent(kind, content);
+  } catch {
+    return content;
+  }
+}
+
 function documentView(doc: Awaited<ReturnType<typeof getDocument>>, kind: WebsiteDocumentKind) {
   return {
     key: doc?.key,
     kind,
     editable: EDITABLE_KINDS.has(kind),
-    draft: doc?.draft ?? null,
+    draft: presentable(kind, doc?.draft ?? null),
     hasDraft: Boolean(doc && doc.draft !== null),
     draftRevision: doc?.draftRevision ?? 0,
     draftBaseVersion: doc?.draftBaseVersion ?? null,
@@ -158,7 +190,7 @@ websiteRouter.get('/website/documents/:key', ...requireCmsEdit, async (req, res)
         ...documentView(doc, r.kind),
         key: r.key,
         latestVersion: await latestVersionNumber(r.key),
-        published: published ? { version: published.version, content: published.content, publishedAt: published.publishedAt, publishedByUserId: published.publishedByUserId } : null,
+        published: published ? { version: published.version, content: presentable(r.kind, published.content), publishedAt: published.publishedAt, publishedByUserId: published.publishedByUserId } : null,
         defaults: defaultsForKind(r.kind),
       },
     });
@@ -193,7 +225,7 @@ websiteRouter.get('/website/documents/:key/versions/:version', ...requireCmsEdit
       res.status(404).json({ error: 'Version not found', code: 'VERSION_NOT_FOUND' });
       return;
     }
-    res.json({ data: version });
+    res.json({ data: { ...version, content: presentable(r.kind, version.content) } });
   } catch (e) {
     sendError(res, e);
   }
@@ -291,7 +323,13 @@ websiteRouter.post('/website/documents/:key/publish', ...requireCmsEdit, async (
       return;
     }
     const content = validateContent(r.kind, doc.draft);
+    const blockers = await publishBlockers(r.kind, content);
+    if (blockers.length) {
+      res.status(422).json({ error: `Fix these before publishing: ${blockers.join('; ')}`, code: 'PUBLISH_BLOCKED', problems: blockers });
+      return;
+    }
     const out = await publishVersion({ key: r.key, content, source: 'publish', changeNote: note, actorUserId: req.userId ?? null, fromDraftRevision: expected });
+    afterPublish(r.kind);
     Logger.audit('website.published', { actorId: req.userId, realActorId: req.realActorUserId ?? null, key: r.key, version: out.version.version, changeNote: note });
     res.json({ data: { ...documentView(out.doc, r.kind), published: { version: out.version.version, publishedAt: out.version.publishedAt } } });
   } catch (e) {
@@ -326,7 +364,13 @@ websiteRouter.post('/website/documents/:key/rollback', ...requireCmsEdit, async 
     }
     // Re-validate: an old version must still satisfy today's rules before it goes public again.
     const content = validateContent(r.kind, old.content);
+    const blockers = await publishBlockers(r.kind, content);
+    if (blockers.length) {
+      res.status(422).json({ error: `This version cannot go live again: ${blockers.join('; ')}`, code: 'PUBLISH_BLOCKED', problems: blockers });
+      return;
+    }
     const out = await publishVersion({ key: r.key, content, source: 'rollback', restoredFromVersion: from, changeNote: note, actorUserId: req.userId ?? null });
+    afterPublish(r.kind);
     Logger.audit('website.rolled_back', { actorId: req.userId, realActorId: req.realActorUserId ?? null, key: r.key, fromVersion: from, newVersion: out.version.version, changeNote: note });
     res.json({ data: { ...documentView(out.doc, r.kind), published: { version: out.version.version, publishedAt: out.version.publishedAt } } });
   } catch (e) {
@@ -395,6 +439,35 @@ websiteRouter.get('/website/preview/:key', async (req, res) => {
       return;
     }
     res.json({ data: { key: r.key, kind: r.kind, draftRevision: doc.draftRevision, content: doc.draft } });
+  } catch (e) {
+    sendError(res, e);
+  }
+});
+
+/**
+ * Storefront draft preview session (Web /cms-preview?token=…, CmsDraftPreviewContext).
+ * Accepts a Website Studio preview token scoped to the HOMEPAGE draft and returns the draft mapped
+ * to the storefront shape plus the public site settings. No-store + noindex; the token is not a
+ * login and expires after PREVIEW_TOKEN_TTL_SECONDS.
+ */
+websiteRouter.get('/catalog/cms-preview/session/:token', async (req, res) => {
+  noStore(res);
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+  const token = String(req.params.token || '');
+  const claims = token ? verifyPreviewToken(token, 'homepage') : null;
+  if (!claims) {
+    res.status(401).json({ error: 'Preview link is invalid or has expired', code: 'PREVIEW_TOKEN_INVALID' });
+    return;
+  }
+  try {
+    const homepage = await getDraftStorefrontHomepage();
+    if (!homepage) {
+      res.status(404).json({ error: 'There is no draft to preview', code: 'NO_DRAFT' });
+      return;
+    }
+    // Same public view of the site settings the storefront gets from GET /catalog/site.
+    const site = siteForViewer(await catalogStore.getSiteConfig(), null);
+    res.json({ preview: { token, expiresAt: new Date(claims.exp * 1000).toISOString(), homepage, site } });
   } catch (e) {
     sendError(res, e);
   }

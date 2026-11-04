@@ -18,7 +18,7 @@ function previewKey(): string {
   return createHmac('sha256', secret).update('website-preview-token-v1').digest('hex');
 }
 
-export type PreviewClaims = { key: string; rev: number; sub: string | null };
+export type PreviewClaims = { key: string; rev: number; sub: string | null; exp: number };
 
 export function signPreviewToken(documentKey: string, draftRevision: number, actorUserId: string | null) {
   const expiresAt = new Date(Date.now() + PREVIEW_TOKEN_TTL_SECONDS * 1000);
@@ -37,7 +37,7 @@ export function verifyPreviewToken(token: string, documentKey: string): PreviewC
   try {
     const decoded = jwt.verify(token, previewKey(), { algorithms: ['HS256'], audience: AUDIENCE, issuer: ISSUER }) as jwt.JwtPayload;
     if (decoded.typ !== 'website-preview' || decoded.k !== documentKey) return null;
-    return { key: String(decoded.k), rev: Number(decoded.r) || 0, sub: typeof decoded.sub === 'string' ? decoded.sub : null };
+    return { key: String(decoded.k), rev: Number(decoded.r) || 0, sub: typeof decoded.sub === 'string' ? decoded.sub : null, exp: Number(decoded.exp) || 0 };
   } catch {
     return null;
   }

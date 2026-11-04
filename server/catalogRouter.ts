@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { getStorefrontHomepage, isHomepageManagedByStudio } from './website/websiteHomepage';
 import { BrandCategoryError, withResolvedBrandCategory } from './catalog/brandCategoryChoice';
 import { recordAccountActivity } from './accountActivity/accountActivity';
 import { recordAudit, withPublicOwnership } from './claims/ownershipClaims';
@@ -833,7 +834,8 @@ catalogRouter.get('/catalog/snapshot', softAuthenticateRequest, async (req, res)
 catalogRouter.get('/catalog/home', softAuthenticateRequest, async (req, res) => {
   try {
     const [homepage, productsRaw, brandsRaw, deals, creatorsRaw, guides] = await Promise.all([
-      catalogStore.getHomepage(),
+      // Published Website Studio homepage when there is one; otherwise the catalog homepage.
+      getStorefrontHomepage(),
       catalogStore.listProducts(),
       catalogStore.listBrands(),
       catalogStore.listDeals(),
@@ -860,6 +862,12 @@ catalogRouter.get('/catalog/home', softAuthenticateRequest, async (req, res) => 
 });
 
 catalogRouter.put('/catalog/home', ...requireCmsWrite, async (req, res) => {
+  // Once the homepage is published from Website Studio, this legacy write path would be silently
+  // ignored by the storefront — refuse it instead so there is one source of truth.
+  if (await isHomepageManagedByStudio()) {
+    res.status(409).json({ error: 'The homepage is managed in Website Studio now — edit and publish it there.', code: 'MANAGED_IN_WEBSITE_STUDIO' });
+    return;
+  }
   try {
     const current = await catalogStore.getHomepage().catch(() => defaultHomepage());
     const normalized = normalizeHomepageInput(req.body, current);
