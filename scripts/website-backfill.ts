@@ -3,7 +3,10 @@
  * into version 1 of each website document, so the CMS starts from exactly what shoppers see today.
  *
  *   npx tsx scripts/website-backfill.ts            # DRY RUN (default): prints the plan, writes nothing
- *   npx tsx scripts/website-backfill.ts --apply    # writes; skips any document that already has versions
+ *   npx tsx scripts/website-backfill.ts --apply    # writes; skips any document that already has a version or draft
+ *
+ * Each document gets an UNPUBLISHED baseline: immutable version 1 (source 'backfill') plus the same
+ * content as its draft. published_version stays NULL, so nothing is public until a Super Admin publishes.
  *
  * Reads the catalog snapshot JSON READ-ONLY (CATALOG_MEMORY_SNAPSHOT_PATH or the default path).
  * Writes only website_documents / website_versions rows. Never touches the catalog snapshot, and
@@ -26,7 +29,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { ensureDocument, getDocument, publishVersion } from '../server/website/websiteStore';
+import { getDocument, latestVersionNumber, recordBaselineVersion } from '../server/website/websiteStore';
 import { validateContent, type WebsiteDocumentKind } from '../server/website/websiteContent';
 import { db } from '../server/db/client';
 
@@ -138,15 +141,16 @@ async function main() {
     const content = validateContent(item.kind, item.content); // fails loudly on anything unsafe
     const existing = await getDocument(item.key);
     const bytes = Buffer.byteLength(JSON.stringify(content), 'utf8');
-    if (existing?.publishedVersion) {
+    const latest = existing ? await latestVersionNumber(item.key) : 0;
+    if (existing?.publishedVersion || existing?.draft || latest > 0) {
       skipped++;
-      console.log(`  skip   ${item.key.padEnd(13)} already at version ${existing.publishedVersion}`);
+      console.log(`  skip   ${item.key.padEnd(13)} already has ${existing?.publishedVersion ? `published version ${existing.publishedVersion}` : latest > 0 ? `version ${latest}` : 'a draft'}`);
       continue;
     }
     console.log(`  ${APPLY ? 'create' : 'would create'} ${item.key.padEnd(13)} v1  ${bytes} bytes  ← ${item.from}`);
     if (APPLY) {
-      await ensureDocument(item.key, item.kind);
-      await publishVersion({ key: item.key, content, source: 'backfill', changeNote: NOTE, actorUserId: null, onlyIfUnpublished: true });
+      // Unpublished baseline: immutable v1 + identical draft; published_version stays NULL.
+      await recordBaselineVersion({ key: item.key, kind: item.kind, content, changeNote: NOTE });
       created++;
     }
   }

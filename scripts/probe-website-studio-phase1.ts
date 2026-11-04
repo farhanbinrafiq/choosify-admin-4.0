@@ -3,7 +3,7 @@
  * preview tokens, public read isolation, validation and DB immutability.
  *
  * ISOLATED STACK ONLY: refuses to run unless API_BASE is localhost and DATABASE_URL points at
- * the isolated QA database (port 55499). Needs the backfill applied first.
+ * the isolated QA database (port 55499). Needs a FRESH backfill (unpublished baselines) first.
  *
  *   API_BASE=http://localhost:3001/api/v1 npx tsx scripts/probe-website-studio-phase1.ts
  */
@@ -76,13 +76,21 @@ async function main() {
   check('seller: no Website Studio access at all (403)', (await call(seller, 'GET', '/website/documents')).status === 403);
   check('signed-out: no staff access (401)', (await call(null, 'GET', '/website/documents')).status === 401);
 
-  // --- Backfill present ---------------------------------------------------------------------
-  const list = (await call(superAdmin, 'GET', '/website/documents')).json?.data ?? [];
-  check('backfilled documents present at version 1', ['company', 'brand_assets', 'navigation', 'footer', 'social', 'seo', 'homepage'].every((k) => list.find((d: any) => d.key === k)?.publishedVersion >= 1), list);
+  // --- Backfill = UNPUBLISHED baseline (v1 + identical draft, nothing public) ----------------
+  const KEYS = ['company', 'brand_assets', 'navigation', 'footer', 'social', 'seo', 'homepage'];
+  const baseline = await Promise.all(KEYS.map(async (k) => (await call(superAdmin, 'GET', `/website/documents/${k}`)).json?.data));
+  check('backfill: all 7 documents have version 1 recorded but NOT published', baseline.every((d: any) => d?.latestVersion === 1 && d?.publishedVersion === null && d?.hasDraft === true), baseline.map((d: any) => [d?.key, d?.latestVersion, d?.publishedVersion, d?.hasDraft]));
+  const v1 = (await call(superAdmin, 'GET', '/website/documents/company/versions/1')).json?.data;
+  check('backfill: draft equals version 1 content', v1?.source === 'backfill' && JSON.stringify(v1?.content) === JSON.stringify(baseline[0]?.draft), v1);
+  check('backfill: nothing is public yet (404)', (await call(null, 'GET', '/website/published/company')).status === 404);
+
+  // --- First publish of the baseline (go-live) -------------------------------------------------
+  const goLive = await call(superAdmin, 'POST', '/website/documents/company/publish', { changeNote: 'Go live with the imported settings', expectedRevision: baseline[0].draftRevision });
+  check('publishing the baseline draft creates version 2 (v1 stays history)', goLive.status === 200 && goLive.json?.data?.published?.version === 2 && goLive.json?.data?.hasDraft === false, goLive.json);
 
   // --- Draft never changes public content ---------------------------------------------------
   const pubBefore = await call(null, 'GET', '/website/published/company');
-  check('public: published company readable', pubBefore.status === 200 && pubBefore.json?.data?.content?.supportEmail === 'support@choosify.bd', pubBefore.json);
+  check('public: published company readable', pubBefore.status === 200 && pubBefore.json?.data?.content?.supportEmail === 'support@choosify.bd' && pubBefore.json?.data?.version === 2, pubBefore.json);
   const doc0 = (await call(superAdmin, 'GET', '/website/documents/company')).json?.data;
   const rev0 = doc0.draftRevision;
   const save = await call(marketing, 'PUT', '/website/documents/company/draft', { content: company({ supportEmail: 'hello-draft@choosify.bd' }), expectedRevision: rev0 });
@@ -105,21 +113,21 @@ async function main() {
   const noNote = await call(superAdmin, 'POST', '/website/documents/company/publish', { expectedRevision: rev1 });
   check('publish requires a change note', noNote.status === 400 && noNote.json?.code === 'CHANGE_NOTE_REQUIRED', noNote.json);
   const pub = await call(superAdmin, 'POST', '/website/documents/company/publish', { changeNote: 'Update support email', expectedRevision: rev1 });
-  check('super admin publishes → version 2, draft cleared', pub.status === 200 && pub.json?.data?.published?.version === 2 && pub.json?.data?.hasDraft === false, pub.json);
+  check('super admin publishes → version 3, draft cleared', pub.status === 200 && pub.json?.data?.published?.version === 3 && pub.json?.data?.hasDraft === false, pub.json);
   const pubNow = await call(null, 'GET', '/website/published/company');
-  check('public now shows version 2 content', pubNow.json?.data?.version === 2 && pubNow.json?.data?.content?.supportEmail === 'hello-draft@choosify.bd', pubNow.json);
+  check('public now shows version 3 content', pubNow.json?.data?.version === 3 && pubNow.json?.data?.content?.supportEmail === 'hello-draft@choosify.bd', pubNow.json);
   const republish = await call(superAdmin, 'POST', '/website/documents/company/publish', { changeNote: 'Again', expectedRevision: pub.json.data.draftRevision });
   check('publishing with no draft → 409 NO_DRAFT', republish.status === 409 && republish.json?.code === 'NO_DRAFT', republish.json);
 
   // --- Versions + rollback ------------------------------------------------------------------
   const versions = (await call(admin, 'GET', '/website/documents/company/versions')).json?.data ?? [];
-  check('history lists v2 (publish) and v1 (backfill), newest first, with notes', versions[0]?.version === 2 && versions[0]?.source === 'publish' && versions[1]?.source === 'backfill' && versions[0]?.changeNote === 'Update support email', versions);
-  check('admin (edit only) cannot roll back', (await call(admin, 'POST', '/website/documents/company/rollback', { version: 1, changeNote: 'Back' })).status === 403);
-  const rb = await call(superAdmin, 'POST', '/website/documents/company/rollback', { version: 1, changeNote: 'Restore original support email' });
-  check('rollback to v1 creates a NEW version 3 (history kept)', rb.status === 200 && rb.json?.data?.published?.version === 3, rb.json);
-  const v3 = (await call(superAdmin, 'GET', '/website/documents/company/versions/3')).json?.data;
-  check('v3 is a rollback copied from v1', v3?.source === 'rollback' && v3?.restoredFromVersion === 1 && v3?.content?.supportEmail === 'support@choosify.bd', v3);
-  check('v2 still exists unchanged after rollback', (await call(superAdmin, 'GET', '/website/documents/company/versions/2')).json?.data?.content?.supportEmail === 'hello-draft@choosify.bd');
+  check('history lists v3 (publish), v2 (publish), v1 (backfill), newest first, with notes', versions[0]?.version === 3 && versions[0]?.source === 'publish' && versions[2]?.source === 'backfill' && versions[0]?.changeNote === 'Update support email', versions);
+  check('admin (edit only) cannot roll back', (await call(admin, 'POST', '/website/documents/company/rollback', { version: 2, changeNote: 'Back' })).status === 403);
+  const rb = await call(superAdmin, 'POST', '/website/documents/company/rollback', { version: 2, changeNote: 'Restore original support email' });
+  check('rollback to v2 creates a NEW version 4 (history kept)', rb.status === 200 && rb.json?.data?.published?.version === 4, rb.json);
+  const v4 = (await call(superAdmin, 'GET', '/website/documents/company/versions/4')).json?.data;
+  check('v4 is a rollback copied from v2', v4?.source === 'rollback' && v4?.restoredFromVersion === 2 && v4?.content?.supportEmail === 'support@choosify.bd', v4);
+  check('v3 still exists unchanged after rollback', (await call(superAdmin, 'GET', '/website/documents/company/versions/3')).json?.data?.content?.supportEmail === 'hello-draft@choosify.bd');
   check('public shows the rolled-back content', (await call(null, 'GET', '/website/published/company')).json?.data?.content?.supportEmail === 'support@choosify.bd');
 
   // --- Restore defaults goes to DRAFT only ----------------------------------------------------

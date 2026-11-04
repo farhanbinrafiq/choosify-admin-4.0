@@ -36,6 +36,7 @@ import {
   listRecentPublications,
   listVersions,
   publishVersion,
+  latestVersionNumber,
   saveDraft,
 } from './websiteStore';
 import { PREVIEW_TOKEN_TTL_SECONDS, signPreviewToken, verifyPreviewToken } from './previewTokens';
@@ -156,6 +157,7 @@ websiteRouter.get('/website/documents/:key', ...requireCmsEdit, async (req, res)
       data: {
         ...documentView(doc, r.kind),
         key: r.key,
+        latestVersion: await latestVersionNumber(r.key),
         published: published ? { version: published.version, content: published.content, publishedAt: published.publishedAt, publishedByUserId: published.publishedByUserId } : null,
         defaults: defaultsForKind(r.kind),
       },

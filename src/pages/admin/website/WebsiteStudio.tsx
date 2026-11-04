@@ -424,7 +424,7 @@ function DocumentWorkspace<T>({
       {dialog?.type === 'publish' && (
         <NoteDialog
           title={`Publish ${title}?`}
-          body={<>This makes the saved draft public as version {(doc.publishedVersion ?? 0) + 1}. The current version stays in the history and can be restored.</>}
+          body={<>This makes the saved draft public as version {(doc.latestVersion ?? doc.publishedVersion ?? 0) + 1}. The current version stays in the history and can be restored.</>}
           confirmLabel="Publish"
           busy={busy === 'publish'}
           onCancel={() => setDialog(null)}
@@ -442,7 +442,7 @@ function DocumentWorkspace<T>({
       {dialog?.type === 'restore' && (
         <NoteDialog
           title={`Restore version ${dialog.version}?`}
-          body={<>This publishes a NEW version ({(doc.publishedVersion ?? 0) + 1}) with the content of version {dialog.version}. Nothing in the history is deleted.</>}
+          body={<>This publishes a NEW version ({(doc.latestVersion ?? doc.publishedVersion ?? 0) + 1}) with the content of version {dialog.version}. Nothing in the history is deleted.</>}
           confirmLabel="Restore & publish"
           busy={busy === 'restore'}
           onCancel={() => setDialog(null)}

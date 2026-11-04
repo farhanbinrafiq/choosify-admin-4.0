@@ -62,6 +62,8 @@ export type WebsiteDocument<T = unknown> = {
   draftUpdatedAt: string | null;
   draftUpdatedByUserId: string | null;
   publishedVersion: number | null;
+  /** Highest recorded version (may be unpublished, e.g. the backfill baseline). */
+  latestVersion?: number;
   published: { version: number; content: T; publishedAt: string; publishedByUserId: string | null } | null;
   defaults: T | null;
 };

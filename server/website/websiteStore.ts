@@ -43,6 +43,12 @@ export async function getPublished(key: string): Promise<{ doc: WebsiteDocumentR
   return version ? { doc, version } : null;
 }
 
+/** Highest version number recorded for a document (0 when none). Versions can exist unpublished (backfill baseline). */
+export async function latestVersionNumber(key: string): Promise<number> {
+  const rows = await db.select({ max: sql<number>`COALESCE(MAX(${websiteVersions.version}), 0)` }).from(websiteVersions).where(eq(websiteVersions.documentKey, key));
+  return Number(rows[0]?.max ?? 0);
+}
+
 /** Version list WITHOUT content (history view); newest first. */
 export async function listVersions(key: string, limit = 100) {
   return db
@@ -149,6 +155,49 @@ type PublishInput = {
   /** Backfill only: refuse if the document already has any version. */
   onlyIfUnpublished?: boolean;
 };
+
+/**
+ * Backfill baseline: records version 1 as an immutable history row AND puts the same content in
+ * the draft, but does NOT point the document at it (published_version stays NULL). Nothing becomes
+ * public; a Super Admin later publishes the draft (→ version 2) when the storefront is switched over.
+ * Refuses if the document already has any version, a draft, or a published pointer.
+ */
+export async function recordBaselineVersion(input: {
+  key: string;
+  kind: WebsiteDocumentKind;
+  content: unknown;
+  changeNote: string;
+}): Promise<{ doc: WebsiteDocumentRow; version: WebsiteVersionRow }> {
+  await ensureDocument(input.key, input.kind);
+  return db.transaction(async (tx) => {
+    const locked = await tx.execute(sql`SELECT key, draft, published_version FROM website_documents WHERE key = ${input.key} FOR UPDATE`);
+    const row = (locked as unknown as { rows: Array<{ draft: unknown; published_version: number | null }> }).rows[0];
+    if (!row) throw new WebsiteStoreError('Document not found', 404, 'DOCUMENT_NOT_FOUND');
+    if (row.published_version) throw new WebsiteStoreError('Document is already published', 409, 'ALREADY_PUBLISHED');
+    if (row.draft !== null && row.draft !== undefined) throw new WebsiteStoreError('Document already has a draft', 409, 'DRAFT_EXISTS');
+    const countRes = await tx.execute(sql`SELECT COUNT(*) AS n FROM website_versions WHERE document_key = ${input.key}`);
+    if (Number((countRes as unknown as { rows: Array<{ n: number | string }> }).rows[0]?.n ?? 0) > 0) {
+      throw new WebsiteStoreError('Document already has versions', 409, 'ALREADY_HAS_VERSIONS');
+    }
+    const [version] = await tx
+      .insert(websiteVersions)
+      .values({ documentKey: input.key, version: 1, content: input.content as object, source: 'backfill', changeNote: input.changeNote, publishedByUserId: null })
+      .returning();
+    const [doc] = await tx
+      .update(websiteDocuments)
+      .set({
+        draft: input.content as object,
+        draftRevision: sql`${websiteDocuments.draftRevision} + 1`,
+        draftBaseVersion: null,
+        draftUpdatedAt: new Date(),
+        draftUpdatedByUserId: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(websiteDocuments.key, input.key))
+      .returning();
+    return { doc, version };
+  });
+}
 
 /** Inserts the next immutable version and points the document at it — atomically. */
 export async function publishVersion(input: PublishInput): Promise<{ doc: WebsiteDocumentRow; version: WebsiteVersionRow }> {
