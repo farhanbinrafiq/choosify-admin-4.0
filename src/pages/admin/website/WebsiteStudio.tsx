@@ -583,7 +583,7 @@ function CompanyEditor({ value, onChange, disabled }: EditorProps<CompanySetting
 
       <div>
         <label className={labelCls} htmlFor="ws-copyright">Copyright holder</label>
-        <input id="ws-copyright" className={inputCls} disabled={disabled} value={value.copyrightText} placeholder="e.g. Choosify Technologies Ltd" onChange={(e) => set({ copyrightText: e.target.value })} />
+        <input id="ws-copyright" className={inputCls} disabled={disabled} value={value.copyrightText} placeholder="e.g. Choosify" onChange={(e) => set({ copyrightText: e.target.value })} />
         <div className="mt-1 text-[11px] text-slate-500">The footer shows: © {new Date().getFullYear()} {value.copyrightText || '…'}. All rights reserved.</div>
       </div>
     </div>

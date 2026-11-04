@@ -17,9 +17,9 @@
  *    homepage config: the stored catalog values ARE what the storefront renders.
  *  - company: the storefront displays hardcoded contact details (support@choosify.bd,
  *    +88 0141 0474014, USA + Bangladesh offices). The stored websiteName/supportEmail/supportPhone
- *    are not displayed anywhere (owner confirmed support@choosify.bd, 2026-11-04). The copyright
- *    holder is the live footer's "Choosify Technologies Ltd" (owner decision 2026-11-04: keep it).
- *    Registered legal name and business identifiers stay BLANK / unverified.
+ *    are not displayed anywhere (owner confirmed support@choosify.bd, 2026-11-04). Copyright holder
+ *    is "Choosify" (owner decision 2026-11-04): Choosify Technologies Ltd is NOT named until it is
+ *    incorporated and the legal name confirmed. Legal name and business identifiers stay BLANK.
  *  - brand assets: none are set live (storefront uses built-in files) → empty slots.
  *  - pages + legal documents: NOT backfilled (storefront keeps its built-in page content until
  *    Phase 4; legal documents are prepared there as drafts only).
@@ -61,8 +61,8 @@ const LIVE_COMPANY = {
     { id: 'bangladesh', label: 'Bangladesh Office', lines: ['House-744 & 746, Road-10, Avenue-4', 'Mirpur DOHS, Dhaka-1216', 'Bangladesh'], enabled: true },
   ],
   identifiers: { dbid: { value: '', verified: false }, tradeLicense: { value: '', verified: false } },
-  // Footer renders "© {current year} {copyrightText}. All rights reserved." (as it does today).
-  copyrightText: 'Choosify Technologies Ltd',
+  // Footer renders "© {current year} {copyrightText}. All rights reserved."
+  copyrightText: 'Choosify',
 };
 
 const plan: Array<{ key: string; kind: WebsiteDocumentKind; content: unknown; from: string }> = [
@@ -100,9 +100,38 @@ const plan: Array<{ key: string; kind: WebsiteDocumentKind; content: unknown; fr
   ...(homepage ? [{ key: 'homepage', kind: 'homepage' as WebsiteDocumentKind, content: homepage, from: 'stored homepage config' }] : []),
 ];
 
+/** Stored catalog settings this backfill deliberately does NOT import, and why (dry-run report). */
+function skippedSettings(): string[] {
+  const out: string[] = [];
+  const stored = Array.isArray(site.navigation) ? site.navigation.map((n: any) => `${n.label}→${n.path}`) : [];
+  out.push(`navigation: stored list IGNORED (storefront does not render it): ${JSON.stringify(stored)}`);
+  out.push(`company: stored websiteName=${JSON.stringify(site.websiteName ?? null)}, supportEmail=${JSON.stringify(site.supportEmail ?? null)}, supportPhone=${JSON.stringify(site.supportPhone ?? null)} NOT imported (never displayed; displayed values used instead)`);
+  out.push(`footer: stored copyrightText=${JSON.stringify(site.footer?.copyrightText ?? null)} NOT imported (footer hardcodes the line; company.copyrightText holds the approved holder)`);
+  out.push('footer: offices, contact email/phone, DBID, trade licence, payment methods, delivery partners, app badges are hardcoded in the storefront — offices/contacts go to company; the rest are Phase 3');
+  const hidden = Array.isArray(homepage?.sections) ? homepage!.sections.filter((x: any) => ['creators', 'newsletter'].includes(x.id)).map((x: any) => x.id) : [];
+  if (hidden.length) out.push(`homepage: sections ${JSON.stringify(hidden)} are imported as stored but the current storefront does not render them`);
+  const heroes = Array.isArray(homepage?.heroBanners) ? homepage!.heroBanners : [];
+  const empty = heroes.filter((h: any) => !h.image && !h.videoUrl && !h.video).length;
+  if (empty) out.push(`homepage: ${empty} hero banner(s) have no image or video (storefront shows its built-in hero video)`);
+  out.push(`brand_assets: websiteAssets ${site.websiteAssets ? 'present' : 'not set'} — empty slots keep the storefront's built-in files`);
+  out.push(`not part of Phase 1 (stay in catalog settings): ctaBanners, authVisual, storefrontCuration, assuranceStrips, productBadges, communityProfiles, catalogMigrations`);
+  out.push('pages and legal documents: not imported (storefront keeps its built-in page content until Phase 4; legal = drafts only)');
+  return out;
+}
+
 async function main() {
   console.log(`Website Studio backfill — ${APPLY ? 'APPLY' : 'DRY RUN (nothing is written)'}`);
   console.log(`catalog snapshot (read-only): ${snapshotPath}`);
+  if (!APPLY) {
+    for (const item of plan) {
+      const content = validateContent(item.kind, item.content);
+      console.log(`\n--- ${item.key} (${item.kind}) ← ${item.from}`);
+      console.log(JSON.stringify(content, null, 2));
+    }
+    console.log('\n--- stored settings skipped or ignored');
+    for (const line of skippedSettings()) console.log(`  • ${line}`);
+    console.log('');
+  }
   let created = 0;
   let skipped = 0;
   for (const item of plan) {
