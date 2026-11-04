@@ -23,6 +23,8 @@ const AUTH_TOKEN_KEY = 'choosify_auth_token';
 
 export type AdsApiRecord = {
   id: string;
+  /** List views: is the ad on the storefront right now, and if not, why. */
+  delivery?: { delivered: boolean; problems: string[] };
   ownerId: string;
   ownerRole: 'seller' | 'creator' | 'admin';
   listingId?: string;
@@ -180,6 +182,10 @@ export const adsApi = {
     ),
 
   listBanners: () => request<AdsApiRecord[]>('/ads/banners'),
+
+  /** Super Admin / Admin: move an ad to another slot (approval status unchanged; creative re-checked). */
+  moveAd: (id: string, placementId: string) =>
+    request<AdsApiRecord>(`/ads/${encodeURIComponent(id)}/move`, 'POST', { placementId }),
 
   getAd: (id: string) => request<AdsApiRecord>(`/ads/${encodeURIComponent(id)}`),
 

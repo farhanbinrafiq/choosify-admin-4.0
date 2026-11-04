@@ -5,6 +5,7 @@ import {
   AD_FORMATS,
   AD_PLACEMENTS,
   assertFormatPlacementCompatible,
+  checkCreativeFit,
   getFormatDef,
   getPlacementDef,
   listPages,
@@ -12,6 +13,7 @@ import {
 } from '@/shared/ads/placementRegistry';
 import { inferHeroMediaType, type HeroMediaType } from '@/shared/ads/heroMedia';
 import { StorefrontAdPresentation } from '../../components/ads/storefront';
+import { AdFitStatus, AdSlotPreview, AdSlotSpec, measureImage } from '../../components/ads/AdSlotPreview';
 import { CategorySearchSelect } from '../../components/ads/CategorySearchSelect';
 import { useAuth } from '../../contexts/AuthContext';
 import { adsApi, type AdsApiRecord, type EligibleListing } from '../../services/adsApi';
@@ -52,6 +54,8 @@ export default function AdsVisualBuilder() {
   const [existing, setExisting] = useState<AdsApiRecord | null>(null);
   const [listings, setListings] = useState<EligibleListing[]>([]);
   const [previewInPlacement, setPreviewInPlacement] = useState(true);
+  /** Natural size of the current creative image (measured in the browser; the server re-measures). */
+  const [imageDims, setImageDims] = useState<{ width: number; height: number } | null>(null);
 
   const [formatId, setFormatId] = useState<AdFormatId>(DEFAULT_FORMAT);
   const [pageKey, setPageKey] = useState('homepage');
@@ -91,6 +95,13 @@ export default function AdsVisualBuilder() {
   const allFormatPlacements = useMemo(() => placementsForFormat(formatId, role), [formatId, role]);
   const placementDef = getPlacementDef(placementId);
   const formatDef = getFormatDef(formatId);
+  const fitError =
+    placementDef && formatDef?.imageLed && imageDims
+      ? (() => {
+          const fit = checkCreativeFit(placementDef, imageDims.width, imageDims.height);
+          return 'error' in fit ? fit.error : null;
+        })()
+      : null;
   const listingLocked = Boolean(listingId) && formatId === 'deal_of_the_day';
 
   const hydrateFromRecord = useCallback((ad: AdsApiRecord) => {
@@ -222,7 +233,16 @@ export default function AdsVisualBuilder() {
       if (!file.type.startsWith('image/')) {
         throw new Error('Only image/GIF files can be uploaded. For Hero video, paste a hosted mp4/webm URL.');
       }
+      let dims: { width: number; height: number } | null = null;
+      if (kind === 'image') {
+        dims = await measureImage(file);
+        if (placementDef && dims) {
+          const fit = checkCreativeFit(placementDef, dims.width, dims.height);
+          if ('error' in fit) throw new Error(fit.error);
+        }
+      }
       const url = await uploadProductImage(file);
+      if (kind === 'image') setImageDims(dims);
       if (kind === 'logo') {
         setLogoUrl(url);
       } else if (kind === 'poster') {
@@ -310,7 +330,23 @@ export default function AdsVisualBuilder() {
     };
   };
 
+  useEffect(() => {
+    let alive = true;
+    if (!imageUrl) {
+      setImageDims(null);
+      return;
+    }
+    measureImage(imageUrl).then((d) => alive && setImageDims(d));
+    return () => {
+      alive = false;
+    };
+  }, [imageUrl]);
+
   const save = async (mode: 'draft' | 'submit' | 'publish') => {
+    if (fitError && mode !== 'draft') {
+      setError(fitError);
+      return;
+    }
     setSaving(true);
     setError(null);
     setMessage(null);
@@ -580,11 +616,12 @@ export default function AdsVisualBuilder() {
                       </div>
                     </div>
                   ) : null}
+                  {placementDef ? <div className="mb-2"><AdSlotSpec placement={placementDef} /></div> : null}
                   <div className="text-[11px] font-bold text-[#374151] mb-1">
                     {mediaType === 'video' && formatId === 'hero_banner'
                       ? 'Hero Video URL (hosted mp4/webm)'
-                      : `Creative ${mediaType === 'gif' ? 'GIF' : 'Image'} ${
-                          placementDef ? `(${placementDef.aspectRatio})` : ''
+                      : `Creative ${mediaType === 'gif' ? 'GIF' : 'Image'}${
+                          placementDef?.creative ? ` — ${placementDef.creative.recommended.width}×${placementDef.creative.recommended.height}px recommended` : ''
                         }`}
                   </div>
                   {mediaType === 'video' && formatId === 'hero_banner' ? (
@@ -647,8 +684,7 @@ export default function AdsVisualBuilder() {
                         )}
                       </div>
                       <div className="mt-1 text-[10px] text-[#9CA3AF]">
-                        JPG/PNG/WEBP/GIF via existing upload policy (server MIME + size). GIF preview animates.
-                        Cover/center crop — not stretched.
+                        JPG/PNG/WEBP/GIF. The size is checked against this slot before uploading.
                       </div>
                     </>
                   )}
@@ -891,7 +927,28 @@ export default function AdsVisualBuilder() {
                   : ''
               }
             >
-              {previewInPlacement && placementDef?.orientation === 'vertical' ? (
+              {previewInPlacement && placementDef ? (
+                <div className="rounded-lg border border-dashed border-[#D1D5DB] bg-white p-3" data-testid="ad-preview-in-slot">
+                  <div className="mb-2 text-[9px] font-bold uppercase tracking-wide text-[#9CA3AF]">
+                    {placementDef.pageLabel} · {placementDef.slotLabel}
+                  </div>
+                  <AdSlotPreview
+                    placement={placementDef}
+                    ad={{
+                      formatId,
+                      imageUrl: imageUrl || undefined,
+                      imageWidth: imageDims?.width,
+                      imageHeight: imageDims?.height,
+                      headline: headline || undefined,
+                      subtext: subtext || undefined,
+                      ctaLabel: ctaLabel || undefined,
+                      advertiserName: advertiserName || undefined,
+                      logoUrl: logoUrl || undefined,
+                    }}
+                  />
+                  <AdFitStatus placement={placementDef} width={imageDims?.width} height={imageDims?.height} />
+                </div>
+              ) : previewInPlacement && placementDef?.orientation === 'vertical' ? (
                 <div className="w-[280px] rounded-lg border border-dashed border-[#D1D5DB] bg-white p-3">
                   <div className="mb-2 text-[9px] font-bold uppercase tracking-wide text-[#9CA3AF]">
                     {placementDef.pageLabel} · {placementDef.slotLabel}
@@ -910,8 +967,8 @@ export default function AdsVisualBuilder() {
               )}
             </div>
             <div className="mt-3 text-[10px] text-[#9CA3AF] leading-snug">
-              Preview uses the shared StorefrontAdPresentation component (same formats as the Choosify
-              storefront references). Badge wording: PROMOTED.
+              “Preview in placement” draws the ad exactly as the storefront slot does (same sizing and
+              cropping). Untick it to see the format on its own.
             </div>
           </div>
         </aside>

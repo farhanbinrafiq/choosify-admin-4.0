@@ -1,7 +1,7 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle, Loader2, Plus, XCircle } from 'lucide-react';
-import { getFormatDef, getPlacementDef } from '@/shared/ads/placementRegistry';
+import { AD_PLACEMENTS, getAnyPlacementDef, getFormatDef, getPlacementDef } from '@/shared/ads/placementRegistry';
 import { inferHeroMediaType } from '@/shared/ads/heroMedia';
 import { useAuth } from '../../contexts/AuthContext';
 import { adsApi, type AdsApiRecord } from '../../services/adsApi';
@@ -133,6 +133,21 @@ function BannerAdsList() {
     () => (filter === 'all' ? rows : rows.filter((r) => r.status === filter)),
     [rows, filter],
   );
+
+  const move = async (id: string, placementId: string, label: string) => {
+    if (!placementId) return;
+    if (!window.confirm(`Move this ad to "${label}"? Its approval status stays the same, and the image is re-checked for the new slot.`)) return;
+    setBusyId(id);
+    setError(null);
+    try {
+      await adsApi.moveAd(id, placementId);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Move failed');
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const act = async (id: string, action: 'approve' | 'reject' | 'pause' | 'disable') => {
     setBusyId(id);
@@ -271,7 +286,29 @@ function BannerAdsList() {
                         {placement?.pageLabel || row.pageKey || '—'}
                       </td>
                       <td className="px-3 py-2.5 text-[11px] text-[#6B7280]">
-                        {placement?.slotLabel || row.placementId || row.placement || '—'}
+                        {placement?.slotLabel || getAnyPlacementDef(row.placementId)?.slotLabel || row.placementId || row.placement || '—'}
+                        {!placement && getAnyPlacementDef(row.placementId) ? (
+                          <div className="text-[9.5px] font-bold text-red-600" data-testid="ads-slot-retired">Slot retired — move this ad</div>
+                        ) : null}
+                        {isAdmin && (row.kind === 'banner' || row.kind === 'external') ? (
+                          <select
+                            className="mt-1 block max-w-[170px] rounded border border-[#E8EDF2] px-1 py-0.5 text-[10px]"
+                            value=""
+                            disabled={busyId === row.id}
+                            data-testid={`ads-move-${row.id}`}
+                            onChange={(e) => {
+                              const target = AD_PLACEMENTS.find((p) => p.placementId === e.target.value);
+                              if (target) void move(row.id, target.placementId, `${target.pageLabel} · ${target.slotLabel}`);
+                            }}
+                          >
+                            <option value="">Move to…</option>
+                            {AD_PLACEMENTS.filter((p) => p.active && p.placementId !== row.placementId && p.allowedFormats.includes(row.formatId as never)).map((p) => (
+                              <option key={p.placementId} value={p.placementId}>
+                                {p.pageLabel} · {p.slotLabel}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
                       </td>
                       <td className="px-3 py-2.5 text-[11px] text-[#6B7280]">
                         {row.ownerRole}
@@ -294,6 +331,15 @@ function BannerAdsList() {
                         >
                           {row.status}
                         </span>
+                        {row.delivery ? (
+                          row.delivery.delivered ? (
+                            <div className="mt-1 text-[9.5px] font-extrabold text-emerald-700" data-testid="ads-delivered">● On the storefront</div>
+                          ) : (
+                            <div className="mt-1 max-w-[200px] text-[9.5px] font-semibold text-slate-500" data-testid="ads-not-delivered" title={row.delivery.problems.join(' · ')}>
+                              Not shown: {row.delivery.problems[0]}
+                            </div>
+                          )
+                        ) : null}
                       </td>
                       <td className="px-3 py-2.5 text-[10px] text-[#9CA3AF]">
                         {new Date(row.updatedAt).toLocaleString()}
