@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { getStorefrontHomepage, isHomepageManagedByStudio } from './website/websiteHomepage';
+import { getPublishedDealsBanners, getStorefrontHomepage, isHomepageManagedByStudio } from './website/websiteHomepage';
+import { getPublishedSiteStudio, legacySiteConflicts } from './website/websiteSite';
 import { BrandCategoryError, withResolvedBrandCategory } from './catalog/brandCategoryChoice';
 import { recordAccountActivity } from './accountActivity/accountActivity';
 import { recordAudit, withPublicOwnership } from './claims/ownershipClaims';
@@ -2808,7 +2809,9 @@ function rejectIfTooManyActiveDeals(
 /** Public: active Today's Deals carousel banners in display order */
 catalogRouter.get('/catalog/deals-banners', async (req, res) => {
   try {
-    const homepage = await readHomepageWithDealsBanners();
+    // Once the homepage is published from Website Studio its (versioned) banners are the source.
+    const studioBanners = await getPublishedDealsBanners();
+    const homepage = studioBanners ? { dealsBanners: studioBanners } : await readHomepageWithDealsBanners();
     const activeOnly = String(req.query.active || 'true').toLowerCase() !== 'false';
     let banners = (homepage.dealsBanners || [])
       .filter((b) => (activeOnly ? b.isActive : true))
@@ -2828,6 +2831,10 @@ catalogRouter.get('/catalog/deals-banners', async (req, res) => {
 });
 
 catalogRouter.post('/catalog/deals-banners', ...requireCmsWrite, async (req, res) => {
+  if (await isHomepageManagedByStudio()) {
+    res.status(409).json({ error: "Today's Deals banners are managed in Website Studio → Homepage now — edit and publish them there.", code: 'MANAGED_IN_WEBSITE_STUDIO' });
+    return;
+  }
   try {
     const homepage = await readHomepageWithDealsBanners();
     const nextOrder =
@@ -2853,6 +2860,10 @@ catalogRouter.post('/catalog/deals-banners', ...requireCmsWrite, async (req, res
 });
 
 catalogRouter.put('/catalog/deals-banners/:id', ...requireCmsWrite, async (req, res) => {
+  if (await isHomepageManagedByStudio()) {
+    res.status(409).json({ error: "Today's Deals banners are managed in Website Studio → Homepage now — edit and publish them there.", code: 'MANAGED_IN_WEBSITE_STUDIO' });
+    return;
+  }
   try {
     const homepage = await readHomepageWithDealsBanners();
     const existing = homepage.dealsBanners.find((b) => b.id === req.params.id);
@@ -2877,6 +2888,10 @@ catalogRouter.put('/catalog/deals-banners/:id', ...requireCmsWrite, async (req, 
 });
 
 catalogRouter.patch('/catalog/deals-banners/:id', ...requireCmsWrite, async (req, res) => {
+  if (await isHomepageManagedByStudio()) {
+    res.status(409).json({ error: "Today's Deals banners are managed in Website Studio → Homepage now — edit and publish them there.", code: 'MANAGED_IN_WEBSITE_STUDIO' });
+    return;
+  }
   try {
     const homepage = await readHomepageWithDealsBanners();
     const existing = homepage.dealsBanners.find((b) => b.id === req.params.id);
@@ -2901,6 +2916,10 @@ catalogRouter.patch('/catalog/deals-banners/:id', ...requireCmsWrite, async (req
 });
 
 catalogRouter.delete('/catalog/deals-banners/:id', ...requireCmsWrite, async (req, res) => {
+  if (await isHomepageManagedByStudio()) {
+    res.status(409).json({ error: "Today's Deals banners are managed in Website Studio → Homepage now — edit and publish them there.", code: 'MANAGED_IN_WEBSITE_STUDIO' });
+    return;
+  }
   try {
     const homepage = await readHomepageWithDealsBanners();
     if (!homepage.dealsBanners.some((b) => b.id === req.params.id)) {
@@ -3065,7 +3084,16 @@ catalogRouter.get('/catalog/site', softAuthenticateRequest, async (req, res) => 
   try {
     // Curation internals (raw pins, editor metadata, audit trail) are only
     // returned to the curation editor; the storefront uses /catalog/storefront/*.
-    res.json({ site: siteForViewer(await catalogStore.getSiteConfig(), req.userRole) });
+    const site = siteForViewer(await catalogStore.getSiteConfig(), req.userRole);
+    // Published Website Studio parts (navigation, footer, social, company, brand assets) — only
+    // the published ones; the storefront keeps its built-in defaults for anything absent.
+    let websiteStudio = {};
+    try {
+      websiteStudio = await getPublishedSiteStudio();
+    } catch {
+      websiteStudio = {};
+    }
+    res.json({ site: site ? { ...site, websiteStudio } : site });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to load site config' });
   }
@@ -3074,6 +3102,15 @@ catalogRouter.get('/catalog/site', softAuthenticateRequest, async (req, res) => 
 catalogRouter.put('/catalog/site', ...requireCmsWrite, async (req, res) => {
   try {
     const existing = await catalogStore.getSiteConfig();
+    const owned = await legacySiteConflicts((req.body ?? {}) as Record<string, unknown>, existing as unknown as Record<string, unknown>);
+    if (owned.length) {
+      res.status(409).json({
+        error: `These settings are managed in Website Studio now — edit and publish them there: ${owned.join(', ')}`,
+        code: 'MANAGED_IN_WEBSITE_STUDIO',
+        fields: owned,
+      });
+      return;
+    }
     const normalized = normalizeSiteInput(req.body, existing);
     const saved = await catalogStore.upsertSiteConfig(normalized);
     res.json({ success: true, site: saved });

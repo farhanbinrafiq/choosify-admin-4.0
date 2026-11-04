@@ -40,7 +40,9 @@ import {
   saveDraft,
 } from './websiteStore';
 import { PREVIEW_TOKEN_TTL_SECONDS, signPreviewToken, verifyPreviewToken } from './previewTokens';
-import { checkHomepageReferences, getDraftStorefrontHomepage, invalidateHomepageCache } from './websiteHomepage';
+import { checkHomepageReferences, getDraftStorefrontHomepage, getStorefrontHomepage, invalidateHomepageCache } from './websiteHomepage';
+import { SITE_DOCUMENT_KEYS, getDraftSiteStudio, getPublishedSiteStudio, invalidateSiteStudioCache, type SiteDocumentKey } from './websiteSite';
+import { paymentCapabilities, unavailablePaymentMethods, type FooterContent } from './siteContent';
 import { catalogStore } from '../../lib/vercel-catalog/catalogStore';
 import { siteForViewer } from '../storefront/curationAuth';
 import type { HomepageStudio } from './websiteContent';
@@ -74,12 +76,17 @@ function sendError(res: Response, error: unknown) {
  */
 async function publishBlockers(kind: WebsiteDocumentKind, content: unknown): Promise<string[]> {
   if (kind === 'homepage') return checkHomepageReferences(content as HomepageStudio);
+  if (kind === 'footer') {
+    const gone = unavailablePaymentMethods(content as FooterContent);
+    return gone.length ? [`Payment methods not available at checkout right now: ${gone.join(', ')}`] : [];
+  }
   return [];
 }
 
 /** Clears server-side caches that serve published content, so the storefront updates at once. */
 function afterPublish(kind: WebsiteDocumentKind) {
   if (kind === 'homepage') invalidateHomepageCache();
+  if ((SITE_DOCUMENT_KEYS as readonly string[]).includes(kind) || kind === 'brand_assets') invalidateSiteStudioCache();
 }
 
 /** Resolves :key to its kind or answers 404. */
@@ -109,7 +116,7 @@ const revisionOf = (req: Request): number | null => {
  * Anything that fails today's validation is returned as stored so nothing is hidden.
  */
 function presentable(kind: WebsiteDocumentKind, content: unknown): unknown {
-  if (kind !== 'homepage' || content === null || content === undefined) return content;
+  if (!['homepage', 'navigation', 'footer', 'social'].includes(kind) || content === null || content === undefined) return content;
   try {
     return validateContent(kind, content);
   } catch {
@@ -144,6 +151,7 @@ websiteRouter.get('/website/capabilities', ...requireCmsEdit, (req, res) => {
       canEdit: true,
       canPublish: hasPermission(req.userRole, PERMISSIONS.CMS_PUBLISH, req.permissions),
       canPublishLegal: hasPermission(req.userRole, PERMISSIONS.CMS_LEGAL_PUBLISH, req.permissions),
+      paymentMethods: paymentCapabilities(),
     },
   });
 });
@@ -454,20 +462,29 @@ websiteRouter.get('/catalog/cms-preview/session/:token', async (req, res) => {
   noStore(res);
   res.setHeader('X-Robots-Tag', 'noindex, nofollow');
   const token = String(req.params.token || '');
-  const claims = token ? verifyPreviewToken(token, 'homepage') : null;
+  // The token names ONE document; only that document's draft is shown, everything else published.
+  const previewable = ['homepage', ...SITE_DOCUMENT_KEYS] as const;
+  let claims: ReturnType<typeof verifyPreviewToken> = null;
+  for (const k of previewable) {
+    claims = token ? verifyPreviewToken(token, k) : null;
+    if (claims) break;
+  }
   if (!claims) {
     res.status(401).json({ error: 'Preview link is invalid or has expired', code: 'PREVIEW_TOKEN_INVALID' });
     return;
   }
   try {
-    const homepage = await getDraftStorefrontHomepage();
-    if (!homepage) {
+    const isHome = claims.key === 'homepage';
+    const homepage = isHome ? await getDraftStorefrontHomepage() : await getStorefrontHomepage();
+    const studio = isHome ? await getPublishedSiteStudio() : await getDraftSiteStudio(claims.key as SiteDocumentKey);
+    if (!homepage || !studio) {
       res.status(404).json({ error: 'There is no draft to preview', code: 'NO_DRAFT' });
       return;
     }
     // Same public view of the site settings the storefront gets from GET /catalog/site.
-    const site = siteForViewer(await catalogStore.getSiteConfig(), null);
-    res.json({ preview: { token, expiresAt: new Date(claims.exp * 1000).toISOString(), homepage, site } });
+    const base = siteForViewer(await catalogStore.getSiteConfig(), null);
+    const site = base ? { ...base, websiteStudio: studio } : base;
+    res.json({ preview: { token, document: claims.key, expiresAt: new Date(claims.exp * 1000).toISOString(), homepage, site } });
   } catch (e) {
     sendError(res, e);
   }

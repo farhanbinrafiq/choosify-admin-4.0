@@ -171,7 +171,7 @@ async function main() {
     (await call(superAdmin, 'PUT', '/website/documents/company/draft', { content: company(overrides), expectedRevision: docC.draftRevision })).json;
   check('company: rejects invalid email', (await badC({ supportEmail: 'not-an-email' }))?.field === 'supportEmail');
   check('company: a verified identifier needs a value', (await badC({ identifiers: { dbid: { value: '', verified: true }, tradeLicense: { value: '', verified: false } } }))?.code === 'INVALID_CONTENT');
-  check('read-only kinds cannot be edited yet (409)', (await call(superAdmin, 'PUT', '/website/documents/navigation/draft', { content: {}, expectedRevision: 0 })).json?.code === 'NOT_EDITABLE_YET');
+  check('read-only kinds cannot be edited yet (409)', (await call(superAdmin, 'PUT', '/website/documents/filters/draft', { content: {}, expectedRevision: 0 })).json?.code === 'NOT_EDITABLE_YET');
   check('unknown document key → 404', (await call(superAdmin, 'GET', '/website/documents/not:valid key')).status === 404);
 
   // --- Legal documents --------------------------------------------------------------------------

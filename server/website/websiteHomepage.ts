@@ -46,7 +46,8 @@ export function studioToHomepageConfig(studio: HomepageStudio, base: HomepageCon
       focalX: s.focalX,
       focalY: s.focalY,
     })) as HomepageConfig['heroBanners'],
-    dealsBanners: base.dealsBanners ?? [],
+    // Today's Deals banners are part of the versioned homepage document (Phase 3).
+    dealsBanners: studioDealsBanners(studio, updatedAt) as HomepageConfig['dealsBanners'],
     sections: [
       { id: 'hero', label: 'Hero', isVisible: studio.heroVisible, order: 0, itemIds: [] },
       ...studio.sections.map((s, i) => ({
@@ -67,6 +68,33 @@ export function studioToHomepageConfig(studio: HomepageStudio, base: HomepageCon
     topCategories: studio.topCategories.map((c, order) => ({ ...c, image: '', order })),
     updatedAt,
   };
+}
+
+/** Studio banners in the catalog CatalogDealsBanner shape the storefront already reads. */
+export function studioDealsBanners(studio: HomepageStudio, at: string) {
+  return studio.dealsBanners.map((b, order) => ({
+    id: b.id,
+    image: b.image,
+    destinationType: b.destinationType,
+    destinationRef: b.destinationRef,
+    order,
+    isActive: b.isActive,
+    brandName: b.brandName || undefined,
+    brandLogoUrl: b.brandLogoUrl || undefined,
+    createdAt: at,
+    updatedAt: at,
+  }));
+}
+
+/** Published Studio deals banners, or null when the Studio does not own the homepage yet. */
+export async function getPublishedDealsBanners() {
+  let pub: Awaited<ReturnType<typeof publishedStudio>> = null;
+  try {
+    pub = await publishedStudio();
+  } catch {
+    pub = null;
+  }
+  return pub ? studioDealsBanners(pub.studio, pub.publishedAt) : null;
 }
 
 // Short memo so every storefront page view does not query the published version. Publishing or
@@ -139,5 +167,8 @@ export async function checkHomepageReferences(studio: HomepageStudio): Promise<s
   missing('Featured Brands', studio.featuredBrandIds, brands as Array<{ id: string }>);
   missing('Top Buying Guides', studio.featuredGuideIds, guides as Array<{ id: string }>);
   missing('Top Categories', studio.topCategories.map((c) => c.id), categories as Array<{ id: string }>);
+  const live = studio.dealsBanners.filter((b) => b.isActive);
+  missing("Today's Deals banner links (products)", live.filter((b) => b.destinationType === 'product').map((b) => b.destinationRef), products as Array<{ id: string }>);
+  missing("Today's Deals banner links (brands)", live.filter((b) => b.destinationType === 'brand').map((b) => b.destinationRef), brands as Array<{ id: string }>);
   return problems;
 }

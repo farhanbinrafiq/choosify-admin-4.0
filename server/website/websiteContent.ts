@@ -8,6 +8,8 @@
  * the live catalog settings) but are read-only until their own phase adds a strict schema.
  */
 
+import { validateFooter, validateNavigation, validateSocial } from './siteContent';
+
 export type WebsiteDocumentKind =
   | 'company'
   | 'brand_assets'
@@ -26,7 +28,7 @@ export const WEBSITE_DOCUMENT_KINDS: readonly WebsiteDocumentKind[] = [
 ];
 
 /** Kinds whose drafts can be edited through the API in the current phase. */
-export const EDITABLE_KINDS: ReadonlySet<WebsiteDocumentKind> = new Set(['company', 'brand_assets', 'homepage']);
+export const EDITABLE_KINDS: ReadonlySet<WebsiteDocumentKind> = new Set(['company', 'brand_assets', 'homepage', 'navigation', 'footer', 'social']);
 
 export const KEY_PATTERN = /^[a-z][a-z0-9_]*(:[a-z0-9]+(-[a-z0-9]+)*)?$/;
 
@@ -293,7 +295,41 @@ const SECTION_IDS = HOMEPAGE_SECTIONS.map((s) => s.id) as readonly string[];
 export const DEPRECATED_HOMEPAGE_SECTIONS = ['creators', 'newsletter'];
 
 // The storefront shows 6 category tiles (icons, not photos), 8 products, 12 brands, 12 guides.
-export const HOMEPAGE_LIMITS = { slides: 6, categories: 6, products: 8, brands: 12, guides: 12 } as const;
+export const HOMEPAGE_LIMITS = { slides: 6, categories: 6, products: 8, brands: 12, guides: 12, dealsBanners: 10, activeDealsBanners: 5 } as const;
+
+/**
+ * The four sample banners created at setup. The storefront hides them (HomeTodaysDealsSection
+ * isSeededPlaceholder: id deals-banner-N AND one of these stock photos), so they import switched off.
+ */
+export const SEEDED_DEALS_BANNER_IMAGES = new Set([
+  'https://images.unsplash.com/photo-1607083206869-4c7672e72a8a?w=800&h=320&fit=crop',
+  'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=800&h=320&fit=crop',
+  'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&h=320&fit=crop',
+  'https://images.unsplash.com/photo-1556740714-a8395b3bf30f?w=800&h=320&fit=crop',
+]);
+export const isSeededDealsBanner = (b: { id?: unknown; image?: unknown }) =>
+  /^deals-banner-\d+$/.test(String(b?.id ?? '')) && SEEDED_DEALS_BANNER_IMAGES.has(String(b?.image ?? ''));
+
+function dealsBanner(raw: unknown, i: number, ids: Set<string>): HomepageDealsBanner {
+  const f = `dealsBanners[${i}]`;
+  const r = asObject(raw, f);
+  let id = (text(r.id, `${f}.id`, 60) || `deal-banner-${i + 1}`).toLowerCase().replace(/[^a-z0-9-]+/g, '-');
+  for (let n = 2; ids.has(id); n++) id = `${id}-${n}`;
+  ids.add(id);
+  const image = assetUrl(r.image, `${f}.image`);
+  if (!image) throw new WebsiteContentError('Add the banner image', `${f}.image`);
+  const type = r.destinationType === 'product' || r.destinationType === 'brand' ? r.destinationType : 'custom-url';
+  const ref = type === 'custom-url' ? linkUrl(r.destinationRef || '/deals', `${f}.destinationRef`) : text(r.destinationRef, `${f}.destinationRef`, 120, true);
+  return {
+    id,
+    image,
+    destinationType: type,
+    destinationRef: ref,
+    brandName: text(r.brandName, `${f}.brandName`, 60),
+    brandLogoUrl: assetUrl(r.brandLogoUrl, `${f}.brandLogoUrl`),
+    isActive: bool(r.isActive, true),
+  };
+}
 
 export type HomepageSlide = {
   id: string;
@@ -315,10 +351,25 @@ export type HomepageSlide = {
 export type HomepageSection = { id: HomepageSectionId; isVisible: boolean; title: string; subtitle: string };
 /** A real catalog category; blank label = the category's own name. */
 export type HomepageCategoryPick = { id: string; label: string };
+/**
+ * Today's Deals carousel card (Web HomeTodaysDealsSection): a wide image (shown 120px tall,
+ * cropped to fill) linking to a product, a brand or a site page, with an optional sponsor chip
+ * ("PROMOTED" + brand name/logo). Max 5 shown.
+ */
+export type HomepageDealsBanner = {
+  id: string;
+  image: string;
+  destinationType: 'product' | 'brand' | 'custom-url';
+  destinationRef: string;
+  brandName: string;
+  brandLogoUrl: string;
+  isActive: boolean;
+};
 export type HomepageStudio = {
   version: 2;
   heroVisible: boolean;
   slides: HomepageSlide[];
+  dealsBanners: HomepageDealsBanner[];
   /** In display order. */
   sections: HomepageSection[];
   topCategories: HomepageCategoryPick[];
@@ -331,6 +382,7 @@ export const DEFAULT_HOMEPAGE: HomepageStudio = {
   version: 2,
   heroVisible: true,
   slides: [],
+  dealsBanners: [],
   sections: HOMEPAGE_SECTIONS.map((s) => ({ id: s.id, isVisible: true, title: '', subtitle: '' })),
   topCategories: [],
   featuredProductIds: [],
@@ -462,6 +514,18 @@ export function validateHomepage(input: unknown): HomepageStudio {
           };
         }),
       sections: orderedIds.map((id) => ({ id, isVisible: listed.get(id)?.visible ?? true, title: '', subtitle: '' })),
+      // Same cards the storefront shows today: sorted by order; setup samples it hides come in off.
+      dealsBanners: (Array.isArray(o.dealsBanners) ? [...(o.dealsBanners as Array<Record<string, unknown>>)] : [])
+        .sort((a, b) => Number(a?.order ?? 0) - Number(b?.order ?? 0))
+        .map((b) => ({
+          id: b?.id,
+          image: b?.image,
+          destinationType: b?.destinationType,
+          destinationRef: b?.destinationRef,
+          brandName: b?.brandName ?? '',
+          brandLogoUrl: b?.brandLogoUrl ?? '',
+          isActive: b?.isActive !== false && Boolean(b?.image) && !isSeededDealsBanner(b ?? {}),
+        })),
       topCategories: Array.isArray(o.topCategories)
         ? [...(o.topCategories as Array<Record<string, unknown>>)]
             .sort((a, b) => Number(a?.order ?? 0) - Number(b?.order ?? 0))
@@ -473,7 +537,7 @@ export function validateHomepage(input: unknown): HomepageStudio {
       featuredGuideIds: o.featuredGuideIds,
     };
   }
-  const allowed = new Set(['version', 'heroVisible', 'slides', 'sections', 'topCategories', 'featuredProductIds', 'featuredBrandIds', 'featuredGuideIds']);
+  const allowed = new Set(['version', 'heroVisible', 'slides', 'dealsBanners', 'sections', 'topCategories', 'featuredProductIds', 'featuredBrandIds', 'featuredGuideIds']);
   for (const k of Object.keys(src)) if (!allowed.has(k)) throw new WebsiteContentError('Unknown homepage setting', k);
 
   const slidesRaw = src.slides === undefined ? [] : src.slides;
@@ -481,6 +545,15 @@ export function validateHomepage(input: unknown): HomepageStudio {
   if (slidesRaw.length > HOMEPAGE_LIMITS.slides) throw new WebsiteContentError(`At most ${HOMEPAGE_LIMITS.slides} slides`, 'slides');
   const slideIds = new Set<string>();
   const slides = slidesRaw.map((s, i) => slide(s, i, slideIds));
+
+  const bannersRaw = src.dealsBanners === undefined ? [] : src.dealsBanners;
+  if (!Array.isArray(bannersRaw)) throw new WebsiteContentError('Expected a list', 'dealsBanners');
+  if (bannersRaw.length > HOMEPAGE_LIMITS.dealsBanners) throw new WebsiteContentError(`At most ${HOMEPAGE_LIMITS.dealsBanners} deals banners`, 'dealsBanners');
+  const bannerIds = new Set<string>();
+  const dealsBanners = bannersRaw.map((b, i) => dealsBanner(b, i, bannerIds));
+  if (dealsBanners.filter((b) => b.isActive).length > HOMEPAGE_LIMITS.activeDealsBanners) {
+    throw new WebsiteContentError(`At most ${HOMEPAGE_LIMITS.activeDealsBanners} banners can be shown at once — switch some off`, 'dealsBanners');
+  }
 
   const sectionsRaw = src.sections === undefined ? [] : src.sections;
   if (!Array.isArray(sectionsRaw)) throw new WebsiteContentError('Expected a list', 'sections');
@@ -523,6 +596,7 @@ export function validateHomepage(input: unknown): HomepageStudio {
     version: 2,
     heroVisible: bool(src.heroVisible, true),
     slides,
+    dealsBanners,
     sections,
     topCategories,
     featuredProductIds: idList(src.featuredProductIds, 'featuredProductIds', HOMEPAGE_LIMITS.products),
@@ -537,6 +611,9 @@ export function defaultsForKind(kind: WebsiteDocumentKind): unknown {
   if (kind === 'company') return structuredClone(DEFAULT_COMPANY);
   if (kind === 'brand_assets') return structuredClone(DEFAULT_BRAND_ASSETS);
   if (kind === 'homepage') return structuredClone(DEFAULT_HOMEPAGE);
+  if (kind === 'navigation') return validateNavigation({ version: 2, items: [{ id: 'home', label: 'Home', url: '/' }], announcement: { enabled: false, text: '', linkUrl: '' } });
+  if (kind === 'footer') return validateFooter({ version: 2, description: '', columns: [], paymentMethods: [], deliveryPartners: [], apps: [] });
+  if (kind === 'social') return { version: 2, links: [] };
   return null;
 }
 
@@ -546,6 +623,9 @@ export function validateContent(kind: WebsiteDocumentKind, content: unknown): un
   if (kind === 'company') return validateCompany(content);
   if (kind === 'brand_assets') return validateBrandAssets(content);
   if (kind === 'homepage') return validateHomepage(content);
+  if (kind === 'navigation') return validateNavigation(content);
+  if (kind === 'footer') return validateFooter(content);
+  if (kind === 'social') return validateSocial(content);
   // Read-only kinds in this phase: only the generic safety checks above apply (used by backfill).
   if (content === null || typeof content !== 'object') throw new WebsiteContentError('Expected an object');
   return content;

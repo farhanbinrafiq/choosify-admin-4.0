@@ -93,7 +93,7 @@ async function main() {
   check('HTML in a heading is refused', (await bad({ sections: d1.sections.map((s: any, i: number) => (i ? s : { ...s, title: '<img src=x onerror=alert(1)>' })) }))?.code === 'INVALID_CONTENT');
   check('more than 6 categories is refused', (await bad({ topCategories: Array.from({ length: 7 }, (_, i) => ({ id: `c${i}`, label: '' })) }))?.field === 'topCategories');
   check('more than 8 products is refused', (await bad({ featuredProductIds: Array.from({ length: 9 }, (_, i) => `p${i}`) }))?.field === 'featuredProductIds');
-  check('unknown top-level setting is refused', (await bad({ dealsBanners: [] }))?.code === 'INVALID_CONTENT');
+  check('unknown top-level setting is refused', (await bad({ newsletter: true }))?.code === 'INVALID_CONTENT');
 
   // --- Real catalog records -------------------------------------------------------------------------
   const products = (await call(superAdmin, 'GET', '/catalog/products')).json?.data ?? [];
@@ -137,7 +137,11 @@ async function main() {
   }
   const companyTok = otherTok;
   check('found another document draft to mint a token for', !!companyTok);
-  if (companyTok) check('a preview token for another document cannot open the homepage preview', (await call(null, 'GET', `/catalog/cms-preview/session/${encodeURIComponent(companyTok)}`)).status === 401);
+  if (companyTok) {
+    // Header/footer tokens open the storefront preview too (Phase 3) — but never the HOMEPAGE draft.
+    const other = await call(null, 'GET', `/catalog/cms-preview/session/${encodeURIComponent(companyTok)}`);
+    check('a token for another document never exposes the homepage draft', !JSON.stringify(other.json).includes('Brands we love'), other.json?.preview?.document);
+  }
   check('garbage token → 401', (await call(null, 'GET', '/catalog/cms-preview/session/' + 'x'.repeat(40))).status === 401);
   check('a login token is not a preview token', (await call(null, 'GET', `/catalog/cms-preview/session/${encodeURIComponent(superAdmin)}`)).status === 401);
   check('a preview token is not a login (staff API rejects it)', (await call(tok, 'GET', '/website/documents')).status === 401);
