@@ -35,6 +35,9 @@ export type PublicAd = {
   ctaLabel?: string;
   sponsorName?: string;
   sponsorLogoUrl?: string;
+  /** Category Promoted Slot: the category card this sponsor footer belongs to. */
+  categoryId?: string;
+  categoryName?: string;
   link: PublicAdLink | null;
 };
 
@@ -102,6 +105,11 @@ export function deliveryProblems(ad: AdRecord, now = Date.now()): string[] {
   if (Number.isFinite(end) && end <= now) out.push(`Campaign ended ${new Date(end).toISOString()}`);
   const img = ad.creative?.imageUrl;
   if (format?.imageLed && !SAFE_IMAGE(img)) out.push('Missing or invalid image');
+  if (format?.formatId === 'cta_strip' && !String(ad.creative?.headline ?? '').trim()) out.push('CTA strip needs a headline');
+  if (format?.formatId === 'category_promoted_slot') {
+    if (!String(ad.creative?.categoryId ?? '').trim()) out.push('Choose the category card this sponsor appears on');
+    if (!String(ad.creative?.advertiserName ?? '').trim()) out.push('Category sponsor needs an advertiser name');
+  }
   if (slot && format?.imageLed && SAFE_IMAGE(img)) {
     const w = Number(ad.creative?.imageWidth);
     const h = Number(ad.creative?.imageHeight);
@@ -141,6 +149,8 @@ export function toPublicAd(ad: AdRecord, origin = ''): PublicAd {
     ctaLabel: str(ad.cta?.label, 30),
     sponsorName: str(c.advertiserName, 60),
     sponsorLogoUrl: SAFE_IMAGE(c.logoUrl) ? absoluteMedia(c.logoUrl, origin) : undefined,
+    categoryId: format.formatId === 'category_promoted_slot' ? str(c.categoryId, 80) : undefined,
+    categoryName: format.formatId === 'category_promoted_slot' ? str(c.categoryName ?? c.hostCategoryName, 120) : undefined,
     link: adLink(ad),
   };
 }

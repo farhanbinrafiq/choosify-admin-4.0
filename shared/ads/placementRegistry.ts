@@ -19,6 +19,8 @@ export type AdFormatId =
   | 'deal_of_the_day'
   | 'follow_brands_banner'
   | 'category_promoted_slot'
+  /** Text CTA strip: headline + line + orange button on the dark brand gradient (no artwork). */
+  | 'cta_strip'
   /** Sponsored Listing: promotes an EXISTING product / brand / deal / guide / creator; the card
    *  is drawn from that record (its own photo, name, price) with a Sponsored label. */
   | 'sponsored_listing';
@@ -139,6 +141,13 @@ export const AD_FORMATS: AdFormatDef[] = [
     fields: ['headline', 'subtext', 'ctaLabel', 'image', 'internalDest', 'externalUrl'],
   },
   {
+    formatId: 'cta_strip',
+    label: 'CTA Strip Banner',
+    description: 'Text banner: headline, one line and an orange button on the dark Choosify gradient. No artwork needed.',
+    imageLed: false,
+    fields: ['advertiser', 'logo', 'headline', 'subtext', 'ctaLabel', 'internalDest', 'externalUrl'],
+  },
+  {
     formatId: 'category_promoted_slot',
     label: 'Category Promoted Slot',
     description: 'Embedded PROMOTED footer on an organic category card.',
@@ -164,7 +173,7 @@ const wideSlot = (placementId: string, pageKey: AdPageKey, pageLabel: string, se
   slotKey: 'sponsored_banner',
   slotLabel: `${pageLabel} page sponsored banner`,
   sectionLabel,
-  allowedFormats: ['follow_brands_banner', 'hero_banner'],
+  allowedFormats: ['follow_brands_banner', 'hero_banner', 'cta_strip'],
   orientation: 'horizontal',
   aspectRatio: '4:1',
   mobileSupport: true,
@@ -231,7 +240,7 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
     slotKey: 'sponsored_banner',
     slotLabel: 'Homepage sponsored banner',
     sectionLabel: 'Homepage — wide sponsored banner after the Viral Today / Popular Products block',
-    allowedFormats: ['follow_brands_banner', 'hero_banner'],
+    allowedFormats: ['follow_brands_banner', 'hero_banner', 'cta_strip'],
     orientation: 'horizontal',
     aspectRatio: '4:1',
     mobileSupport: true,
@@ -264,7 +273,7 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
     slotKey: 'sponsored_banner',
     slotLabel: 'Products page sponsored banner',
     sectionLabel: 'Products & Services page — wide sponsored banner above the product grid',
-    allowedFormats: ['follow_brands_banner', 'hero_banner'],
+    allowedFormats: ['follow_brands_banner', 'hero_banner', 'cta_strip'],
     orientation: 'horizontal',
     aspectRatio: '4:1',
     mobileSupport: true,
@@ -282,7 +291,7 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
     slotKey: 'sponsored_banner',
     slotLabel: 'Deals page sponsored banner',
     sectionLabel: 'Deals page — wide sponsored banner in the deals feed',
-    allowedFormats: ['follow_brands_banner', 'hero_banner'],
+    allowedFormats: ['follow_brands_banner', 'hero_banner', 'cta_strip'],
     orientation: 'horizontal',
     aspectRatio: '4:1',
     mobileSupport: true,
@@ -324,7 +333,7 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
     pageLabel: 'Categories',
     slotKey: 'card_footer',
     slotLabel: 'Category Card Footer (Embedded)',
-    sectionLabel: 'Retired',
+    sectionLabel: 'Categories page: sponsor strip at the bottom of the category card you choose (logo, name, Promoted label)',
     allowedFormats: ['category_promoted_slot'],
     orientation: 'embedded',
     aspectRatio: 'auto',
@@ -332,8 +341,9 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
     mobileSupport: true,
     desktopSupport: true,
     ownerRoles: ['admin', 'seller'],
-    active: false,
-    retiredReason: 'Category cards on the storefront have no promoted footer.',
+    active: true,
+    frequency: 'One sponsor per category card; the newest booking wins.',
+    fallback: 'The card footer shows the category top brand, labelled "Top brand" (not Promoted).',
   },
   // Wide banners above the grid (mounted 2026-11-05 at the Super Admin's request).
   wideSlot('BRANDS_BANNER', 'brands', 'Brands', 'Brands page — wide sponsored banner above the brands grid'),

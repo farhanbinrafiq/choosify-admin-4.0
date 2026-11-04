@@ -86,6 +86,71 @@ export function AdSlotPreview({ placement, ad }: { placement: AdPlacementDef; ad
   if (format?.imageLed && !img) {
     return <div className="rounded-lg border border-dashed border-slate-300 px-3 py-8 text-center text-[11.5px] text-slate-500">Upload the image to see exactly how it will look.</div>;
   }
+  if (ad.formatId === 'cta_strip') {
+    // Same as the storefront CTA strip: dark gradient, headline + line left, orange button right.
+    const strip = (phone: boolean) => (
+      <div
+        className="relative flex gap-3 overflow-hidden rounded-xl"
+        style={{
+          background: 'linear-gradient(110deg, #3B1E3F 0%, #2A1846 55%, #2B1A4A 100%)',
+          padding: phone ? '26px 12px 10px' : '28px 20px 16px',
+          flexDirection: phone ? 'column' : 'row',
+          alignItems: phone ? 'flex-start' : 'center',
+        }}
+      >
+        {chip(ad.advertiserName)}
+        {ad.logoUrl ? (
+          <img src={ad.logoUrl} alt="" className="shrink-0 rounded-full bg-white object-contain p-0.5" style={{ width: phone ? 26 : 34, height: phone ? 26 : 34 }} />
+        ) : null}
+        <div className="min-w-0 flex-1">
+          <div className="font-extrabold leading-tight" style={{ color: '#FFFFFF', fontSize: phone ? 12 : 14 }}>{ad.headline || 'Your headline'}</div>
+          {ad.subtext ? <div style={{ color: 'rgba(255,255,255,.7)', fontSize: phone ? 10 : 11.5, marginTop: 2 }}>{ad.subtext}</div> : null}
+        </div>
+        {ad.ctaLabel && ad.hasDestination !== false ? (
+          <span
+            className="shrink-0 font-extrabold uppercase tracking-wide"
+            style={{ background: '#FF5B00', color: '#FFFFFF', borderRadius: 8, fontSize: phone ? 9.5 : 11, padding: phone ? '5px 10px' : '8px 14px', alignSelf: phone ? 'stretch' : 'center', textAlign: 'center' }}
+            data-testid={phone ? undefined : 'ad-preview-cta'}
+          >
+            {ad.ctaLabel}
+          </span>
+        ) : null}
+      </div>
+    );
+    return (
+      <div className="space-y-3" data-testid="ad-preview-strip">
+        <div>
+          <div className="mb-1 text-[10px] font-bold uppercase text-slate-500">Desktop: full content width</div>
+          {strip(false)}
+        </div>
+        <div>
+          <div className="mb-1 text-[10px] font-bold uppercase text-slate-500">Phone (390px)</div>
+          <div className="mx-auto w-[60%]">{strip(true)}</div>
+        </div>
+        <div className="text-[10.5px] text-slate-500">A text banner drawn by the storefront: no artwork, always sharp, never cropped.</div>
+      </div>
+    );
+  }
+  if (ad.formatId === 'category_promoted_slot') {
+    return (
+      <div className="mx-auto w-[260px]" data-testid="ad-preview-category-footer">
+        <div className="overflow-hidden rounded-xl border border-[#E8EDF2] bg-white">
+          <div className="h-16 bg-slate-100" />
+          <div className="px-4 py-3 text-[13px] font-extrabold text-[#1A1A2E]">Category card</div>
+          <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: '#3B1E3F' }}>
+            <div className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full text-[10px] font-extrabold" style={{ background: 'rgba(255,255,255,.2)', color: '#FFFFFF' }}>
+              {ad.logoUrl ? <img src={ad.logoUrl} alt="" className="h-full w-full object-cover" /> : (ad.advertiserName || 'S').charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1 truncate text-[11px] font-extrabold" style={{ color: '#FFFFFF' }}>{ad.advertiserName || 'Advertiser name'}</div>
+            <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide" style={{ background: '#2323FF', color: '#FFFFFF' }}>Promoted</span>
+          </div>
+        </div>
+        <div className="mt-2 text-[10.5px] text-slate-500">
+          Shown at the bottom of the chosen category card. Without a booking the footer shows the category top brand, labelled "Top brand".
+        </div>
+      </div>
+    );
+  }
   if (placement.placementId === 'HOME_HERO') {
     return (
       <div className="space-y-3" data-testid="ad-preview-hero">

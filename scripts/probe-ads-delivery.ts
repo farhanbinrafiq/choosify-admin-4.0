@@ -102,7 +102,7 @@ async function main() {
   check('unknown slot cannot be chosen', (await create(sa, { placementId: 'NOPE_SLOT', publishNow: true })).status === 400);
   check('public delivery for an unknown slot returns nothing', JSON.stringify(await delivery('NOPE_SLOT')) === '{}');
   const placements = (await call(sa, 'GET', '/ads/placements')).json?.data?.placements ?? [];
-  check('placement picker lists only real (active) slots', placements.length > 0 && placements.every((p: any) => p.active) && !placements.some((p: any) => ['HOME_RIGHT_RAIL', 'CATEGORY_CARD_FOOTER', 'GUIDES_SIDEBAR', 'DEALS_FEATURED'].includes(p.placementId)));
+  check('placement picker lists only real (active) slots', placements.length > 0 && placements.every((p: any) => p.active) && !placements.some((p: any) => ['HOME_RIGHT_RAIL', 'GUIDES_SIDEBAR', 'DEALS_FEATURED'].includes(p.placementId)));
   check('every active slot states section + recommended size', placements.every((p: any) => p.sectionLabel && (p.creative ? p.creative.recommended.width > 0 : true)));
 
   // --- Creative size checks ----------------------------------------------------------------------------
