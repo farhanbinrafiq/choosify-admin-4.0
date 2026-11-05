@@ -193,7 +193,8 @@ export function HomepageEditor({ value, onChange, disabled }: { value: HomepageS
     <div className="space-y-3 p-3" onClick={() => setSel(null)} data-testid="ws-homepage-editor">
       {catalog.error && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11.5px] font-semibold text-red-700">The catalog could not be loaded: {catalog.error}</div>}
       <MirrorBlock selected={sel === 'hero'} onSelect={() => setSel('hero')} label="Hero banner" testId="ws-hp-hero" muted={!v.heroVisible} className="rounded-xl">
-        <div className="relative h-[150px] overflow-hidden rounded-xl" style={{ background: STOREFRONT.navy }}>
+        {/* Same shape as the live desktop hero (about 1920×750): the bottom ~48% fades under the first panel. */}
+        <div className="relative aspect-[1920/750] overflow-hidden rounded-xl" style={{ background: STOREFRONT.navy }}>
           {first?.mediaType === 'image' ? (
             <img src={first.mediaUrl} alt="" className="h-full w-full object-cover" style={{ objectPosition: `${first.focalX}% ${first.focalY}%` }} />
           ) : (
@@ -201,17 +202,32 @@ export function HomepageEditor({ value, onChange, disabled }: { value: HomepageS
               <Play className="h-5 w-5" /> {first ? 'Video slide' : 'Built-in Choosify video'}
             </div>
           )}
+          <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-[52%] bg-gradient-to-b from-transparent via-[#F0F8FF]/55 to-[#F0F8FF]" />
+          {/* Safe area: keep text / logos / buttons inside this box (top ~52%, middle 1400 of 1920 px). */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute top-[3%] h-[49%] rounded-md border border-dashed border-white/80"
+            style={{ left: '13.5%', right: '13.5%', boxShadow: '0 0 0 1px rgba(0,0,0,.25)' }}
+            data-testid="ws-hp-hero-safe-area"
+          >
+            <span className="absolute left-1 top-1 rounded bg-black/55 px-1 py-px text-[8.5px] font-bold text-white">Keep text &amp; buttons inside</span>
+          </div>
           <span className="absolute right-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(0,0,0,.55)', color: '#FFFFFF' }} data-testid="ws-hp-hero-summary">
             {!v.heroVisible ? 'Hidden' : active.length ? `${active.length} active slide${active.length === 1 ? '' : 's'}` : 'No active slides — built-in Choosify video'}
           </span>
         </div>
       </MirrorBlock>
       {v.sections.map((s) => {
+        // Like the live site: when Top Categories is the first shown section it sits over the faded hero.
+        const firstShown = v.sections.find((x) => x.isVisible)?.id;
+        const overlap = v.heroVisible && s.id === 'categories' && firstShown === 'categories';
         return (
-          <MirrorBlock key={s.id} selected={sel === s.id} onSelect={() => setSel(s.id)} label={SECTION_INFO[s.id].name} testId={`ws-hp-section-${s.id}`} muted={!s.isVisible} className="rounded-2xl">
+          <div key={s.id} className={overlap ? 'relative z-10' : undefined} style={overlap ? { marginTop: '-18%' } : undefined}>
+          <MirrorBlock selected={sel === s.id} onSelect={() => setSel(s.id)} label={SECTION_INFO[s.id].name} testId={`ws-hp-section-${s.id}`} muted={!s.isVisible} className="rounded-2xl">
             {!s.isVisible && <span className="absolute right-2 top-2 z-10 rounded-full bg-slate-700 px-2 py-0.5 text-[9.5px] font-extrabold" style={{ color: '#FFFFFF' }}>HIDDEN</span>}
             <SectionMirror s={s} v={v} catalog={catalog} />
           </MirrorBlock>
+          </div>
         );
       })}
     </div>

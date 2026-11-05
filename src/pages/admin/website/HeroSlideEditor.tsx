@@ -221,8 +221,8 @@ export function HeroSlideEditor({
           label={slide.mediaType === 'image' ? 'Image (desktop)' : 'Video (desktop)'}
           hint={
             slide.mediaType === 'image'
-              ? 'Recommended 1920×600 px (about 3.2:1), at least 1600×500. The hero is 460 px tall and as wide as the screen, so keep text and logos inside the middle 1440×460 area — the edges are trimmed on narrower or wider screens. JPG, PNG, WEBP or AVIF.'
-              : 'Recommended 1920×600 px (about 3.2:1), MP4 or WebM, a short muted loop (it plays without sound). Keep text inside the middle 1440×460 area.'
+              ? 'Recommended 1920×750 px (about 2.6:1; 2400×940 for extra sharpness). On computers the hero fills the screen width and its bottom ~48% fades under Top Categories — keep text, logos and buttons in the TOP ~390 px and the middle ~1400 px (the dashed box in the preview); use the bottom for background only. JPG, PNG, WEBP or AVIF, ideally under 1 MB.'
+              : 'Recommended 1920×750 px (about 2.6:1), MP4 or WebM, a short muted loop (it plays without sound). Keep text in the top ~390 px and the middle ~1400 px — the bottom fades under Top Categories.'
           }
           value={slide.mediaUrl}
           kind={slide.mediaType}
@@ -246,7 +246,7 @@ export function HeroSlideEditor({
         {slide.mediaType === 'video' ? (
           <MediaField
             label="Poster image (optional)"
-            hint="Same size as the video (1920×600 px). Shown before the video plays and when autoplay is blocked."
+            hint="Same size as the video (1920×750 px). Shown before the video plays and when autoplay is blocked."
             value={slide.posterUrl}
             kind="image"
             disabled={disabled}
