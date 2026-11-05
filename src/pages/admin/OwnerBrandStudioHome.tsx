@@ -8,6 +8,7 @@ import { MarketplaceAccessLockPanel, MarketplacePendingStudioNotice, partnerMark
 import { getMyProfilePath } from '../../lib/userDisplay';
 import { Avatar } from '../../components/shared/Avatar';
 import { ContentCard, DashShell, EmptyState } from './dashboards/primitives';
+import { OwnerInsightsPanel } from '../../components/owner/OwnerInsightsPanel';
 
 /**
  * Seller Brand Studio home (/admin/brand-studio) for the cases the App route
@@ -71,6 +72,7 @@ export default function OwnerBrandStudioHome() {
     <>
       {locked ? <MarketplacePendingStudioNotice /> : null}
       <DashShell title="Brand Studio" subtitle="Your brands — open Brand Studio to edit and publish each public Brand Page." actions={createButton}>
+        {brands && brands.length > 0 ? <OwnerInsightsPanel /> : null}
         {error ? (
           <ContentCard>
             <div className="text-sm font-bold text-red-600" role="alert">{error}</div>

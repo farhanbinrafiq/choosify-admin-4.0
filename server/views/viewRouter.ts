@@ -14,6 +14,8 @@ import { hasRole } from '../permissions/authorization';
 import { ROLES } from '../permissions/roles';
 import { catalogStore } from '../../lib/vercel-catalog/catalogStore';
 import { recordView, viewCount, viewLog, visitorKey, type ViewKind } from './viewStore';
+import { adsStore } from '../ads/adsStore';
+import { metricsFor } from '../ads/adMetrics';
 
 export const viewRouter = Router();
 
@@ -89,6 +91,94 @@ viewRouter.post('/views/:kind/:id', softAuthenticateRequest, async (req: Request
     device: deviceOf(userAgent),
   });
   res.json({ count });
+});
+
+/**
+ * Owner Insights — one overview of everything a seller owns: brand pages + products (views,
+ * unique visitors, daily trend, sources, devices, top items) and their ads (views, clicks).
+ * Only the owner's own items; a Super Admin may pass ?ownerId= to see what an owner sees.
+ * Visits are one per visitor per item per day; the per-item history keeps the latest 500 visits.
+ */
+viewRouter.get('/views/insights', authenticateRequest, async (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const superAdmin = hasRole(req.userRole, ROLES.SUPER_ADMIN);
+  const ownerId = superAdmin && typeof req.query.ownerId === 'string' && req.query.ownerId ? req.query.ownerId : req.userId;
+  if (!ownerId) {
+    res.status(401).json({ error: 'Sign in' });
+    return;
+  }
+  const daysRaw = String(req.query.days || '30');
+  const days = daysRaw === 'all' ? null : Math.min(365, Math.max(1, Number(daysRaw) || 30));
+  const since = days ? new Date(Date.now() - (days - 1) * 86400_000) : null;
+  const sinceDay = since ? since.toISOString().slice(0, 10) : null;
+  try {
+    const [brands, products] = await Promise.all([catalogStore.listBrands(), catalogStore.listProducts()]);
+    const myBrands = brands.filter((b) => b.sellerId && b.sellerId === ownerId);
+    const myProducts = products.filter(
+      (p) => (p.sellerId && p.sellerId === ownerId) || ((p as { creatorId?: string }).creatorId && (p as { creatorId?: string }).creatorId === ownerId),
+    );
+    const items: Array<{ kind: ViewKind; id: string; name: string; image: string }> = [
+      ...myBrands.map((b) => ({ kind: 'brand' as const, id: b.id, name: b.name, image: b.logo || '' })),
+      ...myProducts.map((p) => ({ kind: 'product' as const, id: p.id, name: p.title, image: p.image || '' })),
+    ];
+    const daily: Record<string, number> = {};
+    const bySource: Record<string, number> = {};
+    const byDevice: Record<string, number> = {};
+    const visitors = new Set<string>();
+    let views = 0;
+    let allTimeViews = 0;
+    const rows = items.map((it) => {
+      const log = viewLog(it.kind, it.id).filter((r) => !sinceDay || r.at.slice(0, 10) >= sinceDay);
+      const total = viewCount(it.kind, it.id);
+      allTimeViews += total;
+      const itemVisitors = new Set<string>();
+      for (const r of log) {
+        views += 1;
+        visitors.add(r.v);
+        itemVisitors.add(r.v);
+        const d = r.at.slice(0, 10);
+        daily[d] = (daily[d] ?? 0) + 1;
+        bySource[r.src || 'direct'] = (bySource[r.src || 'direct'] ?? 0) + 1;
+        byDevice[r.dev || 'desktop'] = (byDevice[r.dev || 'desktop'] ?? 0) + 1;
+      }
+      return { ...it, views: log.length, visitors: itemVisitors.size, allTimeViews: total };
+    });
+    // the day series, oldest first, including days with no visits
+    const series: Array<{ date: string; views: number }> = [];
+    if (days) {
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date(Date.now() - i * 86400_000).toISOString().slice(0, 10);
+        series.push({ date: d, views: daily[d] ?? 0 });
+      }
+    } else {
+      for (const d of Object.keys(daily).sort()) series.push({ date: d, views: daily[d] });
+    }
+    const myAds = (await adsStore.listAds({})).filter((a) => a.ownerId === ownerId);
+    const adm = metricsFor(myAds.map((a) => a.id), sinceDay ?? undefined);
+    let adViews = 0;
+    let adClicks = 0;
+    for (const r of adm.rows) {
+      adViews += r.impressions;
+      adClicks += r.clicks;
+    }
+    res.json({
+      data: {
+        days: days ?? 'all',
+        brands: myBrands.length,
+        products: myProducts.length,
+        views,
+        uniqueVisitors: visitors.size,
+        allTimeViews,
+        series,
+        bySource,
+        byDevice,
+        top: rows.filter((r) => r.views > 0 || r.allTimeViews > 0).sort((a, b) => b.views - a.views || b.allTimeViews - a.allTimeViews).slice(0, 10),
+        ads: { count: myAds.length, views: adViews, clicks: adClicks },
+      },
+    });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : 'Insights unavailable' });
+  }
 });
 
 /**
