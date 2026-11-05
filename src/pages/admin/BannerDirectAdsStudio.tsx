@@ -111,6 +111,12 @@ function BannerAdsList() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [busyId, setBusyId] = useState<string | null>(null);
+  /** Ticked rows (bulk Duplicate / Delete). */
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  /** Attention dialog before Duplicate / Delete. */
+  const [confirm, setConfirm] = useState<{ kind: 'duplicate' | 'delete'; ids: string[]; openCopy?: boolean } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -133,18 +139,69 @@ function BannerAdsList() {
     () => (filter === 'all' ? rows : rows.filter((r) => r.status === filter)),
     [rows, filter],
   );
+  const selectableIds = useMemo(
+    () => filtered.filter((r) => r.kind === 'banner' || r.kind === 'external').map((r) => r.id),
+    [filtered],
+  );
+  const allTicked = selectableIds.length > 0 && selectableIds.every((x) => selected.has(x));
 
-  const duplicate = async (id: string) => {
-    setBusyId(id);
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const refOf = (id: string) => {
+    const r = rows.find((x) => x.id === id);
+    return r?.advertisementReferenceId || r?.title || id;
+  };
+
+  /** Runs the confirmed Duplicate / Delete on every chosen ad, one by one, and reports the result. */
+  const runConfirmed = async () => {
+    if (!confirm) return;
+    const { kind, ids, openCopy } = confirm;
+    setConfirm(null);
+    setBulkBusy(true);
     setError(null);
-    try {
-      const copy = await adsApi.duplicateAd(id);
-      navigate(`/admin/ads-studio/${encodeURIComponent(copy.id)}/edit`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not duplicate the ad');
-    } finally {
-      setBusyId(null);
+    setNotice(null);
+    const done: string[] = [];
+    const skipped: string[] = [];
+    const failed: string[] = [];
+    let lastCopyId: string | null = null;
+    for (const id of ids) {
+      const row = rows.find((x) => x.id === id);
+      try {
+        if (kind === 'duplicate') {
+          const copy = await adsApi.duplicateAd(id);
+          lastCopyId = copy.id;
+          done.push(copy.advertisementReferenceId || copy.id);
+        } else {
+          if (row?.status === 'active') {
+            skipped.push(refOf(id));
+            continue;
+          }
+          await adsApi.deleteAd(id);
+          done.push(refOf(id));
+        }
+      } catch (err) {
+        failed.push(`${refOf(id)} (${err instanceof Error ? err.message : 'failed'})`);
+      }
     }
+    setBulkBusy(false);
+    setSelected(new Set());
+    if (kind === 'duplicate' && openCopy && lastCopyId && !failed.length) {
+      navigate(`/admin/ads-studio/${encodeURIComponent(lastCopyId)}/edit`);
+      return;
+    }
+    const parts = [
+      done.length ? (kind === 'duplicate' ? `${done.length} draft cop${done.length === 1 ? 'y' : 'ies'} created: ${done.join(', ')} — open each, choose where it goes, then publish.` : `${done.length} ad${done.length === 1 ? '' : 's'} deleted: ${done.join(', ')}.`) : '',
+      skipped.length ? `Not deleted (live on the storefront — pause or disable first): ${skipped.join(', ')}.` : '',
+    ].filter(Boolean);
+    if (parts.length) setNotice(parts.join(' '));
+    if (failed.length) setError(`Could not ${kind}: ${failed.join('; ')}`);
+    await load();
   };
 
   const move = async (id: string, placementId: string, label: string) => {
@@ -217,6 +274,39 @@ function BannerAdsList() {
         </div>
       ) : null}
 
+      {notice ? (
+        <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] font-semibold text-emerald-800" role="status" data-testid="ads-bulk-notice">
+          {notice}
+        </div>
+      ) : null}
+      {selected.size > 0 ? (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-[#FFD8C7] bg-[#FFF4EE] px-3 py-2 text-[12px] font-bold text-[#111827]" data-testid="ads-bulk-bar">
+          <span>{selected.size} selected</span>
+          <button
+            type="button"
+            disabled={bulkBusy}
+            onClick={() => setConfirm({ kind: 'duplicate', ids: [...selected] })}
+            className="rounded-md border border-[#E8EDF2] bg-white px-2.5 py-1 text-[11px] font-extrabold"
+            data-testid="ads-bulk-duplicate"
+          >
+            Duplicate
+          </button>
+          <button
+            type="button"
+            disabled={bulkBusy}
+            onClick={() => setConfirm({ kind: 'delete', ids: [...selected] })}
+            className="rounded-md border border-red-200 bg-white px-2.5 py-1 text-[11px] font-extrabold text-red-700"
+            data-testid="ads-bulk-delete"
+          >
+            Delete
+          </button>
+          <button type="button" onClick={() => setSelected(new Set())} className="text-[11px] font-bold text-[#6B7280] hover:underline">
+            Clear selection
+          </button>
+          {bulkBusy ? <Loader2 className="h-4 w-4 animate-spin text-[#EF3C23]" /> : null}
+        </div>
+      ) : null}
+
       {loading ? (
         <div className="flex items-center gap-2 text-[12px] text-[#6B7280]">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading…
@@ -226,6 +316,16 @@ function BannerAdsList() {
           <table className="w-full border-collapse text-left">
             <thead>
               <tr className="bg-[#F9FAFB]">
+                <th className="w-8 px-3 py-2.5">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all ads shown"
+                    checked={allTicked}
+                    onChange={() => setSelected(allTicked ? new Set() : new Set(selectableIds))}
+                    data-testid="ads-select-all"
+                  />
+                </th>
+                <th className="px-2 py-2.5 text-[10px] font-extrabold uppercase tracking-wide text-[#6B7280]">SL</th>
                 {['Creative', 'Advertiser', 'Format', 'Page', 'Placement', 'Owner', 'Status', 'Updated', 'Actions'].map(
                   (h) => (
                     <th
@@ -241,12 +341,12 @@ function BannerAdsList() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-[12px] text-[#9CA3AF]">
+                  <td colSpan={11} className="px-3 py-8 text-center text-[12px] text-[#9CA3AF]">
                     No banner / direct ads yet. Click Create Ad to open the Visual Builder.
                   </td>
                 </tr>
               ) : (
-                filtered.map((row) => {
+                filtered.map((row, idx) => {
                   const creative = (row.creative || {}) as Record<string, string>;
                   const format = getFormatDef(row.formatId);
                   const placement = getPlacementDef(row.placementId);
@@ -261,7 +361,24 @@ function BannerAdsList() {
                       ? creative.posterUrl || creative.imageUrl
                       : creative.imageUrl;
                   return (
-                    <tr key={row.id} className="border-t border-[#F1F3F5]">
+                    <tr key={row.id} className={`border-t border-[#F1F3F5] ${selected.has(row.id) ? 'bg-[#FFF8F4]' : ''}`}>
+                      <td className="px-3 py-2.5">
+                        {row.kind === 'banner' || row.kind === 'external' ? (
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${row.advertisementReferenceId || row.title}`}
+                            checked={selected.has(row.id)}
+                            onChange={() => toggle(row.id)}
+                            data-testid={`ads-select-${row.id}`}
+                          />
+                        ) : null}
+                      </td>
+                      <td className="px-2 py-2.5 align-middle" data-testid={`ads-sl-${row.id}`}>
+                        <div className="text-[12px] font-extrabold text-[#111827]">{idx + 1}</div>
+                        {row.advertisementReferenceId ? (
+                          <div className="font-mono text-[9.5px] font-bold text-[#6B7280]">{row.advertisementReferenceId}</div>
+                        ) : null}
+                      </td>
                       <td className="px-3 py-2.5">
                         <button
                           type="button"
@@ -326,7 +443,7 @@ function BannerAdsList() {
                           <button
                             type="button"
                             disabled={busyId === row.id}
-                            onClick={() => void duplicate(row.id)}
+                            onClick={() => setConfirm({ kind: 'duplicate', ids: [row.id], openCopy: true })}
                             className="mt-1 block text-[10px] font-extrabold text-[#EF3C23] hover:underline"
                             data-testid={`ads-duplicate-${row.id}`}
                           >
@@ -417,6 +534,55 @@ function BannerAdsList() {
           </table>
         </div>
       )}
+
+      {confirm ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" data-testid="ads-confirm">
+          <div className="w-full max-w-[460px] rounded-xl bg-white p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[16px] font-extrabold ${confirm.kind === 'delete' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}`}>!</span>
+              <div className="min-w-0">
+                <div className="text-[15px] font-extrabold text-[#111827]">
+                  {confirm.kind === 'duplicate'
+                    ? `Duplicate ${confirm.ids.length === 1 ? refOf(confirm.ids[0]) : `${confirm.ids.length} ads`}?`
+                    : `Delete ${confirm.ids.length === 1 ? refOf(confirm.ids[0]) : `${confirm.ids.length} ads`}?`}
+                </div>
+                {confirm.kind === 'duplicate' ? (
+                  <div className="mt-1.5 space-y-1 text-[12.5px] text-[#4B5563]">
+                    <p>A copy of {confirm.ids.length === 1 ? 'this ad' : 'each ad'} is made with the same design, text, link and place, and its own AD number.</p>
+                    <p className="font-semibold text-[#92400E]">Copies are saved as drafts and are NOT on the storefront. Open each copy, choose the page and place it should go, then publish it.</p>
+                    {confirm.openCopy ? <p>The copy opens straight away.</p> : null}
+                  </div>
+                ) : (
+                  <div className="mt-1.5 space-y-1 text-[12.5px] text-[#4B5563]">
+                    <p className="font-semibold text-red-700">This permanently removes {confirm.ids.length === 1 ? 'the ad' : 'these ads'} and cannot be undone.</p>
+                    {confirm.ids.some((x) => rows.find((r) => r.id === x)?.status === 'active') ? (
+                      <p>Ads that are live on the storefront are skipped — pause or disable them first.</p>
+                    ) : null}
+                  </div>
+                )}
+                {confirm.ids.length > 1 ? (
+                  <div className="mt-2 max-h-24 overflow-auto rounded border border-[#F1F3F5] bg-[#F9FAFB] px-2 py-1 font-mono text-[10.5px] text-[#374151]">
+                    {confirm.ids.map((x) => refOf(x)).join(', ')}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setConfirm(null)} className="rounded-lg border border-[#E8EDF2] px-3.5 py-2 text-[12px] font-extrabold text-[#374151]" data-testid="ads-confirm-cancel">
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void runConfirmed()}
+                className={`rounded-lg px-3.5 py-2 text-[12px] font-extrabold text-white ${confirm.kind === 'delete' ? 'bg-red-600' : 'bg-[#EF3C23]'}`}
+                data-testid="ads-confirm-ok"
+              >
+                {confirm.kind === 'duplicate' ? (confirm.ids.length === 1 ? 'Duplicate' : `Duplicate ${confirm.ids.length}`) : confirm.ids.length === 1 ? 'Delete' : `Delete ${confirm.ids.length}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

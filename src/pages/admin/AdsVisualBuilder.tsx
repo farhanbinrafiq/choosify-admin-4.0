@@ -450,8 +450,10 @@ export default function AdsVisualBuilder() {
     };
   }, [imageUrl]);
 
+  const [askDuplicate, setAskDuplicate] = useState(false);
   /** Draft copy of this ad; opens it so the copy can be placed somewhere else, then published. */
   const duplicate = async () => {
+    setAskDuplicate(false);
     if (!id) return;
     setSaving(true);
     setError(null);
@@ -584,7 +586,7 @@ export default function AdsVisualBuilder() {
               <button
                 type="button"
                 disabled={saving}
-                onClick={() => void duplicate()}
+                onClick={() => setAskDuplicate(true)}
                 className="rounded-lg border border-[#E8EDF2] bg-white px-3 py-1.5 text-[11px] font-extrabold text-[#374151] hover:bg-[#F9FAFB]"
                 data-testid="ad-duplicate"
                 title="Make a draft copy to place on another page or section"
@@ -598,6 +600,30 @@ export default function AdsVisualBuilder() {
           </div>
         ) : null}
       </div>
+
+      {askDuplicate ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" data-testid="ad-duplicate-confirm">
+          <div className="w-full max-w-[440px] rounded-xl bg-white p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-50 text-[16px] font-extrabold text-amber-600">!</span>
+              <div className="space-y-1 text-[12.5px] text-[#4B5563]">
+                <div className="text-[15px] font-extrabold text-[#111827]">Duplicate {existing?.advertisementReferenceId || 'this ad'}?</div>
+                <p>A copy is made with the same design, text, link and place, and its own AD number.</p>
+                <p className="font-semibold text-[#92400E]">The copy is saved as a draft and is NOT on the storefront. It opens next: choose the page and place it should go, then publish it.</p>
+                <p>Unsaved changes on this page are not copied — save first if you want them in the copy.</p>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setAskDuplicate(false)} className="rounded-lg border border-[#E8EDF2] px-3.5 py-2 text-[12px] font-extrabold text-[#374151]">
+                Cancel
+              </button>
+              <button type="button" onClick={() => void duplicate()} className="rounded-lg bg-[#EF3C23] px-3.5 py-2 text-[12px] font-extrabold text-white" data-testid="ad-duplicate-ok">
+                Duplicate
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {error ? (
         <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-semibold text-red-700">
