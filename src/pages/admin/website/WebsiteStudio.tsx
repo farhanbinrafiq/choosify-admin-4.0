@@ -8,7 +8,7 @@
  * old version publishes a NEW version copied from it; Reset Defaults only changes the draft.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ClipboardCopy, Eye, History, ImagePlus, Loader2, Monitor, Plus, RotateCcw, Smartphone, Trash2, Upload, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ClipboardCopy, Eye, History, ImagePlus, Loader2, Monitor, Pencil, Plus, RotateCcw, Smartphone, Trash2, Upload, X } from 'lucide-react';
 import {
   BRAND_ASSET_SLOTS,
   WebsiteStudioApiError,
@@ -29,7 +29,8 @@ import { HeaderEditor, HeaderOutline } from './HeaderStudio';
 import { FooterEditor, FooterOutline } from './FooterStudio';
 import { SocialEditor, SocialOutline } from './SocialStudio';
 import type { FooterContent, NavigationContent, SocialContent } from './siteModel';
-import { PageList, SitePageEditor, SitePageOutline } from './PagesStudio';
+import { CustomPageEditor, CustomPageOutline, PageList, SitePageEditor, SitePageOutline } from './PagesStudio';
+import type { CustomPageRow } from '../../../services/websiteStudioApi';
 import { SYSTEM_SITE_PAGES, sitePageByDocKey } from '@/shared/website/sitePages';
 
 // Deals Banners are edited inside the versioned Homepage (Today's Deals section) since Phase 3;
@@ -205,6 +206,8 @@ function DocumentWorkspace<T>({
   const [doc, setDoc] = useState<WebsiteDocument<T> | null>(null);
   const [working, setWorking] = useState<T | null>(null);
   const [dirty, setDirty] = useState(false);
+  /** View first: fields are locked until "Edit" is pressed (no accidental changes). */
+  const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<{ message: string; field?: string | null } | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
@@ -271,7 +274,16 @@ function DocumentWorkspace<T>({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {dirty ? (
+          {!editing ? (
+            <button type="button" className={btnPrimary} data-testid="ws-edit" disabled={!!busy} onClick={() => setEditing(true)}>
+              <Pencil className="h-3.5 w-3.5" /> Edit
+            </button>
+          ) : !dirty ? (
+            <button type="button" className={btnGhost} data-testid="ws-stop-edit" disabled={!!busy} onClick={() => setEditing(false)}>
+              Done editing
+            </button>
+          ) : null}
+          {editing && dirty ? (
             <button
               type="button"
               className={btnGhost}
@@ -293,6 +305,7 @@ function DocumentWorkspace<T>({
                 const d = await websiteStudioApi.saveDraft<T>(docKey, working, doc.draftRevision);
                 setDoc({ ...doc, ...d, published: doc.published, defaults: doc.defaults });
                 setDirty(false);
+                setEditing(false);
                 showFlash('Draft saved — the public website is unchanged.');
               })
             }
@@ -400,19 +413,27 @@ function DocumentWorkspace<T>({
 
       <div className={wide ? 'grid gap-4' : 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]'}>
         <div className={wide ? 'min-w-0' : 'rounded-xl border border-[#E8EDF2] bg-white p-4'}>
+          {!editing ? (
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 text-[12px] font-semibold text-[#475569]" data-testid="ws-view-only">
+              <span>View only — press Edit to change this.</span>
+              <button type="button" className={btnPrimary} disabled={!!busy} onClick={() => setEditing(true)}>
+                <Pencil className="h-3.5 w-3.5" /> Edit
+              </button>
+            </div>
+          ) : null}
           <Editor
             value={working}
-            disabled={!!busy}
+            disabled={!!busy || !editing}
             onChange={(next) => {
               setWorking(next);
               setDirty(true);
             }}
           />
           <div className="mt-4 flex flex-wrap gap-2 border-t border-[#F1F3F5] pt-3">
-            <button type="button" className={btnGhost} data-testid="ws-discard" disabled={!doc.hasDraft || !!busy} onClick={() => setDialog({ type: 'discard' })}>
+            <button type="button" className={btnGhost} data-testid="ws-discard" disabled={!editing || !doc.hasDraft || !!busy} onClick={() => setDialog({ type: 'discard' })}>
               <Trash2 className="h-3.5 w-3.5" /> Discard draft
             </button>
-            <button type="button" className={btnGhost} data-testid="ws-reset" disabled={!doc.defaults || !!busy} onClick={() => setDialog({ type: 'reset' })}>
+            <button type="button" className={btnGhost} data-testid="ws-reset" disabled={!editing || !doc.defaults || !!busy} onClick={() => setDialog({ type: 'reset' })}>
               <RotateCcw className="h-3.5 w-3.5" /> Reset to defaults (draft)
             </button>
             {dirty && (
@@ -563,6 +584,7 @@ function DocumentWorkspace<T>({
           onConfirm={() => {
             setWorking((doc.draft ?? doc.published?.content ?? doc.defaults) as T);
             setDirty(false);
+            setEditing(false);
             setError(null);
             setDialog(null);
             showFlash('Changes cancelled.');
@@ -888,13 +910,39 @@ export default function WebsiteStudio() {
   const [docs, setDocs] = useState<WebsiteDocumentSummary[]>([]);
   const [history, setHistory] = useState<WebsitePublication[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [customPages, setCustomPages] = useState<CustomPageRow[]>([]);
+  const [pageBusy, setPageBusy] = useState(false);
+  const [pageMsg, setPageMsg] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const [c, d, h] = await Promise.all([websiteStudioApi.capabilities(), websiteStudioApi.listDocuments(), websiteStudioApi.history()]);
+    const [c, d, h, cp] = await Promise.all([
+      websiteStudioApi.capabilities(),
+      websiteStudioApi.listDocuments(),
+      websiteStudioApi.history(),
+      websiteStudioApi.listPages().catch(() => [] as CustomPageRow[]),
+    ]);
     setCaps(c);
     setDocs(d);
     setHistory(h);
+    setCustomPages(cp);
   }, []);
+
+  const pageAction = useCallback(
+    async (fn: () => Promise<unknown>, done?: string) => {
+      setPageBusy(true);
+      setPageMsg(null);
+      try {
+        await fn();
+        await refresh();
+        if (done) setPageMsg(done);
+      } catch (e) {
+        setPageMsg(errorText(e));
+      } finally {
+        setPageBusy(false);
+      }
+    },
+    [refresh],
+  );
 
   useEffect(() => {
     refresh().catch((e) => setError(errorText(e)));
@@ -921,13 +969,95 @@ export default function WebsiteStudio() {
         />
       );
     if (tab === 'pages') {
+      const custom = customPages.find((p) => p.docKey === pageKey);
       const page = sitePageByDocKey(pageKey) ?? SYSTEM_SITE_PAGES[0];
       const published = new Set(docs.filter((d) => d.publishedVersion).map((d) => d.key));
+      const list = (
+        <div className="h-fit rounded-xl border border-[#E8EDF2] bg-white p-3 lg:sticky lg:top-4">
+          <PageList
+            selected={custom ? custom.docKey : page.docKey}
+            onSelect={(k) => {
+              setPageMsg(null);
+              setPageKey(k);
+            }}
+            publishedKeys={published}
+            customPages={customPages}
+            creating={pageBusy}
+            onNewPage={(slug, title) =>
+              pageAction(async () => {
+                const created = await websiteStudioApi.createPage(slug, title);
+                setPageKey(created.docKey);
+              }, 'Page created as a draft — edit it, then Publish.')
+            }
+          />
+          {pageMsg ? (
+            <div className="mt-2 rounded-md bg-[#F9FAFB] px-2 py-1.5 text-[11px] font-semibold text-[#374151]" data-testid="pg-msg">
+              {pageMsg}
+            </div>
+          ) : null}
+        </div>
+      );
+      if (custom) {
+        const archived = custom.status === 'archived';
+        return (
+          <div className="grid gap-4 lg:grid-cols-[230px_minmax(0,1fr)]" data-testid="ws-pages">
+            {list}
+            <div className="min-w-0 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#E8EDF2] bg-white px-3 py-2 text-[12px]">
+                <div className="text-[#374151]">
+                  Address: <span className="font-bold">/pages/{custom.slug}</span>
+                  {custom.publishedVersion && !archived ? (
+                    <a href={`${STOREFRONT_URL}/pages/${custom.slug}`} target="_blank" rel="noopener noreferrer" className="ml-2 font-bold text-[#EF3C23]">
+                      Open live page ↗
+                    </a>
+                  ) : null}
+                  <span className="ml-2 text-[#9CA3AF]">Link it from Header or Footer with this address.</span>
+                </div>
+                {archived ? (
+                  <button type="button" disabled={pageBusy} onClick={() => pageAction(() => websiteStudioApi.restorePage(custom.slug), 'Page restored as a draft — publish it to show it again.')} className="rounded-md border border-[#E2E8F0] px-2.5 py-1 font-bold" data-testid="pg-restore">
+                    Restore
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={pageBusy}
+                    onClick={() => {
+                      if (window.confirm(`Take "${custom.title}" off the website? Its address will show "Page not found". You can restore it later.`))
+                        void pageAction(() => websiteStudioApi.archivePage(custom.slug), 'Page taken off the website.');
+                    }}
+                    className="rounded-md border border-red-200 px-2.5 py-1 font-bold text-red-600"
+                    data-testid="pg-archive"
+                  >
+                    Take off website
+                  </button>
+                )}
+              </div>
+              {archived ? (
+                <div className="rounded-xl border border-dashed border-[#E2E8F0] bg-white px-4 py-6 text-center text-[12.5px] text-[#6B7280]">
+                  This page is archived and not on the website. Restore it to edit and publish it again.
+                </div>
+              ) : (
+                <DocumentWorkspace<Record<string, never>>
+                  key={custom.docKey}
+                  docKey={custom.docKey}
+                  caps={caps}
+                  title={custom.title}
+                  description="Your own page: a top section plus blocks (text, image, cards, call to action, questions). Publishing puts it live at its address."
+                  Editor={CustomPageEditor as unknown as React.ComponentType<EditorProps<Record<string, never>>>}
+                  Preview={CustomPageOutline as unknown as React.ComponentType<{ value: Record<string, never> }>}
+                  previewLabel="Page outline"
+                  storefrontPreview
+                  previewPage={`custom:${custom.slug}`}
+                  onPublished={() => refresh().catch(() => undefined)}
+                />
+              )}
+            </div>
+          </div>
+        );
+      }
       return (
         <div className="grid gap-4 lg:grid-cols-[230px_minmax(0,1fr)]" data-testid="ws-pages">
-          <div className="h-fit rounded-xl border border-[#E8EDF2] bg-white p-3 lg:sticky lg:top-4">
-            <PageList selected={page.docKey} onSelect={setPageKey} publishedKeys={published} />
-          </div>
+          {list}
           <div className="min-w-0">
             <DocumentWorkspace<Record<string, never>>
               key={page.docKey}
@@ -1021,7 +1151,7 @@ export default function WebsiteStudio() {
         onPublished={() => refresh().catch(() => undefined)}
       />
     );
-  }, [caps, tab, docs, history, refresh, pageKey]);
+  }, [caps, tab, docs, history, refresh, pageKey, customPages, pageBusy, pageMsg, pageAction]);
 
   return (
     <div className="mx-auto max-w-[1200px] px-4 py-5 md:px-6" data-testid="website-studio">

@@ -10,6 +10,7 @@
 
 import { validateFooter, validateNavigation, validateSocial } from './siteContent';
 import { defaultsForSitePage, firstUnsafeLink, normalizeSitePage, sitePageByDocKey } from '../../shared/website/sitePages';
+import { defaultCustomPage, normalizeCustomPage } from '../../shared/website/customPages';
 
 export type WebsiteDocumentKind =
   | 'company'
@@ -611,7 +612,13 @@ export function validateHomepage(input: unknown): HomepageStudio {
 export function defaultsForKind(kind: WebsiteDocumentKind, key?: string): unknown {
   if (kind === 'page' || kind === 'legal') {
     const page = key ? sitePageByDocKey(key) : undefined;
-    return page ? defaultsForSitePage(page.pageKey) : null;
+    if (page) return defaultsForSitePage(page.pageKey);
+    // "Your own pages" (page:<slug>)
+    if (kind === 'page' && key?.startsWith('page:')) {
+      const slug = key.slice(5);
+      return normalizeCustomPage(defaultCustomPage(slug.replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase())));
+    }
+    return null;
   }
   if (kind === 'company') return structuredClone(DEFAULT_COMPANY);
   if (kind === 'brand_assets') return structuredClone(DEFAULT_BRAND_ASSETS);
@@ -627,6 +634,14 @@ export function validateContent(kind: WebsiteDocumentKind, content: unknown, key
   assertSafeStructuredContent(content);
   if (kind === 'page' || kind === 'legal') {
     const page = key ? sitePageByDocKey(key) : undefined;
+    if (!page && kind === 'page' && key?.startsWith('page:')) {
+      // "Your own pages": strict block model; links must be safe.
+      const normalized = normalizeCustomPage(content);
+      const bad = firstUnsafeLink(normalized);
+      if (bad) throw new WebsiteContentError(`Links must start with /, #, mailto:, tel: or https:// ("${bad.value.slice(0, 60)}")`, bad.path);
+      assertSafeStructuredContent(normalized);
+      return normalized;
+    }
     if (!page) throw new WebsiteContentError('Unknown page');
     if (content === null || typeof content !== 'object') throw new WebsiteContentError('Expected an object');
     // Same normaliser the storefront uses: fills anything missing from the page defaults.

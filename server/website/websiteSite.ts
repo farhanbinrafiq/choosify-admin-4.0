@@ -10,6 +10,7 @@ import { getDocument, getPublished } from './websiteStore';
 import { validateCompany, validateContent, type BrandAssets, type CompanySettings } from './websiteContent';
 import type { FooterContent, NavigationContent, SocialContent } from './siteContent';
 import { SYSTEM_SITE_PAGES, sitePageByDocKey } from '../../shared/website/sitePages';
+import { normalizeCustomPage } from '../../shared/website/customPages';
 
 export const SITE_DOCUMENT_KEYS = ['navigation', 'footer', 'social', 'company', 'brand_assets'] as const;
 export type SiteDocumentKey = (typeof SITE_DOCUMENT_KEYS)[number];
@@ -27,6 +28,8 @@ export type PublicCompany = {
 export type StorefrontSiteStudio = {
   /** Published information / legal pages, keyed like the storefront's SitePagesConfig. */
   sitePages?: Record<string, unknown>;
+  /** Preview only: one custom page draft, keyed by slug. */
+  customPages?: Record<string, unknown>;
   navigation?: NavigationContent;
   footer?: FooterContent;
   social?: SocialContent;
@@ -101,6 +104,9 @@ export async function getDraftSiteStudio(key: SiteDocumentKey | string): Promise
   if (!doc || doc.draft === null) return null;
   memo = null;
   const base = await getPublishedSiteStudio();
+  if (key.startsWith('page:') && !SITE_PAGE_DOC_KEYS.includes(key)) {
+    return { ...base, customPages: { [key.slice(5)]: normalizeCustomPage(doc.draft) } };
+  }
   if (SITE_PAGE_DOC_KEYS.includes(key)) {
     const part = pagePart(key, doc.draft);
     return { ...base, sitePages: { ...(base.sitePages || {}), ...(part || {}) } };

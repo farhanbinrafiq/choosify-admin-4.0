@@ -46,8 +46,14 @@ import { paymentCapabilities, unavailablePaymentMethods, type FooterContent } fr
 import { catalogStore } from '../../lib/vercel-catalog/catalogStore';
 import { siteForViewer } from '../storefront/curationAuth';
 import type { HomepageStudio } from './websiteContent';
+import { createCustomPage, customPageKeysSync, isCustomPageKey, listCustomPages, loadCustomPageKeys, restoreCustomPage, setCustomPageStatus } from './customPages';
 
 export const websiteRouter = Router();
+
+// Custom page keys resolve synchronously from a short-lived cache: make sure it is loaded.
+websiteRouter.use(['/website', '/catalog/cms-preview'], (_req, _res, next) => {
+  loadCustomPageKeys().then(() => next(), () => next());
+});
 
 const requireCmsEdit = [authenticateRequest, requirePartnerEntitlement, requireAnyPermission([PERMISSIONS.CMS_EDIT])];
 
@@ -84,7 +90,8 @@ async function publishBlockers(kind: WebsiteDocumentKind, content: unknown): Pro
 }
 
 /** Clears server-side caches that serve published content, so the storefront updates at once. */
-function afterPublish(kind: WebsiteDocumentKind) {
+function afterPublish(kind: WebsiteDocumentKind, key?: string) {
+  if (key && isCustomPageKey(key)) void setCustomPageStatus(key, 'published').catch(() => undefined);
   if (kind === 'homepage') invalidateHomepageCache();
   if ((SITE_DOCUMENT_KEYS as readonly string[]).includes(kind) || kind === 'brand_assets' || kind === 'page' || kind === 'legal') invalidateSiteStudioCache();
 }
@@ -93,7 +100,7 @@ function afterPublish(kind: WebsiteDocumentKind) {
 function resolveKey(req: Request, res: Response): { key: string; kind: WebsiteDocumentKind } | null {
   const key = String(req.params.key || '').trim();
   const kind = kindForKey(key);
-  if (!kind || ((kind === 'page' || kind === 'legal') && !SITE_PAGE_DOC_KEYS.includes(key))) {
+  if (!kind || ((kind === 'page' || kind === 'legal') && !SITE_PAGE_DOC_KEYS.includes(key) && !isCustomPageKey(key))) {
     res.status(404).json({ error: 'Unknown website document', code: 'UNKNOWN_DOCUMENT' });
     return null;
   }
@@ -337,7 +344,7 @@ websiteRouter.post('/website/documents/:key/publish', ...requireCmsEdit, async (
       return;
     }
     const out = await publishVersion({ key: r.key, content, source: 'publish', changeNote: note, actorUserId: req.userId ?? null, fromDraftRevision: expected });
-    afterPublish(r.kind);
+    afterPublish(r.kind, r.key);
     Logger.audit('website.published', { actorId: req.userId, realActorId: req.realActorUserId ?? null, key: r.key, version: out.version.version, changeNote: note });
     res.json({ data: { ...documentView(out.doc, r.kind), published: { version: out.version.version, publishedAt: out.version.publishedAt } } });
   } catch (e) {
@@ -378,7 +385,7 @@ websiteRouter.post('/website/documents/:key/rollback', ...requireCmsEdit, async 
       return;
     }
     const out = await publishVersion({ key: r.key, content, source: 'rollback', restoredFromVersion: from, changeNote: note, actorUserId: req.userId ?? null });
-    afterPublish(r.kind);
+    afterPublish(r.kind, r.key);
     Logger.audit('website.rolled_back', { actorId: req.userId, realActorId: req.realActorUserId ?? null, key: r.key, fromVersion: from, newVersion: out.version.version, changeNote: note });
     res.json({ data: { ...documentView(out.doc, r.kind), published: { version: out.version.version, publishedAt: out.version.publishedAt } } });
   } catch (e) {
@@ -400,6 +407,57 @@ websiteRouter.post('/website/documents/:key/preview-token', ...requireCmsEdit, a
     const { token, expiresAt } = signPreviewToken(r.key, doc.draftRevision, req.userId ?? null);
     Logger.audit('website.preview_token_issued', { actorId: req.userId, key: r.key });
     res.json({ data: { token, expiresAt, ttlSeconds: PREVIEW_TOKEN_TTL_SECONDS } });
+  } catch (e) {
+    sendError(res, e);
+  }
+});
+
+// ---------------------------------------------------------------------------------------------
+// Your own pages (/pages/<slug>)
+// ---------------------------------------------------------------------------------------------
+
+websiteRouter.get('/website/pages', ...requireCmsEdit, async (_req, res) => {
+  noStore(res);
+  try {
+    res.json({ data: await listCustomPages() });
+  } catch (e) {
+    sendError(res, e);
+  }
+});
+
+websiteRouter.post('/website/pages', ...requireCmsEdit, async (req, res) => {
+  try {
+    const created = await createCustomPage(String(req.body?.slug || ''), String(req.body?.title || ''), req.userId ?? null);
+    Logger.audit('website_studio.page_created', { actorId: req.userId, slug: created.slug });
+    res.status(201).json({ data: created });
+  } catch (e) {
+    sendError(res, e);
+  }
+});
+
+/** Take a page off the website (its address 404s); the versions stay in the history. */
+websiteRouter.post('/website/pages/:slug/archive', ...requireCmsEdit, async (req, res) => {
+  if (!canPublish(req, 'page')) {
+    res.status(403).json({ error: 'Taking a page off the website needs the publishing permission', code: 'PUBLISH_FORBIDDEN' });
+    return;
+  }
+  try {
+    await setCustomPageStatus(`page:${String(req.params.slug)}`, 'archived');
+    Logger.audit('website_studio.page_archived', { actorId: req.userId, slug: req.params.slug });
+    res.json({ data: { slug: req.params.slug, status: 'archived' } });
+  } catch (e) {
+    sendError(res, e);
+  }
+});
+
+websiteRouter.post('/website/pages/:slug/restore', ...requireCmsEdit, async (req, res) => {
+  if (!canPublish(req, 'page')) {
+    res.status(403).json({ error: 'Restoring a page needs the publishing permission', code: 'PUBLISH_FORBIDDEN' });
+    return;
+  }
+  try {
+    await restoreCustomPage(String(req.params.slug));
+    res.json({ data: { slug: req.params.slug } });
   } catch (e) {
     sendError(res, e);
   }
@@ -463,7 +521,7 @@ websiteRouter.get('/catalog/cms-preview/session/:token', async (req, res) => {
   res.setHeader('X-Robots-Tag', 'noindex, nofollow');
   const token = String(req.params.token || '');
   // The token names ONE document; only that document's draft is shown, everything else published.
-  const previewable = ['homepage', ...SITE_DOCUMENT_KEYS, ...SITE_PAGE_DOC_KEYS];
+  const previewable = ['homepage', ...SITE_DOCUMENT_KEYS, ...SITE_PAGE_DOC_KEYS, ...customPageKeysSync()];
   let claims: ReturnType<typeof verifyPreviewToken> = null;
   for (const k of previewable) {
     claims = token ? verifyPreviewToken(token, k) : null;

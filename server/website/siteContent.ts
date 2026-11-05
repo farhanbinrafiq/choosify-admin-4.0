@@ -51,6 +51,8 @@ export const LINKABLE_ROUTES = [
   '/', '/about', '/advertise', '/blogs', '/brand-deals', '/brands', '/careers', '/categories', '/compare', '/contact',
   '/creators', '/customer-favorite', '/deals', '/emi', '/faq', '/guides', '/partnership', '/privacy', '/products',
   '/reviews', '/search', '/spotlight', '/suggest-brand', '/terms', '/warranty-claims',
+  // "Your own pages" made in Website Studio → Pages
+  '/pages',
 ] as const;
 /** Never linkable from public menus: staff, account, checkout/payment, preview and API paths. */
 export const RESERVED_ROUTES = [

@@ -103,6 +103,17 @@ export type BrandAssets = Record<BrandAssetSlot, { url: string; alt: string }>;
 
 const enc = encodeURIComponent;
 
+export type CustomPageRow = {
+  slug: string;
+  docKey: string;
+  title: string;
+  status: string;
+  publishedVersion: number | null;
+  hasDraft: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export const websiteStudioApi = {
   capabilities: () => request<WebsiteCapabilities>('/website/capabilities'),
   listDocuments: () => request<WebsiteDocumentSummary[]>('/website/documents'),
@@ -121,6 +132,11 @@ export const websiteStudioApi = {
     request<WebsiteDocument>(`/website/documents/${enc(key)}/publish`, 'POST', { changeNote, expectedRevision }),
   rollback: (key: string, version: number, changeNote: string) =>
     request<WebsiteDocument>(`/website/documents/${enc(key)}/rollback`, 'POST', { version, changeNote }),
+  /** "Your own pages" (/pages/<slug>). */
+  listPages: () => request<CustomPageRow[]>('/website/pages'),
+  createPage: (slug: string, title: string) => request<{ slug: string; docKey: string }>('/website/pages', 'POST', { slug, title }),
+  archivePage: (slug: string) => request<{ slug: string }>(`/website/pages/${enc(slug)}/archive`, 'POST', {}),
+  restorePage: (slug: string) => request<{ slug: string }>(`/website/pages/${enc(slug)}/restore`, 'POST', {}),
   previewToken: (key: string) =>
     request<{ token: string; expiresAt: string; ttlSeconds: number }>(`/website/documents/${enc(key)}/preview-token`, 'POST'),
 };
