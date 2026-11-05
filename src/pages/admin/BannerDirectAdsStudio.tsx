@@ -18,6 +18,47 @@ type StatusFilter =
   | 'rejected'
   | 'approved';
 
+type SortKey = 'updated_desc' | 'updated_asc' | 'created_desc' | 'created_asc' | 'ref_asc' | 'ref_desc' | 'title_asc' | 'status' | 'page' | 'format';
+
+const SORTS: Array<{ key: SortKey; label: string }> = [
+  { key: 'updated_desc', label: 'Last updated (newest first)' },
+  { key: 'updated_asc', label: 'Last updated (oldest first)' },
+  { key: 'created_desc', label: 'Created (newest first)' },
+  { key: 'created_asc', label: 'Created (oldest first)' },
+  { key: 'ref_asc', label: 'AD number (low → high)' },
+  { key: 'ref_desc', label: 'AD number (high → low)' },
+  { key: 'title_asc', label: 'Title (A → Z)' },
+  { key: 'status', label: 'Status (live first)' },
+  { key: 'page', label: 'Page' },
+  { key: 'format', label: 'Format' },
+];
+
+const STATUS_ORDER = ['active', 'approved', 'pending', 'paused', 'draft', 'rejected', 'disabled', 'cancelled'];
+const refNum = (r: AdsApiRecord) => Number(String(r.advertisementReferenceId || '').replace(/\D/g, '')) || Number.MAX_SAFE_INTEGER;
+
+function sortRows(list: AdsApiRecord[], key: SortKey): AdsApiRecord[] {
+  const s = list.slice();
+  const by = (f: (r: AdsApiRecord) => string | number, dir = 1) =>
+    s.sort((a, b) => {
+      const x = f(a);
+      const y = f(b);
+      const c = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y));
+      return c * dir || b.updatedAt.localeCompare(a.updatedAt);
+    });
+  switch (key) {
+    case 'updated_asc': return by((r) => r.updatedAt);
+    case 'created_desc': return by((r) => r.createdAt, -1);
+    case 'created_asc': return by((r) => r.createdAt);
+    case 'ref_asc': return by(refNum);
+    case 'ref_desc': return by((r) => (refNum(r) === Number.MAX_SAFE_INTEGER ? -1 : refNum(r)), -1);
+    case 'title_asc': return by((r) => (r.title || '').toLowerCase());
+    case 'status': return by((r) => { const i = STATUS_ORDER.indexOf(r.status); return i < 0 ? 99 : i; });
+    case 'page': return by((r) => getPlacementDef(r.placementId)?.pageLabel || getAnyPlacementDef(r.placementId)?.pageLabel || '~');
+    case 'format': return by((r) => getFormatDef(r.formatId)?.label || '~');
+    default: return by((r) => r.updatedAt, -1);
+  }
+}
+
 const FILTERS: Array<{ key: StatusFilter; label: string }> = [
   { key: 'all', label: 'All' },
   { key: 'draft', label: 'Draft' },
@@ -110,6 +151,22 @@ function BannerAdsList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<StatusFilter>('all');
+  const [sort, setSort] = useState<SortKey>(() => {
+    try {
+      const v = localStorage.getItem('choosify.adsList.sort') as SortKey | null;
+      return v && SORTS.some((s) => s.key === v) ? v : 'updated_desc';
+    } catch {
+      return 'updated_desc';
+    }
+  });
+  const chooseSort = (v: SortKey) => {
+    setSort(v);
+    try {
+      localStorage.setItem('choosify.adsList.sort', v);
+    } catch {
+      /* remembered for this visit only */
+    }
+  };
   const [busyId, setBusyId] = useState<string | null>(null);
   /** Ticked rows (bulk Duplicate / Delete). */
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -136,8 +193,8 @@ function BannerAdsList() {
   }, [load]);
 
   const filtered = useMemo(
-    () => (filter === 'all' ? rows : rows.filter((r) => r.status === filter)),
-    [rows, filter],
+    () => sortRows(filter === 'all' ? rows : rows.filter((r) => r.status === filter), sort),
+    [rows, filter, sort],
   );
   const selectableIds = useMemo(
     () => filtered.filter((r) => r.kind === 'banner' || r.kind === 'external').map((r) => r.id),
@@ -253,7 +310,7 @@ function BannerAdsList() {
         </button>
       </div>
 
-      <div className="mb-3 flex flex-wrap gap-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         {FILTERS.map((f) => (
           <button
             key={f.key}
@@ -266,6 +323,21 @@ function BannerAdsList() {
             {f.label}
           </button>
         ))}
+        <label className="ml-auto flex items-center gap-1.5 text-[10.5px] font-extrabold uppercase tracking-wide text-[#6B7280]">
+          Sort by
+          <select
+            value={sort}
+            onChange={(e) => chooseSort(e.target.value as SortKey)}
+            className="rounded-lg border border-[#E8EDF2] bg-white px-2 py-1.5 text-[11.5px] font-bold normal-case tracking-normal text-[#111827]"
+            data-testid="ads-sort"
+          >
+            {SORTS.map((s) => (
+              <option key={s.key} value={s.key}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {error ? (
