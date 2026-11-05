@@ -473,6 +473,11 @@ export default function AdsVisualBuilder() {
   };
 
   const save = async (mode: 'draft' | 'submit' | 'publish') => {
+    if (mode !== 'draft' && formatDef?.imageLed && !imageUrl && !(formatId === 'hero_banner' && mediaType === 'video' && videoUrl)) {
+      setMessage(null);
+      setError('Upload an image first — this format shows your image, so it cannot go live without one. (Save Draft keeps it without an image.)');
+      return;
+    }
     if (fitError && mode !== 'draft') {
       setError(fitError);
       return;
@@ -882,10 +887,36 @@ export default function AdsVisualBuilder() {
                     </div>
                   ) : (
                     <>
+                      {imageUrl ? (
+                        <div className="mb-2 flex items-center gap-3 rounded-lg border border-[#E8EDF2] bg-white p-2" data-testid="ad-image-current">
+                          <a href={imageUrl} target="_blank" rel="noreferrer" className="block shrink-0 overflow-hidden rounded-md border border-[#E8EDF2] bg-[#0F1238]" title="Open the full image">
+                            <img src={imageUrl} alt="Current creative" className="block h-16 w-auto max-w-[220px] object-contain" />
+                          </a>
+                          <div className="min-w-0 flex-1 text-[11px]">
+                            <div className="font-bold text-[#111827]">Current image</div>
+                            <div className="text-[#6B7280]">
+                              {imageDims ? `${imageDims.width}×${imageDims.height}px · ${(imageDims.width / imageDims.height).toFixed(2)}:1` : 'Reading size…'}
+                            </div>
+                            <div className="truncate text-[10px] text-[#9CA3AF]">{imageUrl.split('/').pop()}</div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setImageUrl('');
+                              setImageDims(null);
+                              setMessage(null);
+                            }}
+                            className="shrink-0 rounded-md border border-red-200 px-2.5 py-1.5 text-[10.5px] font-extrabold text-red-700 hover:bg-red-50"
+                            data-testid="ad-image-remove"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ) : null}
                       <div className="flex items-center gap-2">
                         <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#E8EDF2] bg-[#F9FAFB] px-3 py-2 text-[11px] font-bold">
                           {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                          Upload
+                          {imageUrl ? 'Replace image' : 'Upload'}
                           <input
                             type="file"
                             accept={
@@ -897,11 +928,9 @@ export default function AdsVisualBuilder() {
                             onChange={(e) => void uploadCreative(e.target.files?.[0] || null, 'image')}
                           />
                         </label>
-                        {imageUrl ? (
-                          <span className="truncate text-[10px] text-[#6B7280] max-w-[180px]">{imageUrl}</span>
-                        ) : (
-                          <span className="text-[10px] text-[#9CA3AF] inline-flex items-center gap-1">
-                            <ImageIcon className="h-3 w-3" /> No image
+                        {imageUrl ? null : (
+                          <span className="text-[10px] text-[#9CA3AF] inline-flex items-center gap-1" data-testid="ad-image-none">
+                            <ImageIcon className="h-3 w-3" /> No image — upload one before publishing
                           </span>
                         )}
                       </div>
