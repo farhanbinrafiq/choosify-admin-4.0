@@ -21,6 +21,8 @@ export type AdFormatId =
   | 'category_promoted_slot'
   /** Text CTA strip: headline + line + orange button on the dark brand gradient (no artwork). */
   | 'cta_strip'
+  /** Pop-up: the uploaded design shown over a dimmed page, with a close button. */
+  | 'popup'
   /** Sponsored Listing: promotes an EXISTING product / brand / deal / guide / creator; the card
    *  is drawn from that record (its own photo, name, price) with a Sponsored label. */
   | 'sponsored_listing';
@@ -39,7 +41,9 @@ export type AdPageKey =
   | 'search'
   | 'compare'
   | 'order_tracking'
-  | 'dashboard';
+  | 'dashboard'
+  /** Site-wide (pop-up): which pages is a per-ad setting. */
+  | 'site';
 
 export type AdOrientation = 'horizontal' | 'vertical' | 'square' | 'embedded';
 
@@ -184,6 +188,13 @@ export const AD_FORMATS: AdFormatDef[] = [
     fields: ['headline', 'subtext', 'ctaLabel', 'image', 'internalDest', 'externalUrl'],
   },
   {
+    formatId: 'popup',
+    label: 'Pop-up',
+    description: 'Your design pops up over the page, with a close button. You choose the pages, how often, and the delay.',
+    imageLed: true,
+    fields: ['headline', 'ctaLabel', 'image', 'internalDest', 'externalUrl'],
+  },
+  {
     formatId: 'cta_strip',
     label: 'CTA Strip Banner',
     description: 'Text banner: headline, one line and an orange button on the dark Choosify gradient. No artwork needed.',
@@ -300,8 +311,53 @@ const gridCard = (placementId: string, pageKey: AdPageKey, pageLabel: string, ca
   fallback: 'Shows the Choosify "Advertise here" card (labelled AD SPACE).',
 });
 
+/** Pop-up design: fitted whole in a box at most 900px wide and 80% of the screen tall. */
+const POPUP_SPEC: AdCreativeSpec = {
+  display: 'natural',
+  recommended: { width: 1600, height: 900 },
+  min: { width: 600, height: 400 },
+  ratioRange: [0.5, 3],
+  howShown:
+    'Pops up centred over a dimmed page, shown whole (never cropped): at most 900 px wide and 80% of the screen tall on desktop, the full width of the phone on phones. A close (×) button sits in the top-right corner — keep that corner free of text. 16:9 (1600×900 px) works on every screen; a squarer design (e.g. 1080×1080) reads better on phones.',
+};
+
+/** Pages a pop-up can be shown on (storefront route → key; Web maps the pathname). */
+export const POPUP_PAGES: Array<{ key: string; label: string }> = [
+  { key: 'homepage', label: 'Homepage' },
+  { key: 'browse', label: 'Products & Services' },
+  { key: 'categories', label: 'Categories' },
+  { key: 'brands', label: 'Brands' },
+  { key: 'creators', label: 'Creators' },
+  { key: 'deals', label: 'Deals' },
+  { key: 'discover', label: 'Recommendations' },
+  { key: 'compare', label: 'Compare' },
+  { key: 'product_detail', label: 'Product pages' },
+  { key: 'brand_detail', label: 'Brand pages' },
+  { key: 'order_tracking', label: 'Order tracking' },
+  { key: 'dashboard', label: 'My dashboard' },
+  { key: 'other', label: 'Every other page (About, Contact, legal…)' },
+];
+
 export const AD_PLACEMENTS: AdPlacementDef[] = [
   // —— Homepage ——
+  {
+    placementId: 'SITE_POPUP',
+    pageKey: 'site',
+    pageLabel: 'Pop-up (any page)',
+    slotKey: 'popup',
+    slotLabel: 'Pop-up',
+    sectionLabel: 'Pop-up: Shows over the page — you choose the pages, times per visit and the delay',
+    allowedFormats: ['popup'],
+    orientation: 'square',
+    aspectRatio: 'auto',
+    mobileSupport: true,
+    desktopSupport: true,
+    ownerRoles: ['admin'],
+    active: true,
+    creative: POPUP_SPEC,
+    pageOrder: 0,
+    frequency: 'Up to your chosen number of times per visit (browser tab); once closed it stays closed until the tab is closed and opened again.',
+  },
   {
     placementId: 'HOME_HERO',
     pageOrder: 0,

@@ -50,7 +50,7 @@ import {
 import type { AdCreative, AdRecord, AdsOwnerRole } from './types';
 import { deliverableAdsBySlot, deliveryProblems, probeImageSize, ACTIVE_SLOT_IDS } from './adDelivery';
 import { adsStore } from './adsStore';
-import { checkCreativeFit, getAnyPlacementDef, getFormatDef, getPlacementDef, assertFormatPlacementCompatible, resolvePagePosition } from '../../shared/ads/placementRegistry';
+import { checkCreativeFit, getAnyPlacementDef, getFormatDef, getPlacementDef, assertFormatPlacementCompatible, resolvePagePosition, POPUP_PAGES } from '../../shared/ads/placementRegistry';
 
 /**
  * Measures the creative image on the SERVER (client-sent sizes are never trusted) and checks it
@@ -71,6 +71,19 @@ async function measuredCreative(creative: unknown, formatId: string | undefined,
     else c.pagePosition = pos;
   }
   if (c.fit !== undefined && c.fit !== 'fill' && c.fit !== 'whole') delete c.fit;
+  if (format?.formatId === 'popup') {
+    const allowed = new Set(['all', ...POPUP_PAGES.map((p) => p.key)]);
+    const pages = Array.isArray(c.popupPages) ? [...new Set(c.popupPages.map(String).filter((k) => allowed.has(k)))] : [];
+    c.popupPages = pages.includes('all') || !pages.length ? ['all'] : pages;
+    const n = Math.round(Number(c.popupMaxPerSession));
+    c.popupMaxPerSession = Number.isFinite(n) ? Math.min(10, Math.max(1, n)) : 1;
+    const d = Math.round(Number(c.popupDelaySec));
+    c.popupDelaySec = Number.isFinite(d) ? Math.min(60, Math.max(0, d)) : 3;
+  } else {
+    delete c.popupPages;
+    delete c.popupMaxPerSession;
+    delete c.popupDelaySec;
+  }
   if (c.focusY !== undefined && c.focusY !== 'top' && c.focusY !== 'center' && c.focusY !== 'bottom') delete c.focusY;
   if (!format?.imageLed || typeof c.imageUrl !== 'string' || !c.imageUrl) return c;
   const size = await probeImageSize(c.imageUrl);

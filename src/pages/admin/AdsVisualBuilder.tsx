@@ -9,6 +9,7 @@ import {
   getFormatDef,
   getPlacementDef,
   listPages,
+  POPUP_PAGES,
   type AdFormatId,
   type AdPlacementDef,
 } from '@/shared/ads/placementRegistry';
@@ -92,6 +93,7 @@ function shapeOf(p: AdPlacementDef): string {
   if (p.placementId === 'HOME_HERO') return 'Hero slide';
   if (p.orientation === 'horizontal') return 'Wide banner';
   if (p.orientation === 'embedded') return 'Card footer strip';
+  if (p.slotKey === 'popup') return 'Pop-up';
   if (p.slotKey === 'grid_card') return 'Grid card';
   if (p.slotKey === 'feed') return 'Feed card';
   return 'Side card';
@@ -132,6 +134,10 @@ export default function AdsVisualBuilder() {
   /** Wide banners on desktop: whole design (side fill) or fill edge to edge (crop top/bottom). */
   const [fit, setFit] = useState<'whole' | 'fill'>('whole');
   const [focusY, setFocusY] = useState<'top' | 'center' | 'bottom'>('center');
+  /** Pop-up rules. */
+  const [popupPages, setPopupPages] = useState<string[]>(['all']);
+  const [popupMax, setPopupMax] = useState(1);
+  const [popupDelay, setPopupDelay] = useState(3);
   const [imageUrl, setImageUrl] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
   const [posterUrl, setPosterUrl] = useState('');
@@ -244,6 +250,12 @@ export default function AdsVisualBuilder() {
     setCtaLabel(cta.label || 'Shop Now');
     setShowText((ad.creative as Record<string, unknown> | undefined)?.showText === true);
     setFit((ad.creative as Record<string, unknown> | undefined)?.fit === 'fill' ? 'fill' : 'whole');
+    {
+      const c = (ad.creative || {}) as Record<string, unknown>;
+      setPopupPages(Array.isArray(c.popupPages) && c.popupPages.length ? (c.popupPages as string[]) : ['all']);
+      setPopupMax(Number(c.popupMaxPerSession) || 1);
+      setPopupDelay(c.popupDelaySec === undefined ? 3 : Number(c.popupDelaySec) || 0);
+    }
     {
       const f = (ad.creative as Record<string, unknown> | undefined)?.focusY;
       setFocusY(f === 'top' || f === 'bottom' ? f : 'center');
@@ -417,8 +429,11 @@ export default function AdsVisualBuilder() {
     const creative: Record<string, unknown> = {
       pagePosition: placementDef?.positions?.length ? pagePosition || placementDef.defaultPosition : undefined,
       showText: formatDef?.imageLed && fields.has('headline') ? showText : undefined,
-      fit: placementDef?.creative?.display === 'natural' ? fit : undefined,
-      focusY: placementDef?.creative?.display === 'natural' && fit === 'fill' ? focusY : undefined,
+      fit: placementDef?.creative?.display === 'natural' && placementDef.slotKey !== 'popup' ? fit : undefined,
+      popupPages: formatId === 'popup' ? popupPages : undefined,
+      popupMaxPerSession: formatId === 'popup' ? popupMax : undefined,
+      popupDelaySec: formatId === 'popup' ? popupDelay : undefined,
+      focusY: placementDef?.creative?.display === 'natural' && placementDef.slotKey !== 'popup' && fit === 'fill' ? focusY : undefined,
       advertiserName: fields.has('advertiser') ? advertiserName || undefined : undefined,
       headline: headline || undefined,
       body: subtext || undefined,
@@ -513,6 +528,11 @@ export default function AdsVisualBuilder() {
   };
 
   const save = async (mode: 'draft' | 'submit' | 'publish') => {
+    if (formatId === 'popup' && !popupPages.length) {
+      setMessage(null);
+      setError('Choose at least one page for the pop-up (or tick All pages).');
+      return;
+    }
     if (mode !== 'draft' && formatDef?.imageLed && !imageUrl && !(formatId === 'hero_banner' && mediaType === 'video' && videoUrl)) {
       setMessage(null);
       setError('Upload an image first — this format shows your image, so it cannot go live without one. (Save Draft keeps it without an image.)');
@@ -896,7 +916,7 @@ export default function AdsVisualBuilder() {
                     </div>
                   ) : null}
                   {placementDef ? <div className="mb-2"><AdSlotSpec placement={placementDef} /></div> : null}
-                  {placementDef?.creative?.display === 'natural' && imageDims ? (
+                  {placementDef?.creative?.display === 'natural' && placementDef.slotKey !== 'popup' && imageDims ? (
                     <div className="mb-2 rounded-lg border border-[#E8EDF2] bg-[#F9FAFB] px-3 py-2 text-[11.5px] text-[#374151]" data-testid="ad-fit-choice">
                       <div className="font-bold">How it fills the banner on desktop</div>
                       {Math.abs(imageDims.width / imageDims.height - 4) < 0.15 ? (
@@ -1197,6 +1217,67 @@ export default function AdsVisualBuilder() {
                 <span className="rounded bg-[#F3F4F6] px-2 py-1 font-mono">{placementId}{pagePosition ? ` · ${pagePosition}` : ''}</span>
               </div>
             </div>
+            {formatId === 'popup' ? (
+              <div className="mt-3 rounded-lg border-2 border-[#C4B5FD] bg-[#F5F3FF] px-3 py-2.5" data-testid="popup-rules">
+                <div className="text-[11.5px] font-extrabold text-[#111827]">Pop-up rules</div>
+                <div className="mt-0.5 text-[10.5px] text-[#6B7280]">
+                  Once a shopper closes it, it does not come back in that browser tab — closing and reopening the tab starts fresh.
+                </div>
+                <div className="mt-2 text-[11px] font-bold text-[#374151]">Show on</div>
+                <label className="mt-1 flex items-center gap-2 text-[11.5px] font-semibold">
+                  <input
+                    type="checkbox"
+                    checked={popupPages.includes('all')}
+                    onChange={(e) => setPopupPages(e.target.checked ? ['all'] : [])}
+                    data-testid="popup-all"
+                  />
+                  All pages
+                </label>
+                {!popupPages.includes('all') ? (
+                  <div className="mt-1 grid gap-1 sm:grid-cols-2" data-testid="popup-pages">
+                    {POPUP_PAGES.map((pg) => (
+                      <label key={pg.key} className="flex items-center gap-2 text-[11.5px]">
+                        <input
+                          type="checkbox"
+                          checked={popupPages.includes(pg.key)}
+                          onChange={(e) =>
+                            setPopupPages((prev) => (e.target.checked ? [...prev.filter((k) => k !== 'all'), pg.key] : prev.filter((k) => k !== pg.key)))
+                          }
+                          data-testid={`popup-page-${pg.key}`}
+                        />
+                        {pg.label}
+                      </label>
+                    ))}
+                    {!popupPages.length ? <div className="text-[10.5px] font-semibold text-amber-800 sm:col-span-2">Pick at least one page (or tick All pages).</div> : null}
+                  </div>
+                ) : null}
+                <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                  <label className="block text-[11px] font-bold text-[#374151]">
+                    Times per visit (browser tab)
+                    <select value={popupMax} onChange={(e) => setPopupMax(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-[#E8EDF2] bg-white px-3 py-2 text-[12px]" data-testid="popup-max">
+                      {[1, 2, 3, 4, 5, 6, 8, 10].map((n) => (
+                        <option key={n} value={n}>
+                          {n === 1 ? 'Once' : `Up to ${n} times`}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block text-[11px] font-bold text-[#374151]">
+                    Wait before showing
+                    <select value={popupDelay} onChange={(e) => setPopupDelay(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-[#E8EDF2] bg-white px-3 py-2 text-[12px]" data-testid="popup-delay">
+                      {[0, 1, 2, 3, 5, 8, 10, 15, 20, 30, 45, 60].map((n) => (
+                        <option key={n} value={n}>
+                          {n === 0 ? 'Show straight away' : `${n} second${n === 1 ? '' : 's'}`}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="mt-1.5 text-[10.5px] text-[#6B7280]">
+                  “Times per visit” counts page opens: with “Up to 3 times” it shows on up to 3 page views in the same tab, unless the shopper closes it.
+                </div>
+              </div>
+            ) : null}
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <label className="block text-[11px] font-bold text-[#374151]">
                 Start (optional)

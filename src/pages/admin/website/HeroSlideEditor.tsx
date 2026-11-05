@@ -77,29 +77,28 @@ function MediaField({
         />
       </div>
       {value ? (
-        <div className="mt-1.5 flex items-center gap-2 rounded-lg border border-[#E2E8F0] bg-white p-1.5" data-testid={`${testId}-preview`}>
-          <div className="flex h-14 w-24 shrink-0 items-center justify-center overflow-hidden rounded-md" style={{ background: '#0F1238' }}>
+        <div className="mt-1.5 overflow-hidden rounded-lg border border-[#E2E8F0] bg-white" data-testid={`${testId}-preview`}>
+          <div className="flex h-24 w-full items-center justify-center" style={{ background: '#0F1238' }}>
             {kind === 'video' ? (
-              <video src={value} muted playsInline loop autoPlay className="h-full w-full object-cover" />
+              <video src={value} muted playsInline loop autoPlay className="h-full w-full object-contain" />
             ) : (
-              <img src={value} alt="" className="h-full w-full object-cover" />
+              <img src={value} alt="" className="h-full w-full object-contain" />
             )}
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-bold text-[#111827]">{kind === 'video' ? 'Current video' : 'Current image'}</div>
-            <a href={value} target="_blank" rel="noreferrer" className="block truncate text-[10px] font-semibold text-[#2563EB] hover:underline">
-              Open full size
+          <div className="flex items-center justify-between gap-2 px-2 py-1.5">
+            <a href={value} target="_blank" rel="noreferrer" className="min-w-0 truncate text-[10.5px] font-bold text-[#2563EB] hover:underline">
+              {kind === 'video' ? 'Current video' : 'Current image'} · Open full size
             </a>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onChange('')}
+              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-[10.5px] font-extrabold text-red-700 hover:bg-red-50 disabled:opacity-50"
+              data-testid={`${testId}-remove`}
+            >
+              <Trash2 className="h-3 w-3" /> Delete
+            </button>
           </div>
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={() => onChange('')}
-            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-[10.5px] font-extrabold text-red-700 hover:bg-red-50 disabled:opacity-50"
-            data-testid={`${testId}-remove`}
-          >
-            <Trash2 className="h-3 w-3" /> Delete
-          </button>
         </div>
       ) : null}
       {hint && <div className="mt-1 text-[10.5px] text-slate-500">{hint}</div>}

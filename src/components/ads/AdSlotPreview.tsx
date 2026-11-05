@@ -92,6 +92,38 @@ export function AdSlotPreview({ placement, ad }: { placement: AdPlacementDef; ad
   if (format?.imageLed && !img) {
     return <div className="rounded-lg border border-dashed border-slate-300 px-3 py-8 text-center text-[11.5px] text-slate-500">Upload the image to see exactly how it will look.</div>;
   }
+  if (ad.formatId === 'popup') {
+    // Same as the storefront pop-up: design shown whole over a dimmed page, × top-right.
+    const box = (phone: boolean) => (
+      <div className="relative flex items-center justify-center overflow-hidden rounded-lg" style={{ height: phone ? 220 : 200, background: 'linear-gradient(180deg,#E2E8F0,#CBD5E1)' }}>
+        <div className="absolute inset-0" style={{ background: 'rgba(15,18,56,.55)' }} />
+        <div className="relative" style={{ width: phone ? '88%' : '62%' }}>
+          <img src={img} alt="" className="block w-full rounded-lg object-contain shadow-xl" style={{ maxHeight: phone ? 190 : 170 }} />
+          <span className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-white text-[12px] font-extrabold shadow" style={{ color: '#111827' }}>×</span>
+          {ad.ctaLabel && ad.hasDestination !== false ? (
+            <span className="absolute bottom-1.5 right-1.5 rounded px-1.5 py-0.5 text-[8px] font-extrabold uppercase" style={{ background: '#FF5B00', color: '#FFFFFF' }} data-testid={phone ? undefined : 'ad-preview-cta'}>
+              {ad.ctaLabel} →
+            </span>
+          ) : null}
+          <span className="absolute left-1.5 top-1.5 rounded px-1 py-px text-[7.5px] font-extrabold uppercase" style={{ background: 'rgba(0,0,0,.6)', color: '#FFFFFF' }}>
+            Sponsored
+          </span>
+        </div>
+      </div>
+    );
+    return (
+      <div className="space-y-3" data-testid="ad-preview-popup">
+        <div>
+          <div className="mb-1 text-[10px] font-bold uppercase text-slate-500">Desktop — pops up over the page</div>
+          {box(false)}
+        </div>
+        <div>
+          <div className="mb-1 text-[10px] font-bold uppercase text-slate-500">Phone</div>
+          <div className="mx-auto w-[60%]">{box(true)}</div>
+        </div>
+      </div>
+    );
+  }
   if (ad.formatId === 'cta_strip') {
     // Same as the storefront CTA strip: dark gradient, headline + line left, orange button right.
     const strip = (phone: boolean) => (

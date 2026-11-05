@@ -37,6 +37,8 @@ export type PublicAd = {
   sponsorLogoUrl?: string;
   /** Wide banners: the exact spot on the page (slot default when none chosen). */
   position?: string;
+  /** Pop-up rules (pages it shows on, times per visit, delay). */
+  popup?: { pages: string[]; maxPerSession: number; delaySec: number };
   /** Image banners: draw headline + subtext over the image. */
   showText?: boolean;
   /** Wide banners on desktop: fill the frame edge to edge (crop top/bottom) instead of showing the whole design. */
@@ -163,6 +165,14 @@ export function toPublicAd(ad: AdRecord, origin = ''): PublicAd {
     focusY: slot.creative?.display === 'natural' && c.fit === 'fill' && (c.focusY === 'top' || c.focusY === 'bottom') ? c.focusY : undefined,
     sponsorLogoUrl: SAFE_IMAGE(c.logoUrl) ? absoluteMedia(c.logoUrl, origin) : undefined,
     position: resolvePagePosition(slot, c.pagePosition),
+    popup:
+      format.formatId === 'popup'
+        ? {
+            pages: Array.isArray(c.popupPages) && c.popupPages.length ? c.popupPages.map(String) : ['all'],
+            maxPerSession: Math.min(10, Math.max(1, Number(c.popupMaxPerSession) || 1)),
+            delaySec: Math.min(60, Math.max(0, Number(c.popupDelaySec ?? 3) || 0)),
+          }
+        : undefined,
     categoryId: format.formatId === 'category_promoted_slot' ? str(c.categoryId, 80) : undefined,
     categoryName: format.formatId === 'category_promoted_slot' ? str(c.categoryName ?? c.hostCategoryName, 120) : undefined,
     link: adLink(ad),
