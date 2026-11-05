@@ -92,6 +92,9 @@ async function main() {
     placementId: 'HOME_FOLLOW_BRANDS',
     creative: { headline: 'Probe headline', imageUrl: wide, advertiserName: 'Probe Brand' },
     cta: { label: 'Visit', url: '/deals', destinationType: 'internal' },
+    // Seller / creator ads are paid per day: they need a start and an end.
+    startsAt: new Date(Date.now() - 3600_000).toISOString(),
+    endsAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
     ...over,
   });
   const create = async (token: string, over: Record<string, unknown>) => call(token, 'POST', '/ads/banners', base(over));
@@ -157,6 +160,7 @@ async function main() {
   check('admin list marks the live ad as delivered', list.find((a: any) => a.id === liveId)?.delivery?.delivered === true);
 
   // --- Approval publishes (pending → active) ----------------------------------------------------------
+  await call(sa, 'POST', `/ads/${pendingId}/billing/paid`, { method: 'bKash', reference: 'PROBE' });
   await call(sa, 'POST', `/ads/banners/${pendingId}/approve`);
   check('approving (with publish) puts the ad on the storefront', !(await notIn(pendingId)));
 

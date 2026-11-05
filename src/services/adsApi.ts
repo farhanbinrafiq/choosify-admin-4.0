@@ -190,6 +190,13 @@ export const adsApi = {
   /** Admin: publish / resume a banner ad (draft, approved, paused, disabled → live); refused with the reason if it cannot be shown. */
   publishAd: (id: string) => request<AdsApiRecord>(`/ads/${encodeURIComponent(id)}/publish`, 'POST', {}),
 
+  /** Admin: record payment for a seller / creator ad. */
+  markAdPaid: (id: string, method: string, reference: string) =>
+    request<AdsApiRecord>(`/ads/${encodeURIComponent(id)}/billing/paid`, 'POST', { method, reference }),
+  /** Admin: waive the charge for a seller / creator ad. */
+  waiveAdCharge: (id: string, note: string) =>
+    request<AdsApiRecord>(`/ads/${encodeURIComponent(id)}/billing/waive`, 'POST', { note }),
+
   /** Draft copy of a banner / direct ad (same design, text, link and place) — place it elsewhere, then publish. */
   duplicateAd: (id: string) => request<AdsApiRecord>(`/ads/${encodeURIComponent(id)}/duplicate`, 'POST', {}),
 

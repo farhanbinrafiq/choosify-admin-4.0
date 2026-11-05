@@ -15,6 +15,7 @@ import { readFile } from 'node:fs/promises';
 import { join, normalize, sep } from 'node:path';
 import type { AdRecord } from './types';
 import { adsStore } from './adsStore';
+import { billingBlocker, withBilling } from './adBilling';
 import { getMediaStaticMount } from '../lib/mediaStorage';
 import { AD_PLACEMENTS, checkCreativeFit, getAnyPlacementDef, getFormatDef, getPlacementDef, resolvePagePosition } from '../../shared/ads/placementRegistry';
 
@@ -116,6 +117,8 @@ export function deliveryProblems(ad: AdRecord, now = Date.now()): string[] {
   if (Number.isFinite(end) && end <= now) out.push(`Campaign ended ${new Date(end).toISOString()}`);
   const img = ad.creative?.imageUrl;
   if (format?.imageLed && !SAFE_IMAGE(img)) out.push('Missing or invalid image');
+  const unpaid = billingBlocker(withBilling(ad));
+  if (unpaid) out.push(unpaid);
   if (format?.formatId === 'cta_strip' && !String(ad.creative?.headline ?? '').trim()) out.push('CTA strip needs a headline');
   const chosen = ad.creative?.pagePosition;
   if (slot && chosen && !slot.positions?.some((p) => p.key === chosen)) out.push(`Position "${chosen}" does not exist on ${slot.pageLabel}`);

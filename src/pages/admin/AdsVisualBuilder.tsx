@@ -15,6 +15,7 @@ import {
   type AdPlacementDef,
 } from '@/shared/ads/placementRegistry';
 import { inferHeroMediaType, type HeroMediaType } from '@/shared/ads/heroMedia';
+import { RATE_TIER_LABEL, formatBdt, quoteAd } from '@/shared/ads/pricing';
 import { StorefrontAdPresentation } from '../../components/ads/storefront';
 import { AdFitStatus, AdSlotPreview, AdSlotSpec, measureImage } from '../../components/ads/AdSlotPreview';
 import { CategorySearchSelect } from '../../components/ads/CategorySearchSelect';
@@ -511,6 +512,29 @@ export default function AdsVisualBuilder() {
 
   const [askDuplicate, setAskDuplicate] = useState(false);
   const [askCancel, setAskCancel] = useState(false);
+  const [payMethod, setPayMethod] = useState('bKash');
+  const [payRef, setPayRef] = useState('');
+  /** Admin: record payment / waive the charge of a seller or creator ad. */
+  const billingAction = async (kind: 'paid' | 'waive') => {
+    if (!id) return;
+    let note = '';
+    if (kind === 'waive') {
+      note = window.prompt('Why is the charge waived? (shown in the history)') || '';
+      if (note.trim().length < 3) return;
+    }
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const saved = kind === 'paid' ? await adsApi.markAdPaid(id, payMethod, payRef) : await adsApi.waiveAdCharge(id, note);
+      setExisting(saved);
+      setMessage(kind === 'paid' ? 'Payment recorded — the ad can now be approved / published.' : 'Charge waived — the ad can now be approved / published.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update the payment');
+    } finally {
+      setSaving(false);
+    }
+  };
   /** Draft copy of this ad; opens it so the copy can be placed somewhere else, then published. */
   const duplicate = async () => {
     setAskDuplicate(false);
@@ -1306,7 +1330,7 @@ export default function AdsVisualBuilder() {
             ) : null}
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <label className="block text-[11px] font-bold text-[#374151]">
-                Start (optional)
+                {isAdmin ? 'Start (optional)' : 'Start date'}
                 <input
                   type="datetime-local"
                   value={startsAt}
@@ -1315,7 +1339,7 @@ export default function AdsVisualBuilder() {
                 />
               </label>
               <label className="block text-[11px] font-bold text-[#374151]">
-                End (optional)
+                {isAdmin ? 'End (optional)' : 'End date'}
                 <input
                   type="datetime-local"
                   value={endsAt}
@@ -1324,6 +1348,66 @@ export default function AdsVisualBuilder() {
                 />
               </label>
             </div>
+            {(() => {
+              // Paid ads: sellers / creators pay per day; Super Admin / Admin ads are free.
+              const ownerPays = !isAdmin || existing?.ownerRole === 'seller' || existing?.ownerRole === 'creator';
+              if (!ownerPays || formatId === 'popup') return null;
+              const billing = ((existing?.metadata || {}) as Record<string, unknown>).billing as
+                | { status: string; amount: number; days: number; ratePerDay: number; tier: string; method?: string; reference?: string; note?: string }
+                | undefined;
+              const q = quoteAd(placementId, startsAt || undefined, endsAt || undefined);
+              return (
+                <div className="mt-3 rounded-lg border-2 border-[#FDBA74] bg-[#FFF7ED] px-3 py-2.5" data-testid="ad-cost">
+                  <div className="text-[11.5px] font-extrabold text-[#111827]">Cost</div>
+                  {'error' in q ? (
+                    <div className="mt-0.5 text-[11.5px] font-semibold text-amber-800" data-testid="ad-cost-missing">{q.error}.</div>
+                  ) : (
+                    <div className="mt-0.5 text-[12.5px] text-[#374151]" data-testid="ad-cost-quote">
+                      {RATE_TIER_LABEL[q.tier]}: {formatBdt(q.ratePerDay)} / day × {q.days} day{q.days === 1 ? '' : 's'} ={' '}
+                      <span className="text-[14px] font-extrabold text-[#111827]">{formatBdt(q.amount)}</span>
+                    </div>
+                  )}
+                  <div className="mt-0.5 text-[10.5px] text-[#6B7280]">
+                    Prices: homepage hero ৳100 / day · other homepage places ৳50 / day · any other page ৳30 / day.
+                  </div>
+                  {billing ? (
+                    <div className="mt-1.5 text-[11.5px] font-bold" data-testid="ad-billing-status">
+                      {billing.status === 'paid' ? (
+                        <span className="text-emerald-700">Paid {formatBdt(billing.amount)}{billing.method ? ` · ${billing.method}` : ''}{billing.reference ? ` · ref ${billing.reference}` : ''} — place and dates are locked.</span>
+                      ) : billing.status === 'waived' ? (
+                        <span className="text-emerald-700">Charge waived by Choosify{billing.note ? ` (${billing.note})` : ''}.</span>
+                      ) : (
+                        <span className="text-amber-800">Payment not received yet ({formatBdt(billing.amount)}). The ad goes live only after payment and approval.</span>
+                      )}
+                    </div>
+                  ) : (
+                    !isAdmin && <div className="mt-1.5 text-[10.5px] text-[#6B7280]">After you submit, Choosify confirms the payment with you; the ad goes live only after payment and approval.</div>
+                  )}
+                  {isAdmin && existing && billing?.status === 'unpaid' ? (
+                    <div className="mt-2 flex flex-wrap items-end gap-2" data-testid="ad-billing-admin">
+                      <label className="text-[10.5px] font-bold text-[#374151]">
+                        Paid by
+                        <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)} className="mt-0.5 block rounded border border-[#E8EDF2] bg-white px-2 py-1 text-[11.5px]" data-testid="ad-pay-method">
+                          {['bKash', 'Nagad', 'Bank transfer', 'Cash', 'Other'].map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="text-[10.5px] font-bold text-[#374151]">
+                        Reference
+                        <input value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="Transaction ID" className="mt-0.5 block rounded border border-[#E8EDF2] bg-white px-2 py-1 text-[11.5px]" data-testid="ad-pay-ref" />
+                      </label>
+                      <button type="button" disabled={saving} onClick={() => void billingAction('paid')} className="rounded-md bg-emerald-600 px-2.5 py-1.5 text-[11px] font-extrabold text-white" data-testid="ad-mark-paid">
+                        Mark as paid
+                      </button>
+                      <button type="button" disabled={saving} onClick={() => void billingAction('waive')} className="rounded-md border border-[#E8EDF2] bg-white px-2.5 py-1.5 text-[11px] font-extrabold text-[#374151]" data-testid="ad-waive">
+                        Waive
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })()}
           </section>
 
           {/* Actions */}
@@ -1354,7 +1438,10 @@ export default function AdsVisualBuilder() {
                 onClick={() => void save('submit')}
                 className="rounded-lg bg-[#EF3C23] px-4 py-2.5 text-[11px] font-extrabold text-white"
               >
-                Submit for Approval
+                {(() => {
+                  const q = quoteAd(placementId, startsAt || undefined, endsAt || undefined);
+                  return 'error' in q ? 'Submit for Approval' : `Submit for Approval · ${formatBdt(q.amount)}`;
+                })()}
               </button>
             ) : (
               <>

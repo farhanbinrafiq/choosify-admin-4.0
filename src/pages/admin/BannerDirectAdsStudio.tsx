@@ -559,6 +559,16 @@ function BannerAdsList() {
                         >
                           {row.status}
                         </span>
+                        {(() => {
+                          const billing = ((row.metadata || {}) as Record<string, unknown>).billing as { status: string; amount: number } | undefined;
+                          if (!billing) return null;
+                          const paid = billing.status !== 'unpaid';
+                          return (
+                            <div className={`mt-0.5 text-[9.5px] font-extrabold ${paid ? 'text-emerald-700' : 'text-amber-700'}`} data-testid={`ads-billing-${row.id}`}>
+                              {billing.status === 'paid' ? `Paid ৳${billing.amount}` : billing.status === 'waived' ? 'Charge waived' : `Unpaid ৳${billing.amount}`}
+                            </div>
+                          );
+                        })()}
                         {row.delivery ? (
                           row.delivery.delivered ? (
                             <div className="mt-1 text-[9.5px] font-extrabold text-emerald-700" data-testid="ads-delivered">● On the storefront</div>

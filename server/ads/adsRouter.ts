@@ -50,6 +50,8 @@ import {
 import type { AdCreative, AdRecord, AdsOwnerRole } from './types';
 import { deliverableAdsBySlot, deliveryProblems, probeImageSize, ACTIVE_SLOT_IDS } from './adDelivery';
 import { adsStore } from './adsStore';
+import { billingBlocker, billingOf, changesPaidTerms, isPaidAd, stripBilling, withBilling } from './adBilling';
+import { AD_DAILY_RATES_BDT, RATE_TIER_LABEL, quoteAd } from '../../shared/ads/pricing';
 import { checkCreativeFit, getAnyPlacementDef, getFormatDef, getPlacementDef, assertFormatPlacementCompatible, resolvePagePosition, POPUP_PAGES, GRID_EVERY_CHOICES } from '../../shared/ads/placementRegistry';
 
 /**
@@ -247,6 +249,7 @@ adsRouter.post('/ads/:id/duplicate', ...requireAuth, async (req, res) => {
     const meta = { ...((ad.metadata || {}) as Record<string, unknown>) };
     delete meta.auditLog;
     delete meta.placementHistory;
+    delete meta.billing; // a copy is a new campaign: quoted afresh, unpaid
     const data = await createBanner(
       {
         ownerId: admin ? ad.ownerId : actor.userId,
@@ -270,8 +273,10 @@ adsRouter.post('/ads/:id/duplicate', ...requireAuth, async (req, res) => {
       },
       actor,
     );
+    const billedCopy = withBilling(data as AdRecord);
+    if (billedCopy !== data) await adsStore.upsertAd(billedCopy);
     Logger.audit('ads.duplicated', { actorId: actor.userId, from: ad.id, to: (data as { id?: string }).id });
-    res.status(201).json({ success: true, data });
+    res.status(201).json({ success: true, data: billedCopy });
   } catch (error) {
     handleError(res, error);
   }
@@ -464,6 +469,15 @@ adsRouter.patch('/ads/:id', ...requireAuth, async (req, res) => {
     const body = req.body || {};
     // Strip status from non-admin paths inside service; never accept active from body blindly
     const current = await getAdForActor(req.params.id, actorOf(req));
+    const role = String(actorOf(req).role || '').toLowerCase();
+    const staff = role === 'admin' || role === 'super_admin';
+    if (!staff && changesPaidTerms(current as AdRecord, {
+      placementId: body.placementId !== undefined ? String(body.placementId) : undefined,
+      startsAt: body.startsAt !== undefined ? String(body.startsAt) : undefined,
+      endsAt: body.endsAt !== undefined ? String(body.endsAt) : undefined,
+    })) {
+      throw new AdsError('This ad is paid for: its place and dates are locked. Contact Choosify to change them.', 409);
+    }
     const creative =
       body.creative !== undefined
         ? await measuredCreative(body.creative, body.formatId !== undefined ? String(body.formatId) : current.formatId, body.placementId !== undefined ? String(body.placementId) : current.placementId)
@@ -481,10 +495,12 @@ adsRouter.patch('/ads/:id', ...requireAuth, async (req, res) => {
       brandId: body.brandId !== undefined ? String(body.brandId) : undefined,
       startsAt: body.startsAt !== undefined ? String(body.startsAt) : undefined,
       endsAt: body.endsAt !== undefined ? String(body.endsAt) : undefined,
-      metadata: body.metadata,
+      metadata: stripBilling(body.metadata) ?? (body.metadata === undefined ? undefined : {}),
       status: body.status,
     });
-    res.json({ success: true, data });
+    const billed = withBilling(data as AdRecord, current as AdRecord);
+    if (billed !== data) await adsStore.upsertAd(billed);
+    res.json({ success: true, data: billed });
   } catch (error) {
     handleError(res, error);
   }
@@ -492,8 +508,70 @@ adsRouter.patch('/ads/:id', ...requireAuth, async (req, res) => {
 
 adsRouter.post('/ads/:id/submit', ...requireAuth, async (req, res) => {
   try {
+    const before = (await adsStore.getAd(req.params.id)) as AdRecord | null;
+    if (before && isPaidAd(before) && !billingOf(withBilling(before))) {
+      throw new AdsError('Choose a start and an end date — ads are charged per day', 400);
+    }
     const data = await submitAdForApproval(req.params.id, actorOf(req));
     res.json({ success: true, data });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+/** Daily ad prices for sellers / creators (builder shows the cost as dates change). */
+adsRouter.get('/ads/pricing', ...requireAuth, (_req, res) => {
+  res.json({ success: true, data: { currency: 'BDT', ratesPerDay: AD_DAILY_RATES_BDT, labels: RATE_TIER_LABEL } });
+});
+
+/** Admin: record the advertiser's payment for a seller / creator ad (no online ad payment yet). */
+adsRouter.post('/ads/:id/billing/paid', ...requireAdmin, async (req, res) => {
+  try {
+    const actor = actorOf(req);
+    const ad = (await adsStore.getAd(req.params.id)) as AdRecord | null;
+    if (!ad) throw new AdsError('Ad not found', 404);
+    const billed = withBilling(ad);
+    const b = billingOf(billed);
+    if (!isPaidAd(ad) || !b) throw new AdsError('This ad has no charge to pay', 400);
+    if (b.status !== 'unpaid') throw new AdsError(`Already ${b.status}`, 409);
+    const method = String(req.body?.method || '').trim().slice(0, 40);
+    const reference = String(req.body?.reference || '').trim().slice(0, 80);
+    if (!method) throw new AdsError('Say how it was paid (e.g. bKash, bank transfer, cash)', 400);
+    const now = new Date().toISOString();
+    const updated: AdRecord = {
+      ...billed,
+      updatedAt: now,
+      metadata: { ...((billed.metadata || {}) as Record<string, unknown>), billing: { ...b, status: 'paid', paidAt: now, paidBy: actor.userId, method, reference } },
+    };
+    await adsStore.upsertAd(updated);
+    Logger.audit('ads.billing_paid', { actorId: actor.userId, adId: ad.id, amount: b.amount, method, reference });
+    res.json({ success: true, data: updated });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+/** Admin: waive the charge (Choosify's own decision, e.g. a partner promotion). */
+adsRouter.post('/ads/:id/billing/waive', ...requireAdmin, async (req, res) => {
+  try {
+    const actor = actorOf(req);
+    const ad = (await adsStore.getAd(req.params.id)) as AdRecord | null;
+    if (!ad) throw new AdsError('Ad not found', 404);
+    const billed = withBilling(ad);
+    const b = billingOf(billed);
+    if (!isPaidAd(ad) || !b) throw new AdsError('This ad has no charge to waive', 400);
+    if (b.status !== 'unpaid') throw new AdsError(`Already ${b.status}`, 409);
+    const note = String(req.body?.note || '').trim().slice(0, 200);
+    if (note.length < 3) throw new AdsError('Add a short reason for waiving the charge', 400);
+    const now = new Date().toISOString();
+    const updated: AdRecord = {
+      ...billed,
+      updatedAt: now,
+      metadata: { ...((billed.metadata || {}) as Record<string, unknown>), billing: { ...b, status: 'waived', paidAt: now, paidBy: actor.userId, note } },
+    };
+    await adsStore.upsertAd(updated);
+    Logger.audit('ads.billing_waived', { actorId: actor.userId, adId: ad.id, amount: b.amount, note });
+    res.json({ success: true, data: updated });
   } catch (error) {
     handleError(res, error);
   }
@@ -511,6 +589,8 @@ adsRouter.post('/ads/:id/publish', ...requireAdmin, async (req, res) => {
     if (!ad) throw new AdsError('Ad not found', 404);
     if (ad.kind !== 'banner' && ad.kind !== 'external') throw new AdsError('Only banner / direct ads can be published here', 400);
     if (ad.status === 'rejected' || ad.status === 'cancelled') throw new AdsError(`A ${ad.status} ad cannot be published — duplicate it to start again`, 400);
+    const unpaid = billingBlocker(withBilling(ad));
+    if (unpaid) throw new AdsError(`Not published: ${unpaid}`, 400);
     const problems = deliveryProblems({ ...ad, status: 'active' }).filter((p) => !p.startsWith('Scheduled'));
     if (problems.length) throw new AdsError(`Not published: ${problems[0]}`, 400);
     const now = new Date().toISOString();
@@ -632,7 +712,14 @@ adsRouter.post('/ads/banners', ...requireAuth, async (req, res) => {
   try {
     const actor = actorOf(req);
     const body = req.body || {};
-    const data = await createBanner(
+    const role = String(actor.role || '').toLowerCase();
+    const staff = role === 'admin' || role === 'super_admin';
+    if (!staff) {
+      const q = quoteAd(body.placementId ? String(body.placementId) : undefined, body.startsAt ? String(body.startsAt) : undefined, body.endsAt ? String(body.endsAt) : undefined);
+      if ('error' in q) throw new AdsError(q.error, 400);
+    }
+    body.metadata = stripBilling(body.metadata);
+    const created = await createBanner(
       {
         ownerId: actor.userId,
         ownerRole: parseOwnerRole(body.ownerRole, defaultOwnerRole(actor.role)),
@@ -655,6 +742,8 @@ adsRouter.post('/ads/banners', ...requireAuth, async (req, res) => {
       },
       actor,
     );
+    const data = withBilling(created as AdRecord);
+    if (data !== created) await adsStore.upsertAd(data);
     res.status(201).json({ success: true, data });
   } catch (error) {
     handleError(res, error);
@@ -663,6 +752,9 @@ adsRouter.post('/ads/banners', ...requireAuth, async (req, res) => {
 
 adsRouter.post('/ads/banners/:id/approve', ...requireAdmin, async (req, res) => {
   try {
+    const pending = (await adsStore.getAd(req.params.id)) as AdRecord | null;
+    const unpaid = pending ? billingBlocker(withBilling(pending)) : null;
+    if (unpaid) throw new AdsError(`Cannot approve yet: ${unpaid}. Mark it as paid (or waive it) first.`, 400);
     const data = await approveAd(req.params.id, actorOf(req), { publish: true });
     res.json({ success: true, data });
   } catch (error) {
