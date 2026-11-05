@@ -12,10 +12,10 @@ import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Loader2, Plus, Trash2, Uploa
 import { websiteStudioApi, type CompanySettings, type PaymentCapability } from '../../../services/websiteStudioApi';
 import { uploadSiteAssetImage } from '../../../services/mediaUpload';
 import { Field, LinkInput, MirrorBlock, MirrorLayout, STOREFRONT, Toggle, iconBtn, inputCls, smallBtn } from './StudioKit';
-import { APP_STORES, FOOTER_LIMITS, SOCIAL_PLATFORMS, isExternal, moveIn, nextId, type FooterContent, type SocialContent } from './siteModel';
+import { APP_STORES, DEFAULT_FOOTER_HEADINGS, DEFAULT_FOOTER_PARTNER, FOOTER_LIMITS, SOCIAL_PLATFORMS, isExternal, moveIn, nextId, type FooterContent, type FooterHeadings, type SocialContent } from './siteModel';
 
 type Sel =
-  | { kind: 'description' | 'social' | 'contact' | 'offices' | 'payments' | 'apps' | 'delivery' | 'ids' | 'copyright' }
+  | { kind: 'description' | 'social' | 'contact' | 'offices' | 'payments' | 'apps' | 'delivery' | 'ids' | 'copyright' | 'headings' | 'partner' }
   | { kind: 'column'; id: string }
   | null;
 
@@ -85,6 +85,8 @@ export function FooterEditor({ value, onChange, disabled }: { value: FooterConte
   const { company, social, payments } = useRelated();
   const v = value;
   const set = (patch: Partial<FooterContent>) => onChange({ ...v, ...patch });
+  const headings: FooterHeadings = { ...DEFAULT_FOOTER_HEADINGS, ...(v.headings || {}) };
+  const partner = { ...DEFAULT_FOOTER_PARTNER, ...(v.partner || {}) };
   const is = (kind: string, id?: string) => sel?.kind === kind && (id === undefined || (sel as { id?: string }).id === id);
   const offices = (company?.offices ?? []).filter((o) => o.enabled);
   const verifiedId = (x?: { value: string; verified: boolean }) => (x?.verified && x.value ? x.value : '—');
@@ -97,11 +99,14 @@ export function FooterEditor({ value, onChange, disabled }: { value: FooterConte
           <div className="text-[20px] font-extrabold" style={{ color: '#FFFFFF' }}>
             choosify
           </div>
+          <button type="button" onClick={(e) => { e.stopPropagation(); setSel({ kind: 'headings' }); }} className="rounded-md border border-dashed border-white/40 px-2 py-1 text-[10px] font-bold" style={{ color: 'rgba(255,255,255,.75)' }} data-testid="ws-ft-headings">
+            Edit section headings (Connect, Contact Us, Address, Payments…)
+          </button>
           <MirrorBlock selected={is('description')} onSelect={() => setSel({ kind: 'description' })} label="Description" testId="ws-ft-description" className="rounded-md">
             <T>{v.description || 'Bangladesh’s smartest product discovery platform… (built-in text)'}</T>
           </MirrorBlock>
           <MirrorBlock selected={is('social')} onSelect={() => setSel({ kind: 'social' })} label="Social links" testId="ws-ft-social" className="rounded-md">
-            <H>Connect</H>
+            <H>{headings.connect}</H>
             <div className="flex flex-wrap gap-1.5">
               {(social?.links ?? []).filter((l) => l.visible).map((l) => (
                 <span key={l.platform} className="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-white px-2 text-[9.5px] font-extrabold text-[#1A1A2E]">
@@ -110,8 +115,13 @@ export function FooterEditor({ value, onChange, disabled }: { value: FooterConte
               ))}
             </div>
           </MirrorBlock>
+          <MirrorBlock selected={is('partner')} onSelect={() => setSel({ kind: 'partner' })} label="Sell or create with us" testId="ws-ft-partner" muted={!partner.show} className="rounded-md">
+            <H>{partner.title}</H>
+            <T>{partner.sellerLabel}</T>
+            <T>{partner.creatorLabel}</T>
+          </MirrorBlock>
           <MirrorBlock selected={is('contact')} onSelect={() => setSel({ kind: 'contact' })} label="Contact (Company Settings)" testId="ws-ft-contact" className="rounded-md">
-            <H>Contact us</H>
+            <H>{headings.contact}</H>
             <T>Email: {company?.supportEmail || 'support@choosify.bd'}</T>
             {company?.supportPhone && <T>Phone: {company.supportPhone}</T>}
           </MirrorBlock>
@@ -145,7 +155,7 @@ export function FooterEditor({ value, onChange, disabled }: { value: FooterConte
             </button>
           )}
           <MirrorBlock selected={is('offices')} onSelect={() => setSel({ kind: 'offices' })} label="Address (Company Settings)" testId="ws-ft-offices" muted={!v.showOffices} className="rounded-md">
-            <H>Address</H>
+            <H>{headings.address}</H>
             {offices.length ? offices.map((o) => (
               <div key={o.id} className="mb-2">
                 <T strong>{o.label}</T>
@@ -205,15 +215,75 @@ export function FooterEditor({ value, onChange, disabled }: { value: FooterConte
     </div>
   );
 
+  const TAB_KEYS: Record<string, string> = { 'Company Settings': 'company', 'Social Links': 'social', 'Brand Assets': 'brand_assets', 'Header & Navigation': 'navigation' };
   const elsewhere = (what: string, tab: string) => (
     <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12px] text-slate-600">
-      {what} come{what.endsWith('s') ? '' : 's'} from <b>{tab}</b> (one place for the whole website). Open the <b>{tab}</b> tab to change {what.endsWith('s') ? 'them' : 'it'}; publish it there.
+      {what} {what.endsWith('s') ? 'are' : 'is'} shared with the rest of the website (<b>{tab}</b>) — edit {what.endsWith('s') ? 'them' : 'it'} just below this footer editor.
+      {TAB_KEYS[tab] ? (
+        <button
+          type="button"
+          className="mt-2 flex items-center gap-1 rounded-md bg-[#EF3C23] px-3 py-1.5 text-[11.5px] font-extrabold"
+          style={{ color: '#FFFFFF' }}
+          data-testid={`ws-open-${TAB_KEYS[tab]}`}
+          onClick={() => {
+            // On the Footer tab the shared editors sit right below — scroll there; elsewhere open the tab.
+            const below = document.getElementById(`ws-footer-${TAB_KEYS[tab]}`);
+            if (below) below.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            else window.dispatchEvent(new CustomEvent('ws-open-tab', { detail: TAB_KEYS[tab] }));
+          }}
+        >
+          Edit {what.toLowerCase()} ↓
+        </button>
+      ) : null}
     </div>
   );
 
   let title = '';
   let inspector: React.ReactNode = null;
-  if (is('description')) {
+  if (is('headings')) {
+    title = 'Footer section headings';
+    const labels: Record<keyof FooterHeadings, string> = {
+      connect: 'Social icons heading',
+      contact: 'Contact heading',
+      address: 'Address heading',
+      payments: 'Payments heading',
+      apps: 'App download heading',
+      appsNote: 'App download note',
+      delivery: 'Delivery partner heading',
+    };
+    inspector = (
+      <div className="space-y-2.5" data-testid="ws-ft-headings-form">
+        {(Object.keys(DEFAULT_FOOTER_HEADINGS) as Array<keyof FooterHeadings>).map((k) => (
+          <Field key={k} label={labels[k]} hint={`Built-in: “${DEFAULT_FOOTER_HEADINGS[k]}”`}>
+            <input
+              className={inputCls}
+              disabled={disabled}
+              maxLength={k === 'appsNote' ? 80 : 40}
+              value={headings[k]}
+              data-testid={`ws-ft-heading-${k}`}
+              onChange={(e) => set({ headings: { ...headings, [k]: e.target.value } })}
+            />
+          </Field>
+        ))}
+      </div>
+    );
+  } else if (is('partner')) {
+    title = 'Sell or create with us';
+    inspector = (
+      <div className="space-y-2.5" data-testid="ws-ft-partner-form">
+        <Toggle checked={partner.show} disabled={disabled} label="Show this block" testId="ws-ft-partner-on" onChange={(on) => set({ partner: { ...partner, show: on } })} />
+        <Field label="Heading">
+          <input className={inputCls} disabled={disabled} maxLength={40} value={partner.title} data-testid="ws-ft-partner-title" onChange={(e) => set({ partner: { ...partner, title: e.target.value } })} />
+        </Field>
+        <Field label="Seller sign-up link text" hint="Opens the seller sign-up page.">
+          <input className={inputCls} disabled={disabled} maxLength={40} value={partner.sellerLabel} onChange={(e) => set({ partner: { ...partner, sellerLabel: e.target.value } })} />
+        </Field>
+        <Field label="Creator sign-up link text" hint="Opens the creator sign-up page.">
+          <input className={inputCls} disabled={disabled} maxLength={40} value={partner.creatorLabel} onChange={(e) => set({ partner: { ...partner, creatorLabel: e.target.value } })} />
+        </Field>
+      </div>
+    );
+  } else if (is('description')) {
     title = 'Footer description';
     inspector = (
       <Field label={`Text (max ${FOOTER_LIMITS.description})`} hint="Leave empty to keep the built-in line.">

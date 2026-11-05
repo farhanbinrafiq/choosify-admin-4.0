@@ -197,8 +197,24 @@ export type AppLink = { platform: 'android' | 'ios'; url: string };
 export type DeliveryPartner = { id: string; name: string; logoUrl: string; confirmed: true };
 export type FooterLinkItem = { label: string; url: string; external: boolean };
 export type FooterColumn = { id: string; title: string; links: FooterLinkItem[] };
+export type FooterHeadings = { connect: string; contact: string; address: string; payments: string; apps: string; appsNote: string; delivery: string };
+export type FooterPartner = { show: boolean; title: string; sellerLabel: string; creatorLabel: string };
+export const DEFAULT_FOOTER_HEADINGS: FooterHeadings = {
+  connect: 'Connect',
+  contact: 'Contact Us',
+  address: 'Address',
+  payments: 'Payments Accepted',
+  apps: 'Available On Platforms',
+  appsNote: 'Download the app — or scan to open the store',
+  delivery: 'Delivery Partner',
+};
+export const DEFAULT_FOOTER_PARTNER: FooterPartner = { show: true, title: 'Sell Or Create With Us', sellerLabel: 'Sign Up As A Seller', creatorLabel: 'Join As A Creator' };
 export type FooterContent = {
   version: 2;
+  /** Section headings (empty = built-in wording). */
+  headings: FooterHeadings;
+  /** "Sell or create with us" block (seller / creator sign-up links). */
+  partner: FooterPartner;
   description: string;
   columns: FooterColumn[];
   showOffices: boolean;
@@ -240,7 +256,21 @@ function footerFromLegacy(o: Record<string, unknown>): Record<string, unknown> {
 export function validateFooter(input: unknown): FooterContent {
   let o = asObject(input, 'footer');
   if (o.version !== 2) o = footerFromLegacy(o);
-  rejectUnknown(o, ['version', 'description', 'columns', 'showOffices', 'showBusinessIds', 'paymentMethods', 'deliveryPartners', 'apps']);
+  rejectUnknown(o, ['version', 'description', 'columns', 'showOffices', 'showBusinessIds', 'paymentMethods', 'deliveryPartners', 'apps', 'headings', 'partner']);
+  const hRaw = (o.headings && typeof o.headings === 'object' ? o.headings : {}) as Record<string, unknown>;
+  const headings = Object.fromEntries(
+    (Object.keys(DEFAULT_FOOTER_HEADINGS) as Array<keyof FooterHeadings>).map((k) => {
+      const t = text(hRaw[k] ?? '', `headings.${k}`, k === 'appsNote' ? 80 : 40);
+      return [k, t || DEFAULT_FOOTER_HEADINGS[k]];
+    }),
+  ) as FooterHeadings;
+  const pRaw = (o.partner && typeof o.partner === 'object' ? o.partner : {}) as Record<string, unknown>;
+  const partner: FooterPartner = {
+    show: bool(pRaw.show, true),
+    title: text(pRaw.title ?? '', 'partner.title', 40) || DEFAULT_FOOTER_PARTNER.title,
+    sellerLabel: text(pRaw.sellerLabel ?? '', 'partner.sellerLabel', 40) || DEFAULT_FOOTER_PARTNER.sellerLabel,
+    creatorLabel: text(pRaw.creatorLabel ?? '', 'partner.creatorLabel', 40) || DEFAULT_FOOTER_PARTNER.creatorLabel,
+  };
   const colIds = new Set<string>();
   const columns = list(o.columns, 'columns', FOOTER_LIMITS.columns, 'columns').map((raw, i) => {
     const f = `columns[${i}]`;
@@ -294,6 +324,8 @@ export function validateFooter(input: unknown): FooterContent {
   });
   return {
     version: 2,
+    headings,
+    partner,
     description: text(o.description, 'description', FOOTER_LIMITS.description),
     columns,
     showOffices: bool(o.showOffices, true),

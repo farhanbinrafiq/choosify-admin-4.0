@@ -44,7 +44,6 @@ const TABS: Array<{ key: TabKey; label: string }> = [
   { key: 'pages', label: 'Pages' },
   { key: 'navigation', label: 'Header & Navigation' },
   { key: 'footer', label: 'Footer' },
-  { key: 'social', label: 'Social Links' },
   { key: 'company', label: 'Company Settings' },
   { key: 'brand_assets', label: 'Brand Assets' },
   { key: 'history', label: 'Publish History' },
@@ -905,7 +904,21 @@ function PublishHistory({ rows }: { rows: WebsitePublication[] }) {
 // ---------------------------------------------------------------------------------------------
 
 export default function WebsiteStudio() {
-  const [tab, setTab] = useState<TabKey>('overview');
+  const [tab, setTabRaw] = useState<TabKey>('overview');
+  // Social Links are edited inside the Footer tab (no separate tab any more).
+  const setTab = useCallback((k: TabKey) => setTabRaw(k === 'social' ? 'footer' : k), []);
+  // Other editors can jump here (e.g. Footer → "Edit the office addresses now").
+  useEffect(() => {
+    const open = (e: Event) => {
+      const key = (e as CustomEvent<string>).detail as TabKey;
+      if (key) {
+        setTab(key);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    };
+    window.addEventListener('ws-open-tab', open);
+    return () => window.removeEventListener('ws-open-tab', open);
+  }, []);
   const [pageKey, setPageKey] = useState<string>(SYSTEM_SITE_PAGES[0].docKey);
   const [caps, setCaps] = useState<WebsiteCapabilities | null>(null);
   const [docs, setDocs] = useState<WebsiteDocumentSummary[]>([]);
@@ -1120,19 +1133,50 @@ export default function WebsiteStudio() {
       );
     if (tab === 'footer')
       return (
-        <DocumentWorkspace<FooterContent>
-          key="footer"
-          docKey="footer"
-          caps={caps}
-          title="Footer"
-          description="Footer text, link columns, payment methods, app badges, delivery partners and which blocks show. Publishing updates every page."
-          Editor={FooterEditor}
-          Preview={FooterOutline}
-          previewLabel="Footer outline"
-          storefrontPreview
-          wide
-          onPublished={() => refresh().catch(() => undefined)}
-        />
+        <div className="space-y-6">
+          <DocumentWorkspace<FooterContent>
+            key="footer"
+            docKey="footer"
+            caps={caps}
+            title="Footer"
+            description="Footer text, link columns, payment methods, app badges, delivery partners and which blocks show. Publishing updates every page."
+            Editor={FooterEditor}
+            Preview={FooterOutline}
+            previewLabel="Footer outline"
+            storefrontPreview
+            wide
+            onPublished={() => refresh().catch(() => undefined)}
+          />
+          {/* Everything else in the footer, editable right here (shared with the rest of the website). */}
+          <div id="ws-footer-company" className="scroll-mt-4" data-testid="ws-footer-company">
+            <div className="mb-2 text-[12px] font-extrabold uppercase tracking-wide text-[#9CA3AF]">Also in the footer · addresses, support email & phone, copyright</div>
+            <DocumentWorkspace<CompanySettings>
+              key="footer-company"
+              docKey="company"
+              caps={caps}
+              title="Company Settings"
+              description="Office addresses, support email & phone and the copyright line shown in the footer (also used on Contact and other pages). Publish here to update them everywhere."
+              Editor={CompanyEditor}
+              Preview={CompanyPreview}
+              onPublished={() => refresh().catch(() => undefined)}
+            />
+          </div>
+          <div id="ws-footer-social" className="scroll-mt-4" data-testid="ws-footer-social">
+            <div className="mb-2 text-[12px] font-extrabold uppercase tracking-wide text-[#9CA3AF]">Also in the footer · social icons</div>
+            <DocumentWorkspace<SocialContent>
+              key="footer-social"
+              docKey="social"
+              caps={caps}
+              title="Social Links"
+              description="The social network icons in the footer."
+              Editor={SocialEditor}
+              Preview={SocialOutline}
+              previewLabel="Social links"
+              wide
+              onPublished={() => refresh().catch(() => undefined)}
+            />
+          </div>
+        </div>
       );
     if (tab === 'social')
       return (

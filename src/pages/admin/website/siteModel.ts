@@ -10,8 +10,22 @@ export type FooterLinkItem = { label: string; url: string; external?: boolean };
 export type FooterColumn = { id: string; title: string; links: FooterLinkItem[] };
 export type DeliveryPartner = { id: string; name: string; logoUrl: string; confirmed: boolean };
 export type AppLink = { platform: 'android' | 'ios'; url: string };
+export type FooterHeadings = { connect: string; contact: string; address: string; payments: string; apps: string; appsNote: string; delivery: string };
+export type FooterPartner = { show: boolean; title: string; sellerLabel: string; creatorLabel: string };
+export const DEFAULT_FOOTER_HEADINGS: FooterHeadings = {
+  connect: 'Connect',
+  contact: 'Contact Us',
+  address: 'Address',
+  payments: 'Payments Accepted',
+  apps: 'Available On Platforms',
+  appsNote: 'Download the app — or scan to open the store',
+  delivery: 'Delivery Partner',
+};
+export const DEFAULT_FOOTER_PARTNER: FooterPartner = { show: true, title: 'Sell Or Create With Us', sellerLabel: 'Sign Up As A Seller', creatorLabel: 'Join As A Creator' };
 export type FooterContent = {
   version: 2;
+  headings?: FooterHeadings;
+  partner?: FooterPartner;
   description: string;
   columns: FooterColumn[];
   showOffices: boolean;
