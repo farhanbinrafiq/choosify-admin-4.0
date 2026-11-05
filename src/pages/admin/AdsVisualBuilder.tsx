@@ -175,6 +175,19 @@ export default function AdsVisualBuilder() {
   const allFormatPlacements = useMemo(() => placementsForFormat(formatId, role), [formatId, role]);
   const placementDef = getPlacementDef(placementId);
   const formatDef = getFormatDef(formatId);
+  /** Sponsored Listing: promotes one product / brand (internal only, types the slot lists). */
+  const isListing = formatId === 'sponsored_listing';
+  useEffect(() => {
+    if (!isListing) return;
+    if (destMode !== 'internal') setDestMode('internal');
+    const allowed = (placementDef?.entityTypes ?? ['product', 'brand']).filter((t) => t === 'product' || t === 'brand');
+    if (allowed.length && !allowed.includes(internalEntityType as 'product' | 'brand')) {
+      setInternalEntityType(allowed[0]);
+      setInternalEntityId('');
+      setInternalEntitySlug('');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isListing, placementDef?.placementId]);
   const fitError =
     placementDef && formatDef?.imageLed && imageDims
       ? (() => {
@@ -1109,8 +1122,14 @@ export default function AdsVisualBuilder() {
 
           {/* 3. DESTINATION */}
           <section className="rounded-xl border border-[#E8EDF2] bg-white p-4">
-            <div className="mb-3 text-[10px] font-extrabold tracking-[0.08em] text-[#9CA3AF]">3 · DESTINATION</div>
-            <div className="flex gap-2 mb-3">
+            <div className="mb-3 text-[10px] font-extrabold tracking-[0.08em] text-[#9CA3AF]">{isListing ? '3 · WHAT YOU ARE PROMOTING' : '3 · DESTINATION'}</div>
+            {isListing ? (
+              <div className="mb-3 rounded-lg bg-[#F5F3FF] px-3 py-2 text-[11px] font-semibold text-[#5B21B6]" data-testid="listing-explainer">
+                Shown as the item's normal card with a “Sponsored” label, inside the {placementDef?.pageLabel ?? ''} list
+                {placementDef?.entityTypes?.length ? ` (${placementDef.entityTypes.join(' / ')})` : ''}. Only shown while it is live on Choosify.
+              </div>
+            ) : null}
+            <div className={`flex gap-2 mb-3 ${isListing ? 'hidden' : ''}`}>
               <button
                 type="button"
                 onClick={() => setDestMode('internal')}
@@ -1131,7 +1150,7 @@ export default function AdsVisualBuilder() {
               </button>
             </div>
             {destMode === 'internal' ? (
-              <FieldBox tone="link" label="Where the button goes" where="A page on Choosify">
+              <FieldBox tone="link" label={isListing ? 'Item to promote' : 'Where the button goes'} where={isListing ? 'Your product or brand' : 'A page on Choosify'}>
               <div className="grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)]">
                 <label className="block text-[11px] font-bold text-[#374151]">
                   Link to a
@@ -1145,12 +1164,14 @@ export default function AdsVisualBuilder() {
                     className={`mt-1 ${fieldInput('link')}`}
                     data-testid="entity-type"
                   >
-                    <option value="product">Product</option>
-                    <option value="brand">Brand</option>
-                    <option value="deal">Deal</option>
-                    <option value="category">Category</option>
-                    <option value="guide">Guide</option>
-                    <option value="creator">Creator</option>
+                    {(isListing
+                      ? (placementDef?.entityTypes ?? ['product', 'brand']).filter((t) => t === 'product' || t === 'brand')
+                      : ['product', 'brand', 'deal', 'category', 'guide', 'creator']
+                    ).map((t) => (
+                      <option key={t} value={t}>
+                        {t.charAt(0).toUpperCase() + t.slice(1)}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 <div className="block text-[11px] font-bold text-[#374151]">

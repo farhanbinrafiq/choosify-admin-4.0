@@ -208,6 +208,13 @@ export const AD_FORMATS: AdFormatDef[] = [
     imageLed: false,
     fields: ['advertiser', 'logo', 'listing', 'internalDest', 'externalUrl', 'hostCategory'],
   },
+  {
+    formatId: 'sponsored_listing',
+    label: 'Sponsored Listing',
+    description: 'Promote one of your products or brands inside a list — shown as its normal card with a Sponsored label.',
+    imageLed: false,
+    fields: ['internalDest'],
+  },
 ];
 
 /** Wide designed banner in a FIXED frame (4:1 desktop, 5:2 phone); the design is fitted whole. */
@@ -526,7 +533,10 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
     slotKey: 'feed',
     slotLabel: 'Sponsored feed card',
     sectionLabel: 'Recommendations / Discover feed — sponsored card between feed items',
-    allowedFormats: ['vertical_card', 'gradient_promo'],
+    allowedFormats: ['vertical_card', 'gradient_promo', 'sponsored_listing'],
+    entityTypes: ['product', 'brand', 'guide', 'creator'],
+    frequency: 'At most 1 sponsored card per 8 feed items, never first.',
+    fallback: 'Feed shows organic items only.',
     orientation: 'vertical',
     aspectRatio: '3:4',
     mobileSupport: true,
@@ -553,6 +563,50 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
     creative: PORTRAIT_CARD,
   },
 ];
+
+
+/** Sponsored Listing slot inside an organic feed (Web: useSponsoredFeedEntries / usePlacements). */
+const listingSlot = (
+  placementId: string,
+  pageKey: AdPageKey,
+  pageLabel: string,
+  where: string,
+  entityTypes: SponsoredEntityType[],
+  frequency: string,
+  live = false,
+): AdPlacementDef => ({
+  placementId,
+  pageKey,
+  pageLabel,
+  slotKey: 'feed',
+  slotLabel: 'Sponsored listing in the feed',
+  sectionLabel: `${pageLabel} — ${where}`,
+  allowedFormats: ['sponsored_listing'],
+  orientation: 'embedded',
+  aspectRatio: 'auto',
+  mobileSupport: true,
+  desktopSupport: true,
+  ownerRoles: ['admin', 'seller', 'creator'],
+  // Each feed goes live once the storefront draws Sponsored Listings in it.
+  active: live,
+  retiredReason: live ? undefined : 'Sponsored Listings are not live on this page yet.',
+  entityTypes,
+  frequency,
+  fallback: 'Feed shows organic items only.',
+});
+
+/** In-feed Sponsored Listing slots (each is a real storefront feed — verified 2026-11-05). */
+AD_PLACEMENTS.push(
+  listingSlot('HOME_PRODUCT_FEED', 'homepage', 'Homepage', 'sponsored product among Popular Products', ['product'], 'Up to 2 per page, about 1 per 9 products.'),
+  listingSlot('PRODUCTS_FEED', 'browse', 'Products & Services', 'sponsored product in the product grid', ['product'], 'Up to 2 per page, about 1 per 5 products.', true),
+  listingSlot('CATEGORIES_FEED', 'categories', 'Categories', 'sponsored card in the category grid', ['product', 'brand'], '1 per page, after 12 items.'),
+  listingSlot('BRANDS_FEED', 'brands', 'Brands', 'sponsored brand in the brands grid', ['brand'], 'Up to 2 per page, about 1 per 5 brands.', true),
+  listingSlot('CREATORS_FEED', 'creators', 'Creators', 'sponsored creator in the creators grid', ['creator'], 'Up to 2 per page, about 1 per 5 creators.'),
+  listingSlot('DEALS_FEED', 'deals', 'Deals', 'sponsored deal in the deals grid', ['product', 'deal'], 'Up to 2 per page, about 1 per 5 deals.'),
+  listingSlot('GUIDES_FEED', 'guides', 'Buying Guides', 'sponsored guide in the guides grid', ['guide'], 'Up to 2 per page, about 1 per 8 guides.'),
+  listingSlot('SEARCH_FEED', 'search', 'Search results', 'sponsored result, never above the first 8 organic results', ['product', 'brand'], '1 per page, never before 8 organic results.'),
+  listingSlot('COMPARE_ALTERNATIVES', 'compare', 'Compare', 'promoted alternative next to the comparison', ['product'], 'Up to 2.'),
+);
 
 export function getFormatDef(formatId: string | undefined | null): AdFormatDef | undefined {
   return AD_FORMATS.find((f) => f.formatId === formatId);

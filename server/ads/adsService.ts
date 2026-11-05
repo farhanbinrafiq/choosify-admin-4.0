@@ -38,6 +38,7 @@ import {
   type PromotionType,
 } from '../../shared/deals/dealPricing';
 import { isProductActive } from '../catalog/productLifecycle';
+import { sellerOwnsBrand } from '../catalog/brandOwnership';
 import { getService, listServices } from '../catalog/serviceStore';
 import { operationsStore } from '../operations/operationsStore';
 import { adsStore } from './adsStore';
@@ -1152,6 +1153,23 @@ export async function listDealEligibleListings(actor: AdsActor): Promise<DealEli
   ];
 }
 
+/** Sponsored Listing: a real product / brand, and (for sellers / creators) their own. */
+async function assertPromotable(formatId: string | undefined | null, cta: unknown, actor: AdsActor): Promise<void> {
+  if (formatId !== 'sponsored_listing') return;
+  const c = (cta && typeof cta === 'object' ? cta : {}) as { internalEntityType?: unknown; internalEntityId?: unknown };
+  const t = String(c.internalEntityType || '');
+  const id = typeof c.internalEntityId === 'string' ? c.internalEntityId.trim() : '';
+  if (!id || (t !== 'product' && t !== 'brand')) throw new AdsError('Choose the product or brand you are promoting', 400);
+  if (t === 'product') {
+    await assertListingOwned(id, actor);
+    return;
+  }
+  const brand = await catalogStore.getBrand(id);
+  if (!brand) throw new AdsError('Brand not found', 404);
+  if (isPlatformAdmin(actor.role)) return;
+  if (!(await sellerOwnsBrand(actor.userId, id))) throw new AdsError('You can only promote a brand you own', 403);
+}
+
 async function assertListingOwned(listingId: string, actor: AdsActor): Promise<{
   id: string;
   title?: string;
@@ -1286,6 +1304,9 @@ export async function updateOwnAd(
   }
 
   let creative = patch.creative !== undefined ? patch.creative : ad.creative;
+  if (patch.cta !== undefined || patch.formatId !== undefined) {
+    await assertPromotable(nextFormat, patch.cta !== undefined ? patch.cta : ad.cta, actor);
+  }
   const listingId = patch.listingId !== undefined ? patch.listingId : ad.listingId;
   if (listingId && (nextFormat === 'deal_of_the_day' || patch.listingId)) {
     creative = await hydrateListingCreative(listingId, creative, actor);
@@ -1415,6 +1436,7 @@ export async function createBanner(
 
   let creative = await hydrateListingCreative(input.listingId, input.creative, actor);
   creative = await resolveCategoryPromotedCreative(input.formatId, creative);
+  await assertPromotable(input.formatId, input.cta, actor);
   const pageKey = input.pageKey || getPlacementDef(input.placementId || '')?.pageKey;
 
   const row = await createBase(

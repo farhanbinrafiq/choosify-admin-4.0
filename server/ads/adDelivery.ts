@@ -17,6 +17,8 @@ import type { AdRecord } from './types';
 import { adsStore } from './adsStore';
 import { billingBlocker, withBilling } from './adBilling';
 import { getMediaStaticMount } from '../lib/mediaStorage';
+import { catalogStore } from '../../lib/vercel-catalog/catalogStore';
+import { isProductActive } from '../catalog/productLifecycle';
 import { AD_PLACEMENTS, checkCreativeFit, getAnyPlacementDef, getFormatDef, getPlacementDef, resolvePagePosition } from '../../shared/ads/placementRegistry';
 
 export type PublicAdLink = { type: 'product' | 'brand' | 'creator' | 'guide' | 'deal' | 'url'; id?: string; url?: string; external: boolean };
@@ -40,8 +42,10 @@ export type PublicAd = {
   position?: string;
   /** Pop-up rules (pages it shows on, times per visit, delay). */
   popup?: { pages: string[]; maxPerSession: number; delaySec: number };
-  /** In-grid cards: after every N cards (0 = once, after the last card). */
+  /** In-grid cards / Sponsored Listings: after every N cards (0 = once, after the last card). */
   gridEvery?: number;
+  /** Sponsored Listing: the product / brand promoted (drawn as its normal card). */
+  entity?: { type: 'product' | 'brand'; id: string };
   /** Image banners: draw headline + subtext over the image. */
   showText?: boolean;
   /** Wide banners on desktop: fill the frame edge to edge (crop top/bottom) instead of showing the whole design. */
@@ -122,6 +126,12 @@ export function deliveryProblems(ad: AdRecord, now = Date.now()): string[] {
   if (format?.formatId === 'cta_strip' && !String(ad.creative?.headline ?? '').trim()) out.push('CTA strip needs a headline');
   const chosen = ad.creative?.pagePosition;
   if (slot && chosen && !slot.positions?.some((p) => p.key === chosen)) out.push(`Position "${chosen}" does not exist on ${slot.pageLabel}`);
+  if (format?.formatId === 'sponsored_listing') {
+    const t = String(ad.cta?.internalEntityType || '');
+    const id = typeof ad.cta?.internalEntityId === 'string' ? ad.cta.internalEntityId.trim() : '';
+    if (!id || (t !== 'product' && t !== 'brand')) out.push('Choose the product or brand this listing promotes');
+    else if (slot && !(slot.entityTypes ?? []).includes(t as 'product' | 'brand')) out.push(`${slot.pageLabel} lists ${(slot.entityTypes ?? []).join(' / ')} only — promote one of those here`);
+  }
   if (format?.formatId === 'category_promoted_slot') {
     if (!String(ad.creative?.categoryId ?? '').trim()) out.push('Choose the category card this sponsor appears on');
     if (!String(ad.creative?.advertiserName ?? '').trim()) out.push('Category sponsor needs an advertiser name');
@@ -170,7 +180,16 @@ export function toPublicAd(ad: AdRecord, origin = ''): PublicAd {
     focusY: slot.creative?.display === 'natural' && c.fit === 'fill' && (c.focusY === 'top' || c.focusY === 'bottom') ? c.focusY : undefined,
     sponsorLogoUrl: SAFE_IMAGE(c.logoUrl) ? absoluteMedia(c.logoUrl, origin) : undefined,
     position: resolvePagePosition(slot, c.pagePosition),
-    gridEvery: slot.slotKey === 'grid_card' ? (Number.isFinite(Number(c.gridEvery)) ? Number(c.gridEvery) : 8) : undefined,
+    gridEvery:
+      slot.slotKey === 'grid_card'
+        ? Number.isFinite(Number(c.gridEvery)) ? Number(c.gridEvery) : 8
+        : format.formatId === 'sponsored_listing'
+          ? Number(c.gridEvery) > 0 ? Number(c.gridEvery) : 5
+          : undefined,
+    entity:
+      format.formatId === 'sponsored_listing' && (ad.cta?.internalEntityType === 'product' || ad.cta?.internalEntityType === 'brand') && ad.cta?.internalEntityId
+        ? { type: ad.cta.internalEntityType, id: String(ad.cta.internalEntityId).trim() }
+        : undefined,
     popup:
       format.formatId === 'popup'
         ? {
@@ -189,14 +208,34 @@ export function toPublicAd(ad: AdRecord, origin = ''): PublicAd {
 export async function deliverableAdsBySlot(now = Date.now(), origin = ''): Promise<Record<string, PublicAd[]>> {
   const rows = await adsStore.listAds({ statuses: ['active'] });
   const out: Record<string, PublicAd[]> = {};
-  rows
-    .filter((ad) => deliveryProblems(ad, now).length === 0)
+  const ok = rows.filter((ad) => deliveryProblems(ad, now).length === 0);
+  // Sponsored Listings only while the promoted product / brand is still on Choosify.
+  const live = await Promise.all(ok.map((ad) => (ad.formatId === 'sponsored_listing' ? sponsoredEntityLive(ad) : Promise.resolve(true))));
+  ok
+    .filter((_, i) => live[i])
     .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
     .forEach((ad) => {
       const p = toPublicAd(ad, origin);
       (out[p.slot] ||= []).push(p);
     });
   return out;
+}
+
+/** The promoted product is active / the promoted brand exists (the storefront also needs it in its public lists). */
+export async function sponsoredEntityLive(ad: AdRecord): Promise<boolean> {
+  const t = ad.cta?.internalEntityType;
+  const id = typeof ad.cta?.internalEntityId === 'string' ? ad.cta.internalEntityId.trim() : '';
+  if (!id) return false;
+  try {
+    if (t === 'product') {
+      const p = await catalogStore.getProduct(id);
+      return Boolean(p && isProductActive((p as { status?: string }).status));
+    }
+    if (t === 'brand') return Boolean(await catalogStore.getBrand(id));
+  } catch {
+    /* treat as not live */
+  }
+  return false;
 }
 
 export const ACTIVE_SLOT_IDS = AD_PLACEMENTS.filter((p) => p.active).map((p) => p.placementId);
