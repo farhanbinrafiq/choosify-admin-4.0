@@ -16,6 +16,7 @@ import { inferHeroMediaType, type HeroMediaType } from '@/shared/ads/heroMedia';
 import { StorefrontAdPresentation } from '../../components/ads/storefront';
 import { AdFitStatus, AdSlotPreview, AdSlotSpec, measureImage } from '../../components/ads/AdSlotPreview';
 import { CategorySearchSelect } from '../../components/ads/CategorySearchSelect';
+import { EntityPicker, type PickableType } from '../../components/ads/EntityPicker';
 import { useAuth } from '../../contexts/AuthContext';
 import { adsApi, type AdsApiRecord, type EligibleListing } from '../../services/adsApi';
 import { catalogApi } from '../../services/catalogApi';
@@ -38,6 +39,33 @@ function placementsForFormat(formatId: AdFormatId, role?: string) {
     (p) => p.active && p.allowedFormats.includes(formatId) && p.ownerRoles.includes(owner),
   );
 }
+
+type FieldTone = 'advertiser' | 'headline' | 'subtext' | 'cta' | 'link';
+
+/** Colour per kind of field, so each is easy to spot while editing (static classes for Tailwind). */
+const TONES: Record<FieldTone, { box: string; dot: string; badge: string; input: string }> = {
+  advertiser: { box: 'border-[#CBD5E1] bg-[#F8FAFC]', dot: 'bg-[#64748B]', badge: 'bg-[#E2E8F0] text-[#334155]', input: 'border-[#CBD5E1] focus:border-[#64748B]' },
+  headline: { box: 'border-[#C4B5FD] bg-[#F5F3FF]', dot: 'bg-[#7C3AED]', badge: 'bg-[#EDE9FE] text-[#5B21B6]', input: 'border-[#C4B5FD] focus:border-[#7C3AED]' },
+  subtext: { box: 'border-[#7DD3FC] bg-[#F0F9FF]', dot: 'bg-[#0284C7]', badge: 'bg-[#E0F2FE] text-[#075985]', input: 'border-[#7DD3FC] focus:border-[#0284C7]' },
+  cta: { box: 'border-[#FDBA74] bg-[#FFF7ED]', dot: 'bg-[#FF5B00]', badge: 'bg-[#FFEDD5] text-[#9A3412]', input: 'border-[#FDBA74] focus:border-[#FF5B00]' },
+  link: { box: 'border-[#93C5FD] bg-[#EFF6FF]', dot: 'bg-[#2563EB]', badge: 'bg-[#DBEAFE] text-[#1E40AF]', input: 'border-[#93C5FD] focus:border-[#2563EB]' },
+};
+
+function FieldBox({ tone, label, where, className = '', children }: { tone: FieldTone; label: string; where?: string; className?: string; children: React.ReactNode }) {
+  const t = TONES[tone];
+  return (
+    <div className={`rounded-lg border-2 px-3 py-2.5 ${t.box} ${className}`} data-testid={`field-${tone}`}>
+      <div className="mb-1.5 flex flex-wrap items-center gap-2">
+        <span className={`h-2.5 w-2.5 rounded-full ${t.dot}`} />
+        <span className="text-[11.5px] font-extrabold text-[#111827]">{label}</span>
+        {where ? <span className={`rounded px-1.5 py-0.5 text-[9.5px] font-extrabold uppercase tracking-wide ${t.badge}`}>{where}</span> : null}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+const fieldInput = (tone: FieldTone) => `w-full rounded-md border-2 bg-white px-3 py-2 text-[12.5px] outline-none ${TONES[tone].input}`;
 
 type PageRow = { key: string; placement: AdPlacementDef; position: string; label: string; order: number };
 
@@ -112,6 +140,8 @@ export default function AdsVisualBuilder() {
   const [listingId, setListingId] = useState('');
   const [destMode, setDestMode] = useState<DestMode>('internal');
   const [internalEntityType, setInternalEntityType] = useState('product');
+  /** Category links go to /categories?category=<slug>. */
+  const [internalEntitySlug, setInternalEntitySlug] = useState('');
   const [internalEntityId, setInternalEntityId] = useState('');
   const [externalUrl, setExternalUrl] = useState('');
   const [hostCategoryId, setHostCategoryId] = useState('');
@@ -245,6 +275,10 @@ export default function AdsVisualBuilder() {
       setDestMode('internal');
       setInternalEntityType(cta.internalEntityType || 'product');
       setInternalEntityId(cta.internalEntityId || ad.listingId || '');
+      {
+        const m = /^\/categories\?category=([^&]+)/.exec(cta.url || '');
+        setInternalEntitySlug(m ? decodeURIComponent(m[1]) : '');
+      }
     }
   }, []);
 
@@ -422,7 +456,12 @@ export default function AdsVisualBuilder() {
       cta: {
         label: ctaLabel || undefined,
         destinationType: destMode,
-        url: destMode === 'external' ? externalUrl.trim() : undefined,
+        url:
+          destMode === 'external'
+            ? externalUrl.trim()
+            : internalEntityType === 'category' && (internalEntitySlug || internalEntityId)
+              ? `/categories?category=${encodeURIComponent(internalEntitySlug || internalEntityId)}`
+              : undefined,
         internalEntityType: destMode === 'internal' ? internalEntityType : undefined,
         internalEntityId: destMode === 'internal' ? internalEntityId || listingId || undefined : undefined,
       },
@@ -675,36 +714,46 @@ export default function AdsVisualBuilder() {
             <div className="mb-3 text-[10px] font-extrabold tracking-[0.08em] text-[#9CA3AF]">2 · CONTENT</div>
             <div className="grid gap-3 sm:grid-cols-2">
               {fields.has('advertiser') ? (
-                <label className="block text-[11px] font-bold text-[#374151]">
-                  Advertiser / Brand
+                <FieldBox tone="advertiser" label="Advertiser / Brand" where="Who the ad is for">
                   <input
                     value={advertiserName}
                     onChange={(e) => setAdvertiserName(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px]"
+                    className={fieldInput('advertiser')}
                     placeholder="e.g. Samsung"
                   />
-                </label>
+                </FieldBox>
               ) : null}
               {fields.has('headline') ? (
-                <label className="block text-[11px] font-bold text-[#374151]">
-                  Headline
+                <FieldBox
+                  tone="headline"
+                  label="Headline"
+                  where={formatDef?.imageLed && !showText ? 'Image description (not shown)' : 'Big text on the ad'}
+                >
                   <input
                     value={headline}
                     onChange={(e) => setHeadline(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px]"
+                    className={fieldInput('headline')}
+                    placeholder="e.g. Membership is open"
+                    data-testid="input-headline"
                   />
-                </label>
+                </FieldBox>
               ) : null}
               {fields.has('subtext') ? (
-                <label className="block sm:col-span-2 text-[11px] font-bold text-[#374151]">
-                  Subtext
+                <FieldBox
+                  tone="subtext"
+                  label="Subtext"
+                  where={formatDef?.imageLed && !showText ? 'Not shown on image banners unless ticked below' : 'Small line under the headline'}
+                  className="sm:col-span-2"
+                >
                   <textarea
                     value={subtext}
                     onChange={(e) => setSubtext(e.target.value)}
                     rows={2}
-                    className="mt-1 w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px]"
+                    className={fieldInput('subtext')}
+                    placeholder="e.g. Special discount for Choosify customers"
+                    data-testid="input-subtext"
                   />
-                </label>
+                </FieldBox>
               ) : null}
               {formatDef?.imageLed && fields.has('headline') && formatId !== 'hero_banner' ? (
                 <label className="flex items-start gap-2 sm:col-span-2 rounded-lg border border-[#E8EDF2] bg-[#F9FAFB] px-3 py-2 text-[11.5px] font-semibold text-[#374151]">
@@ -718,14 +767,30 @@ export default function AdsVisualBuilder() {
                 </label>
               ) : null}
               {fields.has('ctaLabel') ? (
-                <label className="block text-[11px] font-bold text-[#374151]">
-                  CTA Label
-                  <input
-                    value={ctaLabel}
-                    onChange={(e) => setCtaLabel(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px]"
-                  />
-                </label>
+                <FieldBox tone="cta" label="CTA button text" where="The orange button">
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={ctaLabel}
+                      onChange={(e) => setCtaLabel(e.target.value)}
+                      className={fieldInput('cta')}
+                      placeholder="e.g. Apply now, Shop now, Visit"
+                      maxLength={30}
+                      data-testid="input-cta"
+                    />
+                    {ctaLabel ? (
+                      <span className="shrink-0 rounded-lg bg-[#FF5B00] px-3 py-1.5 text-[10.5px] font-extrabold uppercase tracking-wide text-white shadow" data-testid="cta-chip">
+                        {ctaLabel} →
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {['Shop now', 'Apply now', 'Buy now', 'Visit', 'Learn more', 'Book now'].map((s) => (
+                      <button key={s} type="button" onClick={() => setCtaLabel(s)} className="rounded-full border border-[#FDBA74] bg-white px-2 py-0.5 text-[10px] font-bold text-[#9A3412] hover:bg-[#FFEDD5]">
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </FieldBox>
               ) : null}
               {fields.has('listing') ? (
                 <label className="block text-[11px] font-bold text-[#374151]">
@@ -983,13 +1048,19 @@ export default function AdsVisualBuilder() {
               </button>
             </div>
             {destMode === 'internal' ? (
-              <div className="grid gap-3 sm:grid-cols-2">
+              <FieldBox tone="link" label="Where the button goes" where="A page on Choosify">
+              <div className="grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)]">
                 <label className="block text-[11px] font-bold text-[#374151]">
-                  Entity type
+                  Link to a
                   <select
                     value={internalEntityType}
-                    onChange={(e) => setInternalEntityType(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px]"
+                    onChange={(e) => {
+                      setInternalEntityType(e.target.value);
+                      setInternalEntityId('');
+                      setInternalEntitySlug('');
+                    }}
+                    className={`mt-1 ${fieldInput('link')}`}
+                    data-testid="entity-type"
                   >
                     <option value="product">Product</option>
                     <option value="brand">Brand</option>
@@ -999,26 +1070,34 @@ export default function AdsVisualBuilder() {
                     <option value="creator">Creator</option>
                   </select>
                 </label>
-                <label className="block text-[11px] font-bold text-[#374151]">
-                  Entity ID
-                  <input
-                    value={internalEntityId}
-                    onChange={(e) => setInternalEntityId(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px]"
-                    placeholder="Product / brand / deal id"
+                <div className="block text-[11px] font-bold text-[#374151]">
+                  Choose it
+                  <EntityPicker
+                    type={internalEntityType as PickableType}
+                    value={internalEntityType === 'category' ? internalEntityId || internalEntitySlug : internalEntityId}
+                    onPick={(e) => {
+                      setInternalEntityId(e?.id || '');
+                      setInternalEntitySlug(e?.slug || '');
+                    }}
                   />
-                </label>
+                </div>
               </div>
+              </FieldBox>
             ) : (
-              <label className="block text-[11px] font-bold text-[#374151]">
-                External URL (http/https only)
+              <FieldBox tone="link" label="Where the button goes" where="Another website (opens in a new tab)">
                 <input
                   value={externalUrl}
                   onChange={(e) => setExternalUrl(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px]"
+                  className={fieldInput('link')}
                   placeholder="https://example.com/offer"
+                  data-testid="input-external-url"
                 />
-              </label>
+                {externalUrl.trim() && !/^https:\/\//i.test(externalUrl.trim()) ? (
+                  <div className="mt-1 text-[10.5px] font-semibold text-amber-800" data-testid="external-url-warning">
+                    Use a full secure address starting with https:// — other links are not shown on the storefront.
+                  </div>
+                ) : null}
+              </FieldBox>
             )}
           </section>
 
