@@ -112,6 +112,8 @@ export default function AdsVisualBuilder() {
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  /** Status shown next to the upload button (not only at the top of the page). */
+  const [uploadNote, setUploadNote] = useState<{ kind: 'busy' | 'ok' | 'error' | 'tip'; text: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [existing, setExisting] = useState<AdsApiRecord | null>(null);
@@ -397,6 +399,8 @@ export default function AdsVisualBuilder() {
     if (!file) return;
     setUploading(true);
     setError(null);
+    const mb = (file.size / 1024 / 1024).toFixed(1);
+    setUploadNote({ kind: 'busy', text: `Uploading ${file.name} (${mb} MB)… large photos are shrunk first, this can take a few seconds.` });
     try {
       if (!file.type.startsWith('image/')) {
         throw new Error('Only image/GIF files can be uploaded. For Hero video, paste a hosted mp4/webm URL.');
@@ -408,6 +412,7 @@ export default function AdsVisualBuilder() {
           const fit = checkCreativeFit(placementDef, dims.width, dims.height);
           if ('error' in fit) throw new Error(fit.error);
         }
+        if (!dims) throw new Error('This image could not be read — try saving it again as JPG or PNG.');
       }
       const url = await uploadProductImage(file);
       if (kind === 'image') setImageDims(dims);
@@ -423,8 +428,23 @@ export default function AdsVisualBuilder() {
         }
       }
       setMessage('Creative uploaded');
+      const tip =
+        kind === 'image' && placementDef && dims
+          ? (() => {
+              const fit = checkCreativeFit(placementDef, dims.width, dims.height);
+              return 'warnings' in fit && fit.warnings.length ? fit.warnings[0] : null;
+            })()
+          : null;
+      setUploadNote(tip ? { kind: 'tip', text: `Uploaded. ${tip}` } : { kind: 'ok', text: 'Uploaded ✓' });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
+      const msg = err instanceof Error ? err.message : 'Upload failed';
+      const friendly = /413|too large|entity too large|payload/i.test(msg)
+        ? 'This file is too large to upload. Save it smaller (under about 5 MB, e.g. JPG or WebP) and try again.'
+        : /network|failed to fetch/i.test(msg)
+          ? 'Upload failed — the connection dropped. Check your internet and try again.'
+          : msg;
+      setError(friendly);
+      setUploadNote({ kind: 'error', text: `Not uploaded — ${friendly}` });
     } finally {
       setUploading(false);
     }
@@ -1086,7 +1106,13 @@ export default function AdsVisualBuilder() {
                                 : 'image/jpeg,image/jpg,image/png,image/webp,image/gif'
                             }
                             className="hidden"
-                            onChange={(e) => void uploadCreative(e.target.files?.[0] || null, 'image')}
+                            onChange={(e) => {
+                              const f = e.target.files?.[0] || null;
+                              // allow picking the same file again after a failure
+                              e.target.value = '';
+                              void uploadCreative(f, 'image');
+                            }}
+                            data-testid="ad-image-file"
                           />
                         </label>
                         {imageUrl ? null : (
@@ -1095,8 +1121,17 @@ export default function AdsVisualBuilder() {
                           </span>
                         )}
                       </div>
+                      {uploadNote ? (
+                        <div
+                          className={`mt-2 rounded-md px-2.5 py-1.5 text-[11px] font-semibold ${uploadNote.kind === 'error' ? 'bg-red-50 text-red-700' : uploadNote.kind === 'busy' ? 'bg-blue-50 text-blue-700' : uploadNote.kind === 'tip' ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-700'}`}
+                          data-testid="ad-upload-note"
+                          role="status"
+                        >
+                          {uploadNote.text}
+                        </div>
+                      ) : null}
                       <div className="mt-1 text-[10px] text-[#9CA3AF]">
-                        JPG/PNG/WEBP/GIF. The size is checked against this slot before uploading.
+                        JPG/PNG/WEBP/GIF, any shape — it is fitted into the frame (best: the recommended size). Big photos are shrunk automatically.
                       </div>
                     </>
                   )}

@@ -173,7 +173,24 @@ async function request<T>(path: string, method: string = 'GET', body?: unknown):
   return (parsed.data !== undefined ? parsed.data : (parsed as unknown as T)) as T;
 }
 
+export type AdMetricsRow = {
+  adId: string;
+  impressions: number;
+  clicks: number;
+  ctr: number | null;
+  bySlot: Record<string, { impressions: number; clicks: number }>;
+  daily: Array<{ date: string; impressions: number; clicks: number }>;
+};
+
 export const adsApi = {
+  /** Views / clicks per ad (Dhaka dates, YYYY-MM-DD). Admin: every ad; owners: their own. */
+  metrics: (from?: string, to?: string) => {
+    const q = new URLSearchParams();
+    if (from) q.set('from', from);
+    if (to) q.set('to', to);
+    const qs = q.toString();
+    return request<{ since: string; from: string | null; to: string | null; rows: AdMetricsRow[] }>(`/ads/metrics${qs ? `?${qs}` : ''}`);
+  },
   getPlacements: (pageKey?: string) =>
     request<PlacementsResponse>(
       pageKey ? `/ads/placements?pageKey=${encodeURIComponent(pageKey)}` : '/ads/placements',

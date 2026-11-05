@@ -3,7 +3,7 @@
  * Mounted under /api/v1.
  */
 
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { authenticateRequest } from '../middleware/auth';
 import { requireRole } from '../middleware/authorization';
 import { requirePartnerEntitlement } from '../entitlements/entitlementMiddleware';
@@ -50,6 +50,7 @@ import {
 import type { AdCreative, AdRecord, AdsOwnerRole } from './types';
 import { deliverableAdsBySlot, deliveryProblems, probeImageSize, ACTIVE_SLOT_IDS } from './adDelivery';
 import { adsStore } from './adsStore';
+import { metricsFor, rateLimited, recordEvent } from './adMetrics';
 import { billingBlocker, billingOf, changesPaidTerms, isPaidAd, stripBilling, withBilling } from './adBilling';
 import { AD_DAILY_RATES_BDT, RATE_TIER_LABEL, quoteAd } from '../../shared/ads/pricing';
 import { checkCreativeFit, getAnyPlacementDef, getFormatDef, getPlacementDef, assertFormatPlacementCompatible, resolvePagePosition, POPUP_PAGES, GRID_EVERY_CHOICES } from '../../shared/ads/placementRegistry';
@@ -170,6 +171,86 @@ adsRouter.get('/ads/delivery', async (req, res) => {
     Logger.error('ads.delivery_failed', { error: error instanceof Error ? error.message : String(error) });
     res.setHeader('Cache-Control', 'no-store');
     res.status(500).json({ success: false, error: 'Ads unavailable' });
+  }
+});
+
+// ---------------------------------------------------------------------------------------------
+// Impressions + clicks (storefront → POST /ads/events; reports → GET /ads/metrics)
+// ---------------------------------------------------------------------------------------------
+
+/** "slot:adId" pairs that are live right now (30 s cache) — events for anything else are ignored. */
+let liveCache: { at: number; keys: Set<string> } | null = null;
+async function liveAdKeys(): Promise<Set<string>> {
+  if (liveCache && Date.now() - liveCache.at < 30_000) return liveCache.keys;
+  const all = await deliverableAdsBySlot(Date.now());
+  const keys = new Set<string>();
+  for (const [slot, ads] of Object.entries(all)) for (const a of ads) keys.add(`${slot}:${a.id}`);
+  liveCache = { at: Date.now(), keys };
+  return keys;
+}
+
+const PAGE_VIEW_RE = /^[A-Za-z0-9_-]{8,64}$/;
+
+/**
+ * Public. Body (JSON or text/plain from navigator.sendBeacon):
+ *   { pageViewId, events: [{ adId, slot, type: 'i' | 'c' }] }   (≤ 50 events)
+ * Counted only for ads live in that slot, once per page view; no personal data is stored.
+ */
+adsRouter.post('/ads/events', express.text({ type: 'text/plain', limit: '16kb' }), async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  let body: unknown = req.body;
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch {
+      body = null;
+    }
+  }
+  const b = (body && typeof body === 'object' ? body : {}) as { pageViewId?: unknown; events?: unknown };
+  const pageViewId = typeof b.pageViewId === 'string' ? b.pageViewId : '';
+  const events = Array.isArray(b.events) ? b.events.slice(0, 50) : [];
+  if (!PAGE_VIEW_RE.test(pageViewId) || !events.length) {
+    res.status(400).json({ success: false, error: 'Invalid events' });
+    return;
+  }
+  if (rateLimited(req.ip || 'unknown', events.length)) {
+    res.status(429).json({ success: false, error: 'Too many events' });
+    return;
+  }
+  try {
+    const live = await liveAdKeys();
+    let counted = 0;
+    for (const raw of events) {
+      const e = (raw && typeof raw === 'object' ? raw : {}) as { adId?: unknown; slot?: unknown; type?: unknown };
+      const adId = typeof e.adId === 'string' ? e.adId.slice(0, 80) : '';
+      const slot = typeof e.slot === 'string' ? e.slot.slice(0, 60) : '';
+      const type = e.type === 'c' ? 'c' : e.type === 'i' ? 'i' : null;
+      if (!adId || !slot || !type || !live.has(`${slot}:${adId}`)) continue;
+      if (recordEvent(pageViewId, adId, slot, type)) counted++;
+    }
+    res.status(200).json({ success: true, data: { counted } });
+  } catch (error) {
+    Logger.error('ads.events_failed', { error: error instanceof Error ? error.message : String(error) });
+    res.status(500).json({ success: false, error: 'Events unavailable' });
+  }
+});
+
+/** Views / clicks per ad (admin: every ad; seller / creator: their own). ?from=&to= (YYYY-MM-DD, Dhaka). */
+adsRouter.get('/ads/metrics', ...requireAuth, async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    const actor = actorOf(req);
+    const role = String(actor.role || '').toLowerCase();
+    const admin = role === 'admin' || role === 'super_admin';
+    const DATE = /^\d{4}-\d{2}-\d{2}$/;
+    const from = typeof req.query.from === 'string' && DATE.test(req.query.from) ? req.query.from : undefined;
+    const to = typeof req.query.to === 'string' && DATE.test(req.query.to) ? req.query.to : undefined;
+    const ads = await adsStore.listAds({});
+    const mine = admin ? ads : ads.filter((a) => a.ownerId === actor.userId);
+    const out = metricsFor(mine.map((a) => a.id), from, to);
+    res.json({ success: true, data: { since: out.since, from: from ?? null, to: to ?? null, rows: out.rows } });
+  } catch (error) {
+    handleError(res, error);
   }
 });
 

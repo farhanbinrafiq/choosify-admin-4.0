@@ -694,13 +694,18 @@ export function checkCreativeFit(placement: AdPlacementDef, width: number | unde
       error: `Image is ${width}×${height}px — "${placement.slotLabel}" needs at least ${spec.min.width}×${spec.min.height}px (recommended ${spec.recommended.width}×${spec.recommended.height}px).`,
     };
   }
+  const rec = spec.recommended.width / spec.recommended.height;
   if (ratio < lo || ratio > hi) {
+    // Any shape is accepted: the slot frame fits it (whole over a blurred fill, or trimmed edges).
     return {
-      ok: false,
-      error: `Image proportions ${ratio.toFixed(2)}:1 don't fit "${placement.slotLabel}" (allowed ${lo}:1 to ${hi}:1; recommended ${spec.recommended.width}×${spec.recommended.height}px).`,
+      ok: true,
+      warnings: [
+        spec.display === 'cover'
+          ? `Your image is ${ratio.toFixed(2)}:1 and this frame is about ${rec.toFixed(2)}:1 — it will be cropped to fill the frame. For the best result use about ${spec.recommended.width}×${spec.recommended.height}px.`
+          : `Your image is ${ratio.toFixed(2)}:1 and this frame is about ${rec.toFixed(2)}:1 — it will be shown whole inside the frame with a soft blurred background around it. For an edge-to-edge look use about ${spec.recommended.width}×${spec.recommended.height}px.`,
+      ],
     };
   }
-  const rec = spec.recommended.width / spec.recommended.height;
   const warnings = spec.display === 'cover' && Math.abs(ratio - rec) / rec > 0.15 ? [`Edges will be trimmed: your image is ${ratio.toFixed(2)}:1, the frame is about ${rec.toFixed(2)}:1.`] : [];
   return { ok: true, warnings };
 }

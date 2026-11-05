@@ -112,7 +112,8 @@ async function main() {
   const small = await create(sa, { creative: { headline: 'x', imageUrl: tiny }, publishNow: true });
   check('too-small image refused with the required size', small.status === 400 && /at least 1200×240/.test(small.json?.error || ''), small.json);
   const sq = await create(sa, { creative: { headline: 'x', imageUrl: square }, publishNow: true });
-  check('wrong proportions (square in a wide banner slot) refused', sq.status === 400 && /proportions/.test(sq.json?.error || ''), sq.json);
+  // Any shape is accepted (the frame fits it whole or trims it); only too-small images are refused.
+  check('other proportions accepted (square in a wide banner slot is fitted, not refused)', sq.status === 201, sq.json);
   const spoof = await create(sa, { creative: { headline: 'x', imageUrl: tiny, imageWidth: 2000, imageHeight: 600 }, publishNow: true });
   check('client-sent image sizes are ignored (server measures)', spoof.status === 400, spoof.json);
 
@@ -181,7 +182,7 @@ async function main() {
   check('moving a PENDING ad keeps it pending and off the storefront (no silent publish)', mv2.status === 200 && mv2.json?.data?.status === 'pending' && (await notIn(pend2.json?.data?.id)), mv2.json);
   const hero = await create(sa, { formatId: 'hero_banner', creative: { headline: 'wide', imageUrl: ultraWide }, publishNow: true });
   const mvHero = await call(sa, 'POST', `/ads/${hero.json?.data?.id}/move`, { placementId: 'HOME_HERO' });
-  check('move re-checks the creative: a 4.8:1 image is refused for the hero (max 4:1)', hero.status === 201 && mvHero.status === 400 && /proportions/.test(mvHero.json?.error || ''), mvHero.json);
+  check('move re-checks the creative: a 4.8:1 image may move to the hero (it is fitted)', hero.status === 201 && mvHero.status === 200, mvHero.json);
 
   // --- Other permissions ---------------------------------------------------------------------------------
   check('signed-out cannot list ads (401)', (await call(null, 'GET', '/ads/banners')).status === 401);

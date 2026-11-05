@@ -4,7 +4,7 @@ import { CheckCircle, Loader2, Plus, XCircle } from 'lucide-react';
 import { AD_PLACEMENTS, getAnyPlacementDef, getFormatDef, getPlacementDef } from '@/shared/ads/placementRegistry';
 import { inferHeroMediaType } from '@/shared/ads/heroMedia';
 import { useAuth } from '../../contexts/AuthContext';
-import { adsApi, type AdsApiRecord } from '../../services/adsApi';
+import { adsApi, type AdMetricsRow, type AdsApiRecord } from '../../services/adsApi';
 
 const SellerDeals = lazy(() => import('./SellerDeals'));
 
@@ -143,6 +143,87 @@ export default function BannerDirectAdsStudio() {
   );
 }
 
+const dhakaDay = (offsetDays = 0) => new Date(Date.now() + 6 * 3600_000 - offsetDays * 86400_000).toISOString().slice(0, 10);
+const RANGES = [
+  { key: '7', label: 'Last 7 days', from: () => dhakaDay(6) },
+  { key: '30', label: 'Last 30 days', from: () => dhakaDay(29) },
+  { key: 'all', label: 'All time', from: () => undefined },
+] as const;
+type RangeKey = (typeof RANGES)[number]['key'];
+const n = (v: number) => v.toLocaleString('en-US');
+const ctrText = (i: number, c: number) => (i > 0 ? `${((c / i) * 100).toFixed(1)}%` : '—');
+
+/** One ad's report: totals, per spot, per day. */
+function AdReportModal({ row, metrics, rangeLabel, onClose }: { row: AdsApiRecord; metrics: AdMetricsRow | undefined; rangeLabel: string; onClose: () => void }) {
+  const m = metrics ?? { adId: row.id, impressions: 0, clicks: 0, ctr: null, bySlot: {}, daily: [] };
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" onClick={onClose} data-testid="ad-report">
+      <div className="max-h-[85vh] w-full max-w-[560px] overflow-y-auto rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-1 text-[14px] font-extrabold text-[#111827]">Report · {row.advertisementReferenceId || row.id}</div>
+        <div className="mb-4 text-[11.5px] text-[#6B7280]">{row.title || 'Untitled ad'} · {rangeLabel}</div>
+        <div className="mb-4 grid grid-cols-3 gap-2">
+          {[
+            ['Views', n(m.impressions)],
+            ['Clicks', n(m.clicks)],
+            ['Click rate', ctrText(m.impressions, m.clicks)],
+          ].map(([k, v]) => (
+            <div key={k} className="rounded-lg border border-[#E8EDF2] bg-[#F9FAFB] px-3 py-2">
+              <div className="text-[10px] font-extrabold uppercase tracking-wide text-[#9CA3AF]">{k}</div>
+              <div className="text-[18px] font-extrabold text-[#111827]" data-testid={`ad-report-${k.toLowerCase().replace(' ', '-')}`}>{v}</div>
+            </div>
+          ))}
+        </div>
+        {Object.keys(m.bySlot).length > 1 ? (
+          <div className="mb-4">
+            <div className="mb-1.5 text-[11px] font-extrabold text-[#111827]">By spot</div>
+            {Object.entries(m.bySlot).map(([slot, s]) => (
+              <div key={slot} className="flex justify-between border-t border-[#F1F3F5] py-1.5 text-[11.5px]">
+                <span className="text-[#374151]">{getAnyPlacementDef(slot)?.sectionLabel ?? slot}</span>
+                <span className="font-bold">{n(s.impressions)} views · {n(s.clicks)} clicks · {ctrText(s.impressions, s.clicks)}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        <div className="mb-1.5 text-[11px] font-extrabold text-[#111827]">By day</div>
+        {m.daily.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-[#E2E8F0] px-3 py-4 text-center text-[11.5px] text-[#9CA3AF]">
+            No views yet in this period. Views are counted when at least half the ad is on screen for a second.
+          </div>
+        ) : (
+          <table className="w-full text-[11.5px]" data-testid="ad-report-daily">
+            <thead>
+              <tr className="text-left text-[10px] uppercase tracking-wide text-[#9CA3AF]">
+                <th className="py-1">Date</th>
+                <th className="py-1 text-right">Views</th>
+                <th className="py-1 text-right">Clicks</th>
+                <th className="py-1 text-right">Click rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...m.daily].reverse().map((d) => (
+                <tr key={d.date} className="border-t border-[#F1F3F5]">
+                  <td className="py-1.5">{d.date}</td>
+                  <td className="py-1.5 text-right font-bold">{n(d.impressions)}</td>
+                  <td className="py-1.5 text-right font-bold">{n(d.clicks)}</td>
+                  <td className="py-1.5 text-right">{ctrText(d.impressions, d.clicks)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <div className="mt-4 text-[10.5px] text-[#9CA3AF]">
+          A view = at least half of the ad on screen for 1 second; each counted once per page visit. Only live ads are counted. No personal data is stored. Dates are Bangladesh time.
+        </div>
+        <div className="mt-4 flex justify-end">
+          <button type="button" onClick={onClose} className="rounded-md border border-[#E8EDF2] px-3 py-1.5 text-[11.5px] font-extrabold">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BannerAdsList() {
   const navigate = useNavigate();
   const { profile } = useAuth();
@@ -174,6 +255,21 @@ function BannerAdsList() {
   const [confirm, setConfirm] = useState<{ kind: 'duplicate' | 'delete'; ids: string[]; openCopy?: boolean } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [range, setRange] = useState<RangeKey>('30');
+  const [metrics, setMetrics] = useState<Map<string, AdMetricsRow>>(new Map());
+  const [reportFor, setReportFor] = useState<AdsApiRecord | null>(null);
+  const rangeDef = RANGES.find((r) => r.key === range) ?? RANGES[1];
+
+  useEffect(() => {
+    let alive = true;
+    adsApi
+      .metrics(rangeDef.from())
+      .then((m) => alive && setMetrics(new Map(m.rows.map((r) => [r.adId, r]))))
+      .catch(() => alive && setMetrics(new Map()));
+    return () => {
+      alive = false;
+    };
+  }, [range, rows.length]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -380,6 +476,32 @@ function BannerAdsList() {
         </div>
       ) : null}
 
+      <div className="mb-3 flex flex-wrap items-center gap-3 rounded-[5px] border border-[#E8EDF2] bg-white px-3 py-2 text-[11.5px]" data-testid="ads-results-bar">
+        <span className="font-extrabold text-[#111827]">Results</span>
+        <select value={range} onChange={(e) => setRange(e.target.value as RangeKey)} className="rounded-md border border-[#E8EDF2] px-2 py-1 text-[11.5px]" data-testid="ads-results-range">
+          {RANGES.map((r) => (
+            <option key={r.key} value={r.key}>
+              {r.label}
+            </option>
+          ))}
+        </select>
+        {(() => {
+          let i = 0;
+          let c = 0;
+          metrics.forEach((m) => {
+            i += m.impressions;
+            c += m.clicks;
+          });
+          return (
+            <span className="text-[#374151]" data-testid="ads-results-total">
+              <b>{n(i)}</b> views · <b>{n(c)}</b> clicks · click rate <b>{ctrText(i, c)}</b>
+            </span>
+          );
+        })()}
+      </div>
+
+      {reportFor ? <AdReportModal row={reportFor} metrics={metrics.get(reportFor.id)} rangeLabel={rangeDef.label} onClose={() => setReportFor(null)} /> : null}
+
       {loading ? (
         <div className="flex items-center gap-2 text-[12px] text-[#6B7280]">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading…
@@ -399,7 +521,7 @@ function BannerAdsList() {
                   />
                 </th>
                 <th className="px-2 py-2.5 text-[10px] font-extrabold uppercase tracking-wide text-[#6B7280]">SL</th>
-                {['Creative', 'Advertiser', 'Format', 'Page', 'Placement', 'Owner', 'Status', 'Updated', 'Actions'].map(
+                {['Creative', 'Advertiser', 'Format', 'Page', 'Placement', 'Owner', 'Status', 'Results', 'Updated', 'Actions'].map(
                   (h) => (
                     <th
                       key={h}
@@ -414,7 +536,7 @@ function BannerAdsList() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-3 py-8 text-center text-[12px] text-[#9CA3AF]">
+                  <td colSpan={12} className="px-3 py-8 text-center text-[12px] text-[#9CA3AF]">
                     No banner / direct ads yet. Click Create Ad to open the Visual Builder.
                   </td>
                 </tr>
@@ -578,6 +700,21 @@ function BannerAdsList() {
                             </div>
                           )
                         ) : null}
+                      </td>
+                      <td className="px-3 py-2.5 text-[10.5px]" data-testid={`ads-results-${row.id}`}>
+                        {(() => {
+                          const m = metrics.get(row.id);
+                          const i = m?.impressions ?? 0;
+                          const c = m?.clicks ?? 0;
+                          return (
+                            <button type="button" onClick={() => setReportFor(row)} className="text-left hover:underline" title="Open the report">
+                              <div className="font-extrabold text-[#111827]">{n(i)} views</div>
+                              <div className="text-[#6B7280]">
+                                {n(c)} clicks · {ctrText(i, c)}
+                              </div>
+                            </button>
+                          );
+                        })()}
                       </td>
                       <td className="px-3 py-2.5 text-[10px] text-[#9CA3AF]">
                         {new Date(row.updatedAt).toLocaleString()}
