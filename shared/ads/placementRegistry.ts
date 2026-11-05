@@ -204,7 +204,7 @@ const WIDE_BANNER: AdCreativeSpec = {
   recommended: { width: 2000, height: 500 },
   min: { width: 1200, height: 240 },
   ratioRange: [2, 8],
-  howShown: 'Fixed banner frame: 4:1 across the content width on desktop (at most 300px tall) and 5:2 on phones. Your design is fitted whole — never cropped; any space it does not fill shows a soft blurred fill of the same image. Upload 4:1 (2000×500px) for an edge-to-edge banner. The orange CTA button sits on the right side, vertically centred — keep that area free of text.',
+  howShown: 'Fixed banner frame: 4:1 across the content width on desktop (at most 300px tall); on phones the frame follows your design’s own shape (2:1 to 4:1). Your design is fitted whole by default; you can choose to fill the desktop frame edge to edge instead. Upload 4:1 (2000×500px) for an edge-to-edge banner everywhere. The orange CTA button sits on the right, vertically centred (on phones: a small button in the bottom-right corner) — keep those areas free of text.',
 };
 
 /** Wide sponsored banner slot above a listing grid (same 4:1 frame as Products / Deals). */

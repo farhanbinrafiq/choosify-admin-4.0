@@ -210,12 +210,11 @@ export function AdSlotPreview({ placement, ad }: { placement: AdPlacementDef; ad
             style={{
               background: '#FF5B00',
               color: '#FFFFFF',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              right: phone ? 6 : 10,
-              fontSize: phone ? 7 : 8.5,
-              padding: phone ? '2px 6px' : '4px 9px',
-              borderRadius: 6,
+              // Phones: small pill in the bottom-right corner; larger screens: right, vertically centred.
+              ...(phone ? { bottom: 4, right: 4 } : { top: '50%', transform: 'translateY(-50%)', right: 10 }),
+              fontSize: phone ? 6 : 8.5,
+              padding: phone ? '1px 5px' : '4px 9px',
+              borderRadius: phone ? 4 : 6,
             }}
             data-testid={testId ? 'ad-preview-cta' : undefined}
           >
@@ -235,7 +234,7 @@ export function AdSlotPreview({ placement, ad }: { placement: AdPlacementDef; ad
           <div className="mx-auto w-[60%]">{frame(phoneAspect, undefined, true)}</div>
         </div>
         <div className="text-[10.5px] text-slate-500">
-          Your design is fitted whole (never cropped) inside the fixed frame; space it does not fill shows a blurred fill. The orange CTA button sits on the right, vertically centred, when a label and destination are set.
+          Your design is fitted whole (never cropped) inside the fixed frame; space it does not fill shows a blurred fill. The orange CTA button sits on the right, vertically centred (on phones: a small button in the bottom-right corner), when a label and destination are set.
           {ad.ctaLabel && ad.hasDestination === false ? (
             <span className="mt-1 block font-semibold text-amber-700" data-testid="ad-preview-cta-hint">
               The “{ad.ctaLabel}” button is hidden until you set a destination (step 3).
