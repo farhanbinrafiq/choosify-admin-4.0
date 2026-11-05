@@ -13,6 +13,7 @@ import { SYSTEM_SITE_PAGES, type SystemSitePage } from '@/shared/website/sitePag
 import { CUSTOM_BLOCK_LABELS, CUSTOM_SLUG_RE, blankBlock, blankCard, blankFaq, type CustomBlockType } from '@/shared/website/customPages';
 import type { CustomPageRow } from '../../../services/websiteStudioApi';
 import { uploadSiteAssetImage } from '../../../services/mediaUpload';
+import { LISTING_PAGES } from '@/shared/website/listingPages';
 
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 type Obj = { [k: string]: Json };
@@ -21,6 +22,11 @@ const HIDDEN_KEYS = new Set(['id', 'order', 'enabled']);
 
 /** Friendlier names for the model's field names. */
 const LABELS: Record<string, string> = {
+  intro: 'Intro line under the heading (optional)',
+  filterTitle: 'Filter panel title',
+  quickSpecsTitle: 'Quick Specs box title',
+  ctaStrip: 'Call-to-action strip under the list',
+  show: 'Show this strip',
   hero: 'Top of the page',
   badge: 'Small label above the title',
   title: 'Title',
@@ -365,6 +371,21 @@ export function SitePageEditor({ value, onChange, disabled }: { value: Obj; onCh
   );
 }
 
+/** Outline of a storefront listing page's words. */
+export function ListingPageOutline({ value }: { value: Obj }) {
+  const cta = (value?.ctaStrip || {}) as Obj;
+  return (
+    <div className="space-y-1.5 text-[11.5px]" data-testid="lp-outline">
+      {value?.eyebrow ? <div className="rounded-md bg-[#F4F7F9] px-2.5 py-1.5 text-[10px] font-extrabold uppercase tracking-wide text-[#6B7280]">{String(value.eyebrow)}</div> : null}
+      <div className="rounded-md border border-[#E8EDF2] bg-white px-2.5 py-1.5 text-[#374151]">{value?.intro ? String(value.intro) : <span className="text-[#9CA3AF]">No intro line</span>}</div>
+      {value?.filterTitle ? <div className="rounded-md border border-[#E8EDF2] bg-white px-2.5 py-1.5 font-semibold text-[#374151]">Filters: {String(value.filterTitle)}</div> : null}
+      <div className="rounded-md border border-[#E8EDF2] bg-white px-2.5 py-1.5 font-semibold text-[#374151]">
+        Call-to-action strip: {cta.show ? `${String(cta.heading || '')} → ${String(cta.buttonLabel || '')}` : 'hidden'}
+      </div>
+    </div>
+  );
+}
+
 /** Short outline of a page (version history "View" + side preview). */
 export function SitePageOutline({ value }: { value: Obj }) {
   const hero = (value?.hero || {}) as Obj;
@@ -594,8 +615,25 @@ export function PageList({
       {group('legal', 'Legal pages', 'Drafts for everyone; only Super Admin can publish.')}
       <div>
         <div className="mb-1.5 text-[10.5px] font-extrabold uppercase tracking-wide text-[#9CA3AF]">Storefront pages</div>
-        <div className="rounded-lg border border-dashed border-[#E2E8F0] px-3 py-2 text-[11px] text-[#9CA3AF]">
-          Categories, Products & Services, Brands, Recommendations, Deals, Creators, Compare — coming next.
+        <div className="mb-1.5 text-[10.5px] text-[#9CA3AF]">Labels, intro line and a call-to-action strip. Lists, filters and tabs stay automatic.</div>
+        <div className="space-y-1">
+          {LISTING_PAGES.map((p) => (
+            <button
+              key={p.docKey}
+              type="button"
+              onClick={() => onSelect(p.docKey)}
+              data-testid={`pg-listing-${p.key}`}
+              className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[12.5px] font-bold ${selected === p.docKey ? 'bg-[#FFF4EE] text-[#EF3C23]' : 'text-[#374151] hover:bg-[#F9FAFB]'}`}
+            >
+              <span className="min-w-0">
+                <span className="block truncate">{p.label}</span>
+                <span className="block truncate text-[10px] font-semibold text-[#9CA3AF]">{p.path}</span>
+              </span>
+              <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-extrabold uppercase ${publishedKeys.has(p.docKey) ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                {publishedKeys.has(p.docKey) ? 'Live' : 'Built-in'}
+              </span>
+            </button>
+          ))}
         </div>
       </div>
       <div>

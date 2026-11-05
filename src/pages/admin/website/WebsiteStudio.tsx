@@ -29,7 +29,8 @@ import { HeaderEditor, HeaderOutline } from './HeaderStudio';
 import { FooterEditor, FooterOutline } from './FooterStudio';
 import { SocialEditor, SocialOutline } from './SocialStudio';
 import type { FooterContent, NavigationContent, SocialContent } from './siteModel';
-import { CustomPageEditor, CustomPageOutline, PageList, SitePageEditor, SitePageOutline } from './PagesStudio';
+import { CustomPageEditor, CustomPageOutline, ListingPageOutline, PageList, SitePageEditor, SitePageOutline } from './PagesStudio';
+import { listingPageByDocKey } from '@/shared/website/listingPages';
 import type { CustomPageRow } from '../../../services/websiteStudioApi';
 import { SYSTEM_SITE_PAGES, sitePageByDocKey } from '@/shared/website/sitePages';
 
@@ -970,12 +971,13 @@ export default function WebsiteStudio() {
       );
     if (tab === 'pages') {
       const custom = customPages.find((p) => p.docKey === pageKey);
+      const listing = listingPageByDocKey(pageKey);
       const page = sitePageByDocKey(pageKey) ?? SYSTEM_SITE_PAGES[0];
       const published = new Set(docs.filter((d) => d.publishedVersion).map((d) => d.key));
       const list = (
         <div className="h-fit rounded-xl border border-[#E8EDF2] bg-white p-3 lg:sticky lg:top-4">
           <PageList
-            selected={custom ? custom.docKey : page.docKey}
+            selected={custom ? custom.docKey : listing ? listing.docKey : page.docKey}
             onSelect={(k) => {
               setPageMsg(null);
               setPageKey(k);
@@ -997,6 +999,28 @@ export default function WebsiteStudio() {
           ) : null}
         </div>
       );
+      if (listing) {
+        return (
+          <div className="grid gap-4 lg:grid-cols-[230px_minmax(0,1fr)]" data-testid="ws-pages">
+            {list}
+            <div className="min-w-0">
+              <DocumentWorkspace<Record<string, never>>
+                key={listing.docKey}
+                docKey={listing.docKey}
+                caps={caps}
+                title={`${listing.label} page`}
+                description={`The words on ${listing.path}: the small label above the list, an optional intro line, filter titles and an optional call-to-action strip under the list. Products, filters and tabs stay automatic.`}
+                Editor={SitePageEditor as unknown as React.ComponentType<EditorProps<Record<string, never>>>}
+                Preview={ListingPageOutline as unknown as React.ComponentType<{ value: Record<string, never> }>}
+                previewLabel="Page outline"
+                storefrontPreview
+                previewPage={`listing:${listing.key}`}
+                onPublished={() => refresh().catch(() => undefined)}
+              />
+            </div>
+          </div>
+        );
+      }
       if (custom) {
         const archived = custom.status === 'archived';
         return (

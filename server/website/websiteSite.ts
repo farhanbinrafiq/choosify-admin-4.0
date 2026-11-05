@@ -11,6 +11,7 @@ import { validateCompany, validateContent, type BrandAssets, type CompanySetting
 import type { FooterContent, NavigationContent, SocialContent } from './siteContent';
 import { SYSTEM_SITE_PAGES, sitePageByDocKey } from '../../shared/website/sitePages';
 import { normalizeCustomPage } from '../../shared/website/customPages';
+import { LISTING_PAGES, listingPageByDocKey, normalizeListingPage } from '../../shared/website/listingPages';
 
 export const SITE_DOCUMENT_KEYS = ['navigation', 'footer', 'social', 'company', 'brand_assets'] as const;
 export type SiteDocumentKey = (typeof SITE_DOCUMENT_KEYS)[number];
@@ -28,6 +29,8 @@ export type PublicCompany = {
 export type StorefrontSiteStudio = {
   /** Published information / legal pages, keyed like the storefront's SitePagesConfig. */
   sitePages?: Record<string, unknown>;
+  /** Published listing-page words (Categories, Brands, …), keyed by ListingPageKey. */
+  listingPages?: Record<string, unknown>;
   /** Preview only: one custom page draft, keyed by slug. */
   customPages?: Record<string, unknown>;
   navigation?: NavigationContent;
@@ -67,6 +70,13 @@ export function invalidateSiteStudioCache() {
 
 /** Page documents (information + legal pages) whose published content the storefront renders. */
 export const SITE_PAGE_DOC_KEYS = SYSTEM_SITE_PAGES.map((p) => p.docKey);
+/** Storefront listing pages (Website Studio → Pages → Storefront pages). */
+export const LISTING_DOC_KEYS = LISTING_PAGES.map((p) => p.docKey);
+
+function listingPart(docKey: string, content: unknown): Record<string, unknown> | null {
+  const page = listingPageByDocKey(docKey);
+  return page ? { [page.key]: normalizeListingPage(page.key, content) } : null;
+}
 
 function pagePart(docKey: string, content: unknown): Record<string, unknown> | null {
   const page = sitePageByDocKey(docKey);
@@ -94,6 +104,15 @@ export async function getPublishedSiteStudio(): Promise<StorefrontSiteStudio> {
       /* skipped → the storefront keeps that page's built-in content */
     }
   }
+  for (const key of LISTING_DOC_KEYS) {
+    try {
+      const pub = await getPublished(key);
+      const part = pub ? listingPart(key, pub.version.content) : null;
+      if (part) value.listingPages = { ...(value.listingPages || {}), ...part };
+    } catch {
+      /* skipped → the page keeps its built-in words */
+    }
+  }
   memo = { at: Date.now(), value };
   return value;
 }
@@ -104,6 +123,9 @@ export async function getDraftSiteStudio(key: SiteDocumentKey | string): Promise
   if (!doc || doc.draft === null) return null;
   memo = null;
   const base = await getPublishedSiteStudio();
+  if (LISTING_DOC_KEYS.includes(key)) {
+    return { ...base, listingPages: { ...(base.listingPages || {}), ...(listingPart(key, doc.draft) || {}) } };
+  }
   if (key.startsWith('page:') && !SITE_PAGE_DOC_KEYS.includes(key)) {
     return { ...base, customPages: { [key.slice(5)]: normalizeCustomPage(doc.draft) } };
   }

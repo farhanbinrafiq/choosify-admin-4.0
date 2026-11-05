@@ -11,6 +11,7 @@
 import { validateFooter, validateNavigation, validateSocial } from './siteContent';
 import { defaultsForSitePage, firstUnsafeLink, normalizeSitePage, sitePageByDocKey } from '../../shared/website/sitePages';
 import { defaultCustomPage, normalizeCustomPage } from '../../shared/website/customPages';
+import { defaultListingPage, listingPageByDocKey, normalizeListingPage } from '../../shared/website/listingPages';
 
 export type WebsiteDocumentKind =
   | 'company'
@@ -613,6 +614,8 @@ export function defaultsForKind(kind: WebsiteDocumentKind, key?: string): unknow
   if (kind === 'page' || kind === 'legal') {
     const page = key ? sitePageByDocKey(key) : undefined;
     if (page) return defaultsForSitePage(page.pageKey);
+    const listing = key ? listingPageByDocKey(key) : undefined;
+    if (listing) return defaultListingPage(listing.key);
     // "Your own pages" (page:<slug>)
     if (kind === 'page' && key?.startsWith('page:')) {
       const slug = key.slice(5);
@@ -634,6 +637,17 @@ export function validateContent(kind: WebsiteDocumentKind, content: unknown, key
   assertSafeStructuredContent(content);
   if (kind === 'page' || kind === 'legal') {
     const page = key ? sitePageByDocKey(key) : undefined;
+    const listing = key ? listingPageByDocKey(key) : undefined;
+    if (listing) {
+      // Storefront listing pages: plain words + one optional CTA strip.
+      const normalized = normalizeListingPage(listing.key, content);
+      const bad = firstUnsafeLink(normalized);
+      if (bad) throw new WebsiteContentError(`Links must start with /, #, mailto:, tel: or https:// ("${bad.value.slice(0, 60)}")`, bad.path);
+      if (normalized.ctaStrip.show && (!normalized.ctaStrip.buttonLabel.trim() || !normalized.ctaStrip.buttonHref)) {
+        throw new WebsiteContentError('A shown call-to-action needs button text and a button link', 'ctaStrip.buttonHref');
+      }
+      return normalized;
+    }
     if (!page && kind === 'page' && key?.startsWith('page:')) {
       // "Your own pages": strict block model; links must be safe.
       const normalized = normalizeCustomPage(content);

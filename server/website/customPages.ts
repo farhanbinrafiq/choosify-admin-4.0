@@ -9,7 +9,7 @@
 import { and, eq, ne } from 'drizzle-orm';
 import { db } from '../db/client';
 import { websiteDocuments, websitePages, websiteVersions } from '../db/schema';
-import { CUSTOM_SLUG_RE, RESERVED_CUSTOM_SLUGS, defaultCustomPage, normalizeCustomPage } from '../../shared/website/customPages';
+import { CUSTOM_SLUG_RE, defaultCustomPage, isReservedCustomSlug, normalizeCustomPage } from '../../shared/website/customPages';
 import { WebsiteStoreError, ensureDocument, saveDraft } from './websiteStore';
 
 const TTL_MS = 60_000;
@@ -81,7 +81,7 @@ export async function createCustomPage(slugIn: string, titleIn: string, userId: 
   const slug = String(slugIn || '').trim().toLowerCase();
   const title = String(titleIn || '').trim().slice(0, 120);
   if (!CUSTOM_SLUG_RE.test(slug) || slug.length > 60) throw new WebsiteStoreError('Use lowercase letters, numbers and hyphens for the address (e.g. summer-sale)', 400, 'INVALID_SLUG');
-  if (RESERVED_CUSTOM_SLUGS.has(slug)) throw new WebsiteStoreError('That address is already used by a built-in page', 409, 'SLUG_TAKEN');
+  if (isReservedCustomSlug(slug)) throw new WebsiteStoreError('That address is already used by a built-in page', 409, 'SLUG_TAKEN');
   if (title.length < 2) throw new WebsiteStoreError('Give the page a title', 400, 'INVALID_TITLE');
   const docKey = customDocKey(slug);
   const existing = await db.select().from(websitePages).where(eq(websitePages.slug, slug)).limit(1);

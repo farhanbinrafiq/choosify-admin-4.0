@@ -36,6 +36,8 @@ export const CUSTOM_BLOCK_LABELS: Record<CustomBlockType, string> = {
 export const CUSTOM_SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 /** Slugs the built-in pages already use as page:<slug> documents. */
 export const RESERVED_CUSTOM_SLUGS = new Set(['about', 'contact', 'suggest-brand', 'partnership', 'advertise', 'terms', 'privacy', 'new', 'preview']);
+/** listing-* addresses belong to the storefront listing pages' documents (page:listing-<key>). */
+export const isReservedCustomSlug = (slug: string) => RESERVED_CUSTOM_SLUGS.has(slug) || slug.startsWith('listing-');
 
 const newId = (p: string) => `${p}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 

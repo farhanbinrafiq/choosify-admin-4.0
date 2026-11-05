@@ -41,7 +41,7 @@ import {
 } from './websiteStore';
 import { PREVIEW_TOKEN_TTL_SECONDS, signPreviewToken, verifyPreviewToken } from './previewTokens';
 import { checkHomepageReferences, getDraftStorefrontHomepage, getStorefrontHomepage, invalidateHomepageCache } from './websiteHomepage';
-import { SITE_DOCUMENT_KEYS, SITE_PAGE_DOC_KEYS, getDraftSiteStudio, getPublishedSiteStudio, invalidateSiteStudioCache, type SiteDocumentKey } from './websiteSite';
+import { SITE_DOCUMENT_KEYS, SITE_PAGE_DOC_KEYS, LISTING_DOC_KEYS, getDraftSiteStudio, getPublishedSiteStudio, invalidateSiteStudioCache, type SiteDocumentKey } from './websiteSite';
 import { paymentCapabilities, unavailablePaymentMethods, type FooterContent } from './siteContent';
 import { catalogStore } from '../../lib/vercel-catalog/catalogStore';
 import { siteForViewer } from '../storefront/curationAuth';
@@ -100,7 +100,7 @@ function afterPublish(kind: WebsiteDocumentKind, key?: string) {
 function resolveKey(req: Request, res: Response): { key: string; kind: WebsiteDocumentKind } | null {
   const key = String(req.params.key || '').trim();
   const kind = kindForKey(key);
-  if (!kind || ((kind === 'page' || kind === 'legal') && !SITE_PAGE_DOC_KEYS.includes(key) && !isCustomPageKey(key))) {
+  if (!kind || ((kind === 'page' || kind === 'legal') && !SITE_PAGE_DOC_KEYS.includes(key) && !LISTING_DOC_KEYS.includes(key) && !isCustomPageKey(key))) {
     res.status(404).json({ error: 'Unknown website document', code: 'UNKNOWN_DOCUMENT' });
     return null;
   }
@@ -521,7 +521,7 @@ websiteRouter.get('/catalog/cms-preview/session/:token', async (req, res) => {
   res.setHeader('X-Robots-Tag', 'noindex, nofollow');
   const token = String(req.params.token || '');
   // The token names ONE document; only that document's draft is shown, everything else published.
-  const previewable = ['homepage', ...SITE_DOCUMENT_KEYS, ...SITE_PAGE_DOC_KEYS, ...customPageKeysSync()];
+  const previewable = ['homepage', ...SITE_DOCUMENT_KEYS, ...SITE_PAGE_DOC_KEYS, ...LISTING_DOC_KEYS, ...customPageKeysSync()];
   let claims: ReturnType<typeof verifyPreviewToken> = null;
   for (const k of previewable) {
     claims = token ? verifyPreviewToken(token, k) : null;
