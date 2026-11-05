@@ -10,6 +10,7 @@ import {
   getPlacementDef,
   listPages,
   POPUP_PAGES,
+  GRID_EVERY_CHOICES,
   type AdFormatId,
   type AdPlacementDef,
 } from '@/shared/ads/placementRegistry';
@@ -138,6 +139,8 @@ export default function AdsVisualBuilder() {
   const [popupPages, setPopupPages] = useState<string[]>(['all']);
   const [popupMax, setPopupMax] = useState(1);
   const [popupDelay, setPopupDelay] = useState(3);
+  /** In-grid cards: after every N cards (0 = once at the end). */
+  const [gridEvery, setGridEvery] = useState(8);
   const [imageUrl, setImageUrl] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
   const [posterUrl, setPosterUrl] = useState('');
@@ -255,6 +258,7 @@ export default function AdsVisualBuilder() {
       setPopupPages(Array.isArray(c.popupPages) && c.popupPages.length ? (c.popupPages as string[]) : ['all']);
       setPopupMax(Number(c.popupMaxPerSession) || 1);
       setPopupDelay(c.popupDelaySec === undefined ? 3 : Number(c.popupDelaySec) || 0);
+      setGridEvery(c.gridEvery === undefined ? 8 : Number(c.gridEvery));
     }
     {
       const f = (ad.creative as Record<string, unknown> | undefined)?.focusY;
@@ -430,6 +434,7 @@ export default function AdsVisualBuilder() {
       pagePosition: placementDef?.positions?.length ? pagePosition || placementDef.defaultPosition : undefined,
       showText: formatDef?.imageLed && fields.has('headline') ? showText : undefined,
       fit: placementDef?.creative?.display === 'natural' && placementDef.slotKey !== 'popup' ? fit : undefined,
+      gridEvery: placementDef?.slotKey === 'grid_card' ? gridEvery : undefined,
       popupPages: formatId === 'popup' ? popupPages : undefined,
       popupMaxPerSession: formatId === 'popup' ? popupMax : undefined,
       popupDelaySec: formatId === 'popup' ? popupDelay : undefined,
@@ -558,6 +563,10 @@ export default function AdsVisualBuilder() {
         saved = await adsApi.updateAd(id, patch);
         if (mode === 'submit' && saved.status === 'draft') {
           saved = await adsApi.submitForApproval(id);
+        }
+        // Saving alone never changes the status: Publish must also make a draft / paused ad live.
+        if (mode === 'publish' && saved.status !== 'active') {
+          saved = await adsApi.publishAd(id);
         }
       } else {
         if (mode === 'submit') {
@@ -1217,6 +1226,23 @@ export default function AdsVisualBuilder() {
                 <span className="rounded bg-[#F3F4F6] px-2 py-1 font-mono">{placementId}{pagePosition ? ` · ${pagePosition}` : ''}</span>
               </div>
             </div>
+            {placementDef?.slotKey === 'grid_card' ? (
+              <div className="mt-3 rounded-lg border-2 border-[#C4B5FD] bg-[#F5F3FF] px-3 py-2.5" data-testid="grid-rules">
+                <label className="block text-[11.5px] font-extrabold text-[#111827]">
+                  How often in the grid
+                  <select value={gridEvery} onChange={(e) => setGridEvery(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-[#E8EDF2] bg-white px-3 py-2 text-[12px] font-semibold" data-testid="grid-every">
+                    {GRID_EVERY_CHOICES.map((n) => (
+                      <option key={n} value={n}>
+                        {n === 0 ? 'Once, after the last card' : `After every ${n} cards`}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="mt-1 text-[10.5px] text-[#6B7280]">
+                  The ad repeats through the list (e.g. after every 8 cards = about every 2 rows on desktop). If several ads are booked here they take turns. With fewer cards than that, it shows once after the last card.
+                </div>
+              </div>
+            ) : null}
             {formatId === 'popup' ? (
               <div className="mt-3 rounded-lg border-2 border-[#C4B5FD] bg-[#F5F3FF] px-3 py-2.5" data-testid="popup-rules">
                 <div className="text-[11.5px] font-extrabold text-[#111827]">Pop-up rules</div>

@@ -41,7 +41,7 @@ import {
 } from './websiteStore';
 import { PREVIEW_TOKEN_TTL_SECONDS, signPreviewToken, verifyPreviewToken } from './previewTokens';
 import { checkHomepageReferences, getDraftStorefrontHomepage, getStorefrontHomepage, invalidateHomepageCache } from './websiteHomepage';
-import { SITE_DOCUMENT_KEYS, getDraftSiteStudio, getPublishedSiteStudio, invalidateSiteStudioCache, type SiteDocumentKey } from './websiteSite';
+import { SITE_DOCUMENT_KEYS, SITE_PAGE_DOC_KEYS, getDraftSiteStudio, getPublishedSiteStudio, invalidateSiteStudioCache, type SiteDocumentKey } from './websiteSite';
 import { paymentCapabilities, unavailablePaymentMethods, type FooterContent } from './siteContent';
 import { catalogStore } from '../../lib/vercel-catalog/catalogStore';
 import { siteForViewer } from '../storefront/curationAuth';
@@ -86,14 +86,14 @@ async function publishBlockers(kind: WebsiteDocumentKind, content: unknown): Pro
 /** Clears server-side caches that serve published content, so the storefront updates at once. */
 function afterPublish(kind: WebsiteDocumentKind) {
   if (kind === 'homepage') invalidateHomepageCache();
-  if ((SITE_DOCUMENT_KEYS as readonly string[]).includes(kind) || kind === 'brand_assets') invalidateSiteStudioCache();
+  if ((SITE_DOCUMENT_KEYS as readonly string[]).includes(kind) || kind === 'brand_assets' || kind === 'page' || kind === 'legal') invalidateSiteStudioCache();
 }
 
 /** Resolves :key to its kind or answers 404. */
 function resolveKey(req: Request, res: Response): { key: string; kind: WebsiteDocumentKind } | null {
   const key = String(req.params.key || '').trim();
   const kind = kindForKey(key);
-  if (!kind) {
+  if (!kind || ((kind === 'page' || kind === 'legal') && !SITE_PAGE_DOC_KEYS.includes(key))) {
     res.status(404).json({ error: 'Unknown website document', code: 'UNKNOWN_DOCUMENT' });
     return null;
   }
@@ -115,10 +115,10 @@ const revisionOf = (req: Request): number | null => {
  * it is shown normalised to the Studio shape (read-only — stored rows are never rewritten here).
  * Anything that fails today's validation is returned as stored so nothing is hidden.
  */
-function presentable(kind: WebsiteDocumentKind, content: unknown): unknown {
-  if (!['homepage', 'navigation', 'footer', 'social'].includes(kind) || content === null || content === undefined) return content;
+function presentable(kind: WebsiteDocumentKind, content: unknown, key?: string): unknown {
+  if (!['homepage', 'navigation', 'footer', 'social', 'page', 'legal'].includes(kind) || content === null || content === undefined) return content;
   try {
-    return validateContent(kind, content);
+    return validateContent(kind, content, key);
   } catch {
     return content;
   }
@@ -129,7 +129,7 @@ function documentView(doc: Awaited<ReturnType<typeof getDocument>>, kind: Websit
     key: doc?.key,
     kind,
     editable: EDITABLE_KINDS.has(kind),
-    draft: presentable(kind, doc?.draft ?? null),
+    draft: presentable(kind, doc?.draft ?? null, doc?.key),
     hasDraft: Boolean(doc && doc.draft !== null),
     draftRevision: doc?.draftRevision ?? 0,
     draftBaseVersion: doc?.draftBaseVersion ?? null,
@@ -198,8 +198,8 @@ websiteRouter.get('/website/documents/:key', ...requireCmsEdit, async (req, res)
         ...documentView(doc, r.kind),
         key: r.key,
         latestVersion: await latestVersionNumber(r.key),
-        published: published ? { version: published.version, content: presentable(r.kind, published.content), publishedAt: published.publishedAt, publishedByUserId: published.publishedByUserId } : null,
-        defaults: defaultsForKind(r.kind),
+        published: published ? { version: published.version, content: presentable(r.kind, published.content, r.key), publishedAt: published.publishedAt, publishedByUserId: published.publishedByUserId } : null,
+        defaults: defaultsForKind(r.kind, r.key),
       },
     });
   } catch (e) {
@@ -233,7 +233,7 @@ websiteRouter.get('/website/documents/:key/versions/:version', ...requireCmsEdit
       res.status(404).json({ error: 'Version not found', code: 'VERSION_NOT_FOUND' });
       return;
     }
-    res.json({ data: { ...version, content: presentable(r.kind, version.content) } });
+    res.json({ data: { ...version, content: presentable(r.kind, version.content, r.key) } });
   } catch (e) {
     sendError(res, e);
   }
@@ -254,7 +254,7 @@ websiteRouter.put('/website/documents/:key/draft', ...requireCmsEdit, async (req
     return;
   }
   try {
-    const content = validateContent(r.kind, req.body?.content);
+    const content = validateContent(r.kind, req.body?.content, r.key);
     const doc = await saveDraft(r.key, r.kind, content, expected, req.userId ?? null);
     Logger.audit('website.draft_saved', { actorId: req.userId, key: r.key, revision: doc.draftRevision });
     res.json({ data: documentView(doc, r.kind) });
@@ -286,7 +286,7 @@ websiteRouter.post('/website/documents/:key/restore-defaults', ...requireCmsEdit
   noStore(res);
   const r = resolveKey(req, res);
   if (!r) return;
-  const defaults = defaultsForKind(r.kind);
+  const defaults = defaultsForKind(r.kind, r.key);
   if (!EDITABLE_KINDS.has(r.kind) || defaults === null) {
     res.status(409).json({ error: 'No defaults to restore for this part of the website', code: 'NO_DEFAULTS' });
     return;
@@ -297,7 +297,7 @@ websiteRouter.post('/website/documents/:key/restore-defaults', ...requireCmsEdit
     return;
   }
   try {
-    const doc = await saveDraft(r.key, r.kind, validateContent(r.kind, defaults), expected, req.userId ?? null);
+    const doc = await saveDraft(r.key, r.kind, validateContent(r.kind, defaults, r.key), expected, req.userId ?? null);
     Logger.audit('website.defaults_restored_to_draft', { actorId: req.userId, key: r.key });
     res.json({ data: documentView(doc, r.kind) });
   } catch (e) {
@@ -330,7 +330,7 @@ websiteRouter.post('/website/documents/:key/publish', ...requireCmsEdit, async (
       res.status(409).json({ error: 'There is no draft to publish', code: 'NO_DRAFT' });
       return;
     }
-    const content = validateContent(r.kind, doc.draft);
+    const content = validateContent(r.kind, doc.draft, r.key);
     const blockers = await publishBlockers(r.kind, content);
     if (blockers.length) {
       res.status(422).json({ error: `Fix these before publishing: ${blockers.join('; ')}`, code: 'PUBLISH_BLOCKED', problems: blockers });
@@ -371,7 +371,7 @@ websiteRouter.post('/website/documents/:key/rollback', ...requireCmsEdit, async 
       return;
     }
     // Re-validate: an old version must still satisfy today's rules before it goes public again.
-    const content = validateContent(r.kind, old.content);
+    const content = validateContent(r.kind, old.content, r.key);
     const blockers = await publishBlockers(r.kind, content);
     if (blockers.length) {
       res.status(422).json({ error: `This version cannot go live again: ${blockers.join('; ')}`, code: 'PUBLISH_BLOCKED', problems: blockers });
@@ -463,7 +463,7 @@ websiteRouter.get('/catalog/cms-preview/session/:token', async (req, res) => {
   res.setHeader('X-Robots-Tag', 'noindex, nofollow');
   const token = String(req.params.token || '');
   // The token names ONE document; only that document's draft is shown, everything else published.
-  const previewable = ['homepage', ...SITE_DOCUMENT_KEYS] as const;
+  const previewable = ['homepage', ...SITE_DOCUMENT_KEYS, ...SITE_PAGE_DOC_KEYS];
   let claims: ReturnType<typeof verifyPreviewToken> = null;
   for (const k of previewable) {
     claims = token ? verifyPreviewToken(token, k) : null;
@@ -476,7 +476,7 @@ websiteRouter.get('/catalog/cms-preview/session/:token', async (req, res) => {
   try {
     const isHome = claims.key === 'homepage';
     const homepage = isHome ? await getDraftStorefrontHomepage() : await getStorefrontHomepage();
-    const studio = isHome ? await getPublishedSiteStudio() : await getDraftSiteStudio(claims.key as SiteDocumentKey);
+    const studio = isHome ? await getPublishedSiteStudio() : await getDraftSiteStudio(claims.key);
     if (!homepage || !studio) {
       res.status(404).json({ error: 'There is no draft to preview', code: 'NO_DRAFT' });
       return;

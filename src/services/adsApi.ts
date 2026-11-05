@@ -187,6 +187,9 @@ export const adsApi = {
 
   getAd: (id: string) => request<AdsApiRecord>(`/ads/${encodeURIComponent(id)}`),
 
+  /** Admin: publish / resume a banner ad (draft, approved, paused, disabled → live); refused with the reason if it cannot be shown. */
+  publishAd: (id: string) => request<AdsApiRecord>(`/ads/${encodeURIComponent(id)}/publish`, 'POST', {}),
+
   /** Draft copy of a banner / direct ad (same design, text, link and place) — place it elsewhere, then publish. */
   duplicateAd: (id: string) => request<AdsApiRecord>(`/ads/${encodeURIComponent(id)}/duplicate`, 'POST', {}),
 

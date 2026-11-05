@@ -39,6 +39,8 @@ export type PublicAd = {
   position?: string;
   /** Pop-up rules (pages it shows on, times per visit, delay). */
   popup?: { pages: string[]; maxPerSession: number; delaySec: number };
+  /** In-grid cards: after every N cards (0 = once, after the last card). */
+  gridEvery?: number;
   /** Image banners: draw headline + subtext over the image. */
   showText?: boolean;
   /** Wide banners on desktop: fill the frame edge to edge (crop top/bottom) instead of showing the whole design. */
@@ -165,6 +167,7 @@ export function toPublicAd(ad: AdRecord, origin = ''): PublicAd {
     focusY: slot.creative?.display === 'natural' && c.fit === 'fill' && (c.focusY === 'top' || c.focusY === 'bottom') ? c.focusY : undefined,
     sponsorLogoUrl: SAFE_IMAGE(c.logoUrl) ? absoluteMedia(c.logoUrl, origin) : undefined,
     position: resolvePagePosition(slot, c.pagePosition),
+    gridEvery: slot.slotKey === 'grid_card' ? (Number.isFinite(Number(c.gridEvery)) ? Number(c.gridEvery) : 8) : undefined,
     popup:
       format.formatId === 'popup'
         ? {

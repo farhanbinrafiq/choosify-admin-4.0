@@ -276,7 +276,7 @@ function BannerAdsList() {
     }
   };
 
-  const act = async (id: string, action: 'approve' | 'reject' | 'pause' | 'disable') => {
+  const act = async (id: string, action: 'approve' | 'reject' | 'pause' | 'disable' | 'publish') => {
     setBusyId(id);
     setError(null);
     try {
@@ -284,6 +284,7 @@ function BannerAdsList() {
       if (action === 'reject') await adsApi.rejectBanner(id, 'Rejected by admin');
       if (action === 'pause') await adsApi.pauseAd(id);
       if (action === 'disable') await adsApi.disableAd(id);
+      if (action === 'publish') await adsApi.publishAd(id);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Action failed');
@@ -426,8 +427,8 @@ function BannerAdsList() {
                     creative.videoUrl || creative.imageUrl,
                     creative.mediaType,
                   );
-                  const mediaLabel =
-                    mediaType === 'video' ? 'Video' : mediaType === 'gif' ? 'GIF' : 'Image';
+                  const textOnly = Boolean(format && !format.imageLed);
+                  const mediaLabel = textOnly ? 'Text' : mediaType === 'video' ? 'Video' : mediaType === 'gif' ? 'GIF' : 'Image';
                   const thumbUrl =
                     mediaType === 'video'
                       ? creative.posterUrl || creative.imageUrl
@@ -457,18 +458,32 @@ function BannerAdsList() {
                           onClick={() => navigate(`/admin/ads-studio/${encodeURIComponent(row.id)}/edit`)}
                           className="flex items-center gap-2 text-left"
                         >
-                          <div
-                            className="h-10 w-14 shrink-0 rounded bg-[#F3F4F6]"
-                            style={
-                              thumbUrl
-                                ? {
-                                    backgroundImage: `url(${thumbUrl})`,
-                                    backgroundSize: 'cover',
-                                    backgroundPosition: 'center',
-                                  }
-                                : undefined
-                            }
-                          />
+                          {textOnly ? (
+                            <div
+                              className="flex h-10 w-14 shrink-0 items-center justify-center rounded text-[13px] font-extrabold"
+                              style={{ background: 'linear-gradient(135deg,#2A1846,#FF5B00)', color: '#FFFFFF' }}
+                              title="Text ad — this format has no image (headline + button on a gradient)"
+                              data-testid={`ads-thumb-text-${row.id}`}
+                            >
+                              Aa
+                            </div>
+                          ) : (
+                            <div
+                              className="flex h-10 w-14 shrink-0 items-center justify-center rounded bg-[#F3F4F6] text-[8.5px] font-extrabold uppercase text-amber-700"
+                              style={
+                                thumbUrl
+                                  ? {
+                                      backgroundImage: `url(${thumbUrl})`,
+                                      backgroundSize: 'cover',
+                                      backgroundPosition: 'center',
+                                    }
+                                  : undefined
+                              }
+                              title={thumbUrl ? undefined : 'No image uploaded yet — this format needs one before it can go live'}
+                            >
+                              {thumbUrl ? null : 'No image'}
+                            </div>
+                          )}
                           <div>
                             <div className="text-[12px] font-bold text-[#111827]">{row.title}</div>
                             <div className="flex items-center gap-1.5 mt-0.5">
@@ -585,6 +600,17 @@ function BannerAdsList() {
                                 <XCircle className="h-3 w-3" /> Reject
                               </button>
                             </>
+                          ) : null}
+                          {isAdmin && (row.kind === 'banner' || row.kind === 'external') && ['draft', 'approved', 'paused', 'disabled'].includes(row.status) ? (
+                            <button
+                              type="button"
+                              disabled={busyId === row.id}
+                              onClick={() => void act(row.id, 'publish')}
+                              className="rounded-md bg-emerald-600 px-2 py-1 text-[10px] font-extrabold text-white"
+                              data-testid={`ads-publish-${row.id}`}
+                            >
+                              {row.status === 'paused' || row.status === 'disabled' ? 'Resume' : 'Publish'}
+                            </button>
                           ) : null}
                           {isAdmin && row.status === 'active' ? (
                             <button

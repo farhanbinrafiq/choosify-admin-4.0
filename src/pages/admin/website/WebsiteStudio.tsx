@@ -29,14 +29,17 @@ import { HeaderEditor, HeaderOutline } from './HeaderStudio';
 import { FooterEditor, FooterOutline } from './FooterStudio';
 import { SocialEditor, SocialOutline } from './SocialStudio';
 import type { FooterContent, NavigationContent, SocialContent } from './siteModel';
+import { PageList, SitePageEditor, SitePageOutline } from './PagesStudio';
+import { SYSTEM_SITE_PAGES, sitePageByDocKey } from '@/shared/website/sitePages';
 
 // Deals Banners are edited inside the versioned Homepage (Today's Deals section) since Phase 3;
 // the old live-saving editor tab is retired.
-type TabKey = 'overview' | 'homepage' | 'navigation' | 'footer' | 'social' | 'company' | 'brand_assets' | 'history';
+type TabKey = 'overview' | 'homepage' | 'pages' | 'navigation' | 'footer' | 'social' | 'company' | 'brand_assets' | 'history';
 
 const TABS: Array<{ key: TabKey; label: string }> = [
   { key: 'overview', label: 'Overview' },
   { key: 'homepage', label: 'Homepage' },
+  { key: 'pages', label: 'Pages' },
   { key: 'navigation', label: 'Header & Navigation' },
   { key: 'footer', label: 'Footer' },
   { key: 'social', label: 'Social Links' },
@@ -182,6 +185,7 @@ function DocumentWorkspace<T>({
   storefrontPreview = false,
   previewLabel = 'Live preview of your edits',
   wide = false,
+  previewPage,
 }: {
   docKey: string;
   caps: WebsiteCapabilities;
@@ -195,6 +199,8 @@ function DocumentWorkspace<T>({
   previewLabel?: string;
   /** Storefront-mirror editors take the full width; outline + history go below. */
   wide?: boolean;
+  /** Page documents: preview opens that page (storefront /cms-preview?page=<key>). */
+  previewPage?: string;
 }) {
   const [doc, setDoc] = useState<WebsiteDocument<T> | null>(null);
   const [working, setWorking] = useState<T | null>(null);
@@ -312,7 +318,7 @@ function DocumentWorkspace<T>({
                   void run('preview', async () => {
                     try {
                       const t = await websiteStudioApi.previewToken(docKey);
-                      const url = `${STOREFRONT_URL}/cms-preview?token=${encodeURIComponent(t.token)}`;
+                      const url = `${STOREFRONT_URL}/cms-preview?token=${encodeURIComponent(t.token)}${previewPage ? `&page=${encodeURIComponent(previewPage)}` : ''}`;
                       setPreviewLink({ url, expiresAt: t.expiresAt });
                       if (win) win.location.href = url;
                     } catch (e) {
@@ -877,6 +883,7 @@ function PublishHistory({ rows }: { rows: WebsitePublication[] }) {
 
 export default function WebsiteStudio() {
   const [tab, setTab] = useState<TabKey>('overview');
+  const [pageKey, setPageKey] = useState<string>(SYSTEM_SITE_PAGES[0].docKey);
   const [caps, setCaps] = useState<WebsiteCapabilities | null>(null);
   const [docs, setDocs] = useState<WebsiteDocumentSummary[]>([]);
   const [history, setHistory] = useState<WebsitePublication[]>([]);
@@ -913,6 +920,34 @@ export default function WebsiteStudio() {
           onPublished={() => refresh().catch(() => undefined)}
         />
       );
+    if (tab === 'pages') {
+      const page = sitePageByDocKey(pageKey) ?? SYSTEM_SITE_PAGES[0];
+      const published = new Set(docs.filter((d) => d.publishedVersion).map((d) => d.key));
+      return (
+        <div className="grid gap-4 lg:grid-cols-[230px_minmax(0,1fr)]" data-testid="ws-pages">
+          <div className="h-fit rounded-xl border border-[#E8EDF2] bg-white p-3 lg:sticky lg:top-4">
+            <PageList selected={page.docKey} onSelect={setPageKey} publishedKeys={published} />
+          </div>
+          <div className="min-w-0">
+            <DocumentWorkspace<Record<string, never>>
+              key={page.docKey}
+              docKey={page.docKey}
+              caps={caps}
+              title={`${page.label} page`}
+              description={`Everything written on ${page.path} — headings, texts, cards, links, form labels and messages. The page keeps its design; ${
+                page.group === 'legal' ? 'legal pages are published by Super Admin only.' : 'publishing updates the live page.'
+              }`}
+              Editor={SitePageEditor as unknown as React.ComponentType<EditorProps<Record<string, never>>>}
+              Preview={SitePageOutline as unknown as React.ComponentType<{ value: Record<string, never> }>}
+              previewLabel="Page outline"
+              storefrontPreview
+              previewPage={page.pageKey}
+              onPublished={() => refresh().catch(() => undefined)}
+            />
+          </div>
+        </div>
+      );
+    }
     if (tab === 'navigation')
       return (
         <DocumentWorkspace<NavigationContent>
@@ -986,7 +1021,7 @@ export default function WebsiteStudio() {
         onPublished={() => refresh().catch(() => undefined)}
       />
     );
-  }, [caps, tab, docs, history, refresh]);
+  }, [caps, tab, docs, history, refresh, pageKey]);
 
   return (
     <div className="mx-auto max-w-[1200px] px-4 py-5 md:px-6" data-testid="website-studio">

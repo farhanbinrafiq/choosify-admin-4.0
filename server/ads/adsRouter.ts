@@ -50,7 +50,7 @@ import {
 import type { AdCreative, AdRecord, AdsOwnerRole } from './types';
 import { deliverableAdsBySlot, deliveryProblems, probeImageSize, ACTIVE_SLOT_IDS } from './adDelivery';
 import { adsStore } from './adsStore';
-import { checkCreativeFit, getAnyPlacementDef, getFormatDef, getPlacementDef, assertFormatPlacementCompatible, resolvePagePosition, POPUP_PAGES } from '../../shared/ads/placementRegistry';
+import { checkCreativeFit, getAnyPlacementDef, getFormatDef, getPlacementDef, assertFormatPlacementCompatible, resolvePagePosition, POPUP_PAGES, GRID_EVERY_CHOICES } from '../../shared/ads/placementRegistry';
 
 /**
  * Measures the creative image on the SERVER (client-sent sizes are never trusted) and checks it
@@ -71,6 +71,12 @@ async function measuredCreative(creative: unknown, formatId: string | undefined,
     else c.pagePosition = pos;
   }
   if (c.fit !== undefined && c.fit !== 'fill' && c.fit !== 'whole') delete c.fit;
+  if (slot?.slotKey === 'grid_card') {
+    const n = Math.round(Number(c.gridEvery));
+    c.gridEvery = GRID_EVERY_CHOICES.includes(n) ? n : 8;
+  } else {
+    delete c.gridEvery;
+  }
   if (format?.formatId === 'popup') {
     const allowed = new Set(['all', ...POPUP_PAGES.map((p) => p.key)]);
     const pages = Array.isArray(c.popupPages) ? [...new Set(c.popupPages.map(String).filter((k) => allowed.has(k)))] : [];
@@ -488,6 +494,36 @@ adsRouter.post('/ads/:id/submit', ...requireAuth, async (req, res) => {
   try {
     const data = await submitAdForApproval(req.params.id, actorOf(req));
     res.json({ success: true, data });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+/**
+ * Publish (or resume) a banner / direct ad: draft, approved, paused, disabled or pending → active.
+ * Admin only. Refused — with the reason — when the ad could not actually be shown (no image, a
+ * retired place, wrong shape, campaign already ended…), so "Publish" never silently does nothing.
+ */
+adsRouter.post('/ads/:id/publish', ...requireAdmin, async (req, res) => {
+  try {
+    const actor = actorOf(req);
+    const ad = (await adsStore.getAd(req.params.id)) as AdRecord | null;
+    if (!ad) throw new AdsError('Ad not found', 404);
+    if (ad.kind !== 'banner' && ad.kind !== 'external') throw new AdsError('Only banner / direct ads can be published here', 400);
+    if (ad.status === 'rejected' || ad.status === 'cancelled') throw new AdsError(`A ${ad.status} ad cannot be published — duplicate it to start again`, 400);
+    const problems = deliveryProblems({ ...ad, status: 'active' }).filter((p) => !p.startsWith('Scheduled'));
+    if (problems.length) throw new AdsError(`Not published: ${problems[0]}`, 400);
+    const now = new Date().toISOString();
+    const meta = (ad.metadata || {}) as Record<string, unknown>;
+    const updated: AdRecord = {
+      ...ad,
+      status: 'active',
+      updatedAt: now,
+      metadata: { ...meta, publishedBy: actor.userId, publishedAt: now, publishedFrom: ad.status },
+    };
+    await adsStore.upsertAd(updated);
+    Logger.audit('ads.publish', { actorId: actor.userId, adId: ad.id, from: ad.status });
+    res.json({ success: true, data: { ...updated, delivery: { problems: deliveryProblems(updated) } } });
   } catch (error) {
     handleError(res, error);
   }

@@ -9,6 +9,7 @@
 import { getDocument, getPublished } from './websiteStore';
 import { validateCompany, validateContent, type BrandAssets, type CompanySettings } from './websiteContent';
 import type { FooterContent, NavigationContent, SocialContent } from './siteContent';
+import { SYSTEM_SITE_PAGES, sitePageByDocKey } from '../../shared/website/sitePages';
 
 export const SITE_DOCUMENT_KEYS = ['navigation', 'footer', 'social', 'company', 'brand_assets'] as const;
 export type SiteDocumentKey = (typeof SITE_DOCUMENT_KEYS)[number];
@@ -24,6 +25,8 @@ export type PublicCompany = {
 };
 
 export type StorefrontSiteStudio = {
+  /** Published information / legal pages, keyed like the storefront's SitePagesConfig. */
+  sitePages?: Record<string, unknown>;
   navigation?: NavigationContent;
   footer?: FooterContent;
   social?: SocialContent;
@@ -59,6 +62,15 @@ export function invalidateSiteStudioCache() {
   memo = null;
 }
 
+/** Page documents (information + legal pages) whose published content the storefront renders. */
+export const SITE_PAGE_DOC_KEYS = SYSTEM_SITE_PAGES.map((p) => p.docKey);
+
+function pagePart(docKey: string, content: unknown): Record<string, unknown> | null {
+  const page = sitePageByDocKey(docKey);
+  if (!page) return null;
+  return { [page.pageKey]: validateContent(docKey.startsWith('legal:') ? 'legal' : 'page', content, docKey) };
+}
+
 export async function getPublishedSiteStudio(): Promise<StorefrontSiteStudio> {
   if (memo && Date.now() - memo.at < TTL_MS) return memo.value;
   const value: StorefrontSiteStudio = {};
@@ -70,17 +82,30 @@ export async function getPublishedSiteStudio(): Promise<StorefrontSiteStudio> {
       /* a document that no longer validates is skipped → storefront keeps its built-in default */
     }
   }
+  for (const key of SITE_PAGE_DOC_KEYS) {
+    try {
+      const pub = await getPublished(key);
+      const part = pub ? pagePart(key, pub.version.content) : null;
+      if (part) value.sitePages = { ...(value.sitePages || {}), ...part };
+    } catch {
+      /* skipped → the storefront keeps that page's built-in content */
+    }
+  }
   memo = { at: Date.now(), value };
   return value;
 }
 
 /** Published parts + ONE document's draft on top (token-gated preview only). */
-export async function getDraftSiteStudio(key: SiteDocumentKey): Promise<StorefrontSiteStudio | null> {
+export async function getDraftSiteStudio(key: SiteDocumentKey | string): Promise<StorefrontSiteStudio | null> {
   const doc = await getDocument(key);
   if (!doc || doc.draft === null) return null;
   memo = null;
   const base = await getPublishedSiteStudio();
-  return { ...base, ...toPart(key, doc.draft) };
+  if (SITE_PAGE_DOC_KEYS.includes(key)) {
+    const part = pagePart(key, doc.draft);
+    return { ...base, sitePages: { ...(base.sitePages || {}), ...(part || {}) } };
+  }
+  return { ...base, ...toPart(key as SiteDocumentKey, doc.draft) };
 }
 
 export async function isSiteDocumentPublished(key: SiteDocumentKey): Promise<boolean> {

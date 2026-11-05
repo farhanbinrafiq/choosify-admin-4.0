@@ -298,7 +298,7 @@ const gridCard = (placementId: string, pageKey: AdPageKey, pageLabel: string, ca
   pageLabel,
   slotKey: 'grid_card',
   slotLabel: 'In-grid card',
-  sectionLabel: `${pageLabel} page: card in the grid, the size of a ${cardKind} card (after the last ${cardKind})`,
+  sectionLabel: `${pageLabel} page: card in the grid, the size of a ${cardKind} card (repeats after every few ${cardKind}s — you choose how often)`,
   allowedFormats: ['vertical_card', 'gradient_promo'],
   orientation: 'vertical',
   aspectRatio: '4:3',
@@ -320,6 +320,9 @@ const POPUP_SPEC: AdCreativeSpec = {
   howShown:
     'Pops up centred over a dimmed page, shown whole (never cropped): at most 900 px wide and 80% of the screen tall on desktop, the full width of the phone on phones. A close (×) button sits in the top-right corner — keep that corner free of text. 16:9 (1600×900 px) works on every screen; a squarer design (e.g. 1080×1080) reads better on phones.',
 };
+
+/** In-grid card frequency choices ("after every N cards"; 0 = once, after the last card). */
+export const GRID_EVERY_CHOICES = [4, 6, 8, 12, 16, 20, 0];
 
 /** Pages a pop-up can be shown on (storefront route → key; Web maps the pathname). */
 export const POPUP_PAGES: Array<{ key: string; label: string }> = [

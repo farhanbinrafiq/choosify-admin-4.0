@@ -29,6 +29,8 @@ export type AdCreative = {
   fit?: 'whole' | 'fill';
   /** With fit 'fill': which part of the design to keep. */
   focusY?: 'top' | 'center' | 'bottom';
+  /** In-grid cards: show after every N cards (0 = once, after the last card). */
+  gridEvery?: number;
   /** Pop-up: page keys it may show on (POPUP_PAGES), or ['all']. */
   popupPages?: string[];
   /** Pop-up: most times it shows per visit (browser tab), 1–10. */

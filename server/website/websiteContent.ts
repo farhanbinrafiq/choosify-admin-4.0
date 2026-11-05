@@ -9,6 +9,7 @@
  */
 
 import { validateFooter, validateNavigation, validateSocial } from './siteContent';
+import { defaultsForSitePage, firstUnsafeLink, normalizeSitePage, sitePageByDocKey } from '../../shared/website/sitePages';
 
 export type WebsiteDocumentKind =
   | 'company'
@@ -28,7 +29,7 @@ export const WEBSITE_DOCUMENT_KINDS: readonly WebsiteDocumentKind[] = [
 ];
 
 /** Kinds whose drafts can be edited through the API in the current phase. */
-export const EDITABLE_KINDS: ReadonlySet<WebsiteDocumentKind> = new Set(['company', 'brand_assets', 'homepage', 'navigation', 'footer', 'social']);
+export const EDITABLE_KINDS: ReadonlySet<WebsiteDocumentKind> = new Set(['company', 'brand_assets', 'homepage', 'navigation', 'footer', 'social', 'page', 'legal']);
 
 export const KEY_PATTERN = /^[a-z][a-z0-9_]*(:[a-z0-9]+(-[a-z0-9]+)*)?$/;
 
@@ -607,7 +608,11 @@ export function validateHomepage(input: unknown): HomepageStudio {
 
 // ---------------------------------------------------------------------------------------------
 
-export function defaultsForKind(kind: WebsiteDocumentKind): unknown {
+export function defaultsForKind(kind: WebsiteDocumentKind, key?: string): unknown {
+  if (kind === 'page' || kind === 'legal') {
+    const page = key ? sitePageByDocKey(key) : undefined;
+    return page ? defaultsForSitePage(page.pageKey) : null;
+  }
   if (kind === 'company') return structuredClone(DEFAULT_COMPANY);
   if (kind === 'brand_assets') return structuredClone(DEFAULT_BRAND_ASSETS);
   if (kind === 'homepage') return structuredClone(DEFAULT_HOMEPAGE);
@@ -618,8 +623,20 @@ export function defaultsForKind(kind: WebsiteDocumentKind): unknown {
 }
 
 /** Validate + normalise content for a kind. Throws WebsiteContentError. */
-export function validateContent(kind: WebsiteDocumentKind, content: unknown): unknown {
+export function validateContent(kind: WebsiteDocumentKind, content: unknown, key?: string): unknown {
   assertSafeStructuredContent(content);
+  if (kind === 'page' || kind === 'legal') {
+    const page = key ? sitePageByDocKey(key) : undefined;
+    if (!page) throw new WebsiteContentError('Unknown page');
+    if (content === null || typeof content !== 'object') throw new WebsiteContentError('Expected an object');
+    // Same normaliser the storefront uses: fills anything missing from the page defaults.
+    // (JSON round trip drops optional fields the normaliser leaves undefined, e.g. legal bullets)
+    const normalized = JSON.parse(JSON.stringify(normalizeSitePage(page.pageKey, content)));
+    const bad = firstUnsafeLink(normalized);
+    if (bad) throw new WebsiteContentError(`Links must start with /, #, mailto:, tel: or https:// ("${bad.value.slice(0, 60)}")`, bad.path);
+    assertSafeStructuredContent(normalized);
+    return normalized;
+  }
   if (kind === 'company') return validateCompany(content);
   if (kind === 'brand_assets') return validateBrandAssets(content);
   if (kind === 'homepage') return validateHomepage(content);
