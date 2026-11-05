@@ -76,6 +76,32 @@ function MediaField({
           }}
         />
       </div>
+      {value ? (
+        <div className="mt-1.5 flex items-center gap-2 rounded-lg border border-[#E2E8F0] bg-white p-1.5" data-testid={`${testId}-preview`}>
+          <div className="flex h-14 w-24 shrink-0 items-center justify-center overflow-hidden rounded-md" style={{ background: '#0F1238' }}>
+            {kind === 'video' ? (
+              <video src={value} muted playsInline loop autoPlay className="h-full w-full object-cover" />
+            ) : (
+              <img src={value} alt="" className="h-full w-full object-cover" />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] font-bold text-[#111827]">{kind === 'video' ? 'Current video' : 'Current image'}</div>
+            <a href={value} target="_blank" rel="noreferrer" className="block truncate text-[10px] font-semibold text-[#2563EB] hover:underline">
+              Open full size
+            </a>
+          </div>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange('')}
+            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-[10.5px] font-extrabold text-red-700 hover:bg-red-50 disabled:opacity-50"
+            data-testid={`${testId}-remove`}
+          >
+            <Trash2 className="h-3 w-3" /> Delete
+          </button>
+        </div>
+      ) : null}
       {hint && <div className="mt-1 text-[10.5px] text-slate-500">{hint}</div>}
       {err && <div className="mt-1 text-[11px] font-semibold text-red-600">{err}</div>}
     </div>
@@ -194,7 +220,11 @@ export function HeroSlideEditor({
         </div>
         <MediaField
           label={slide.mediaType === 'image' ? 'Image (desktop)' : 'Video (desktop)'}
-          hint={slide.mediaType === 'image' ? 'Wide image, at least 1600×700. JPG, PNG, WEBP or AVIF.' : 'Short muted loop, MP4 or WebM. It plays without sound.'}
+          hint={
+            slide.mediaType === 'image'
+              ? 'Recommended 1920×600 px (about 3.2:1), at least 1600×500. The hero is 460 px tall and as wide as the screen, so keep text and logos inside the middle 1440×460 area — the edges are trimmed on narrower or wider screens. JPG, PNG, WEBP or AVIF.'
+              : 'Recommended 1920×600 px (about 3.2:1), MP4 or WebM, a short muted loop (it plays without sound). Keep text inside the middle 1440×460 area.'
+          }
           value={slide.mediaUrl}
           kind={slide.mediaType}
           disabled={disabled}
@@ -203,7 +233,11 @@ export function HeroSlideEditor({
         />
         <MediaField
           label={slide.mediaType === 'image' ? 'Image for phones (optional)' : 'Video for phones (optional)'}
-          hint="Leave empty to use the desktop media on phones too."
+          hint={
+            slide.mediaType === 'image'
+              ? 'Recommended 1170×960 px (about 6:5) — phones show the hero about 390×320. Leave empty to use the desktop image, cropped around the focal point (wide designs lose their sides on phones).'
+              : 'Recommended 1170×960 px (about 6:5) — phones show the hero about 390×320. Leave empty to use the desktop video, cropped around the focal point.'
+          }
           value={slide.mobileMediaUrl}
           kind={slide.mediaType}
           disabled={disabled}
@@ -213,7 +247,7 @@ export function HeroSlideEditor({
         {slide.mediaType === 'video' ? (
           <MediaField
             label="Poster image (optional)"
-            hint="Shown before the video plays and when autoplay is blocked."
+            hint="Same size as the video (1920×600 px). Shown before the video plays and when autoplay is blocked."
             value={slide.posterUrl}
             kind="image"
             disabled={disabled}

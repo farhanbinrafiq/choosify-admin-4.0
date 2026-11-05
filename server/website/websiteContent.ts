@@ -271,8 +271,8 @@ export function validateBrandAssets(input: unknown): BrandAssets {
  * default order. `content` says what the Studio may configure for the section — only fields the
  * storefront really reads are offered:
  *  - categories: optional hand-picked categories (else: categories with the most products)
- *  - products:   featuredProductIds (else: newest products). Shown inside "Viral Today" while that
- *                section is visible; as its own "Popular Products" block when Viral Today is hidden.
+ *  - products:   featuredProductIds (else: newest products). Its own "Popular Products" section,
+ *                ordered / hidden independently of "Viral Today".
  *  - guides:     featuredGuideIds (else: newest guides)
  *  - brands:     featuredBrandIds (else: daily rotation). Active ad placements still win.
  *  - dealsBanners: content comes from the Deals Banners studio (not stored here)

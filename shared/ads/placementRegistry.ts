@@ -97,7 +97,8 @@ export type AdPagePosition = { key: string; label: string; /** Place in page ord
 export const HOME_BANNER_POSITIONS: AdPagePosition[] = [
   { key: 'after-hero', order: 10, label: 'Top of page (under the hero)' },
   { key: 'after-categories', order: 20, label: 'After Top Categories' },
-  { key: 'after-popular-products', order: 30, label: 'After Viral Today / Popular Products' },
+  { key: 'after-viral-today', order: 25, label: 'After Viral Today' },
+  { key: 'after-popular-products', order: 30, label: 'After Popular Products' },
   { key: 'after-deals', order: 40, label: "After Today's Deals" },
   { key: 'after-compare', order: 50, label: 'After Compare Anything' },
   { key: 'after-guides', order: 60, label: 'After Buying Guides' },
@@ -330,7 +331,7 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
     pageLabel: 'Homepage',
     slotKey: 'sponsored_banner',
     slotLabel: 'Homepage sponsored banner',
-    sectionLabel: 'Homepage — wide sponsored banner after the Viral Today / Popular Products block',
+    sectionLabel: 'Homepage — wide sponsored banner in the spot you choose (after any section)',
     allowedFormats: ['follow_brands_banner', 'hero_banner', 'cta_strip'],
     orientation: 'horizontal',
     aspectRatio: '4:1',

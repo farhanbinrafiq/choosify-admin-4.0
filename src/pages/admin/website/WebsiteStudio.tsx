@@ -202,7 +202,7 @@ function DocumentWorkspace<T>({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<{ message: string; field?: string | null } | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<null | { type: 'publish' } | { type: 'reset' } | { type: 'discard' } | { type: 'restore'; version: number }>(null);
+  const [dialog, setDialog] = useState<null | { type: 'publish' } | { type: 'reset' } | { type: 'discard' } | { type: 'cancel' } | { type: 'restore'; version: number }>(null);
   const [versions, setVersions] = useState<WebsiteVersionSummary[]>([]);
   const [viewing, setViewing] = useState<(WebsiteVersionSummary & { content: T }) | null>(null);
   const [previewLink, setPreviewLink] = useState<{ url: string; expiresAt: string } | null>(null);
@@ -265,6 +265,18 @@ function DocumentWorkspace<T>({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {dirty ? (
+            <button
+              type="button"
+              className={btnGhost}
+              data-testid="ws-cancel-edits"
+              disabled={!!busy}
+              onClick={() => setDialog({ type: 'cancel' })}
+              title="Undo everything you changed since the last save"
+            >
+              Cancel changes
+            </button>
+          ) : null}
           <button
             type="button"
             className={btnGhost}
@@ -528,6 +540,27 @@ function DocumentWorkspace<T>({
               showFlash('Defaults restored into the draft — not published.');
             })
           }
+        />
+      )}
+      {dialog?.type === 'cancel' && (
+        <ConfirmDialog
+          title="Cancel your changes?"
+          body={
+            <>
+              Everything you changed since the last save is undone, and the editor goes back to{' '}
+              {doc.hasDraft ? 'your saved draft' : doc.publishedVersion ? `the live version ${doc.publishedVersion}` : 'the defaults'}. The public website is not affected.
+            </>
+          }
+          confirmLabel="Cancel changes"
+          busy={false}
+          onCancel={() => setDialog(null)}
+          onConfirm={() => {
+            setWorking((doc.draft ?? doc.published?.content ?? doc.defaults) as T);
+            setDirty(false);
+            setError(null);
+            setDialog(null);
+            showFlash('Changes cancelled.');
+          }}
         />
       )}
       {dialog?.type === 'discard' && (

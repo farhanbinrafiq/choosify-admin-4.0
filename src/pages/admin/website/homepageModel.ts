@@ -78,7 +78,7 @@ export const SECTION_INFO: Record<
     defaultTitle: 'Popular Products',
     defaultSubtitle: "Handpicked deals you'll love",
     heading: true,
-    note: 'Shown inside Viral Today while Viral Today is visible; in its own place only when Viral Today is hidden. Pick up to 8 products, or leave empty for the newest products.',
+    note: 'Its own section — move it up or down, or hide it, independently of Viral Today. Pick up to 8 products, or leave empty for the newest products.',
   },
   deals: {
     name: "Today's Deals",

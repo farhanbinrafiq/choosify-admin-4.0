@@ -490,6 +490,7 @@ export default function AdsVisualBuilder() {
   }, [imageUrl]);
 
   const [askDuplicate, setAskDuplicate] = useState(false);
+  const [askCancel, setAskCancel] = useState(false);
   /** Draft copy of this ad; opens it so the copy can be placed somewhere else, then published. */
   const duplicate = async () => {
     setAskDuplicate(false);
@@ -644,6 +645,35 @@ export default function AdsVisualBuilder() {
           </div>
         ) : null}
       </div>
+
+      {askCancel && existing ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" data-testid="ad-cancel-confirm">
+          <div className="w-full max-w-[420px] rounded-xl bg-white p-5 shadow-xl">
+            <div className="text-[15px] font-extrabold text-[#111827]">Cancel your changes?</div>
+            <p className="mt-1.5 text-[12.5px] text-[#4B5563]">
+              Everything you changed since the last save is undone, and the ad goes back to how it was last saved. The live ad is not affected.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setAskCancel(false)} className="rounded-lg border border-[#E8EDF2] px-3.5 py-2 text-[12px] font-extrabold text-[#374151]">
+                Keep editing
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  hydrateFromRecord(existing);
+                  setAskCancel(false);
+                  setError(null);
+                  setMessage('Changes cancelled — back to the last saved version.');
+                }}
+                className="rounded-lg bg-[#EF3C23] px-3.5 py-2 text-[12px] font-extrabold text-white"
+                data-testid="ad-cancel-ok"
+              >
+                Cancel changes
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {askDuplicate ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" data-testid="ad-duplicate-confirm">
@@ -1191,6 +1221,17 @@ export default function AdsVisualBuilder() {
 
           {/* Actions */}
           <div className="flex flex-wrap gap-2">
+            {isEdit && existing ? (
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => setAskCancel(true)}
+                className="rounded-lg border border-[#E8EDF2] bg-white px-4 py-2.5 text-[11px] font-extrabold text-[#6B7280]"
+                data-testid="ad-cancel-edits"
+              >
+                Cancel changes
+              </button>
+            ) : null}
             <button
               type="button"
               disabled={saving}

@@ -82,7 +82,6 @@ function SectionMirror({ s, v, catalog }: { s: HomepageSection; v: HomepageStudi
   const info = SECTION_INFO[s.id];
   const title = s.title || info.defaultTitle;
   const sub = s.subtitle || info.defaultSubtitle || '';
-  const trending = v.sections.find((x) => x.id === 'trending');
   const productCards = v.featuredProductIds.map((id) => catalog.product(id));
   switch (s.id) {
     case 'categories':
@@ -108,12 +107,6 @@ function SectionMirror({ s, v, catalog }: { s: HomepageSection; v: HomepageStudi
             ))}
           </div>
           <AutoTag text="Filled automatically with creator videos, reels and live streams" />
-          {trending?.isVisible !== false && (
-            <div className="mt-3 rounded-xl border border-dashed border-violet-200 p-2">
-              <div className="mb-1 text-[11px] font-extrabold text-[#1A1A2E]">{trending?.title || 'Popular Products'} <span className="font-semibold text-violet-600">(inside Viral Today)</span></div>
-              <Cards items={productCards} empty="Automatic — the newest products" />
-            </div>
-          )}
         </Panel>
       );
     case 'trending':
@@ -192,7 +185,6 @@ export function HomepageEditor({ value, onChange, disabled }: { value: HomepageS
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded, productKey]);
 
-  const spotlightVisible = v.sections.find((s) => s.id === 'spotlight')?.isVisible !== false;
   const active = v.slides.filter((s) => s.isActive && s.mediaUrl);
   const first = active[0];
   const pickerOff = disabled || !loaded;
@@ -215,11 +207,6 @@ export function HomepageEditor({ value, onChange, disabled }: { value: HomepageS
         </div>
       </MirrorBlock>
       {v.sections.map((s) => {
-        if (s.id === 'trending' && spotlightVisible && s.isVisible) return (
-          <MirrorBlock key={s.id} selected={sel === s.id} onSelect={() => setSel(s.id)} label="Popular Products" testId={`ws-hp-section-${s.id}`} className="rounded-xl">
-            <div className="rounded-xl border border-dashed border-violet-200 bg-white px-3 py-2 text-[11px] font-semibold text-violet-700">Popular Products — shown inside Viral Today (click to edit)</div>
-          </MirrorBlock>
-        );
         return (
           <MirrorBlock key={s.id} selected={sel === s.id} onSelect={() => setSel(s.id)} label={SECTION_INFO[s.id].name} testId={`ws-hp-section-${s.id}`} muted={!s.isVisible} className="rounded-2xl">
             {!s.isVisible && <span className="absolute right-2 top-2 z-10 rounded-full bg-slate-700 px-2 py-0.5 text-[9.5px] font-extrabold" style={{ color: '#FFFFFF' }}>HIDDEN</span>}
@@ -328,7 +315,6 @@ export function HomepageEditor({ value, onChange, disabled }: { value: HomepageS
 
 /** Compact page outline (version history "View"). */
 export function HomepageOutline({ value }: { value: HomepageStudioContent }) {
-  const spotlightVisible = value.sections.find((s) => s.id === 'spotlight')?.isVisible !== false;
   const activeSlides = value.slides.filter((s) => s.isActive && s.mediaUrl).length;
   return (
     <div className="space-y-1.5 text-[11.5px]" data-testid="ws-hp-outline">
@@ -336,7 +322,8 @@ export function HomepageOutline({ value }: { value: HomepageStudioContent }) {
         Hero {value.heroVisible ? (activeSlides ? `· ${activeSlides} slide${activeSlides === 1 ? '' : 's'}` : '· built-in video') : '· hidden'}
       </div>
       {value.sections.map((s) =>
-        s.id === 'trending' && spotlightVisible ? null : (
+        (
+
           <div key={s.id} className={`rounded-md px-2.5 py-1.5 ${s.isVisible ? 'border border-[#E8EDF2] bg-white font-bold text-[#111827]' : 'border border-dashed border-slate-200 text-slate-400 line-through'}`}>
             {s.title || SECTION_INFO[s.id].defaultTitle || SECTION_INFO[s.id].name}
             {s.id === 'deals' && ` · ${(value.dealsBanners ?? []).filter((b) => b.isActive).length} banner(s)`}
