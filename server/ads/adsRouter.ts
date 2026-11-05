@@ -70,6 +70,8 @@ async function measuredCreative(creative: unknown, formatId: string | undefined,
     else if (!slot.positions.some((p) => p.key === pos)) throw new AdsError(`"${pos}" is not a position on the ${slot.pageLabel} page`, 400);
     else c.pagePosition = pos;
   }
+  if (c.fit !== undefined && c.fit !== 'fill' && c.fit !== 'whole') delete c.fit;
+  if (c.focusY !== undefined && c.focusY !== 'top' && c.focusY !== 'center' && c.focusY !== 'bottom') delete c.focusY;
   if (!format?.imageLed || typeof c.imageUrl !== 'string' || !c.imageUrl) return c;
   const size = await probeImageSize(c.imageUrl);
   if (size) {
@@ -204,6 +206,53 @@ adsRouter.post('/ads/:id/move', ...requireAdmin, async (req, res) => {
     await adsStore.upsertAd(updated);
     Logger.audit('ads.placement_moved', { actorId: actor.userId, adId: ad.id, from: entry.from, to, fromPosition: fromPos, toPosition: toPos, status: ad.status });
     res.json({ success: true, data: { ...updated, delivery: { problems: deliveryProblems(updated) } } });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+/**
+ * Duplicate a banner / direct ad as a DRAFT copy (same design, text, link and place), so the same
+ * creative can run on several pages / places. The copy gets its own reference id and history and
+ * is never live until it is published; the original is untouched. Admin, or the ad's owner.
+ */
+adsRouter.post('/ads/:id/duplicate', ...requireAuth, async (req, res) => {
+  try {
+    const actor = actorOf(req);
+    const ad = (await adsStore.getAd(req.params.id)) as AdRecord | null;
+    if (!ad) throw new AdsError('Ad not found', 404);
+    if (ad.kind !== 'banner' && ad.kind !== 'external') throw new AdsError('Only banner / direct ads can be duplicated', 400);
+    const role = String(actor.role || '').toLowerCase();
+    const admin = role === 'admin' || role === 'super_admin';
+    if (!admin && ad.ownerId !== actor.userId) throw new AdsError('You can only duplicate your own ads', 403);
+    const meta = { ...((ad.metadata || {}) as Record<string, unknown>) };
+    delete meta.auditLog;
+    delete meta.placementHistory;
+    const data = await createBanner(
+      {
+        ownerId: admin ? ad.ownerId : actor.userId,
+        ownerRole: ad.ownerRole,
+        listingId: ad.listingId,
+        brandId: ad.brandId,
+        title: `${ad.title || 'Ad'} (copy)`.slice(0, 160),
+        kind: ad.kind,
+        formatId: ad.formatId,
+        placementId: ad.placementId,
+        pageKey: ad.pageKey,
+        creative: await measuredCreative(ad.creative, ad.formatId, ad.placementId),
+        cta: ad.cta,
+        externalUrl: ad.externalUrl,
+        placement: ad.placement,
+        startsAt: ad.startsAt,
+        endsAt: ad.endsAt,
+        metadata: { ...meta, duplicatedFrom: ad.id, duplicatedFromRef: ad.advertisementReferenceId ?? null },
+        asDraft: true,
+        publishNow: false,
+      },
+      actor,
+    );
+    Logger.audit('ads.duplicated', { actorId: actor.userId, from: ad.id, to: (data as { id?: string }).id });
+    res.status(201).json({ success: true, data });
   } catch (error) {
     handleError(res, error);
   }

@@ -163,7 +163,7 @@ async function main() {
   // --- Moves ---------------------------------------------------------------------------------------------
   check('seller cannot move ads (403)', (await call(seller, 'POST', `/ads/${liveId}/move`, { placementId: 'BROWSE_BANNER' })).status === 403);
   check('signed-out cannot move ads (401)', (await call(null, 'POST', `/ads/${liveId}/move`, { placementId: 'BROWSE_BANNER' })).status === 401);
-  const bad = await call(sa, 'POST', `/ads/${liveId}/move`, { placementId: 'BROWSE_SIDEBAR' });
+  const bad = await call(sa, 'POST', `/ads/${liveId}/move`, { placementId: 'DEALS_SIDEBAR' });
   check('move into a slot that does not accept the format is refused', bad.status === 400 && /not allowed/.test(bad.json?.error || ''), bad.json);
   check('move into a retired slot is refused', (await call(sa, 'POST', `/ads/${liveId}/move`, { placementId: 'HOME_RIGHT_RAIL' })).status === 400);
   const mv = await call(sa, 'POST', `/ads/${liveId}/move`, { placementId: 'BROWSE_BANNER' });

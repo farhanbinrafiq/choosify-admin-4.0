@@ -134,6 +134,19 @@ function BannerAdsList() {
     [rows, filter],
   );
 
+  const duplicate = async (id: string) => {
+    setBusyId(id);
+    setError(null);
+    try {
+      const copy = await adsApi.duplicateAd(id);
+      navigate(`/admin/ads-studio/${encodeURIComponent(copy.id)}/edit`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not duplicate the ad');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const move = async (id: string, placementId: string, label: string) => {
     if (!placementId) return;
     if (!window.confirm(`Move this ad to "${label}"? Its approval status stays the same, and the image is re-checked for the new slot.`)) return;
@@ -308,6 +321,17 @@ function BannerAdsList() {
                               </option>
                             ))}
                           </select>
+                        ) : null}
+                        {row.kind === 'banner' || row.kind === 'external' ? (
+                          <button
+                            type="button"
+                            disabled={busyId === row.id}
+                            onClick={() => void duplicate(row.id)}
+                            className="mt-1 block text-[10px] font-extrabold text-[#EF3C23] hover:underline"
+                            data-testid={`ads-duplicate-${row.id}`}
+                          >
+                            Duplicate
+                          </button>
                         ) : null}
                       </td>
                       <td className="px-3 py-2.5 text-[11px] text-[#6B7280]">

@@ -187,6 +187,9 @@ export const adsApi = {
 
   getAd: (id: string) => request<AdsApiRecord>(`/ads/${encodeURIComponent(id)}`),
 
+  /** Draft copy of a banner / direct ad (same design, text, link and place) — place it elsewhere, then publish. */
+  duplicateAd: (id: string) => request<AdsApiRecord>(`/ads/${encodeURIComponent(id)}/duplicate`, 'POST', {}),
+
   listEligibleListings: () => request<EligibleListing[]>('/ads/listings/eligible'),
 
   createBanner: (body: Record<string, unknown>) =>

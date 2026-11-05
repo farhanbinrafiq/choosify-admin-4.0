@@ -25,6 +25,10 @@ export type AdCreative = {
   pagePosition?: string;
   /** Image banners: draw the headline + subtext over the image (off = they are the image's description only). */
   showText?: boolean;
+  /** Wide banners on desktop: 'whole' = whole design, soft side fill (default); 'fill' = edge to edge, crops top/bottom. */
+  fit?: 'whole' | 'fill';
+  /** With fit 'fill': which part of the design to keep. */
+  focusY?: 'top' | 'center' | 'bottom';
   headline?: string;
   body?: string;
   imageUrl?: string;

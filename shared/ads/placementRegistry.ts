@@ -37,7 +37,9 @@ export type AdPageKey =
   | 'guide_detail'
   | 'guides'
   | 'search'
-  | 'compare';
+  | 'compare'
+  | 'order_tracking'
+  | 'dashboard';
 
 export type AdOrientation = 'horizontal' | 'vertical' | 'square' | 'embedded';
 
@@ -85,28 +87,30 @@ export type AdPlacementDef = {
   positions?: AdPagePosition[];
   /** Spot used when an ad has none chosen (where the slot always rendered before). */
   defaultPosition?: string;
+  /** Where this place sits in the page, top = small (builder lists a page's places in this order). */
+  pageOrder?: number;
 };
 
-export type AdPagePosition = { key: string; label: string };
+export type AdPagePosition = { key: string; label: string; /** Place in page order (top = small). */ order?: number };
 
 /** Homepage spots follow the sections, so they stay right when Website Studio reorders them. */
 export const HOME_BANNER_POSITIONS: AdPagePosition[] = [
-  { key: 'after-hero', label: 'Top of page (under the hero)' },
-  { key: 'after-categories', label: 'After Top Categories' },
-  { key: 'after-popular-products', label: 'After Viral Today / Popular Products' },
-  { key: 'after-deals', label: "After Today's Deals" },
-  { key: 'after-compare', label: 'After Compare Anything' },
-  { key: 'after-guides', label: 'After Buying Guides' },
-  { key: 'after-featured-brands', label: 'After Featured Brands' },
-  { key: 'after-services', label: 'After Popular Services' },
-  { key: 'after-recently-viewed', label: 'After Recently Viewed (only when the shopper has history)' },
-  { key: 'page-end', label: 'End of page' },
+  { key: 'after-hero', order: 10, label: 'Top of page (under the hero)' },
+  { key: 'after-categories', order: 20, label: 'After Top Categories' },
+  { key: 'after-popular-products', order: 30, label: 'After Viral Today / Popular Products' },
+  { key: 'after-deals', order: 40, label: "After Today's Deals" },
+  { key: 'after-compare', order: 50, label: 'After Compare Anything' },
+  { key: 'after-guides', order: 60, label: 'After Buying Guides' },
+  { key: 'after-featured-brands', order: 70, label: 'After Featured Brands' },
+  { key: 'after-services', order: 80, label: 'After Popular Services' },
+  { key: 'after-recently-viewed', order: 90, label: 'After Recently Viewed (only when the shopper has history)' },
+  { key: 'page-end', order: 100, label: 'End of page' },
 ];
 
 /** Listing pages: above or below the results. */
 export const LISTING_BANNER_POSITIONS: AdPagePosition[] = [
-  { key: 'top', label: 'Top of results' },
-  { key: 'bottom', label: 'Bottom of results' },
+  { key: 'top', order: 10, label: 'Banner at the top of the page' },
+  { key: 'bottom', order: 90, label: 'Banner at the bottom of the page' },
 ];
 
 /** The spot an ad really shows in: its chosen one if valid for the slot, else the slot default. */
@@ -249,10 +253,57 @@ const sidebar = (placementId: string, pageKey: AdPageKey, pageLabel: string): Ad
   creative: PORTRAIT_CARD,
 });
 
+/** Side rails that the storefront hides at every width — never chosen (would never be seen). */
+const hiddenSidebar = (placementId: string, pageKey: AdPageKey, pageLabel: string): AdPlacementDef => ({
+  ...sidebar(placementId, pageKey, pageLabel),
+  sectionLabel: 'Retired',
+  active: false,
+  retiredReason: `The ${pageLabel} page side rail is hidden on the storefront at every screen width, so an ad here is never seen. Use a banner or an in-grid card on that page.`,
+});
+
+/** Card ad in a page's right-hand column (visible on desktop beside the content). */
+const sideCard = (placementId: string, pageKey: AdPageKey, pageLabel: string, where: string, pageOrder: number, mobile = true): AdPlacementDef => ({
+  ...sidebar(placementId, pageKey, pageLabel),
+  slotLabel: 'Side card',
+  sectionLabel: `${pageLabel} page: ${where}`,
+  mobileSupport: mobile,
+  pageOrder,
+});
+
+/** Image shape of an in-grid card: wide-ish top image above the headline + button (like a brand card). */
+const GRID_CARD: AdCreativeSpec = {
+  display: 'cover',
+  recommended: { width: 800, height: 600 },
+  min: { width: 400, height: 300 },
+  ratioRange: [1, 1.8],
+  howShown: 'Fills the top of a card the same size as the other cards in the grid (about 4:3), above your headline, line and button; edges may be trimmed, so keep the subject centred.',
+};
+
+/** Card ad inside a page's results grid, the same size as the cards around it. */
+const gridCard = (placementId: string, pageKey: AdPageKey, pageLabel: string, cardKind: string, pageOrder: number): AdPlacementDef => ({
+  placementId,
+  pageKey,
+  pageLabel,
+  slotKey: 'grid_card',
+  slotLabel: 'In-grid card',
+  sectionLabel: `${pageLabel} page: card in the grid, the size of a ${cardKind} card (after the last ${cardKind})`,
+  allowedFormats: ['vertical_card', 'gradient_promo'],
+  orientation: 'vertical',
+  aspectRatio: '4:3',
+  mobileSupport: true,
+  desktopSupport: true,
+  ownerRoles: ['admin', 'seller', 'creator'],
+  active: true,
+  creative: GRID_CARD,
+  pageOrder,
+  fallback: 'Shows the Choosify "Advertise here" card (labelled AD SPACE).',
+});
+
 export const AD_PLACEMENTS: AdPlacementDef[] = [
   // —— Homepage ——
   {
     placementId: 'HOME_HERO',
+    pageOrder: 0,
     pageKey: 'homepage',
     pageLabel: 'Homepage',
     slotKey: 'hero',
@@ -326,7 +377,7 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
     positions: LISTING_BANNER_POSITIONS,
     defaultPosition: 'top',
   },
-  sidebar('BROWSE_SIDEBAR', 'browse', 'Products & Services'),
+  hiddenSidebar('BROWSE_SIDEBAR', 'browse', 'Products & Services'),
   // —— Deals ——
   {
     placementId: 'DEALS_BANNER',
@@ -346,7 +397,8 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
     positions: LISTING_BANNER_POSITIONS,
     defaultPosition: 'top',
   },
-  sidebar('DEALS_SIDEBAR', 'deals', 'Deals'),
+  sideCard('DEALS_SIDEBAR', 'deals', 'Deals', 'card in the right-hand column beside the deals grid (desktop)', 30, false),
+  gridCard('DEALS_GRID_CARD', 'deals', 'Deals', 'deal', 20),
   {
     placementId: 'DEALS_FEATURED',
     pageKey: 'deals',
@@ -364,9 +416,9 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
     retiredReason: 'Deal of the Day is filled from live flash deals; paid Deal of the Day is handled by Deals → Promotion Requests, not banner ads.',
   },
   // —— Other listing pages with a real side rail ——
-  sidebar('BRANDS_SIDEBAR', 'brands', 'Brands'),
-  sidebar('CATEGORIES_SIDEBAR', 'categories', 'Categories'),
-  sidebar('CREATORS_SIDEBAR', 'creators', 'Creators'),
+  hiddenSidebar('BRANDS_SIDEBAR', 'brands', 'Brands'),
+  hiddenSidebar('CATEGORIES_SIDEBAR', 'categories', 'Categories'),
+  hiddenSidebar('CREATORS_SIDEBAR', 'creators', 'Creators'),
   {
     ...sidebar('GUIDES_SIDEBAR', 'guides', 'Buying Guides'),
     sectionLabel: 'Retired',
@@ -375,6 +427,7 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
   },
   {
     placementId: 'CATEGORY_CARD_FOOTER',
+    pageOrder: 50,
     pageKey: 'categories',
     pageLabel: 'Categories',
     slotKey: 'card_footer',
@@ -396,9 +449,18 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
   wideSlot('CATEGORIES_BANNER', 'categories', 'Categories', 'Categories page — wide sponsored banner above the category grid'),
   wideSlot('CREATORS_BANNER', 'creators', 'Creators', 'Creators page — wide sponsored banner above the creators grid'),
   wideSlot('DISCOVER_BANNER', 'discover', 'Recommendations (Discover)', 'Recommendations page (also Buying Guides) — wide sponsored banner above the feed'),
+  gridCard('BRANDS_GRID_CARD', 'brands', 'Brands', 'brand', 20),
+  gridCard('CREATORS_GRID_CARD', 'creators', 'Creators', 'creator', 20),
+  sideCard('DISCOVER_SIDEBAR', 'discover', 'Recommendations (Discover)', "card in the right-hand column, under Editor's Pick", 30),
+  wideSlot('COMPARE_BANNER', 'compare', 'Compare', 'Compare page: wide sponsored banner above / below the comparison'),
+  sideCard('COMPARE_SIDEBAR', 'compare', 'Compare', 'card in the right-hand rail, under "Need help deciding?"', 30),
+  wideSlot('ORDER_TRACKING_BANNER', 'order_tracking', 'Order tracking', 'Order tracking page: wide sponsored banner above / below the tracking details'),
+  wideSlot('DASHBOARD_BANNER', 'dashboard', 'My dashboard', "Shopper's dashboard overview: wide sponsored banner above / below the overview"),
+  sideCard('DASHBOARD_SIDEBAR', 'dashboard', 'My dashboard', "card in the right-hand column of the overview, and the side rail of the other tabs (desktop)", 30, false),
   // —— Discover + product page ——
   {
     placementId: 'DISCOVER_FEED',
+    pageOrder: 50,
     pageKey: 'discover',
     pageLabel: 'Recommendations (Discover)',
     slotKey: 'feed',
@@ -415,6 +477,7 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
   },
   {
     placementId: 'PRODUCT_DETAIL_RAIL',
+    pageOrder: 30,
     pageKey: 'product_detail',
     pageLabel: 'Product Detail',
     slotKey: 'right_sidebar',

@@ -39,6 +39,9 @@ export type PublicAd = {
   position?: string;
   /** Image banners: draw headline + subtext over the image. */
   showText?: boolean;
+  /** Wide banners on desktop: fill the frame edge to edge (crop top/bottom) instead of showing the whole design. */
+  fit?: 'fill';
+  focusY?: 'top' | 'center' | 'bottom';
   /** Category Promoted Slot: the category card this sponsor footer belongs to. */
   categoryId?: string;
   categoryName?: string;
@@ -156,6 +159,8 @@ export function toPublicAd(ad: AdRecord, origin = ''): PublicAd {
     // Only formats that ask for an advertiser carry one (a stale name never leaks onto other formats).
     sponsorName: format.fields.includes('advertiser') ? str(c.advertiserName, 60) : undefined,
     showText: format.imageLed && c.showText === true ? true : undefined,
+    fit: slot.creative?.display === 'natural' && c.fit === 'fill' ? 'fill' : undefined,
+    focusY: slot.creative?.display === 'natural' && c.fit === 'fill' && (c.focusY === 'top' || c.focusY === 'bottom') ? c.focusY : undefined,
     sponsorLogoUrl: SAFE_IMAGE(c.logoUrl) ? absoluteMedia(c.logoUrl, origin) : undefined,
     position: resolvePagePosition(slot, c.pagePosition),
     categoryId: format.formatId === 'category_promoted_slot' ? str(c.categoryId, 80) : undefined,

@@ -10,6 +10,7 @@ import {
   getPlacementDef,
   listPages,
   type AdFormatId,
+  type AdPlacementDef,
 } from '@/shared/ads/placementRegistry';
 import { inferHeroMediaType, type HeroMediaType } from '@/shared/ads/heroMedia';
 import { StorefrontAdPresentation } from '../../components/ads/storefront';
@@ -36,6 +37,36 @@ function placementsForFormat(formatId: AdFormatId, role?: string) {
   return AD_PLACEMENTS.filter(
     (p) => p.active && p.allowedFormats.includes(formatId) && p.ownerRoles.includes(owner),
   );
+}
+
+type PageRow = { key: string; placement: AdPlacementDef; position: string; label: string; order: number };
+
+/** Every place an ad can go on one page, in page order (wide banners expand to their spots). */
+function pageRowsFor(pageKey: string, role?: string): PageRow[] {
+  const r = (role || 'admin').toLowerCase();
+  const owner: 'admin' | 'seller' | 'creator' = r === 'seller' ? 'seller' : r === 'creator' ? 'creator' : 'admin';
+  const rows: PageRow[] = [];
+  for (const p of AD_PLACEMENTS) {
+    if (!p.active || p.pageKey !== pageKey || !p.ownerRoles.includes(owner)) continue;
+    if (p.positions?.length) {
+      p.positions.forEach((pos, i) =>
+        rows.push({ key: `${p.placementId}:${pos.key}`, placement: p, position: pos.key, label: pos.label, order: pos.order ?? (p.pageOrder ?? 50) + i / 100 }),
+      );
+    } else {
+      rows.push({ key: p.placementId, placement: p, position: '', label: p.sectionLabel.replace(/^[^:—]*[:—]\s*/, ''), order: p.pageOrder ?? 50 });
+    }
+  }
+  return rows.sort((a, b) => a.order - b.order);
+}
+
+/** Plain-language shape of a place (what the advertiser needs to design). */
+function shapeOf(p: AdPlacementDef): string {
+  if (p.placementId === 'HOME_HERO') return 'Hero slide';
+  if (p.orientation === 'horizontal') return 'Wide banner';
+  if (p.orientation === 'embedded') return 'Card footer strip';
+  if (p.slotKey === 'grid_card') return 'Grid card';
+  if (p.slotKey === 'feed') return 'Feed card';
+  return 'Side card';
 }
 
 export default function AdsVisualBuilder() {
@@ -70,6 +101,9 @@ export default function AdsVisualBuilder() {
   const [ctaLabel, setCtaLabel] = useState('Shop Now');
   /** Image banners: draw headline + subtext over the image on the storefront. */
   const [showText, setShowText] = useState(false);
+  /** Wide banners on desktop: whole design (side fill) or fill edge to edge (crop top/bottom). */
+  const [fit, setFit] = useState<'whole' | 'fill'>('whole');
+  const [focusY, setFocusY] = useState<'top' | 'center' | 'bottom'>('center');
   const [imageUrl, setImageUrl] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
   const [posterUrl, setPosterUrl] = useState('');
@@ -123,19 +157,42 @@ export default function AdsVisualBuilder() {
     if (pagePosition && !placementDef?.positions?.some((p) => p.key === pagePosition)) setPagePosition('');
   }, [placementDef, pagePosition]);
 
-  /** Live ads already in each spot of the chosen slot (this ad excluded). */
-  const spotOccupancy = useMemo(() => {
+  /** Every place on the chosen page, in page order. */
+  const pageRows = useMemo(() => pageRowsFor(pageKey, role), [pageKey, role]);
+
+  /** Live ads already in each place (key = placementId or placementId:spot; this ad excluded). */
+  const placeOccupancy = useMemo(() => {
     const map: Record<string, AdsApiRecord[]> = {};
-    if (!placementDef?.positions?.length) return map;
     for (const a of otherAds) {
-      if (a.id === id || a.placementId !== placementDef.placementId) continue;
-      if (a.status !== 'active') continue; // only ads shoppers can see right now
+      if (a.id === id || a.status !== 'active') continue; // only ads shoppers can see right now
+      const slot = AD_PLACEMENTS.find((p) => p.placementId === a.placementId);
+      if (!slot) continue;
       const c = (a.creative || {}) as Record<string, unknown>;
-      const key = placementDef.positions.some((p) => p.key === c.pagePosition) ? String(c.pagePosition) : placementDef.defaultPosition || '';
+      const key = slot.positions?.length
+        ? `${slot.placementId}:${slot.positions.some((p) => p.key === c.pagePosition) ? String(c.pagePosition) : slot.defaultPosition}`
+        : slot.placementId;
       (map[key] ||= []).push(a);
     }
     return map;
-  }, [otherAds, placementDef, id]);
+  }, [otherAds, id]);
+
+  const isRowChosen = (row: PageRow) =>
+    row.placement.placementId === placementId &&
+    (!row.position || (pagePosition || row.placement.defaultPosition) === row.position);
+
+  /** Choose a place; switches to a format the place accepts when the current one does not fit. */
+  const chooseRow = (row: PageRow) => {
+    if (!row.placement.allowedFormats.includes(formatId)) setFormatId(row.placement.allowedFormats[0] as AdFormatId);
+    setPlacementId(row.placement.placementId);
+    setPagePosition(row.position);
+  };
+
+  const choosePage = (next: string) => {
+    setPageKey(next);
+    const rows = pageRowsFor(next, role);
+    const first = rows.find((r) => r.placement.allowedFormats.includes(formatId)) ?? rows[0];
+    if (first) chooseRow(first);
+  };
 
   // A success note from an earlier save must not sit next to a new, unsaved shape / position.
   useEffect(() => {
@@ -156,6 +213,11 @@ export default function AdsVisualBuilder() {
     setSubtext(creative.body || creative.subtext || '');
     setCtaLabel(cta.label || 'Shop Now');
     setShowText((ad.creative as Record<string, unknown> | undefined)?.showText === true);
+    setFit((ad.creative as Record<string, unknown> | undefined)?.fit === 'fill' ? 'fill' : 'whole');
+    {
+      const f = (ad.creative as Record<string, unknown> | undefined)?.focusY;
+      setFocusY(f === 'top' || f === 'bottom' ? f : 'center');
+    }
     setImageUrl(creative.imageUrl || '');
     setVideoUrl(creative.videoUrl || '');
     setPosterUrl(creative.posterUrl || '');
@@ -239,15 +301,16 @@ export default function AdsVisualBuilder() {
   }, [hostCategoryId, hostCategoryName, catalogCategories]);
 
   // Keep placement valid when format/page changes
+  // (format changed from the format cards: stay on this page when it has a place for the format,
+  //  otherwise go to the first page that does)
   useEffect(() => {
-    const pagesForFormat = [...new Set(allFormatPlacements.map((p) => p.pageKey))];
-    if (!pagesForFormat.includes(pageKey as never) && pagesForFormat[0]) {
-      setPageKey(pagesForFormat[0]);
+    if (availablePlacements.some((p) => p.placementId === placementId)) return;
+    if (availablePlacements[0]) {
+      setPlacementId(availablePlacements[0].placementId);
       return;
     }
-    if (!availablePlacements.some((p) => p.placementId === placementId)) {
-      if (availablePlacements[0]) setPlacementId(availablePlacements[0].placementId);
-    }
+    const pagesForFormat = [...new Set(allFormatPlacements.map((p) => p.pageKey))];
+    if (pagesForFormat[0] && pagesForFormat[0] !== pageKey) setPageKey(pagesForFormat[0]);
   }, [allFormatPlacements, availablePlacements, pageKey, placementId]);
 
   const onSelectListing = (lid: string) => {
@@ -320,6 +383,8 @@ export default function AdsVisualBuilder() {
     const creative: Record<string, unknown> = {
       pagePosition: placementDef?.positions?.length ? pagePosition || placementDef.defaultPosition : undefined,
       showText: formatDef?.imageLed && fields.has('headline') ? showText : undefined,
+      fit: placementDef?.creative?.display === 'natural' ? fit : undefined,
+      focusY: placementDef?.creative?.display === 'natural' && fit === 'fill' ? focusY : undefined,
       advertiserName: fields.has('advertiser') ? advertiserName || undefined : undefined,
       headline: headline || undefined,
       body: subtext || undefined,
@@ -384,6 +449,26 @@ export default function AdsVisualBuilder() {
       alive = false;
     };
   }, [imageUrl]);
+
+  /** Draft copy of this ad; opens it so the copy can be placed somewhere else, then published. */
+  const duplicate = async () => {
+    if (!id) return;
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const copy = await adsApi.duplicateAd(id);
+      navigate(`/admin/ads-studio/${encodeURIComponent(copy.id)}/edit`);
+      window.setTimeout(
+        () => setMessage(`Copy created as a draft (${copy.advertisementReferenceId || copy.id}). Choose where it goes, then publish.`),
+        600,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not duplicate the ad');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const save = async (mode: 'draft' | 'submit' | 'publish') => {
     if (fitError && mode !== 'draft') {
@@ -494,9 +579,23 @@ export default function AdsVisualBuilder() {
           </div>
         </div>
         {existing ? (
-          <span className="rounded-full bg-[#F3F4F6] px-3 py-1 text-[10px] font-extrabold uppercase tracking-wide text-[#374151]">
-            {existing.status}
-          </span>
+          <div className="flex items-center gap-2">
+            {existing.kind === 'banner' || existing.kind === 'external' ? (
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void duplicate()}
+                className="rounded-lg border border-[#E8EDF2] bg-white px-3 py-1.5 text-[11px] font-extrabold text-[#374151] hover:bg-[#F9FAFB]"
+                data-testid="ad-duplicate"
+                title="Make a draft copy to place on another page or section"
+              >
+                Duplicate
+              </button>
+            ) : null}
+            <span className="rounded-full bg-[#F3F4F6] px-3 py-1 text-[10px] font-extrabold uppercase tracking-wide text-[#374151]">
+              {existing.status}
+            </span>
+          </div>
         ) : null}
       </div>
 
@@ -671,6 +770,41 @@ export default function AdsVisualBuilder() {
                     </div>
                   ) : null}
                   {placementDef ? <div className="mb-2"><AdSlotSpec placement={placementDef} /></div> : null}
+                  {placementDef?.creative?.display === 'natural' && imageDims ? (
+                    <div className="mb-2 rounded-lg border border-[#E8EDF2] bg-[#F9FAFB] px-3 py-2 text-[11.5px] text-[#374151]" data-testid="ad-fit-choice">
+                      <div className="font-bold">How it fills the banner on desktop</div>
+                      {Math.abs(imageDims.width / imageDims.height - 4) < 0.15 ? (
+                        <div className="mt-0.5 text-[10.5px] text-emerald-700 font-semibold">Your design is 4:1 — it fills the frame edge to edge on every screen.</div>
+                      ) : (
+                        <>
+                          <div className="mt-0.5 text-[10.5px] text-[#6B7280]">
+                            Your design is {(imageDims.width / imageDims.height).toFixed(2)}:1 and the desktop frame is 4:1. Phones always show it whole, edge to edge.
+                          </div>
+                          <label className="mt-1.5 flex items-start gap-2">
+                            <input type="radio" name="ad-fit" checked={fit === 'whole'} onChange={() => setFit('whole')} data-testid="ad-fit-whole" />
+                            <span>Show the whole design <span className="text-[#6B7280]">— nothing cut off; a soft blurred fill covers the {imageDims.width / imageDims.height < 4 ? 'sides' : 'top and bottom'}</span></span>
+                          </label>
+                          <label className="mt-1 flex items-start gap-2">
+                            <input type="radio" name="ad-fit" checked={fit === 'fill'} onChange={() => setFit('fill')} data-testid="ad-fit-fill" />
+                            <span>
+                              Fill edge to edge <span className="text-[#6B7280]">— no gaps; about {Math.round(Math.abs(1 - Math.min(imageDims.width / imageDims.height, 4) / Math.max(imageDims.width / imageDims.height, 4)) * 100)}% of the design is cut off ({imageDims.width / imageDims.height < 4 ? 'top and bottom' : 'sides'}). Check the preview so no text is lost.</span>
+                            </span>
+                          </label>
+                          {fit === 'fill' && imageDims.width / imageDims.height < 4 ? (
+                            <label className="mt-1.5 ml-6 flex items-center gap-2 text-[11px]">
+                              Keep
+                              <select value={focusY} onChange={(e) => setFocusY(e.target.value as 'top' | 'center' | 'bottom')} className="rounded border border-[#E8EDF2] px-1.5 py-0.5 text-[11px]" data-testid="ad-fit-focus">
+                                <option value="top">the top</option>
+                                <option value="center">the middle</option>
+                                <option value="bottom">the bottom</option>
+                              </select>
+                              of the design
+                            </label>
+                          ) : null}
+                        </>
+                      )}
+                    </div>
+                  ) : null}
                   {fitError && imageDims && placementDef?.creative ? (
                     <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11.5px] font-semibold leading-snug text-amber-900" data-testid="ad-artwork-needed">
                       New artwork needed for this shape. The current design is {imageDims.width}×{imageDims.height}px
@@ -836,91 +970,69 @@ export default function AdsVisualBuilder() {
           {/* 4. PLACEMENT */}
           <section className="rounded-xl border border-[#E8EDF2] bg-white p-4">
             <div className="mb-3 text-[10px] font-extrabold tracking-[0.08em] text-[#9CA3AF]">4 · PLACEMENT</div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block text-[11px] font-bold text-[#374151]">
-                Page
-                <select
-                  value={pageKey}
-                  onChange={(e) => setPageKey(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px]"
-                >
-                  {pages
-                    .filter((p) => pagesForFormat.includes(p.pageKey))
-                    .map((p) => (
-                      <option key={p.pageKey} value={p.pageKey}>
-                        {p.pageLabel}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <label className="block text-[11px] font-bold text-[#374151]">
-                Position
-                <select
-                  value={placementId}
-                  onChange={(e) => setPlacementId(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px]"
-                >
-                  {availablePlacements.map((p) => (
-                    <option key={p.placementId} value={p.placementId}>
-                      {p.slotLabel}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-bold text-[#6B7280]">
-              <span className="rounded bg-[#F3F4F6] px-2 py-1">
-                Devices:{' '}
-                {[placementDef?.desktopSupport ? 'Desktop' : null, placementDef?.mobileSupport ? 'Mobile' : null]
-                  .filter(Boolean)
-                  .join(' · ') || '—'}
-              </span>
-              {placementDef?.embeddedMode ? (
-                <span className="rounded bg-amber-50 text-amber-800 px-2 py-1">Embedded sub-slot</span>
-              ) : null}
-              <span className="rounded bg-[#F3F4F6] px-2 py-1 font-mono">{placementId}</span>
-            </div>
-            {placementDef?.positions?.length ? (
-              <div className="mt-3" data-testid="ad-position-picker">
-                <div className="text-[11px] font-bold text-[#374151]">Exact spot on the {placementDef.pageLabel} page</div>
-                <div className="mt-0.5 text-[10.5px] text-[#6B7280]">
-                  Spots are listed in page order. Different spots show separately; ads sharing a spot take turns (every 7 seconds).
-                </div>
-                <div className="mt-2 overflow-hidden rounded-lg border border-[#E8EDF2]">
-                  {placementDef.positions.map((pos, idx) => {
-                    const chosen = (pagePosition || placementDef.defaultPosition) === pos.key;
-                    const taken = spotOccupancy[pos.key] || [];
-                    return (
-                      <button
-                        key={pos.key}
-                        type="button"
-                        onClick={() => setPagePosition(pos.key)}
-                        data-testid={`ad-position-${pos.key}`}
-                        aria-pressed={chosen}
-                        className={`flex w-full items-center gap-3 px-3 py-2 text-left text-[11.5px] ${idx ? 'border-t border-[#E8EDF2]' : ''} ${
-                          chosen ? 'bg-[#FFF4EE]' : 'bg-white hover:bg-[#F9FAFB]'
-                        }`}
-                      >
-                        <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${chosen ? 'border-[#EF3C23] bg-[#EF3C23]' : 'border-[#CBD5E1]'}`}>
-                          {chosen ? <span className="h-1.5 w-1.5 rounded-full bg-white" /> : null}
-                        </span>
-                        <span className={`flex-1 ${chosen ? 'font-extrabold text-[#111827]' : 'font-semibold text-[#374151]'}`}>
-                          {pos.label}
-                          {pos.key === placementDef.defaultPosition ? <span className="ml-1 font-normal text-[#9CA3AF]">(default)</span> : null}
-                        </span>
-                        {taken.length ? (
-                          <span className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-800" title={taken.map((a) => a.advertisementReferenceId || a.title).join(', ')}>
-                            {taken.length} live ad{taken.length > 1 ? 's' : ''} here{chosen ? ' — will take turns' : ''}
-                          </span>
-                        ) : (
-                          <span className="shrink-0 text-[10px] font-semibold text-[#9CA3AF]">free</span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+            <label className="block text-[11px] font-bold text-[#374151]">
+              Page
+              <select
+                value={pageKey}
+                onChange={(e) => choosePage(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px]"
+                data-testid="ad-page-select"
+              >
+                {pages.map((p) => (
+                  <option key={p.pageKey} value={p.pageKey}>
+                    {p.pageLabel}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="mt-3" data-testid="ad-page-map">
+              <div className="text-[11px] font-bold text-[#374151]">Where on this page</div>
+              <div className="mt-0.5 text-[10.5px] text-[#6B7280]">
+                Every place on the page, top to bottom. Different places show separately; ads in the same place take turns (round switch icons).
               </div>
-            ) : null}
+              <div className="mt-2 overflow-hidden rounded-lg border border-[#E8EDF2]">
+                {pageRows.map((row, idx) => {
+                  const chosen = isRowChosen(row);
+                  const taken = placeOccupancy[row.key] || [];
+                  const fits = row.placement.allowedFormats.includes(formatId);
+                  const switchTo = fits ? null : getFormatDef(row.placement.allowedFormats[0] as AdFormatId)?.label;
+                  return (
+                    <button
+                      key={row.key}
+                      type="button"
+                      onClick={() => chooseRow(row)}
+                      data-testid={`ad-place-${row.key.replace(':', '--')}`}
+                      aria-pressed={chosen}
+                      className={`flex w-full items-center gap-3 px-3 py-2 text-left text-[11.5px] ${idx ? 'border-t border-[#E8EDF2]' : ''} ${
+                        chosen ? 'bg-[#FFF4EE]' : 'bg-white hover:bg-[#F9FAFB]'
+                      }`}
+                    >
+                      <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${chosen ? 'border-[#EF3C23] bg-[#EF3C23]' : 'border-[#CBD5E1]'}`}>
+                        {chosen ? <span className="h-1.5 w-1.5 rounded-full bg-white" /> : null}
+                      </span>
+                      <span className="w-[92px] shrink-0 rounded bg-[#EEF2FF] px-1.5 py-0.5 text-center text-[9.5px] font-extrabold uppercase tracking-wide text-[#3730A3]">
+                        {shapeOf(row.placement)}
+                      </span>
+                      <span className={`min-w-0 flex-1 ${chosen ? 'font-extrabold text-[#111827]' : 'font-semibold text-[#374151]'}`}>
+                        {row.label}
+                        {switchTo ? <span className="block text-[10px] font-semibold text-[#9CA3AF]">Switches the format to {switchTo}</span> : null}
+                        {!row.placement.mobileSupport ? <span className="block text-[10px] font-semibold text-[#9CA3AF]">Desktop only</span> : null}
+                      </span>
+                      {taken.length ? (
+                        <span className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-800" title={taken.map((a) => a.advertisementReferenceId || a.title).join(', ')}>
+                          {taken.length} live ad{taken.length > 1 ? 's' : ''}{chosen ? ' — will take turns' : ''}
+                        </span>
+                      ) : (
+                        <span className="shrink-0 text-[10px] font-semibold text-[#9CA3AF]">free</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-bold text-[#6B7280]">
+                <span className="rounded bg-[#F3F4F6] px-2 py-1 font-mono">{placementId}{pagePosition ? ` · ${pagePosition}` : ''}</span>
+              </div>
+            </div>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <label className="block text-[11px] font-bold text-[#374151]">
                 Start (optional)
@@ -1061,6 +1173,8 @@ export default function AdsVisualBuilder() {
                       logoUrl: logoUrl || undefined,
                       hasDestination: destMode === 'external' ? Boolean(externalUrl.trim()) : Boolean(internalEntityId || listingId),
                       showText: formatDef?.imageLed ? showText : false,
+                      fit,
+                      focusY,
                     }}
                   />
                   <AdFitStatus placement={placementDef} width={imageDims?.width} height={imageDims?.height} />

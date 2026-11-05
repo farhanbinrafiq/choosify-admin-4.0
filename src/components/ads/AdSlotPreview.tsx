@@ -24,6 +24,9 @@ export type AdPreviewInput = {
   hasDestination?: boolean;
   /** Draw headline + subtext over the image (storefront parity). */
   showText?: boolean;
+  /** Desktop wide banner: 'fill' crops top/bottom to fill the frame. */
+  fit?: 'whole' | 'fill';
+  focusY?: 'top' | 'center' | 'bottom';
 };
 
 // Same label as the storefront: always just "Sponsored" (the design itself names the advertiser).
@@ -176,10 +179,20 @@ export function AdSlotPreview({ placement, ad }: { placement: AdPlacementDef; ad
   }
   if (placement.creative?.display === 'natural') {
     // Same fixed frame as the storefront AdSlotBanner: 4:1 desktop / 5:2 phone, design fitted whole.
+    const fill = (phone: boolean) => !phone && ad.fit === 'fill';
+    // Phones: the frame takes the design's own shape (between 2:1 and 4:1), so it fills edge to edge.
+    const ratio = ad.imageWidth && ad.imageHeight ? ad.imageWidth / ad.imageHeight : 2.5;
+    const phoneAspect = `${Math.min(4, Math.max(2, ratio)).toFixed(3)} / 1`;
     const frame = (aspect: string, testId?: string, phone = false) => (
       <div className="relative w-full overflow-hidden rounded-xl" style={{ aspectRatio: aspect, background: '#0F1238' }}>
-        <img src={img} alt="" aria-hidden className="absolute inset-0 h-full w-full scale-110 object-cover blur-xl" style={{ opacity: 0.6 }} />
-        <img src={img} alt={ad.headline || ''} className="relative block h-full w-full object-contain" data-testid={testId} />
+        {fill(phone) ? null : <img src={img} alt="" aria-hidden className="absolute inset-0 h-full w-full scale-110 object-cover blur-xl" style={{ opacity: 0.6 }} />}
+        <img
+          src={img}
+          alt={ad.headline || ''}
+          className={`relative block h-full w-full ${fill(phone) ? 'object-cover' : 'object-contain'}`}
+          style={fill(phone) ? { objectPosition: `center ${ad.focusY || 'center'}` } : undefined}
+          data-testid={testId}
+        />
         {ad.showText && (ad.headline || ad.subtext) ? (
           <div
             className="absolute inset-y-0 left-0 z-[1] flex flex-col justify-center"
@@ -218,8 +231,8 @@ export function AdSlotPreview({ placement, ad }: { placement: AdPlacementDef; ad
           {frame('4 / 1', 'ad-preview-image')}
         </div>
         <div>
-          <div className="mb-1 text-[10px] font-bold uppercase text-slate-500">Phone (390px) — fixed 5:2 frame</div>
-          <div className="mx-auto w-[60%]">{frame('5 / 2', undefined, true)}</div>
+          <div className="mb-1 text-[10px] font-bold uppercase text-slate-500">Phone (390px) — frame follows your design's shape</div>
+          <div className="mx-auto w-[60%]">{frame(phoneAspect, undefined, true)}</div>
         </div>
         <div className="text-[10.5px] text-slate-500">
           Your design is fitted whole (never cropped) inside the fixed frame; space it does not fill shows a blurred fill. The orange CTA button sits on the right, vertically centred, when a label and destination are set.
@@ -229,6 +242,29 @@ export function AdSlotPreview({ placement, ad }: { placement: AdPlacementDef; ad
             </span>
           ) : null}
         </div>
+      </div>
+    );
+  }
+  if (placement.slotKey === 'grid_card') {
+    // Same as the storefront AdGridCard: the size of the cards around it, image on top (~4:3).
+    return (
+      <div className="mx-auto w-[260px]" data-testid="ad-preview-grid-card">
+        <div className="relative flex min-h-[300px] flex-col overflow-hidden rounded-[10px]" style={{ background: 'linear-gradient(160deg, #3B1E3F, #1E1B4B)' }}>
+          <div className="relative min-h-0 flex-[7] overflow-hidden" style={{ background: 'linear-gradient(135deg, #FF5B00, #2323FF)' }}>
+            {format?.imageLed && img ? <img src={img} alt="" className="absolute inset-0 h-full w-full object-cover" /> : null}
+            {chip(ad.advertiserName)}
+          </div>
+          <div className="flex min-h-0 flex-[3] flex-col justify-center p-3.5">
+            <div className="mb-1 text-[13.5px] font-bold leading-snug" style={{ color: '#FFFFFF' }}>{ad.headline || 'Your headline'}</div>
+            {ad.subtext ? <div className="mb-3 text-[11px] leading-snug" style={{ color: 'rgba(255,255,255,.6)' }}>{ad.subtext}</div> : null}
+            {ad.ctaLabel && ad.hasDestination !== false ? (
+              <span className="mt-auto w-full rounded-md py-2.5 text-center text-[11.5px] font-extrabold uppercase" style={{ background: '#FF5B00', color: '#FFFFFF' }} data-testid="ad-preview-cta">
+                {ad.ctaLabel} →
+              </span>
+            ) : null}
+          </div>
+        </div>
+        <div className="mt-2 text-[10.5px] text-slate-500">Sits in the grid at the same size as the cards around it.</div>
       </div>
     );
   }
