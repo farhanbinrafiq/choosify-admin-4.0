@@ -5,6 +5,7 @@ import { AD_PLACEMENTS, getAnyPlacementDef, getFormatDef, getPlacementDef } from
 import { inferHeroMediaType } from '@/shared/ads/heroMedia';
 import { useAuth } from '../../contexts/AuthContext';
 import { adsApi, type AdMetricsRow, type AdsApiRecord } from '../../services/adsApi';
+import { DayBars, InsightGrid, InsightPanel, KPI_COLORS, KpiStrip, RankList, fmt as kfmt, pct } from '../../components/insights/Kpi';
 
 const SellerDeals = lazy(() => import('./SellerDeals'));
 
@@ -407,36 +408,6 @@ function BannerAdsList() {
         </button>
       </div>
 
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        {FILTERS.map((f) => (
-          <button
-            key={f.key}
-            type="button"
-            onClick={() => setFilter(f.key)}
-            className={`rounded-full px-3 py-1.5 text-[10px] font-extrabold ${
-              filter === f.key ? 'bg-[#111827] text-white' : 'bg-[#F3F4F6] text-[#374151]'
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
-        <label className="ml-auto flex items-center gap-1.5 text-[10.5px] font-extrabold uppercase tracking-wide text-[#6B7280]">
-          Sort by
-          <select
-            value={sort}
-            onChange={(e) => chooseSort(e.target.value as SortKey)}
-            className="rounded-lg border border-[#E8EDF2] bg-white px-2 py-1.5 text-[11.5px] font-bold normal-case tracking-normal text-[#111827]"
-            data-testid="ads-sort"
-          >
-            {SORTS.map((s) => (
-              <option key={s.key} value={s.key}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
       {error ? (
         <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-semibold text-red-700">
           {error}
@@ -475,6 +446,106 @@ function BannerAdsList() {
           {bulkBusy ? <Loader2 className="h-4 w-4 animate-spin text-[#EF3C23]" /> : null}
         </div>
       ) : null}
+
+      {/* Top analytics — Inventory-style cards + panels (same period as the Results bar below). */}
+      {(() => {
+        let views = 0;
+        let clicks = 0;
+        const day: Record<string, { a: number; b: number }> = {};
+        const slot: Record<string, { i: number; c: number }> = {};
+        metrics.forEach((m) => {
+          views += m.impressions;
+          clicks += m.clicks;
+          m.daily.forEach((d) => {
+            const x = (day[d.date] ||= { a: 0, b: 0 });
+            x.a += d.impressions;
+            x.b += d.clicks;
+          });
+          Object.entries(m.bySlot).forEach(([k, v]) => {
+            const x = (slot[k] ||= { i: 0, c: 0 });
+            x.i += v.impressions;
+            x.c += v.clicks;
+          });
+        });
+        const live = rows.filter((r) => r.status === 'active').length;
+        const waiting = rows.filter((r) => r.status === 'pending').length;
+        const unpaid = rows.filter((r) => (((r.metadata || {}) as Record<string, unknown>).billing as { status?: string } | undefined)?.status === 'unpaid').length;
+        const byId = new Map(rows.map((r) => [r.id, r]));
+        const top = [...metrics.values()].filter((m) => m.impressions || m.clicks).sort((a, b) => b.impressions - a.impressions).slice(0, 5);
+        return (
+          <div className="mb-4 space-y-3.5" data-testid="ads-top-analytics">
+            <KpiStrip
+              items={[
+                { label: 'Live ads', value: kfmt(live), sub: `${rows.length} ads in total`, color: KPI_COLORS.green, testId: 'ads-kpi-live' },
+                { label: 'Ad views', value: kfmt(views), sub: rangeDef.label, color: KPI_COLORS.blue, testId: 'ads-kpi-views' },
+                { label: 'Ad clicks', value: kfmt(clicks), sub: rangeDef.label, color: KPI_COLORS.orange, testId: 'ads-kpi-clicks' },
+                { label: 'Click rate', value: pct(clicks, views), sub: 'Clicks ÷ views', color: KPI_COLORS.purple, testId: 'ads-kpi-ctr' },
+                { label: 'Waiting', value: kfmt(waiting), sub: unpaid ? `${unpaid} unpaid` : 'Awaiting approval', color: KPI_COLORS.amber, testId: 'ads-kpi-waiting' },
+              ]}
+            />
+            <InsightGrid>
+              <InsightPanel title="Views & clicks per day" testId="ads-panel-daily">
+                <DayBars
+                  series={Object.keys(day)
+                    .sort()
+                    .map((d) => ({ date: d, a: day[d].a, b: day[d].b }))}
+                  empty="No ad views in this period yet."
+                />
+                <div style={{ fontSize: 10.5, color: '#6B7280', marginTop: 6 }}>Orange = views · navy = clicks</div>
+              </InsightPanel>
+              <InsightPanel title="Top ads" testId="ads-panel-top">
+                <RankList
+                  empty="No views yet."
+                  rows={top.map((m) => {
+                    const r = byId.get(m.adId);
+                    return { key: m.adId, label: `${r?.advertisementReferenceId || m.adId} · ${r?.title || 'Ad'}`, value: `${kfmt(m.impressions)} · ${kfmt(m.clicks)} clicks` };
+                  })}
+                />
+              </InsightPanel>
+              <InsightPanel title="By placement" testId="ads-panel-slots">
+                <RankList
+                  empty="No views yet."
+                  rows={Object.entries(slot)
+                    .sort((a, b) => b[1].i - a[1].i)
+                    .slice(0, 6)
+                    .map(([k, v]) => ({ key: k, label: getAnyPlacementDef(k)?.sectionLabel ?? k, value: `${kfmt(v.i)} · ${pct(v.c, v.i)}` }))}
+                />
+              </InsightPanel>
+            </InsightGrid>
+          </div>
+        );
+      })()}
+
+      {/* Status filters + sort sit under the analytics cards, right above the list. */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {FILTERS.map((f) => (
+          <button
+            key={f.key}
+            type="button"
+            onClick={() => setFilter(f.key)}
+            className={`rounded-full px-3 py-1.5 text-[10px] font-extrabold ${
+              filter === f.key ? 'bg-[#111827] text-white' : 'bg-[#F3F4F6] text-[#374151]'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+        <label className="ml-auto flex items-center gap-1.5 text-[10.5px] font-extrabold uppercase tracking-wide text-[#6B7280]">
+          Sort by
+          <select
+            value={sort}
+            onChange={(e) => chooseSort(e.target.value as SortKey)}
+            className="rounded-lg border border-[#E8EDF2] bg-white px-2 py-1.5 text-[11.5px] font-bold normal-case tracking-normal text-[#111827]"
+            data-testid="ads-sort"
+          >
+            {SORTS.map((s) => (
+              <option key={s.key} value={s.key}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-3 rounded-[5px] border border-[#E8EDF2] bg-white px-3 py-2 text-[11.5px]" data-testid="ads-results-bar">
         <span className="font-extrabold text-[#111827]">Results</span>

@@ -19,26 +19,9 @@ import {
 } from 'recharts';
 import { useOrders } from '../../contexts/OrdersContext';
 import { operationsApi, toAnalyticsSummary, type AnalyticsSummary } from '../../services/operationsApi';
+import { useAuth } from '../../contexts/AuthContext';
+import { OwnerInsightsPanel } from '../../components/owner/OwnerInsightsPanel';
 
-const defaultMockWeeklyData = [
-  { name: 'Sun', users: 4000, sessions: 2400, sales: 120000, commission: 14000 },
-  { name: 'Mon', users: 3000, sessions: 1398, sales: 98000, commission: 11000 },
-  { name: 'Tue', users: 2000, sessions: 9800, sales: 154000, commission: 18500 },
-  { name: 'Wed', users: 2780, sessions: 3908, sales: 112000, commission: 13200 },
-  { name: 'Thu', users: 1890, sessions: 4800, sales: 87000, commission: 10400 },
-  { name: 'Fri', users: 2390, sessions: 3800, sales: 135000, commission: 16200 },
-  { name: 'Sat', users: 3490, sessions: 4300, sales: 198000, commission: 23800 },
-];
-
-function stableRandom(seed: string, min: number, max: number): number {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) {
-    hash = ((hash << 5) - hash) + seed.charCodeAt(i);
-    hash |= 0;
-  }
-  const normalized = (Math.abs(hash) % 1000) / 1000;
-  return +(min + normalized * (max - min)).toFixed(1);
-}
 
 export default function AnalyticsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -117,8 +100,8 @@ export default function AnalyticsPage() {
       commission: day.commission
     }));
 
-    const isDataEmpty = results.every(d => d.sales === 0 && d.users === 0);
-    return isDataEmpty ? defaultMockWeeklyData : results;
+    // Real numbers only (an empty week shows zeros — never sample data).
+    return results;
   }, [filteredOrders]);
 
   // 2. Sales Report: Group and sum sales total per Category
@@ -173,24 +156,21 @@ export default function AnalyticsPage() {
       const seller = { id: s.sellerId, sellerName: s.sellerName };
       const index = idx;
 
-      const avgFulfillment = stableRandom(seller.id || seller.sellerName || String(index), 1, 5).toFixed(1); 
-      const returnRateNum = stableRandom((seller.id || String(index)) + '_return', 2, 8); 
+      // Not recorded by the platform yet — shown as "—" (never invented).
+      const avgFulfillment = '—';
+      const returnRateNum = null as number | null;
+      void index;
       const rate = s.totalAssigned > 0 ? (s.fulfilled / s.totalAssigned) * 100 : 100;
       
       return {
         ...s,
         fulfillmentRate: Number(rate.toFixed(0)),
         avgFulfillment,
-        returnRate: `${returnRateNum}%`
+        returnRate: returnRateNum === null ? '—' : `${returnRateNum}%`
       };
     });
 
-    const finalGrid = computedList.length > 0 ? computedList : [
-      { sellerId: 'seller_001', sellerName: 'Aarong Digital', totalAssigned: 12, fulfilled: 11, fulfillmentRate: 92, avgFulfillment: '2.4', returnRate: '3.2%' },
-      { sellerId: 'seller_002', sellerName: 'TechZone BD', totalAssigned: 8, fulfilled: 8, fulfillmentRate: 100, avgFulfillment: '1.8', returnRate: '4.5%' },
-      { sellerId: 'seller_003', sellerName: 'StyleCouture BD', totalAssigned: 15, fulfilled: 13, fulfillmentRate: 87, avgFulfillment: '3.1', returnRate: '5.1%' },
-      { sellerId: 'seller_004', sellerName: 'ElectroBD', totalAssigned: 5, fulfilled: 4, fulfillmentRate: 80, avgFulfillment: '4.2', returnRate: '2.8%' }
-    ];
+    const finalGrid = computedList;
 
     return [...finalGrid].sort((a, b) => {
       let valA: any = a[sortField];
@@ -224,9 +204,19 @@ export default function AnalyticsPage() {
     return Math.round(weeklyGrossSales * 0.12);
   }, [weeklyGrossSales]);
 
+  const { profile } = useAuth();
+  const isSuperAdmin = String(profile?.role || '').toLowerCase() === 'super_admin';
+
   return (
     <div className="space-y-6 text-white pb-16 animate-fade-in animate-duration-300">
       
+      {/* Platform Insights — Super Admin: whole-website traffic + ads, or exactly what one owner sees. */}
+      {isSuperAdmin ? (
+        <div className="rounded-2xl bg-[#F4F7FB] p-4 text-[#111827]">
+          <OwnerInsightsPanel platform />
+        </div>
+      ) : null}
+
       {/* Header section with Date Range Selector */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-app-border pb-6">
         <div>

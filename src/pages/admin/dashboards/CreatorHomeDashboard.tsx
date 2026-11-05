@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { OwnerInsightsPanel } from '../../../components/owner/OwnerInsightsPanel';
 import { ProfileCompletionCard, creatorCompletionItems } from '../../../components/dashboard/ProfileCompletionCard';
 import {
   FilePlus2,
@@ -175,6 +176,7 @@ export default function CreatorHomeDashboard() {
       title="Creator Command Center"
       subtitle="What content and profile work to focus on, and how your Creator presence is doing."
     >
+      <OwnerInsightsPanel />
       {appStatus ? (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-[12px] font-semibold text-amber-800">
           {appStatus.label} —{' '}

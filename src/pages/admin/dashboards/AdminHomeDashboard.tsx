@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { OwnerInsightsPanel } from '../../../components/owner/OwnerInsightsPanel';
+import { useAuth } from '../../../contexts/AuthContext';
 import {
   ExternalLink,
   LayoutTemplate,
@@ -182,6 +184,9 @@ export default function AdminHomeDashboard() {
     }
   };
 
+  const { profile: insightsProfile } = useAuth();
+  const isSuperAdmin = String(insightsProfile?.role || '').toLowerCase() === 'super_admin';
+
   return (
     <DashShell
       title="Platform Command Center"
@@ -208,6 +213,7 @@ export default function AdminHomeDashboard() {
         </>
       }
     >
+      {isSuperAdmin ? <OwnerInsightsPanel platform /> : null}
       <KpiPanel cols={4} branded>
         <KpiTile
           label="GMV / Revenue"

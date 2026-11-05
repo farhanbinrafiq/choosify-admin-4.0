@@ -1,4 +1,5 @@
-import React, { useMemo, useState, CSSProperties } from 'react';
+import React, { useEffect, useMemo, useState, CSSProperties } from 'react';
+import { authedFetch } from '../../services/authRefresh';
 import { Search, Plus, AlertTriangle, FileSpreadsheet, CheckCircle } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
@@ -194,6 +195,24 @@ const statusPill = (status: string): CSSProperties => {
 
 export default function ProductsPage() {
   const { profile, activeBrandId, allBrands, sellerBrands } = useAuth();
+  // Popularity Insights: most-viewed products (own products; Super Admin = whole website).
+  const [popular, setPopular] = useState<Array<{ id: string; name: string; views: number }> | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const scope = String(profile?.role || '').toLowerCase() === 'super_admin' ? '&scope=all' : '';
+    const base = String((import.meta as unknown as { env?: Record<string, string> }).env?.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '');
+    authedFetch(`${base}/views/insights?days=30${scope}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!alive) return;
+        const top = ((j?.data?.top || []) as Array<{ kind: string; id: string; name: string; views: number }>).filter((t) => t.kind === 'product' && t.views > 0).slice(0, 5);
+        setPopular(top);
+      })
+      .catch(() => alive && setPopular([]));
+    return () => {
+      alive = false;
+    };
+  }, [profile?.role]);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -718,8 +737,25 @@ export default function ProductsPage() {
     { key: 'audit', label: 'Audit & Reconciliation' },
   ];
 
-  const analyticsCards = [
-    { title: 'Popularity Insights', body: 'Product view, search and save analytics are not available in this release — there is no persisted analytics store to source most-viewed / most-searched / most-saved from.' },
+  const analyticsCards: Array<{ title: string; body: React.ReactNode }> = [
+    {
+      title: 'Popularity Insights',
+      body: popular === null ? (
+        'Loading most-viewed products…'
+      ) : popular.length === 0 ? (
+        'No product views in the last 30 days yet.'
+      ) : (
+        <div data-testid="popularity-insights">
+          <div style={{ marginBottom: 6, color: '#6B7280' }}>Most viewed products · last 30 days</div>
+          {popular.map((p) => (
+            <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, borderTop: '1px solid #EEF2F6', padding: '5px 0', color: '#374151' }}>
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+              <b style={{ color: '#111827', flexShrink: 0 }}>{p.views.toLocaleString('en-US')} views</b>
+            </div>
+          ))}
+        </div>
+      ),
+    },
     { title: 'Top Performing Categories', body: 'Category revenue and share analytics are not available in this release.' },
     { title: 'Conversion & Engagement', body: 'Detail-to-cart, cart-to-checkout and net conversion trend analytics are not available in this release.' },
   ];

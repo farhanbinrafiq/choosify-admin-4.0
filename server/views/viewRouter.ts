@@ -102,6 +102,8 @@ viewRouter.post('/views/:kind/:id', softAuthenticateRequest, async (req: Request
 viewRouter.get('/views/insights', authenticateRequest, async (req: Request, res: Response) => {
   res.setHeader('Cache-Control', 'no-store');
   const superAdmin = hasRole(req.userRole, ROLES.SUPER_ADMIN);
+  // Super Admin: ?scope=all = the whole website; ?ownerId= = exactly what that owner sees.
+  const all = superAdmin && req.query.scope === 'all';
   const ownerId = superAdmin && typeof req.query.ownerId === 'string' && req.query.ownerId ? req.query.ownerId : req.userId;
   if (!ownerId) {
     res.status(401).json({ error: 'Sign in' });
@@ -113,10 +115,12 @@ viewRouter.get('/views/insights', authenticateRequest, async (req: Request, res:
   const sinceDay = since ? since.toISOString().slice(0, 10) : null;
   try {
     const [brands, products] = await Promise.all([catalogStore.listBrands(), catalogStore.listProducts()]);
-    const myBrands = brands.filter((b) => b.sellerId && b.sellerId === ownerId);
-    const myProducts = products.filter(
-      (p) => (p.sellerId && p.sellerId === ownerId) || ((p as { creatorId?: string }).creatorId && (p as { creatorId?: string }).creatorId === ownerId),
-    );
+    const myBrands = all ? brands : brands.filter((b) => b.sellerId && b.sellerId === ownerId);
+    const myProducts = all
+      ? products
+      : products.filter(
+          (p) => (p.sellerId && p.sellerId === ownerId) || ((p as { creatorId?: string }).creatorId && (p as { creatorId?: string }).creatorId === ownerId),
+        );
     const items: Array<{ kind: ViewKind; id: string; name: string; image: string }> = [
       ...myBrands.map((b) => ({ kind: 'brand' as const, id: b.id, name: b.name, image: b.logo || '' })),
       ...myProducts.map((p) => ({ kind: 'product' as const, id: p.id, name: p.title, image: p.image || '' })),
@@ -153,7 +157,7 @@ viewRouter.get('/views/insights', authenticateRequest, async (req: Request, res:
     } else {
       for (const d of Object.keys(daily).sort()) series.push({ date: d, views: daily[d] });
     }
-    const myAds = (await adsStore.listAds({})).filter((a) => a.ownerId === ownerId);
+    const myAds = (await adsStore.listAds({})).filter((a) => all || a.ownerId === ownerId);
     const adm = metricsFor(myAds.map((a) => a.id), sinceDay ?? undefined);
     let adViews = 0;
     let adClicks = 0;
@@ -173,6 +177,10 @@ viewRouter.get('/views/insights', authenticateRequest, async (req: Request, res:
         bySource,
         byDevice,
         top: rows.filter((r) => r.views > 0 || r.allTimeViews > 0).sort((a, b) => b.views - a.views || b.allTimeViews - a.allTimeViews).slice(0, 10),
+        // owners with brands (Super Admin "view as owner" picker)
+        owners: superAdmin
+          ? [...new Map(brands.filter((b) => b.sellerId).map((b) => [b.sellerId as string, { ownerId: b.sellerId as string, label: b.name }])).values()].slice(0, 200)
+          : undefined,
         ads: { count: myAds.length, views: adViews, clicks: adClicks },
       },
     });

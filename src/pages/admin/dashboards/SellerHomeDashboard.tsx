@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { OwnerInsightsPanel } from '../../../components/owner/OwnerInsightsPanel';
 import { ProfileCompletionCard, brandCompletionItems } from '../../../components/dashboard/ProfileCompletionCard';
 import {
   Package,
@@ -195,6 +196,7 @@ export default function SellerHomeDashboard() {
       subtitle="How your business is doing, and what you need to act on now — scoped to your seller account."
       actions={<RangeToggle value={range} onChange={setRange} />}
     >
+      <OwnerInsightsPanel />
       {appStatus ? (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-[12px] font-semibold text-amber-800">
           {appStatus.label} —{' '}
