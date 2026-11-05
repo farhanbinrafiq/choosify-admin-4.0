@@ -46,6 +46,8 @@ export type PublicAd = {
   gridEvery?: number;
   /** Sponsored Listing: the product / brand promoted (drawn as its normal card). */
   entity?: { type: 'product' | 'brand'; id: string };
+  /** Sponsored Listing: the row it starts (first card of that row, whatever the column count). */
+  listRow?: number;
   /** Image banners: draw headline + subtext over the image. */
   showText?: boolean;
   /** Wide banners on desktop: fill the frame edge to edge (crop top/bottom) instead of showing the whole design. */
@@ -186,6 +188,7 @@ export function toPublicAd(ad: AdRecord, origin = ''): PublicAd {
         : format.formatId === 'sponsored_listing'
           ? Number(c.gridEvery) > 0 ? Number(c.gridEvery) : 5
           : undefined,
+    listRow: format.formatId === 'sponsored_listing' ? (Number(c.listRow) >= 1 && Number(c.listRow) <= 10 ? Math.round(Number(c.listRow)) : 2) : undefined,
     entity:
       format.formatId === 'sponsored_listing' && (ad.cta?.internalEntityType === 'product' || ad.cta?.internalEntityType === 'brand') && ad.cta?.internalEntityId
         ? { type: ad.cta.internalEntityType, id: String(ad.cta.internalEntityId).trim() }

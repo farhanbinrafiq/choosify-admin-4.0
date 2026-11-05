@@ -20,6 +20,7 @@ import { StorefrontAdPresentation } from '../../components/ads/storefront';
 import { AdFitStatus, AdSlotPreview, AdSlotSpec, measureImage } from '../../components/ads/AdSlotPreview';
 import { CategorySearchSelect } from '../../components/ads/CategorySearchSelect';
 import { EntityPicker, type PickableType } from '../../components/ads/EntityPicker';
+import { SponsoredListingPreview } from '../../components/ads/SponsoredListingPreview';
 import { useAuth } from '../../contexts/AuthContext';
 import { adsApi, type AdsApiRecord, type EligibleListing } from '../../services/adsApi';
 import { catalogApi } from '../../services/catalogApi';
@@ -93,6 +94,7 @@ function pageRowsFor(pageKey: string, role?: string): PageRow[] {
 /** Plain-language shape of a place (what the advertiser needs to design). */
 function shapeOf(p: AdPlacementDef): string {
   if (p.placementId === 'HOME_HERO') return 'Hero slide';
+  if (p.allowedFormats.includes('sponsored_listing')) return 'In-list card';
   if (p.orientation === 'horizontal') return 'Wide banner';
   if (p.orientation === 'embedded') return 'Card footer strip';
   if (p.slotKey === 'popup') return 'Pop-up';
@@ -144,6 +146,7 @@ export default function AdsVisualBuilder() {
   const [popupDelay, setPopupDelay] = useState(3);
   /** In-grid cards: after every N cards (0 = once at the end). */
   const [gridEvery, setGridEvery] = useState(8);
+  const [listRow, setListRow] = useState(2);
   const [imageUrl, setImageUrl] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
   const [posterUrl, setPosterUrl] = useState('');
@@ -275,6 +278,7 @@ export default function AdsVisualBuilder() {
       setPopupMax(Number(c.popupMaxPerSession) || 1);
       setPopupDelay(c.popupDelaySec === undefined ? 3 : Number(c.popupDelaySec) || 0);
       setGridEvery(c.gridEvery === undefined ? 8 : Number(c.gridEvery));
+      setListRow(Number(c.listRow) >= 1 ? Number(c.listRow) : 2);
     }
     {
       const f = (ad.creative as Record<string, unknown> | undefined)?.focusY;
@@ -469,6 +473,7 @@ export default function AdsVisualBuilder() {
       showText: formatDef?.imageLed && fields.has('headline') ? showText : undefined,
       fit: placementDef?.creative?.display === 'natural' && placementDef.slotKey !== 'popup' ? fit : undefined,
       gridEvery: placementDef?.slotKey === 'grid_card' ? gridEvery : undefined,
+      listRow: formatId === 'sponsored_listing' ? listRow : undefined,
       popupPages: formatId === 'popup' ? popupPages : undefined,
       popupMaxPerSession: formatId === 'popup' ? popupMax : undefined,
       popupDelaySec: formatId === 'popup' ? popupDelay : undefined,
@@ -828,6 +833,11 @@ export default function AdsVisualBuilder() {
           {/* 2. CONTENT */}
           <section className="rounded-xl border border-[#E8EDF2] bg-white p-4">
             <div className="mb-3 text-[10px] font-extrabold tracking-[0.08em] text-[#9CA3AF]">2 · CONTENT</div>
+            {isListing ? (
+              <div className="rounded-lg bg-[#F9FAFB] px-3 py-2 text-[11.5px] text-[#6B7280]" data-testid="listing-no-content">
+                Nothing to write here — a Sponsored Listing shows the item’s own photo, name and price with a “Sponsored” label. Choose the item below.
+              </div>
+            ) : null}
             <div className="grid gap-3 sm:grid-cols-2">
               {fields.has('advertiser') ? (
                 <FieldBox tone="advertiser" label="Advertiser / Brand" where="Who the ad is for">
@@ -1323,6 +1333,23 @@ export default function AdsVisualBuilder() {
                 </div>
               </div>
             ) : null}
+            {isListing ? (
+              <div className="mt-3 rounded-lg border-2 border-[#C4B5FD] bg-[#F5F3FF] px-3 py-2.5" data-testid="list-row-rules">
+                <label className="block text-[11.5px] font-extrabold text-[#111827]">
+                  Which row
+                  <select value={listRow} onChange={(e) => setListRow(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-[#E8EDF2] bg-white px-3 py-2 text-[12px] font-semibold" data-testid="list-row">
+                    {[1, 2, 3, 4, 5, 6].map((n) => (
+                      <option key={n} value={n}>
+                        {n === 1 ? 'Row 1 — the very first card of the list' : `Row ${n} — first card of row ${n}`}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="mt-1 text-[10.5px] text-[#6B7280]">
+                  The sponsored card always starts the row you pick — whether the screen shows 4, 6 or 8 cards per row. If the list is shorter, it shows as the first card of the last row.
+                </div>
+              </div>
+            ) : null}
             {formatId === 'popup' ? (
               <div className="mt-3 rounded-lg border-2 border-[#C4B5FD] bg-[#F5F3FF] px-3 py-2.5" data-testid="popup-rules">
                 <div className="text-[11.5px] font-extrabold text-[#111827]">Pop-up rules</div>
@@ -1466,6 +1493,54 @@ export default function AdsVisualBuilder() {
             })()}
           </section>
 
+          {/* Ready check — every problem is shown and fixable HERE, next to the buttons (no scrolling up). */}
+          {(() => {
+            const needsImage = Boolean(formatDef?.imageLed) && !imageUrl && !(formatId === 'hero_banner' && mediaType === 'video' && videoUrl);
+            const needsItem = isListing && !internalEntityId;
+            const needsPages = formatId === 'popup' && !popupPages.length;
+            if (!needsImage && !needsItem && !needsPages && !fitError) return null;
+            return (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5" data-testid="ad-ready-check">
+                <div className="mb-1.5 text-[11.5px] font-extrabold text-amber-900">Before it can go live</div>
+                <div className="space-y-1.5">
+                  {needsImage ? (
+                    <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-amber-900">
+                      <span>• This format shows your image — none uploaded yet.</span>
+                      <label className="inline-flex cursor-pointer items-center gap-1 rounded-md bg-[#EF3C23] px-2.5 py-1 text-[11px] font-extrabold text-white" data-testid="ad-ready-upload">
+                        {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />} Upload image here
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0] || null;
+                            e.target.value = '';
+                            void uploadCreative(f, 'image');
+                          }}
+                        />
+                      </label>
+                    </div>
+                  ) : null}
+                  {needsItem ? (
+                    <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-amber-900">
+                      <span>• Choose the product or brand you are promoting.</span>
+                      <button type="button" className="rounded-md border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-extrabold" onClick={() => document.querySelector('[data-testid="entity-type"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
+                        Choose it
+                      </button>
+                    </div>
+                  ) : null}
+                  {needsPages ? <div className="text-[11.5px] text-amber-900">• Pick the pages the pop-up shows on (Pop-up rules above).</div> : null}
+                  {fitError ? <div className="text-[11.5px] text-amber-900">• {fitError}</div> : null}
+                </div>
+                {uploadNote ? (
+                  <div className={`mt-2 rounded-md px-2.5 py-1.5 text-[11px] font-semibold ${uploadNote.kind === 'error' ? 'bg-red-50 text-red-700' : uploadNote.kind === 'busy' ? 'bg-blue-50 text-blue-700' : 'bg-white text-[#374151]'}`}>
+                    {uploadNote.text}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })()}
+
           {/* Actions */}
           <div className="flex flex-wrap gap-2">
             {isEdit && existing ? (
@@ -1584,6 +1659,9 @@ export default function AdsVisualBuilder() {
                   <div className="mb-2 text-[9px] font-bold uppercase tracking-wide text-[#9CA3AF]">
                     {placementDef.pageLabel} · {placementDef.slotLabel}
                   </div>
+                  {isListing ? (
+                    <SponsoredListingPreview type={internalEntityType === 'product' ? 'product' : 'brand'} id={internalEntityId} />
+                  ) : (
                   <AdSlotPreview
                     placement={placementDef}
                     ad={{
@@ -1602,6 +1680,7 @@ export default function AdsVisualBuilder() {
                       focusY,
                     }}
                   />
+                  )}
                   <AdFitStatus placement={placementDef} width={imageDims?.width} height={imageDims?.height} />
                 </div>
               ) : previewInPlacement && placementDef?.orientation === 'vertical' ? (

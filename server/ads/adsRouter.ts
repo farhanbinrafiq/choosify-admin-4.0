@@ -80,6 +80,13 @@ async function measuredCreative(creative: unknown, formatId: string | undefined,
   } else {
     delete c.gridEvery;
   }
+  // Sponsored Listing: the row it starts (it is always the FIRST card of that row).
+  if (format?.formatId === 'sponsored_listing') {
+    const r = Math.round(Number(c.listRow));
+    c.listRow = r >= 1 && r <= 10 ? r : 2;
+  } else {
+    delete c.listRow;
+  }
   if (format?.formatId === 'popup') {
     const allowed = new Set(['all', ...POPUP_PAGES.map((p) => p.key)]);
     const pages = Array.isArray(c.popupPages) ? [...new Set(c.popupPages.map(String).filter((k) => allowed.has(k)))] : [];
@@ -180,8 +187,8 @@ adsRouter.get('/ads/delivery', async (req, res) => {
 
 /** "slot:adId" pairs that are live right now (30 s cache) — events for anything else are ignored. */
 let liveCache: { at: number; keys: Set<string> } | null = null;
-async function liveAdKeys(): Promise<Set<string>> {
-  if (liveCache && Date.now() - liveCache.at < 30_000) return liveCache.keys;
+async function liveAdKeys(force = false): Promise<Set<string>> {
+  if (!force && liveCache && Date.now() - liveCache.at < 30_000) return liveCache.keys;
   const all = await deliverableAdsBySlot(Date.now());
   const keys = new Set<string>();
   for (const [slot, ads] of Object.entries(all)) for (const a of ads) keys.add(`${slot}:${a.id}`);
@@ -218,7 +225,13 @@ adsRouter.post('/ads/events', express.text({ type: 'text/plain', limit: '16kb' }
     return;
   }
   try {
-    const live = await liveAdKeys();
+    let live = await liveAdKeys();
+    // A just-published ad is not in the cached list yet: refresh once (at most every 3 s).
+    const unknown = events.some((raw) => {
+      const e = (raw && typeof raw === 'object' ? raw : {}) as { adId?: unknown; slot?: unknown };
+      return typeof e.adId === 'string' && typeof e.slot === 'string' && !live.has(`${e.slot}:${e.adId}`);
+    });
+    if (unknown && liveCache && Date.now() - liveCache.at > 3000) live = await liveAdKeys(true);
     let counted = 0;
     for (const raw of events) {
       const e = (raw && typeof raw === 'object' ? raw : {}) as { adId?: unknown; slot?: unknown; type?: unknown };

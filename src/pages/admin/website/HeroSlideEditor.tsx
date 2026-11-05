@@ -221,8 +221,8 @@ export function HeroSlideEditor({
           label={slide.mediaType === 'image' ? 'Image (desktop)' : 'Video (desktop)'}
           hint={
             slide.mediaType === 'image'
-              ? 'Recommended 1920×750 px (about 2.6:1; 2400×940 for extra sharpness). On computers the hero fills the screen width and its bottom ~48% fades under Top Categories — keep text, logos and buttons in the TOP ~390 px and the middle ~1400 px (the dashed box in the preview); use the bottom for background only. JPG, PNG, WEBP or AVIF, ideally under 1 MB.'
-              : 'Recommended 1920×750 px (about 2.6:1), MP4 or WebM, a short muted loop (it plays without sound). Keep text in the top ~390 px and the middle ~1400 px — the bottom fades under Top Categories.'
+              ? 'Recommended 1920×750 px (2400×940 for extra sharpness). Your design is shown WHOLE and edge to edge — never zoomed or cut. The hero takes the first slide’s shape; give all slides the same size so they line up (a different shape is fitted with a soft blurred border). Keep text and buttons out of the bottom 20% — it fades under Top Categories. JPG, PNG, WEBP or AVIF, ideally under 1 MB.'
+              : 'Recommended 1920×750 px, MP4 or WebM, a short muted loop (it plays without sound). Keep text out of the bottom 20% — it fades under Top Categories.'
           }
           value={slide.mediaUrl}
           kind={slide.mediaType}
