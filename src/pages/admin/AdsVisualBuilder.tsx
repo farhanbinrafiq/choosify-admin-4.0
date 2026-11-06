@@ -21,6 +21,7 @@ import { AdFitStatus, AdSlotPreview, AdSlotSpec, measureImage } from '../../comp
 import { CategorySearchSelect } from '../../components/ads/CategorySearchSelect';
 import { EntityPicker, type PickableType } from '../../components/ads/EntityPicker';
 import { SponsoredListingPreview } from '../../components/ads/SponsoredListingPreview';
+import { brandGradient, dominantColor } from '@/shared/ads/brandColor';
 import { useAuth } from '../../contexts/AuthContext';
 import { adsApi, type AdsApiRecord, type EligibleListing } from '../../services/adsApi';
 import { catalogApi } from '../../services/catalogApi';
@@ -152,6 +153,9 @@ export default function AdsVisualBuilder() {
   const [posterUrl, setPosterUrl] = useState('');
   const [mediaType, setMediaType] = useState<HeroMediaType>('image');
   const [logoUrl, setLogoUrl] = useState('');
+  /** Card colour from the logo (on by default when a logo is set). */
+  const [logoColor, setLogoColor] = useState('');
+  const [useLogoColor, setUseLogoColor] = useState(true);
   const [listingId, setListingId] = useState('');
   const [destMode, setDestMode] = useState<DestMode>('internal');
   const [internalEntityType, setInternalEntityType] = useState('product');
@@ -180,6 +184,16 @@ export default function AdsVisualBuilder() {
   const allFormatPlacements = useMemo(() => placementsForFormat(formatId, role), [formatId, role]);
   const placementDef = getPlacementDef(placementId);
   const formatDef = getFormatDef(formatId);
+  useEffect(() => {
+    if (!logoUrl) return;
+    let alive = true;
+    void dominantColor(logoUrl).then((c) => {
+      if (alive && c) setLogoColor(c);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [logoUrl]);
   /** Sponsored Listing: promotes one product / brand (internal only, types the slot lists). */
   const isListing = formatId === 'sponsored_listing';
   useEffect(() => {
@@ -294,6 +308,9 @@ export default function AdsVisualBuilder() {
       ),
     );
     setLogoUrl(creative.logoUrl || '');
+    setLogoColor(typeof creative.logoColor === 'string' && creative.logoColor !== 'none' ? creative.logoColor : '');
+    // On unless the advertiser turned it off ('none').
+    setUseLogoColor(creative.logoColor !== 'none');
     setListingId(ad.listingId || '');
     setProductTitle(creative.productTitle || '');
     setSalePriceLabel(creative.salePriceLabel || '');
@@ -487,6 +504,7 @@ export default function AdsVisualBuilder() {
       posterUrl: formatId === 'hero_banner' && resolvedMediaType === 'video' ? posterUrl || imageUrl || undefined : undefined,
       mediaType: formatId === 'hero_banner' ? resolvedMediaType : undefined,
       logoUrl: logoUrl || undefined,
+      logoColor: !logoUrl ? undefined : !useLogoColor ? 'none' : logoColor || undefined,
       hostCategoryName: fields.has('hostCategory') ? hostCategoryName || undefined : undefined,
       categoryId: fields.has('hostCategory') ? hostCategoryId || undefined : undefined,
       categoryName: fields.has('hostCategory') ? hostCategoryName || undefined : undefined,
@@ -1160,6 +1178,20 @@ export default function AdsVisualBuilder() {
                       onChange={(e) => void uploadCreative(e.target.files?.[0] || null, 'logo')}
                     />
                   </label>
+                  {logoUrl ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11.5px]" data-testid="logo-color">
+                      <img src={logoUrl} alt="" className="h-9 w-9 rounded-full border border-[#E8EDF2] bg-white object-cover" />
+                      <span
+                        className="inline-block h-7 w-16 rounded-md border border-[#E8EDF2]"
+                        style={{ background: (useLogoColor && brandGradient(logoColor)) || 'linear-gradient(110deg,#3B1E3F,#2A1846,#2B1A4A)' }}
+                        title={logoColor || 'Choosify colours'}
+                      />
+                      <label className="inline-flex items-center gap-1.5 font-semibold text-[#374151]">
+                        <input type="checkbox" checked={useLogoColor} onChange={(e) => setUseLogoColor(e.target.checked)} data-testid="logo-color-on" />
+                        Colour the card from the logo{logoColor ? ` (${logoColor})` : ''}
+                      </label>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -1674,6 +1706,7 @@ export default function AdsVisualBuilder() {
                       ctaLabel: ctaLabel || undefined,
                       advertiserName: advertiserName || undefined,
                       logoUrl: logoUrl || undefined,
+                      brandColor: logoUrl && useLogoColor && logoColor ? logoColor : undefined,
                       hasDestination: destMode === 'external' ? Boolean(externalUrl.trim()) : Boolean(internalEntityId || listingId),
                       showText: formatDef?.imageLed ? showText : false,
                       fit,

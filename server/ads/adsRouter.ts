@@ -74,6 +74,8 @@ async function measuredCreative(creative: unknown, formatId: string | undefined,
     else c.pagePosition = pos;
   }
   if (c.fit !== undefined && c.fit !== 'fill' && c.fit !== 'whole') delete c.fit;
+  // Card colour taken from the logo (builder); only a plain #RRGGBB is kept.
+  if (c.logoColor !== undefined && !(typeof c.logoColor === 'string' && (/^#[0-9a-f]{6}$/i.test(c.logoColor) || c.logoColor === 'none'))) delete c.logoColor;
   if (slot?.slotKey === 'grid_card') {
     const n = Math.round(Number(c.gridEvery));
     c.gridEvery = GRID_EVERY_CHOICES.includes(n) ? n : 8;

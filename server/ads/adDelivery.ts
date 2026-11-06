@@ -38,6 +38,8 @@ export type PublicAd = {
   ctaLabel?: string;
   sponsorName?: string;
   sponsorLogoUrl?: string;
+  /** Text cards: the logo's main colour → card gradient (storefront brandGradient). */
+  brandColor?: string;
   /** Wide banners: the exact spot on the page (slot default when none chosen). */
   position?: string;
   /** Pop-up rules (pages it shows on, times per visit, delay). */
@@ -181,6 +183,7 @@ export function toPublicAd(ad: AdRecord, origin = ''): PublicAd {
     fit: slot.creative?.display === 'natural' && c.fit === 'fill' ? 'fill' : undefined,
     focusY: slot.creative?.display === 'natural' && c.fit === 'fill' && (c.focusY === 'top' || c.focusY === 'bottom') ? c.focusY : undefined,
     sponsorLogoUrl: SAFE_IMAGE(c.logoUrl) ? absoluteMedia(c.logoUrl, origin) : undefined,
+    brandColor: SAFE_IMAGE(c.logoUrl) && typeof c.logoColor === 'string' && /^#[0-9a-f]{6}$/i.test(c.logoColor) ? c.logoColor : undefined,
     position: resolvePagePosition(slot, c.pagePosition),
     gridEvery:
       slot.slotKey === 'grid_card'

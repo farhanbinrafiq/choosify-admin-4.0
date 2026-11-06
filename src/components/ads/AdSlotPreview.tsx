@@ -9,6 +9,7 @@
 import React from 'react';
 import { AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import { checkCreativeFit, getFormatDef, type AdPlacementDef } from '@/shared/ads/placementRegistry';
+import { brandGradient } from '@/shared/ads/brandColor';
 
 export type AdPreviewInput = {
   formatId: string;
@@ -20,6 +21,8 @@ export type AdPreviewInput = {
   ctaLabel?: string;
   advertiserName?: string;
   logoUrl?: string;
+  /** Card colour from the logo. */
+  brandColor?: string;
   /** false = no link set, so the storefront hides the CTA button. */
   hasDestination?: boolean;
   /** Draw headline + subtext over the image (storefront parity). */
@@ -130,7 +133,7 @@ export function AdSlotPreview({ placement, ad }: { placement: AdPlacementDef; ad
       <div
         className="relative flex gap-3 overflow-hidden rounded-xl"
         style={{
-          background: 'linear-gradient(110deg, #3B1E3F 0%, #2A1846 55%, #2B1A4A 100%)',
+          background: brandGradient(ad.brandColor) ?? 'linear-gradient(110deg, #3B1E3F 0%, #2A1846 55%, #2B1A4A 100%)',
           padding: phone ? '26px 12px 10px' : '28px 20px 16px',
           flexDirection: phone ? 'column' : 'row',
           alignItems: phone ? 'flex-start' : 'center',
@@ -138,7 +141,7 @@ export function AdSlotPreview({ placement, ad }: { placement: AdPlacementDef; ad
       >
         {chip(ad.advertiserName)}
         {ad.logoUrl ? (
-          <img src={ad.logoUrl} alt="" className="shrink-0 rounded-full bg-white object-contain p-0.5" style={{ width: phone ? 26 : 34, height: phone ? 26 : 34 }} />
+          <img src={ad.logoUrl} alt="" className="shrink-0 rounded-full bg-white object-cover" style={{ width: phone ? 44 : 52, height: phone ? 44 : 52, boxShadow: '0 0 0 2px rgba(255,255,255,.7)' }} />
         ) : null}
         <div className="min-w-0 flex-1">
           <div className="font-extrabold leading-tight" style={{ color: '#FFFFFF', fontSize: phone ? 12 : 14 }}>{ad.headline || 'Your headline'}</div>
@@ -281,7 +284,7 @@ export function AdSlotPreview({ placement, ad }: { placement: AdPlacementDef; ad
     return (
       <div className="mx-auto w-[260px]" data-testid="ad-preview-grid-card">
         <div className="relative flex min-h-[300px] flex-col overflow-hidden rounded-[10px]" style={{ background: 'linear-gradient(160deg, #3B1E3F, #1E1B4B)' }}>
-          <div className="relative min-h-0 flex-[7] overflow-hidden" style={{ background: 'linear-gradient(135deg, #FF5B00, #2323FF)' }}>
+          <div className="relative min-h-0 flex-[7] overflow-hidden" style={{ background: brandGradient(ad.brandColor, 135) ?? 'linear-gradient(135deg, #FF5B00, #2323FF)' }}>
             {format?.imageLed && img ? <img src={img} alt="" className="absolute inset-0 h-full w-full object-cover" /> : null}
             {chip(ad.advertiserName)}
           </div>
@@ -307,8 +310,8 @@ export function AdSlotPreview({ placement, ad }: { placement: AdPlacementDef; ad
         {format?.imageLed && img ? (
           <img src={img} alt="" className="block aspect-[3/4] w-full object-cover" />
         ) : (
-          <div className="flex aspect-[3/4] w-full flex-col justify-end p-4" style={{ background: 'linear-gradient(135deg, #1A1D4E, #FF5B00)' }}>
-            {ad.logoUrl && <img src={ad.logoUrl} alt="" className="mb-auto h-10 w-10 rounded-full bg-white object-contain p-1" />}
+          <div className="flex aspect-[3/4] w-full flex-col justify-end p-4" style={{ background: brandGradient(ad.brandColor, 160) ?? 'linear-gradient(135deg, #1A1D4E, #FF5B00)' }}>
+            {ad.logoUrl && <img src={ad.logoUrl} alt="" className="mb-auto h-12 w-12 rounded-full bg-white object-cover" style={{ boxShadow: '0 0 0 2px rgba(255,255,255,.7)' }} />}
             <div className="text-[15px] font-extrabold leading-tight" style={{ color: '#FFFFFF' }}>{ad.headline || 'Your headline'}</div>
           </div>
         )}
