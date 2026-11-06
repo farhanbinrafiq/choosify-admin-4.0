@@ -53,7 +53,7 @@ import { adsStore } from './adsStore';
 import { metricsFor, rateLimited, recordEvent } from './adMetrics';
 import { billingBlocker, billingOf, changesPaidTerms, isPaidAd, stripBilling, withBilling } from './adBilling';
 import { AD_DAILY_RATES_BDT, RATE_TIER_LABEL, quoteAd } from '../../shared/ads/pricing';
-import { checkCreativeFit, getAnyPlacementDef, getFormatDef, getPlacementDef, assertFormatPlacementCompatible, resolvePagePosition, POPUP_PAGES, GRID_EVERY_CHOICES } from '../../shared/ads/placementRegistry';
+import { checkCreativeFit, getAnyPlacementDef, getFormatDef, getPlacementDef, assertFormatPlacementCompatible, resolvePagePosition, POPUP_PAGES, GRID_EVERY_CHOICES, GRID_ROW_CHOICES, IN_GRID_POSITION } from '../../shared/ads/placementRegistry';
 
 /**
  * Measures the creative image on the SERVER (client-sent sizes are never trusted) and checks it
@@ -105,6 +105,10 @@ async function measuredCreative(creative: unknown, formatId: string | undefined,
   if (format?.formatId === 'sponsored_listing') {
     const r = Math.round(Number(c.listRow));
     c.listRow = r >= 1 && r <= 10 ? r : 2;
+  } else if (c.pagePosition === IN_GRID_POSITION && format?.formatId !== 'popup') {
+    // Wide banner inside the grid: the row of cards it follows.
+    const r = Math.round(Number(c.listRow));
+    c.listRow = GRID_ROW_CHOICES.includes(r) ? r : 1;
   } else {
     delete c.listRow;
   }

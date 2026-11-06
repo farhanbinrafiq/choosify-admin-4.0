@@ -19,7 +19,7 @@ import { billingBlocker, withBilling } from './adBilling';
 import { getMediaStaticMount } from '../lib/mediaStorage';
 import { catalogStore } from '../../lib/vercel-catalog/catalogStore';
 import { isProductActive } from '../catalog/productLifecycle';
-import { AD_PLACEMENTS, checkCreativeFit, getAnyPlacementDef, getFormatDef, getPlacementDef, resolvePagePosition } from '../../shared/ads/placementRegistry';
+import { AD_PLACEMENTS, checkCreativeFit, getAnyPlacementDef, getFormatDef, getPlacementDef, resolvePagePosition, IN_GRID_POSITION } from '../../shared/ads/placementRegistry';
 
 export type PublicAdLink = { type: 'product' | 'brand' | 'creator' | 'guide' | 'deal' | 'url'; id?: string; url?: string; external: boolean };
 
@@ -207,7 +207,12 @@ export function toPublicAd(ad: AdRecord, origin = ''): PublicAd {
         : format.formatId === 'sponsored_listing'
           ? Number(c.gridEvery) > 0 ? Number(c.gridEvery) : 5
           : undefined,
-    listRow: format.formatId === 'sponsored_listing' ? (Number(c.listRow) >= 1 && Number(c.listRow) <= 10 ? Math.round(Number(c.listRow)) : 2) : undefined,
+    listRow:
+      format.formatId === 'sponsored_listing'
+        ? Number(c.listRow) >= 1 && Number(c.listRow) <= 10 ? Math.round(Number(c.listRow)) : 2
+        : resolvePagePosition(slot, c.pagePosition) === IN_GRID_POSITION
+          ? Number(c.listRow) >= 1 && Number(c.listRow) <= 10 ? Math.round(Number(c.listRow)) : 1
+          : undefined,
     entity:
       format.formatId === 'sponsored_listing' && (ad.cta?.internalEntityType === 'product' || ad.cta?.internalEntityType === 'brand') && ad.cta?.internalEntityId
         ? { type: ad.cta.internalEntityType, id: String(ad.cta.internalEntityId).trim() }

@@ -118,6 +118,19 @@ export const LISTING_BANNER_POSITIONS: AdPagePosition[] = [
   { key: 'bottom', order: 90, label: 'Banner at the bottom of the page' },
 ];
 
+/** Spot key of a wide banner drawn INSIDE a results grid, between two rows of cards. */
+export const IN_GRID_POSITION = 'in-grid';
+
+/** Grid pages: top / bottom, plus a full-width row inside the grid (the side menu is not covered). */
+export const GRID_BANNER_POSITIONS: AdPagePosition[] = [
+  LISTING_BANNER_POSITIONS[0],
+  { key: IN_GRID_POSITION, order: 40, label: 'Inside the grid, between two rows of cards' },
+  LISTING_BANNER_POSITIONS[1],
+];
+
+/** "After which row" choices for an in-grid banner. */
+export const GRID_ROW_CHOICES = [1, 2, 3, 4, 5, 6];
+
 /** The spot an ad really shows in: its chosen one if valid for the slot, else the slot default. */
 export function resolvePagePosition(slot: AdPlacementDef | undefined, chosen: unknown): string | undefined {
   if (!slot?.positions?.length) return undefined;
@@ -227,7 +240,7 @@ const WIDE_BANNER: AdCreativeSpec = {
 };
 
 /** Wide sponsored banner slot above a listing grid (same 4:1 frame as Products / Deals). */
-const wideSlot = (placementId: string, pageKey: AdPageKey, pageLabel: string, sectionLabel: string): AdPlacementDef => ({
+const wideSlot = (placementId: string, pageKey: AdPageKey, pageLabel: string, sectionLabel: string, positions = LISTING_BANNER_POSITIONS): AdPlacementDef => ({
   placementId,
   pageKey,
   pageLabel,
@@ -242,7 +255,7 @@ const wideSlot = (placementId: string, pageKey: AdPageKey, pageLabel: string, se
   ownerRoles: ['admin', 'seller', 'creator'],
   active: true,
   creative: WIDE_BANNER,
-  positions: LISTING_BANNER_POSITIONS,
+  positions,
   defaultPosition: 'top',
 });
 /** Portrait card image in side rails / feeds, cropped to a 3:4 frame. */
@@ -441,7 +454,7 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
     ownerRoles: ['admin', 'seller', 'creator'],
     active: true,
     creative: WIDE_BANNER,
-    positions: LISTING_BANNER_POSITIONS,
+    positions: GRID_BANNER_POSITIONS,
     defaultPosition: 'top',
   },
   hiddenSidebar('BROWSE_SIDEBAR', 'browse', 'Products & Services'),
@@ -461,7 +474,7 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
     ownerRoles: ['admin', 'seller', 'creator'],
     active: true,
     creative: WIDE_BANNER,
-    positions: LISTING_BANNER_POSITIONS,
+    positions: GRID_BANNER_POSITIONS,
     defaultPosition: 'top',
   },
   sideCard('DEALS_SIDEBAR', 'deals', 'Deals', 'card in the right-hand column beside the deals grid (desktop)', 30, false),
@@ -512,11 +525,11 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
     fallback: 'The card footer shows the category top brand, labelled "Top brand" (not Promoted).',
   },
   // Wide banners above the grid (mounted 2026-11-05 at the Super Admin's request).
-  wideSlot('BRANDS_BANNER', 'brands', 'Brands', 'Brands page — wide sponsored banner above the brands grid'),
-  wideSlot('CATEGORIES_BANNER', 'categories', 'Categories', 'Categories page — wide sponsored banner above the category grid'),
+  wideSlot('BRANDS_BANNER', 'brands', 'Brands', 'Brands page — wide sponsored banner above, inside or below the brands grid', GRID_BANNER_POSITIONS),
+  wideSlot('CATEGORIES_BANNER', 'categories', 'Categories', 'Categories page — wide sponsored banner above, inside or below the category grid', GRID_BANNER_POSITIONS),
   gridCard('CATEGORIES_GRID_CARD', 'categories', 'Categories', 'category', 20),
-  wideSlot('CREATORS_BANNER', 'creators', 'Creators', 'Creators page — wide sponsored banner above the creators grid'),
-  wideSlot('DISCOVER_BANNER', 'discover', 'Recommendations (Discover)', 'Recommendations page (also Buying Guides) — wide sponsored banner above the feed'),
+  wideSlot('CREATORS_BANNER', 'creators', 'Creators', 'Creators page — wide sponsored banner above, inside or below the creators grid', GRID_BANNER_POSITIONS),
+  wideSlot('DISCOVER_BANNER', 'discover', 'Recommendations (Discover)', 'Recommendations page (also Buying Guides) — wide sponsored banner above, inside or below the feed', GRID_BANNER_POSITIONS),
   gridCard('BRANDS_GRID_CARD', 'brands', 'Brands', 'brand', 20),
   gridCard('CREATORS_GRID_CARD', 'creators', 'Creators', 'creator', 20),
   sideCard('DISCOVER_SIDEBAR', 'discover', 'Recommendations (Discover)', "card in the right-hand column, under Editor's Pick", 30),

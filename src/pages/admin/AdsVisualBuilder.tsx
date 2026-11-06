@@ -11,6 +11,8 @@ import {
   listPages,
   POPUP_PAGES,
   GRID_EVERY_CHOICES,
+  GRID_ROW_CHOICES,
+  IN_GRID_POSITION,
   type AdFormatId,
   type AdPlacementDef,
 } from '@/shared/ads/placementRegistry';
@@ -216,6 +218,8 @@ export default function AdsVisualBuilder() {
   }, [logoUrl]);
   /** Sponsored Listing: promotes one product / brand (internal only, types the slot lists). */
   const isListing = formatId === 'sponsored_listing';
+  /** Wide banner placed inside a results grid (between two rows of cards). */
+  const isInGrid = !isListing && formatId !== 'popup' && pagePosition === IN_GRID_POSITION;
   useEffect(() => {
     if (!isListing) return;
     if (destMode !== 'internal') setDestMode('internal');
@@ -276,6 +280,7 @@ export default function AdsVisualBuilder() {
   const chooseRow = (row: PageRow) => {
     if (!row.placement.allowedFormats.includes(formatId)) setFormatId(row.placement.allowedFormats[0] as AdFormatId);
     setPlacementId(row.placement.placementId);
+    if (row.position === IN_GRID_POSITION && pagePosition !== IN_GRID_POSITION) setListRow(1);
     setPagePosition(row.position);
   };
 
@@ -513,7 +518,7 @@ export default function AdsVisualBuilder() {
       showText: formatDef?.imageLed && fields.has('headline') ? showText : undefined,
       fit: placementDef?.creative?.display === 'natural' && placementDef.slotKey !== 'popup' ? fit : undefined,
       gridEvery: placementDef?.slotKey === 'grid_card' ? gridEvery : undefined,
-      listRow: formatId === 'sponsored_listing' ? listRow : undefined,
+      listRow: formatId === 'sponsored_listing' || isInGrid ? listRow : undefined,
       popupPages: formatId === 'popup' ? popupPages : undefined,
       popupMaxPerSession: formatId === 'popup' ? popupMax : undefined,
       popupDelaySec: formatId === 'popup' ? popupDelay : undefined,
@@ -1454,6 +1459,23 @@ export default function AdsVisualBuilder() {
                 </label>
                 <div className="mt-1 text-[10.5px] text-[#6B7280]">
                   The sponsored card always starts the row you pick — whether the screen shows 4, 6 or 8 cards per row. If the list is shorter, it shows as the first card of the last row.
+                </div>
+              </div>
+            ) : null}
+            {isInGrid ? (
+              <div className="mt-3 rounded-lg border-2 border-[#C4B5FD] bg-[#F5F3FF] px-3 py-2.5" data-testid="grid-row-rules">
+                <label className="block text-[11.5px] font-extrabold text-[#111827]">
+                  After which row of cards
+                  <select value={listRow} onChange={(e) => setListRow(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-[#E8EDF2] bg-white px-3 py-2 text-[12px] font-semibold" data-testid="grid-row">
+                    {GRID_ROW_CHOICES.map((n) => (
+                      <option key={n} value={n}>
+                        {n === 1 ? 'After row 1 — between the first and second row' : `After row ${n}`}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="mt-1 text-[10.5px] text-[#6B7280]">
+                  The banner takes a full row inside the grid: cards above it, cards below it. It is as wide as the grid only, so the side menu stays where it is. A row is however many cards fit across the screen (fewer on phones). If the list has fewer rows, it shows after the last card.
                 </div>
               </div>
             ) : null}
