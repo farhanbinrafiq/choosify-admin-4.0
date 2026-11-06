@@ -78,5 +78,7 @@ export interface CategoryType {
   description: string;
   displayOrder: number;
   enabled: boolean;
+  /** Brand shown in this category's storefront card footer (chosen by staff). */
+  featuredBrandId?: string | null;
 }
 

@@ -11,6 +11,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { Modal } from '../../components/ui/Modal';
 import { CategoryRequestsPanel } from '../../components/admin/catalog/CategoryRequestsPanel';
+import { EntityPicker } from '../../components/ads/EntityPicker';
 
 const AVAILABLE_ICONS = [
   { name: 'Shirt', label: 'Fashion & Shirts', icon: Shirt },
@@ -73,6 +74,7 @@ export default function CategoriesPage() {
   const [formSlug, setFormSlug] = useState('');
   const [formIcon, setFormIcon] = useState('Folder');
   const [formDescription, setFormDescription] = useState('');
+  const [formFeaturedBrandId, setFormFeaturedBrandId] = useState<string>('');
   const [formParentId, setFormParentId] = useState<string | null>(null);
   const [formEnabled, setFormEnabled] = useState(true);
 
@@ -195,6 +197,7 @@ export default function CategoriesPage() {
       if (cat) {
         setFormName(cat.name); setFormSlug(cat.slug); setFormIcon(cat.icon);
         setFormDescription(cat.description); setFormParentId(cat.parentId); setFormEnabled(cat.enabled);
+        setFormFeaturedBrandId(cat.featuredBrandId || '');
       }
     } else if (editorMode === 'create_child') {
       const parentName = targetParentId ? categories.find(c => c.id === targetParentId)?.name : 'Root';
@@ -233,6 +236,7 @@ export default function CategoriesPage() {
         await updateCategory(selectedId, {
           name: formName.trim(), slug: formSlug.trim(), icon: formIcon,
           description: formDescription, parentId: formParentId, enabled: formEnabled,
+          featuredBrandId: formParentId === null ? formFeaturedBrandId || null : null,
         });
         showToast('Category updated successfully', 'success');
       } catch (error) {
@@ -630,6 +634,18 @@ export default function CategoriesPage() {
                 style={S.textarea}
               />
             </div>
+
+            {/* FEATURED BRAND — staff choice shown in this category's storefront card footer */}
+            {editorMode === 'edit' && formParentId === null ? (
+              <div style={{ marginBottom: 14 }} data-testid="category-featured-brand">
+                <label style={S.fLabel}>FEATURED BRAND (STOREFRONT CARD FOOTER)</label>
+                <EntityPicker type="brand" value={formFeaturedBrandId} onPick={(e) => setFormFeaturedBrandId(e?.id || '')} />
+                <div style={{ fontSize: 11, color: '#6B7280', marginTop: 6 }}>
+                  Shown at the bottom of this category&apos;s card on the Categories page, labelled &quot;Featured&quot;. Leave empty for no footer.
+                  A paid sponsor booked for this card in Ads Studio (&quot;Promoted&quot;) takes the footer while its booking runs.
+                </div>
+              </div>
+            ) : null}
 
             {/* CATEGORY PHOTO — reference shape, genuinely disabled (no CategoryType field) */}
             <div style={{ marginBottom: 14 }}>

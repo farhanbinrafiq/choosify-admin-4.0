@@ -11,6 +11,7 @@ export const toCategoryType = (category: CatalogCategory): CategoryType => ({
   description: category.description,
   displayOrder: category.displayOrder,
   enabled: category.enabled,
+  featuredBrandId: (category as { featuredBrandId?: string | null }).featuredBrandId ?? null,
 });
 
 export const toCatalogPayload = (category: CategoryType): Partial<CatalogCategory> => ({
@@ -22,6 +23,7 @@ export const toCatalogPayload = (category: CategoryType): Partial<CatalogCategor
   description: category.description,
   displayOrder: category.displayOrder,
   enabled: category.enabled,
+  featuredBrandId: category.featuredBrandId ?? null,
 });
 
 export async function fetchCategoriesFromApi(): Promise<CategoryType[]> {

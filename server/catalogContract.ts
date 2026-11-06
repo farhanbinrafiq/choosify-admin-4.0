@@ -153,6 +153,7 @@ const categorySchema = z.object({
   parentId: z.string().nullable(),
   enabled: z.boolean(),
   displayOrder: z.number().int(),
+  featuredBrandId: z.string().nullable().optional(),
   createdAt: isoDate,
   updatedAt: isoDate,
 });
@@ -442,6 +443,10 @@ export const normalizeCategoryInput = (
         : toString(raw.parentId, existing?.parentId ?? '') || null,
     enabled: toBoolean(raw.enabled, existing?.enabled ?? true),
     displayOrder: Math.floor(toNumber(raw.displayOrder, existing?.displayOrder ?? 0)),
+    featuredBrandId:
+      raw.featuredBrandId === null || raw.featuredBrandId === ''
+        ? null
+        : toString(raw.featuredBrandId, existing?.featuredBrandId ?? '') || null,
     createdAt: existingOrNow(existing?.createdAt),
     updatedAt: nowIso(),
   };

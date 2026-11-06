@@ -17,6 +17,8 @@ export interface CatalogCategory {
   parentId: string | null;
   enabled: boolean;
   displayOrder: number;
+  /** Brand shown in this category's card footer on the storefront — chosen by Choosify staff. */
+  featuredBrandId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

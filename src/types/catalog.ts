@@ -14,6 +14,8 @@ export type CatalogPublishStatus =
   | 'archived';
 
 export interface CatalogCategory {
+  /** Brand shown in this category's storefront card footer — chosen by Choosify staff. */
+  featuredBrandId?: string | null;
   id: string;
   slug: string;
   name: string;
