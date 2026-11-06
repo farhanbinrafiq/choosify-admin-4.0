@@ -88,6 +88,7 @@ async function measuredCreative(creative: unknown, formatId: string | undefined,
   if (c.fit !== undefined && c.fit !== 'fill' && c.fit !== 'whole') delete c.fit;
   // Card colour taken from the logo (builder); only a plain #RRGGBB is kept.
   if (c.logoColor2 !== undefined && !(typeof c.logoColor2 === 'string' && /^#[0-9a-f]{6}$/i.test(c.logoColor2))) delete c.logoColor2;
+  if (c.logoFit !== undefined && c.logoFit !== 'fill' && c.logoFit !== 'fit') delete c.logoFit;
   if (c.logoZoom !== undefined) {
     const z = Number(c.logoZoom);
     if (Number.isFinite(z) && z >= 1 && z <= 1.8) c.logoZoom = Math.round(z * 100) / 100;

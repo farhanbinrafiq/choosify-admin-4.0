@@ -155,3 +155,56 @@ export async function logoFillZoom(src: string): Promise<number | null> {
 export async function dominantColor(src: string): Promise<string | null> {
   return (await dominantColors(src))?.first ?? null;
 }
+
+/**
+ * How a logo should sit in a round frame. Round / square content (emblems, icons) → 'fill' with a
+ * zoom that crops only empty margin; wide or tall content (wordmarks) → 'fit' whole inside a white
+ * circle with padding, so nothing is cut off. Browser only.
+ */
+export async function logoFrame(src: string): Promise<{ fit: 'fill' | 'fit'; zoom: number } | null> {
+  if (typeof document === 'undefined') return null;
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  const ok = await new Promise<boolean>((resolve) => {
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = src;
+  });
+  if (!ok || !img.naturalWidth || !img.naturalHeight) return null;
+  try {
+    const n = 128;
+    const k = n / Math.max(img.naturalWidth, img.naturalHeight);
+    const w0 = Math.max(1, Math.round(img.naturalWidth * k));
+    const h0 = Math.max(1, Math.round(img.naturalHeight * k));
+    const c = document.createElement('canvas');
+    c.width = w0;
+    c.height = h0;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, w0, h0);
+    const px = ctx.getImageData(0, 0, w0, h0).data;
+    let minX = w0, minY = h0, maxX = -1, maxY = -1;
+    for (let y = 0; y < h0; y++) {
+      for (let x = 0; x < w0; x++) {
+        const i = (y * w0 + x) * 4;
+        if (px[i + 3] > 40 && !(px[i] > 232 && px[i + 1] > 232 && px[i + 2] > 232)) {
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX < 0) return { fit: 'fit', zoom: 1 };
+    const cw = maxX - minX + 1;
+    const ch = maxY - minY + 1;
+    const shape = cw / ch;
+    if (shape < 0.8 || shape > 1.25) return { fit: 'fit', zoom: 1 };
+    // round / square content: zoom so the content fills the (square-cropped) circle
+    const side = Math.min(w0, h0);
+    const zoom = side / Math.max(cw, ch);
+    return { fit: 'fill', zoom: Math.round(Math.min(1.8, Math.max(1, zoom * 0.98)) * 100) / 100 };
+  } catch {
+    return null;
+  }
+}

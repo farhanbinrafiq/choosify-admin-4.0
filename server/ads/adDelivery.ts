@@ -42,6 +42,8 @@ export type PublicAd = {
   brandColor?: string;
   /** Zoom that fills the round logo frame (crops the logo's own white margin). */
   logoZoom?: number;
+  /** 'fit' = wide / tall logo shown whole on white inside the circle (never cropped). */
+  logoFit?: 'fill' | 'fit';
   /** Optional phone picture (taller design) and its size. */
   mobileImage?: string;
   mobileImageWidth?: number;
@@ -195,6 +197,7 @@ export function toPublicAd(ad: AdRecord, origin = ''): PublicAd {
     focusY: slot.creative?.display === 'natural' && c.fit === 'fill' && (c.focusY === 'top' || c.focusY === 'bottom') ? c.focusY : undefined,
     sponsorLogoUrl: SAFE_IMAGE(c.logoUrl) ? absoluteMedia(c.logoUrl, origin) : undefined,
     brandColor2: SAFE_IMAGE(c.logoUrl) && typeof c.logoColor2 === 'string' && /^#[0-9a-f]{6}$/i.test(c.logoColor2) ? c.logoColor2 : undefined,
+    logoFit: SAFE_IMAGE(c.logoUrl) && c.logoFit === 'fit' ? 'fit' : undefined,
     logoZoom: SAFE_IMAGE(c.logoUrl) && Number(c.logoZoom) > 1 && Number(c.logoZoom) <= 1.8 ? Number(c.logoZoom) : undefined,
     brandColor: SAFE_IMAGE(c.logoUrl) && typeof c.logoColor === 'string' && /^#[0-9a-f]{6}$/i.test(c.logoColor) ? c.logoColor : undefined,
     position: resolvePagePosition(slot, c.pagePosition),

@@ -22,7 +22,7 @@ import { CategorySearchSelect } from '../../components/ads/CategorySearchSelect'
 import { EntityPicker, type PickableType } from '../../components/ads/EntityPicker';
 import { SponsoredListingPreview } from '../../components/ads/SponsoredListingPreview';
 import { LinkInput } from './website/StudioKit';
-import { brandGradient, dominantColors, logoFillZoom } from '@/shared/ads/brandColor';
+import { brandGradient, dominantColors, logoFrame } from '@/shared/ads/brandColor';
 import { useAuth } from '../../contexts/AuthContext';
 import { adsApi, type AdsApiRecord, type EligibleListing } from '../../services/adsApi';
 import { catalogApi } from '../../services/catalogApi';
@@ -163,6 +163,8 @@ export default function AdsVisualBuilder() {
   const [useLogoColor, setUseLogoColor] = useState(true);
   /** Zoom that crops the logo's own white margin so it fills its round frame. */
   const [logoZoom, setLogoZoom] = useState(1);
+  /** 'fill' = round/square logo fills the circle; 'fit' = wide/tall logo shown whole on white. */
+  const [logoFit, setLogoFit] = useState<'fill' | 'fit'>('fill');
   const [listingId, setListingId] = useState('');
   const [destMode, setDestMode] = useState<DestMode>('internal');
   const [internalEntityType, setInternalEntityType] = useState('product');
@@ -202,8 +204,11 @@ export default function AdsVisualBuilder() {
         setLogoColor2(c.second || '');
       }
     });
-    void logoFillZoom(logoUrl).then((z) => {
-      if (alive && z) setLogoZoom(z);
+    void logoFrame(logoUrl).then((f) => {
+      if (alive && f) {
+        setLogoFit(f.fit);
+        setLogoZoom(f.zoom);
+      }
     });
     return () => {
       alive = false;
@@ -525,7 +530,8 @@ export default function AdsVisualBuilder() {
       logoUrl: logoUrl || undefined,
       logoColor: !logoUrl ? undefined : !useLogoColor ? 'none' : logoColor || undefined,
       logoColor2: logoUrl && useLogoColor && logoColor2 ? logoColor2 : undefined,
-      logoZoom: logoUrl && logoZoom > 1 ? logoZoom : undefined,
+      logoZoom: logoUrl && logoFit === 'fill' && logoZoom > 1 ? logoZoom : undefined,
+      logoFit: logoUrl ? logoFit : undefined,
       hostCategoryName: fields.has('hostCategory') ? hostCategoryName || undefined : undefined,
       categoryId: fields.has('hostCategory') ? hostCategoryId || undefined : undefined,
       categoryName: fields.has('hostCategory') ? hostCategoryName || undefined : undefined,
@@ -1777,7 +1783,8 @@ export default function AdsVisualBuilder() {
                       logoUrl: logoUrl || undefined,
                       brandColor: logoUrl && useLogoColor && logoColor ? logoColor : undefined,
                       brandColor2: logoUrl && useLogoColor && logoColor2 ? logoColor2 : undefined,
-                      logoZoom: logoUrl ? logoZoom : undefined,
+                      logoZoom: logoUrl && logoFit === 'fill' ? logoZoom : undefined,
+                      logoFit: logoUrl ? logoFit : undefined,
                       hasDestination: destMode === 'external' ? Boolean(externalUrl.trim()) : internalEntityType === 'page' ? Boolean(pagePath.trim()) : Boolean(internalEntityId || listingId),
                       showText: formatDef?.imageLed ? showText : false,
                       fit,

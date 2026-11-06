@@ -24,6 +24,7 @@ export type AdPreviewInput = {
   /** Card colour from the logo. */
   brandColor?: string;
   logoZoom?: number;
+  logoFit?: 'fill' | 'fit';
   brandColor2?: string;
   /** false = no link set, so the storefront hides the CTA button. */
   hasDestination?: boolean;
@@ -143,7 +144,7 @@ export function AdSlotPreview({ placement, ad }: { placement: AdPlacementDef; ad
       >
         {chip(ad.advertiserName)}
         {ad.logoUrl ? (
-          <span className="shrink-0 overflow-hidden rounded-full" style={{ width: phone ? 48 : 56, height: phone ? 48 : 56, boxShadow: '0 4px 14px rgba(0,0,0,.35)', alignSelf: phone ? 'center' : undefined }}><img src={ad.logoUrl} alt="" className="h-full w-full object-cover" style={{ transform: ad.logoZoom ? `scale(${ad.logoZoom})` : undefined }} /></span>
+          <span className="shrink-0 overflow-hidden rounded-full" style={{ width: phone ? 48 : 56, height: phone ? 48 : 56, boxShadow: '0 4px 14px rgba(0,0,0,.35)', alignSelf: phone ? 'center' : undefined, background: ad.logoFit === 'fit' ? '#FFFFFF' : undefined, padding: ad.logoFit === 'fit' ? (phone ? 6 : 7) : undefined }}><img src={ad.logoUrl} alt="" className={`h-full w-full ${ad.logoFit === 'fit' ? 'object-contain' : 'object-cover'}`} style={{ transform: ad.logoFit !== 'fit' && ad.logoZoom ? `scale(${ad.logoZoom})` : undefined }} /></span>
         ) : null}
         <div className="min-w-0 flex-1">
           <div className="font-extrabold leading-tight" style={{ color: '#FFFFFF', fontSize: phone ? 12 : 14 }}>{ad.headline || 'Your headline'}</div>
