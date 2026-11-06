@@ -21,6 +21,7 @@ import { AdFitStatus, AdSlotPreview, AdSlotSpec, measureImage } from '../../comp
 import { CategorySearchSelect } from '../../components/ads/CategorySearchSelect';
 import { EntityPicker, type PickableType } from '../../components/ads/EntityPicker';
 import { SponsoredListingPreview } from '../../components/ads/SponsoredListingPreview';
+import { LinkInput } from './website/StudioKit';
 import { brandGradient, dominantColors, logoFillZoom } from '@/shared/ads/brandColor';
 import { useAuth } from '../../contexts/AuthContext';
 import { adsApi, type AdsApiRecord, type EligibleListing } from '../../services/adsApi';
@@ -167,6 +168,8 @@ export default function AdsVisualBuilder() {
   const [internalEntityType, setInternalEntityType] = useState('product');
   /** Category links go to /categories?category=<slug>. */
   const [internalEntitySlug, setInternalEntitySlug] = useState('');
+  /** "A Choosify page" destination (About, Terms, /pages/…): its path. */
+  const [pagePath, setPagePath] = useState('');
   const [internalEntityId, setInternalEntityId] = useState('');
   const [externalUrl, setExternalUrl] = useState('');
   const [hostCategoryId, setHostCategoryId] = useState('');
@@ -339,7 +342,9 @@ export default function AdsVisualBuilder() {
       setExternalUrl(ad.externalUrl);
     } else {
       setDestMode('internal');
-      setInternalEntityType(cta.internalEntityType || 'product');
+      const isPage = !cta.internalEntityType && !ad.listingId && typeof cta.url === 'string' && cta.url.startsWith('/') && !/^\/categories\?category=/.test(cta.url);
+      setInternalEntityType(isPage ? 'page' : cta.internalEntityType || 'product');
+      setPagePath(isPage ? String(cta.url) : '');
       setInternalEntityId(cta.internalEntityId || ad.listingId || '');
       {
         const m = /^\/categories\?category=([^&]+)/.exec(cta.url || '');
@@ -552,11 +557,13 @@ export default function AdsVisualBuilder() {
         url:
           destMode === 'external'
             ? externalUrl.trim()
-            : internalEntityType === 'category' && (internalEntitySlug || internalEntityId)
-              ? `/categories?category=${encodeURIComponent(internalEntitySlug || internalEntityId)}`
-              : undefined,
-        internalEntityType: destMode === 'internal' ? internalEntityType : undefined,
-        internalEntityId: destMode === 'internal' ? internalEntityId || listingId || undefined : undefined,
+            : internalEntityType === 'page'
+              ? pagePath.trim() || undefined
+              : internalEntityType === 'category' && (internalEntitySlug || internalEntityId)
+                ? `/categories?category=${encodeURIComponent(internalEntitySlug || internalEntityId)}`
+                : undefined,
+        internalEntityType: destMode === 'internal' && internalEntityType !== 'page' ? internalEntityType : undefined,
+        internalEntityId: destMode === 'internal' && internalEntityType !== 'page' ? internalEntityId || listingId || undefined : undefined,
       },
       externalUrl: destMode === 'external' ? externalUrl.trim() : undefined,
       startsAt: startsAt ? new Date(startsAt).toISOString() : undefined,
@@ -1298,16 +1305,22 @@ export default function AdsVisualBuilder() {
                   >
                     {(isListing
                       ? (placementDef?.entityTypes ?? ['product', 'brand']).filter((t) => t === 'product' || t === 'brand')
-                      : ['product', 'brand', 'deal', 'category', 'guide', 'creator']
+                      : ['page', 'product', 'brand', 'deal', 'category', 'guide', 'creator']
                     ).map((t) => (
                       <option key={t} value={t}>
-                        {t.charAt(0).toUpperCase() + t.slice(1)}
+                        {t === 'page' ? 'Choosify page (About, Terms…)' : t.charAt(0).toUpperCase() + t.slice(1)}
                       </option>
                     ))}
                   </select>
                 </label>
                 <div className="block text-[11px] font-bold text-[#374151]">
                   Choose it
+                  {internalEntityType === 'page' ? (
+                    <div className="mt-1" data-testid="ad-dest-page">
+                      <LinkInput value={pagePath} onChange={setPagePath} disabled={false} testId="ad-dest-page-input" placeholder="Start typing: /about, /terms, /privacy, /pages/…" />
+                      <div className="mt-1 text-[10.5px] text-[#6B7280]">Pick from the list or type any Choosify address starting with /.</div>
+                    </div>
+                  ) : (
                   <EntityPicker
                     type={internalEntityType as PickableType}
                     value={internalEntityType === 'category' ? internalEntityId || internalEntitySlug : internalEntityId}
@@ -1316,6 +1329,7 @@ export default function AdsVisualBuilder() {
                       setInternalEntitySlug(e?.slug || '');
                     }}
                   />
+                  )}
                 </div>
               </div>
               </FieldBox>
@@ -1764,7 +1778,7 @@ export default function AdsVisualBuilder() {
                       brandColor: logoUrl && useLogoColor && logoColor ? logoColor : undefined,
                       brandColor2: logoUrl && useLogoColor && logoColor2 ? logoColor2 : undefined,
                       logoZoom: logoUrl ? logoZoom : undefined,
-                      hasDestination: destMode === 'external' ? Boolean(externalUrl.trim()) : Boolean(internalEntityId || listingId),
+                      hasDestination: destMode === 'external' ? Boolean(externalUrl.trim()) : internalEntityType === 'page' ? Boolean(pagePath.trim()) : Boolean(internalEntityId || listingId),
                       showText: formatDef?.imageLed ? showText : false,
                       fit,
                       focusY,
