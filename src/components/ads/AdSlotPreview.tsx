@@ -143,7 +143,7 @@ export function AdSlotPreview({ placement, ad }: { placement: AdPlacementDef; ad
       >
         {chip(ad.advertiserName)}
         {ad.logoUrl ? (
-          <span className="shrink-0 overflow-hidden rounded-full bg-white" style={{ width: phone ? 48 : 56, height: phone ? 48 : 56, boxShadow: '0 0 0 2px rgba(255,255,255,.7)', alignSelf: phone ? 'center' : undefined }}><img src={ad.logoUrl} alt="" className="h-full w-full object-cover" style={{ transform: ad.logoZoom ? `scale(${ad.logoZoom})` : undefined }} /></span>
+          <span className="shrink-0 overflow-hidden rounded-full" style={{ width: phone ? 48 : 56, height: phone ? 48 : 56, boxShadow: '0 4px 14px rgba(0,0,0,.35)', alignSelf: phone ? 'center' : undefined }}><img src={ad.logoUrl} alt="" className="h-full w-full object-cover" style={{ transform: ad.logoZoom ? `scale(${ad.logoZoom})` : undefined }} /></span>
         ) : null}
         <div className="min-w-0 flex-1">
           <div className="font-extrabold leading-tight" style={{ color: '#FFFFFF', fontSize: phone ? 12 : 14 }}>{ad.headline || 'Your headline'}</div>
@@ -313,7 +313,7 @@ export function AdSlotPreview({ placement, ad }: { placement: AdPlacementDef; ad
           <img src={img} alt="" className="block aspect-[3/4] w-full object-cover" />
         ) : (
           <div className="flex aspect-[3/4] w-full flex-col justify-end p-4" style={{ background: brandGradient(ad.brandColor, 160, ad.brandColor2) ?? 'linear-gradient(135deg, #1A1D4E, #FF5B00)' }}>
-            {ad.logoUrl && <img src={ad.logoUrl} alt="" className="mb-auto h-12 w-12 rounded-full bg-white object-cover" style={{ boxShadow: '0 0 0 2px rgba(255,255,255,.7)' }} />}
+            {ad.logoUrl && <img src={ad.logoUrl} alt="" className="mb-auto h-12 w-12 rounded-full object-cover" style={{ boxShadow: '0 4px 14px rgba(0,0,0,.35)' }} />}
             <div className="text-[15px] font-extrabold leading-tight" style={{ color: '#FFFFFF' }}>{ad.headline || 'Your headline'}</div>
           </div>
         )}
