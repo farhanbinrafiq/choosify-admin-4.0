@@ -5,6 +5,7 @@ import { AD_PLACEMENTS, getAnyPlacementDef, getFormatDef, getPlacementDef } from
 import { inferHeroMediaType } from '@/shared/ads/heroMedia';
 import { useAuth } from '../../contexts/AuthContext';
 import { adsApi, type AdMetricsRow, type AdsApiRecord } from '../../services/adsApi';
+import { catalogApi } from '../../services/catalogApi';
 import { DayBars, InsightGrid, InsightPanel, KPI_COLORS, KpiStrip, RankList, fmt as kfmt, pct } from '../../components/insights/Kpi';
 
 const SellerDeals = lazy(() => import('./SellerDeals'));
@@ -259,6 +260,71 @@ function BannerAdsList() {
   const [range, setRange] = useState<RangeKey>('30');
   const [metrics, setMetrics] = useState<Map<string, AdMetricsRow>>(new Map());
   const [reportFor, setReportFor] = useState<AdsApiRecord | null>(null);
+  // Who each ad is for (brand / product / creator / guide names + images), loaded once.
+  const [entities, setEntities] = useState<Map<string, { name: string; image: string }>>(new Map());
+  useEffect(() => {
+    let alive = true;
+    const s = (v: unknown) => (typeof v === 'string' ? v : '');
+    Promise.all([
+      catalogApi.listBrands().catch(() => []),
+      catalogApi.listProducts().catch(() => []),
+      catalogApi.listCreators().catch(() => []),
+      catalogApi.listGuides().catch(() => []),
+      catalogApi.listCategories().catch(() => []),
+    ]).then(([b, p, c, g, cat]) => {
+      if (!alive) return;
+      const m = new Map<string, { name: string; image: string }>();
+      (b as unknown as Array<Record<string, unknown>>).forEach((x) => {
+        m.set(`brand:${s(x.id)}`, { name: s(x.name), image: s(x.logo) });
+        // owner → their brand(s), to name who a page-link ad is for
+        if (s(x.sellerId)) {
+          const k = `owner:${s(x.sellerId)}`;
+          const prev = m.get(k);
+          m.set(k, { name: prev ? `${prev.name}, ${s(x.name)}` : s(x.name), image: prev?.image || s(x.logo) });
+        }
+      });
+      (p as unknown as Array<Record<string, unknown>>).forEach((x) => m.set(`product:${s(x.id)}`, { name: s(x.title) || s(x.name), image: s(x.image) }));
+      (c as unknown as Array<Record<string, unknown>>).forEach((x) => m.set(`creator:${s(x.id)}`, { name: s(x.name), image: s(x.avatar) }));
+      (g as unknown as Array<Record<string, unknown>>).forEach((x) => m.set(`guide:${s(x.id)}`, { name: s(x.title), image: s(x.coverImage) }));
+      (cat as unknown as Array<Record<string, unknown>>).forEach((x) => {
+        m.set(`category:${s(x.id)}`, { name: s(x.name), image: '' });
+        if (s(x.slug)) m.set(`category:${s(x.slug)}`, { name: s(x.name), image: '' });
+      });
+      setEntities(m);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  /** "For: Artveen (brand)" / "For: ezbooking.global" — who / what the ad promotes. */
+  const adFor = (row: AdsApiRecord): { label: string; image?: string } | null => {
+    const cta = (row.cta || {}) as { internalEntityType?: string; internalEntityId?: string; url?: string; destinationType?: string };
+    if (cta.internalEntityType && cta.internalEntityId) {
+      const e = entities.get(`${cta.internalEntityType}:${cta.internalEntityId}`);
+      if (cta.internalEntityType === 'category') return { label: `${e?.name || cta.internalEntityId} (category)` };
+      return { label: `${e?.name || cta.internalEntityId} (${cta.internalEntityType})`, image: e?.image || undefined };
+    }
+    if (row.listingId) {
+      const e = entities.get(`product:${row.listingId}`);
+      return { label: `${e?.name || row.listingId} (product)`, image: e?.image || undefined };
+    }
+    // A link to a page / website: name WHO it is for, then where it goes.
+    const advertiser = String(((row.creative || {}) as { advertiserName?: string }).advertiserName || '').trim();
+    const ownerBrand = row.ownerId ? entities.get(`owner:${row.ownerId}`)?.name : undefined;
+    const role = String(row.ownerRole || '').toLowerCase();
+    const who = advertiser || ownerBrand || (role === 'admin' || role === 'super_admin' ? 'Choosify (house ad)' : role ? `a ${role}` : '');
+    const ext = (row as { externalUrl?: string }).externalUrl || (cta.destinationType === 'external' ? cta.url : '');
+    let where = '';
+    if (ext) {
+      try {
+        where = new URL(ext).hostname.replace(/^www\./, '');
+      } catch {
+        where = ext;
+      }
+    } else if (cta.url) where = `choosify.bd${cta.url}`;
+    if (!where && !who) return null;
+    return { label: who && where ? `${who} · links to ${where}` : who || where };
+  };
   const rangeDef = RANGES.find((r) => r.key === range) ?? RANGES[1];
 
   useEffect(() => {
@@ -578,7 +644,7 @@ function BannerAdsList() {
           <Loader2 className="h-4 w-4 animate-spin" /> Loading…
         </div>
       ) : (
-        <div className="overflow-hidden rounded-[5px] border border-[#E8EDF2] bg-white">
+        <div className="overflow-x-auto rounded-[5px] border border-[#E8EDF2] bg-white" data-testid="ads-table-wrap">
           <table className="w-full border-collapse text-left">
             <thead>
               <tr className="bg-[#F9FAFB]">
@@ -596,7 +662,7 @@ function BannerAdsList() {
                   (h) => (
                     <th
                       key={h}
-                      className="px-3 py-2.5 text-[10px] font-extrabold uppercase tracking-wide text-[#6B7280]"
+                      className={`px-3 py-2.5 text-[10px] font-extrabold uppercase tracking-wide text-[#6B7280] ${h === 'Actions' ? 'sticky right-0 z-[1] bg-[#F9FAFB] shadow-[-6px_0_8px_-6px_rgba(0,0,0,.15)]' : ''}`}
                     >
                       {h}
                     </th>
@@ -651,7 +717,14 @@ function BannerAdsList() {
                           onClick={() => navigate(`/admin/ads-studio/${encodeURIComponent(row.id)}/edit`)}
                           className="flex items-center gap-2 text-left"
                         >
-                          {textOnly ? (
+                          {row.formatId === 'sponsored_listing' && adFor(row)?.image ? (
+                            <div
+                              className="h-10 w-14 shrink-0 rounded border border-[#E8EDF2] bg-white"
+                              style={{ backgroundImage: `url(${adFor(row)!.image})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' }}
+                              title="The promoted item's own picture"
+                              data-testid={`ads-thumb-entity-${row.id}`}
+                            />
+                          ) : textOnly ? (
                             <div
                               className="flex h-10 w-14 shrink-0 items-center justify-center rounded text-[13px] font-extrabold"
                               style={{ background: 'linear-gradient(135deg,#2A1846,#FF5B00)', color: '#FFFFFF' }}
@@ -679,17 +752,22 @@ function BannerAdsList() {
                           )}
                           <div>
                             <div className="text-[12px] font-bold text-[#111827]">{row.title}</div>
+                            {adFor(row) ? (
+                              <div className="mt-0.5 max-w-[240px] truncate text-[11px] font-semibold text-[#EF3C23]" data-testid={`ads-for-${row.id}`} title={adFor(row)!.label}>
+                                For: {adFor(row)!.label}
+                              </div>
+                            ) : null}
                             <div className="flex items-center gap-1.5 mt-0.5">
                               <span className="text-[9px] font-extrabold uppercase tracking-wide text-[#6B7280] bg-[#F3F4F6] px-1.5 py-0.5 rounded">
                                 {mediaLabel}
                               </span>
-                              <span className="text-[10px] text-[#9CA3AF] font-mono">{row.id.slice(0, 18)}…</span>
+
                             </div>
                           </div>
                         </button>
                       </td>
                       <td className="px-3 py-2.5 text-[12px] font-semibold text-[#374151]">
-                        {creative.advertiserName || '—'}
+                        {creative.advertiserName || (adFor(row)?.label ? adFor(row)!.label.replace(/ · links to .*$/, '').replace(/ \((brand|product|creator|guide|deal|category)\)$/, '') : '—')}
                       </td>
                       <td className="px-3 py-2.5 text-[11px] text-[#6B7280]">{format?.label || row.formatId || '—'}</td>
                       <td className="px-3 py-2.5 text-[11px] text-[#6B7280]">
@@ -790,8 +868,8 @@ function BannerAdsList() {
                       <td className="px-3 py-2.5 text-[10px] text-[#9CA3AF]">
                         {new Date(row.updatedAt).toLocaleString()}
                       </td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex flex-wrap gap-1.5">
+                      <td className="sticky right-0 z-[1] bg-white px-3 py-2.5 shadow-[-6px_0_8px_-6px_rgba(0,0,0,.15)]" data-testid={`ads-actions-${row.id}`}>
+                        <div className="flex min-w-[64px] flex-col gap-1.5">
                           <button
                             type="button"
                             onClick={() => navigate(`/admin/ads-studio/${encodeURIComponent(row.id)}/edit`)}
