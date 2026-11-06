@@ -65,7 +65,19 @@ async function measuredCreative(creative: unknown, formatId: string | undefined,
   const c = { ...(creative as AdCreative) };
   delete c.imageWidth;
   delete c.imageHeight;
+  delete c.mobileImageWidth;
+  delete c.mobileImageHeight;
   const format = getFormatDef(formatId);
+  // Optional taller picture for phones (wide banners / pop-ups).
+  if (typeof c.mobileImageUrl === 'string' && c.mobileImageUrl && format?.imageLed) {
+    const ms = await probeImageSize(c.mobileImageUrl);
+    if (ms) {
+      c.mobileImageWidth = ms.width;
+      c.mobileImageHeight = ms.height;
+    }
+  } else {
+    delete c.mobileImageUrl;
+  }
   const slot = getPlacementDef(placementId);
   if (c.pagePosition !== undefined) {
     const pos = typeof c.pagePosition === 'string' ? c.pagePosition.trim() : '';
@@ -75,6 +87,12 @@ async function measuredCreative(creative: unknown, formatId: string | undefined,
   }
   if (c.fit !== undefined && c.fit !== 'fill' && c.fit !== 'whole') delete c.fit;
   // Card colour taken from the logo (builder); only a plain #RRGGBB is kept.
+  if (c.logoColor2 !== undefined && !(typeof c.logoColor2 === 'string' && /^#[0-9a-f]{6}$/i.test(c.logoColor2))) delete c.logoColor2;
+  if (c.logoZoom !== undefined) {
+    const z = Number(c.logoZoom);
+    if (Number.isFinite(z) && z >= 1 && z <= 1.8) c.logoZoom = Math.round(z * 100) / 100;
+    else delete c.logoZoom;
+  }
   if (c.logoColor !== undefined && !(typeof c.logoColor === 'string' && (/^#[0-9a-f]{6}$/i.test(c.logoColor) || c.logoColor === 'none'))) delete c.logoColor;
   if (slot?.slotKey === 'grid_card') {
     const n = Math.round(Number(c.gridEvery));

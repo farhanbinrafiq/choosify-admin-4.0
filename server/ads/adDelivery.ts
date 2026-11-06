@@ -40,6 +40,14 @@ export type PublicAd = {
   sponsorLogoUrl?: string;
   /** Text cards: the logo's main colour → card gradient (storefront brandGradient). */
   brandColor?: string;
+  /** Zoom that fills the round logo frame (crops the logo's own white margin). */
+  logoZoom?: number;
+  /** Optional phone picture (taller design) and its size. */
+  mobileImage?: string;
+  mobileImageWidth?: number;
+  mobileImageHeight?: number;
+  /** Second logo colour (gradient end). */
+  brandColor2?: string;
   /** Wide banners: the exact spot on the page (slot default when none chosen). */
   position?: string;
   /** Pop-up rules (pages it shows on, times per visit, delay). */
@@ -171,6 +179,9 @@ export function toPublicAd(ad: AdRecord, origin = ''): PublicAd {
     format: format.formatId,
     display: format.imageLed ? slot.creative?.display ?? 'cover' : 'text',
     image: SAFE_IMAGE(c.imageUrl) ? absoluteMedia(c.imageUrl, origin) : undefined,
+    mobileImage: format.imageLed && SAFE_IMAGE(c.mobileImageUrl) ? absoluteMedia(c.mobileImageUrl, origin) : undefined,
+    mobileImageWidth: Number(c.mobileImageWidth) > 0 ? Number(c.mobileImageWidth) : undefined,
+    mobileImageHeight: Number(c.mobileImageHeight) > 0 ? Number(c.mobileImageHeight) : undefined,
     imageWidth: Number(c.imageWidth) > 0 ? Number(c.imageWidth) : undefined,
     imageHeight: Number(c.imageHeight) > 0 ? Number(c.imageHeight) : undefined,
     alt: headline ?? 'Sponsored',
@@ -183,6 +194,8 @@ export function toPublicAd(ad: AdRecord, origin = ''): PublicAd {
     fit: slot.creative?.display === 'natural' && c.fit === 'fill' ? 'fill' : undefined,
     focusY: slot.creative?.display === 'natural' && c.fit === 'fill' && (c.focusY === 'top' || c.focusY === 'bottom') ? c.focusY : undefined,
     sponsorLogoUrl: SAFE_IMAGE(c.logoUrl) ? absoluteMedia(c.logoUrl, origin) : undefined,
+    brandColor2: SAFE_IMAGE(c.logoUrl) && typeof c.logoColor2 === 'string' && /^#[0-9a-f]{6}$/i.test(c.logoColor2) ? c.logoColor2 : undefined,
+    logoZoom: SAFE_IMAGE(c.logoUrl) && Number(c.logoZoom) > 1 && Number(c.logoZoom) <= 1.8 ? Number(c.logoZoom) : undefined,
     brandColor: SAFE_IMAGE(c.logoUrl) && typeof c.logoColor === 'string' && /^#[0-9a-f]{6}$/i.test(c.logoColor) ? c.logoColor : undefined,
     position: resolvePagePosition(slot, c.pagePosition),
     gridEvery:

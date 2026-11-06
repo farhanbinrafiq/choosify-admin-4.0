@@ -9,6 +9,7 @@ export type HomepageSlide = {
   /** Accessible name of the slide and its link (the hero shows media only, no text overlay). */
   label: string;
   linkUrl: string;
+  buttonText?: string;
   mediaType: 'image' | 'video';
   mediaUrl: string;
   mobileMediaUrl: string;

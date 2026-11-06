@@ -21,7 +21,7 @@ import { AdFitStatus, AdSlotPreview, AdSlotSpec, measureImage } from '../../comp
 import { CategorySearchSelect } from '../../components/ads/CategorySearchSelect';
 import { EntityPicker, type PickableType } from '../../components/ads/EntityPicker';
 import { SponsoredListingPreview } from '../../components/ads/SponsoredListingPreview';
-import { brandGradient, dominantColor } from '@/shared/ads/brandColor';
+import { brandGradient, dominantColors, logoFillZoom } from '@/shared/ads/brandColor';
 import { useAuth } from '../../contexts/AuthContext';
 import { adsApi, type AdsApiRecord, type EligibleListing } from '../../services/adsApi';
 import { catalogApi } from '../../services/catalogApi';
@@ -149,13 +149,19 @@ export default function AdsVisualBuilder() {
   const [gridEvery, setGridEvery] = useState(8);
   const [listRow, setListRow] = useState(2);
   const [imageUrl, setImageUrl] = useState('');
+  /** Optional taller picture shown on phones (wide banners / pop-ups). */
+  const [mobileImageUrl, setMobileImageUrl] = useState('');
+  const [mobileUploading, setMobileUploading] = useState(false);
   const [videoUrl, setVideoUrl] = useState('');
   const [posterUrl, setPosterUrl] = useState('');
   const [mediaType, setMediaType] = useState<HeroMediaType>('image');
   const [logoUrl, setLogoUrl] = useState('');
   /** Card colour from the logo (on by default when a logo is set). */
   const [logoColor, setLogoColor] = useState('');
+  const [logoColor2, setLogoColor2] = useState('');
   const [useLogoColor, setUseLogoColor] = useState(true);
+  /** Zoom that crops the logo's own white margin so it fills its round frame. */
+  const [logoZoom, setLogoZoom] = useState(1);
   const [listingId, setListingId] = useState('');
   const [destMode, setDestMode] = useState<DestMode>('internal');
   const [internalEntityType, setInternalEntityType] = useState('product');
@@ -187,8 +193,14 @@ export default function AdsVisualBuilder() {
   useEffect(() => {
     if (!logoUrl) return;
     let alive = true;
-    void dominantColor(logoUrl).then((c) => {
-      if (alive && c) setLogoColor(c);
+    void dominantColors(logoUrl).then((c) => {
+      if (alive && c) {
+        setLogoColor(c.first);
+        setLogoColor2(c.second || '');
+      }
+    });
+    void logoFillZoom(logoUrl).then((z) => {
+      if (alive && z) setLogoZoom(z);
     });
     return () => {
       alive = false;
@@ -299,6 +311,7 @@ export default function AdsVisualBuilder() {
       setFocusY(f === 'top' || f === 'bottom' ? f : 'center');
     }
     setImageUrl(creative.imageUrl || '');
+    setMobileImageUrl(typeof creative.mobileImageUrl === 'string' ? creative.mobileImageUrl : '');
     setVideoUrl(creative.videoUrl || '');
     setPosterUrl(creative.posterUrl || '');
     setMediaType(
@@ -500,11 +513,14 @@ export default function AdsVisualBuilder() {
       body: subtext || undefined,
       subtext: subtext || undefined,
       imageUrl: imageUrl || undefined,
+      mobileImageUrl: formatDef?.imageLed && formatId !== 'hero_banner' && mobileImageUrl ? mobileImageUrl : undefined,
       videoUrl: formatId === 'hero_banner' && resolvedMediaType === 'video' ? videoUrl || undefined : undefined,
       posterUrl: formatId === 'hero_banner' && resolvedMediaType === 'video' ? posterUrl || imageUrl || undefined : undefined,
       mediaType: formatId === 'hero_banner' ? resolvedMediaType : undefined,
       logoUrl: logoUrl || undefined,
       logoColor: !logoUrl ? undefined : !useLogoColor ? 'none' : logoColor || undefined,
+      logoColor2: logoUrl && useLogoColor && logoColor2 ? logoColor2 : undefined,
+      logoZoom: logoUrl && logoZoom > 1 ? logoZoom : undefined,
       hostCategoryName: fields.has('hostCategory') ? hostCategoryName || undefined : undefined,
       categoryId: fields.has('hostCategory') ? hostCategoryId || undefined : undefined,
       categoryName: fields.has('hostCategory') ? hostCategoryName || undefined : undefined,
@@ -1161,6 +1177,45 @@ export default function AdsVisualBuilder() {
                       <div className="mt-1 text-[10px] text-[#9CA3AF]">
                         JPG/PNG/WEBP/GIF, any shape — it is fitted into the frame (best: the recommended size). Big photos are shrunk automatically.
                       </div>
+                      {formatId !== 'hero_banner' ? (
+                        <div className="mt-3 rounded-lg border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-2.5" data-testid="ad-phone-image">
+                          <div className="text-[11.5px] font-extrabold text-[#111827]">Phone image (optional)</div>
+                          <div className="mb-2 text-[10.5px] text-[#6B7280]">
+                            Phones are narrow, so a wide banner looks thin there. Upload a taller version — e.g. 1080×1080 (square) or 1080×1350 — and phones show it instead. Without one, phones show the wide design whole.
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {mobileImageUrl ? <img src={mobileImageUrl} alt="" className="h-16 w-16 rounded-md border border-[#E8EDF2] object-cover" /> : null}
+                            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#E8EDF2] bg-white px-3 py-1.5 text-[11px] font-bold">
+                              {mobileUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                              {mobileImageUrl ? 'Replace phone image' : 'Upload phone image'}
+                              <input
+                                type="file"
+                                accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                                className="hidden"
+                                data-testid="ad-phone-image-file"
+                                onChange={async (e) => {
+                                  const f = e.target.files?.[0];
+                                  e.target.value = '';
+                                  if (!f) return;
+                                  setMobileUploading(true);
+                                  try {
+                                    setMobileImageUrl(await uploadProductImage(f));
+                                  } catch (err) {
+                                    setError(err instanceof Error ? err.message : 'Upload failed');
+                                  } finally {
+                                    setMobileUploading(false);
+                                  }
+                                }}
+                              />
+                            </label>
+                            {mobileImageUrl ? (
+                              <button type="button" onClick={() => setMobileImageUrl('')} className="rounded-md border border-red-200 px-2.5 py-1.5 text-[10.5px] font-extrabold text-red-700">
+                                Remove
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : null}
                     </>
                   )}
                 </div>
@@ -1183,7 +1238,7 @@ export default function AdsVisualBuilder() {
                       <img src={logoUrl} alt="" className="h-9 w-9 rounded-full border border-[#E8EDF2] bg-white object-cover" />
                       <span
                         className="inline-block h-7 w-16 rounded-md border border-[#E8EDF2]"
-                        style={{ background: (useLogoColor && brandGradient(logoColor)) || 'linear-gradient(110deg,#3B1E3F,#2A1846,#2B1A4A)' }}
+                        style={{ background: (useLogoColor && brandGradient(logoColor, 110, logoColor2)) || 'linear-gradient(110deg,#3B1E3F,#2A1846,#2B1A4A)' }}
                         title={logoColor || 'Choosify colours'}
                       />
                       <label className="inline-flex items-center gap-1.5 font-semibold text-[#374151]">
@@ -1707,6 +1762,8 @@ export default function AdsVisualBuilder() {
                       advertiserName: advertiserName || undefined,
                       logoUrl: logoUrl || undefined,
                       brandColor: logoUrl && useLogoColor && logoColor ? logoColor : undefined,
+                      brandColor2: logoUrl && useLogoColor && logoColor2 ? logoColor2 : undefined,
+                      logoZoom: logoUrl ? logoZoom : undefined,
                       hasDestination: destMode === 'external' ? Boolean(externalUrl.trim()) : Boolean(internalEntityId || listingId),
                       showText: formatDef?.imageLed ? showText : false,
                       fit,

@@ -34,6 +34,7 @@ export function studioToHomepageConfig(studio: HomepageStudio, base: HomepageCon
       subtitle: '',
       ctaText: s.label,
       ctaUrl: s.linkUrl,
+      buttonText: s.buttonText || '',
       backgroundImage: s.mediaType === 'image' ? s.mediaUrl : s.posterUrl,
       isActive: s.isActive,
       order,

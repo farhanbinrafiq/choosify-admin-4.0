@@ -339,6 +339,8 @@ export type HomepageSlide = {
   /** Accessible name of the slide + its link (the hero shows media only, no text overlay). */
   label: string;
   linkUrl: string;
+  /** Optional button on the slide (e.g. "Apply now"); a linked slide without it shows "Learn more". */
+  buttonText?: string;
   mediaType: 'image' | 'video';
   mediaUrl: string;
   /** Optional separate media for phones (same type). */
@@ -459,6 +461,7 @@ function slide(raw: unknown, i: number, ids: Set<string>): HomepageSlide {
     id,
     label,
     linkUrl: linkUrl(r.linkUrl, `${f}.linkUrl`),
+    buttonText: text(r.buttonText ?? '', `${f}.buttonText`, 30),
     mediaType,
     mediaUrl,
     mobileMediaUrl,

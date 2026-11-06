@@ -7,6 +7,7 @@ import React, { useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, ImagePlus, Loader2, Trash2, Upload, Video } from 'lucide-react';
 import { uploadProductVideoFile, uploadSiteAssetImage } from '../../../services/mediaUpload';
 import type { HomepageSlide } from './homepageModel';
+import { SlideLinkPicker } from './SlideLinkPicker';
 
 const inputCls =
   'w-full rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-[12.5px] text-[#111827] outline-none focus:border-[#EF3C23] focus:ring-2 focus:ring-[#EF3C23]/15 disabled:bg-slate-50';
@@ -268,17 +269,21 @@ export function HeroSlideEditor({
           </div>
         )}
         <div>
-          <label className={labelCls}>Link (CTA) when clicked</label>
+          <label className={labelCls}>Where the slide goes when clicked</label>
+          <SlideLinkPicker value={slide.linkUrl} disabled={disabled} testId={`ws-hp-slide-link-${slide.id}`} onChange={(url) => set({ linkUrl: url })} />
+        </div>
+        <div>
+          <label className={labelCls}>Button text on the slide</label>
           <input
             className={inputCls}
-            value={slide.linkUrl}
-            disabled={disabled}
-            maxLength={500}
-            placeholder="/deals or https://…"
-            data-testid={`ws-hp-slide-link-${slide.id}`}
-            onChange={(e) => set({ linkUrl: e.target.value })}
+            value={slide.buttonText || ''}
+            disabled={disabled || !slide.linkUrl}
+            maxLength={30}
+            placeholder={slide.linkUrl ? 'e.g. Apply now · Shop the sale (empty = “Learn more”)' : 'Add a link first'}
+            data-testid={`ws-hp-slide-button-${slide.id}`}
+            onChange={(e) => set({ buttonText: e.target.value })}
           />
-          <div className="mt-1 text-[10.5px] text-slate-500">The whole slide is clickable. Leave empty for no link.</div>
+          <div className="mt-1 text-[10.5px] text-slate-500">An orange button at the bottom-right of the slide shows visitors it can be clicked. The whole slide stays clickable.</div>
         </div>
       </div>
       <div className="mt-3">

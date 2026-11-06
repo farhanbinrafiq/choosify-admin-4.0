@@ -23,17 +23,30 @@ const mix = (hex: string, k: number) => {
   return toHex(r * k, g * k, b * k);
 };
 
-/** Gradient for an ad card from a brand colour (white text stays readable); null → caller default. */
-export function brandGradient(hex: string | undefined | null, angle = 110): string | null {
+const lighten = (hex: string, k: number) => {
+  const [r, g, b] = toRgb(hex);
+  return toHex(r + (255 - r) * k, g + (255 - g) * k, b + (255 - b) * k);
+};
+/** Darken until white text has strong contrast (luminance ≤ max). */
+const readable = (hex: string, max: number) => {
+  let c = hex;
+  for (let i = 0; i < 16 && lum(toRgb(c)) > max; i++) c = mix(c, 0.85);
+  return c;
+};
+
+/**
+ * Card gradient from the logo's colours (white text stays readable); null → caller default.
+ * Two colours: deep first colour flowing into the second. One colour: deep → brighter shade of it.
+ */
+export function brandGradient(hex: string | undefined | null, angle = 110, hex2?: string | null): string | null {
   if (!hex || !HEX_RE.test(hex)) return null;
-  // darken until white text has at least ~7:1 contrast
-  let base = hex;
-  for (let i = 0; i < 12 && lum(toRgb(base)) > 0.1; i++) base = mix(base, 0.85);
-  return `linear-gradient(${angle}deg, ${mix(base, 0.75)} 0%, ${base} 55%, ${mix(base, 0.6)} 100%)`;
+  const a = readable(hex, 0.08);
+  const b = hex2 && HEX_RE.test(hex2) ? readable(hex2, 0.2) : readable(lighten(hex, 0.35), 0.16);
+  return `linear-gradient(${angle}deg, ${mix(a, 0.8)} 0%, ${a} 40%, ${b} 100%)`;
 }
 
 /** Main colour of a picture (browser only): saturated, non-white, non-black pixels win. */
-export async function dominantColor(src: string): Promise<string | null> {
+export async function dominantColors(src: string): Promise<{ first: string; second: string | null } | null> {
   if (typeof document === 'undefined') return null;
   const img = new Image();
   img.crossOrigin = 'anonymous';
@@ -71,11 +84,74 @@ export async function dominantColor(src: string): Promise<string | null> {
       e.b += b * w;
       buckets.set(key, e);
     }
-    let best: { n: number; r: number; g: number; b: number } | null = null;
-    for (const e of buckets.values()) if (!best || e.n > best.n) best = e;
-    if (!best) return null;
-    return toHex(best.r / best.n, best.g / best.n, best.b / best.n);
+    const ranked = [...buckets.values()].sort((x, y) => y.n - x.n).map((e) => toHex(e.r / e.n, e.g / e.n, e.b / e.n));
+    if (!ranked.length) return null;
+    let second: string | null = null;
+    const [r1, g1, b1] = toRgb(ranked[0]);
+    // second colour: the strongest one clearly different from the first
+    for (const c of ranked.slice(1, 40)) {
+      const [r, g, b] = toRgb(c);
+      if (Math.abs(r - r1) + Math.abs(g - g1) + Math.abs(b - b1) > 120) {
+        second = c;
+        break;
+      }
+    }
+    return { first: ranked[0], second };
   } catch {
     return null; // canvas tainted (logo on another site without CORS)
   }
+}
+
+/**
+ * How much to zoom a logo so its content fills a round frame: finds the box of non-white,
+ * non-transparent pixels and returns the zoom (1 = no margin; capped at 1.8). Browser only.
+ */
+export async function logoFillZoom(src: string): Promise<number | null> {
+  if (typeof document === 'undefined') return null;
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  const ok = await new Promise<boolean>((resolve) => {
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = src;
+  });
+  if (!ok) return null;
+  try {
+    const n = 96;
+    const c = document.createElement('canvas');
+    c.width = n;
+    c.height = n;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+    // same framing as object-fit: cover in a square
+    const s = Math.min(img.naturalWidth, img.naturalHeight);
+    ctx.drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, n, n);
+    const px = ctx.getImageData(0, 0, n, n).data;
+    let minX = n, minY = n, maxX = -1, maxY = -1;
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        const i = (y * n + x) * 4;
+        const a = px[i + 3];
+        const white = px[i] > 232 && px[i + 1] > 232 && px[i + 2] > 232;
+        if (a > 40 && !white) {
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX < 0) return 1;
+    const w = maxX - minX + 1;
+    const h = maxY - minY + 1;
+    const zoom = n / Math.max(w, h);
+    return Math.round(Math.min(1.8, Math.max(1, zoom * 0.98)) * 100) / 100;
+  } catch {
+    return null;
+  }
+}
+
+/** The logo's main colour only. */
+export async function dominantColor(src: string): Promise<string | null> {
+  return (await dominantColors(src))?.first ?? null;
 }

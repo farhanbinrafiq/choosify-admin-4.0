@@ -514,6 +514,7 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
   // Wide banners above the grid (mounted 2026-11-05 at the Super Admin's request).
   wideSlot('BRANDS_BANNER', 'brands', 'Brands', 'Brands page — wide sponsored banner above the brands grid'),
   wideSlot('CATEGORIES_BANNER', 'categories', 'Categories', 'Categories page — wide sponsored banner above the category grid'),
+  gridCard('CATEGORIES_GRID_CARD', 'categories', 'Categories', 'category', 20),
   wideSlot('CREATORS_BANNER', 'creators', 'Creators', 'Creators page — wide sponsored banner above the creators grid'),
   wideSlot('DISCOVER_BANNER', 'discover', 'Recommendations (Discover)', 'Recommendations page (also Buying Guides) — wide sponsored banner above the feed'),
   gridCard('BRANDS_GRID_CARD', 'brands', 'Brands', 'brand', 20),
