@@ -1,7 +1,35 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle, Loader2, Plus, XCircle } from 'lucide-react';
-import { AD_PLACEMENTS, getAnyPlacementDef, getFormatDef, getPlacementDef } from '@/shared/ads/placementRegistry';
+import { AD_PLACEMENTS, getAnyPlacementDef, getFormatDef, getPlacementDef, pagePositionLabel, resolvePagePosition, IN_GRID_POSITION } from '@/shared/ads/placementRegistry';
+
+/** What kind of ad it is, at a glance: short name, colour and what it looks like on the storefront. */
+const AD_TYPE: Record<string, { name: string; fg: string; bg: string; look: string }> = {
+  hero_banner: { name: 'Hero slide', fg: '#1D4ED8', bg: '#DBEAFE', look: 'Big picture slide at the top of the homepage' },
+  follow_brands_banner: { name: 'Banner', fg: '#C2410C', bg: '#FFEDD5', look: 'Wide picture banner (your design)' },
+  cta_strip: { name: 'CTA strip', fg: '#6D28D9', bg: '#EDE9FE', look: 'Text strip: headline + button on a coloured band' },
+  gradient_promo: { name: 'Gradient card', fg: '#BE185D', bg: '#FCE7F3', look: 'Card with text on a colour gradient' },
+  vertical_card: { name: 'Image card', fg: '#0F766E', bg: '#CCFBF1', look: 'Card with a picture on top' },
+  deal_of_the_day: { name: 'Deal of the day', fg: '#B45309', bg: '#FEF3C7', look: 'Deal card with price and timer' },
+  category_promoted_slot: { name: 'Category footer', fg: '#334155', bg: '#E2E8F0', look: 'Promoted line at the bottom of a category card' },
+  popup: { name: 'Pop-up', fg: '#B91C1C', bg: '#FEE2E2', look: 'Pops up over the page' },
+  sponsored_listing: { name: 'Sponsored listing', fg: '#15803D', bg: '#DCFCE7', look: 'An existing product / brand card with a Sponsored label' },
+};
+const adType = (formatId?: string) =>
+  AD_TYPE[formatId || ''] ?? { name: getFormatDef(formatId)?.label || formatId || 'Ad', fg: '#374151', bg: '#F3F4F6', look: '' };
+function AdTypeBadge({ formatId, testId }: { formatId?: string; testId?: string }) {
+  const t = adType(formatId);
+  return (
+    <span
+      className="inline-block whitespace-nowrap rounded px-1.5 py-0.5 text-[9.5px] font-extrabold uppercase tracking-wide"
+      style={{ color: t.fg, background: t.bg }}
+      title={t.look}
+      data-testid={testId}
+    >
+      {t.name}
+    </span>
+  );
+}
 import { inferHeroMediaType } from '@/shared/ads/heroMedia';
 import { useAuth } from '../../contexts/AuthContext';
 import { adsApi, type AdMetricsRow, type AdsApiRecord } from '../../services/adsApi';
@@ -758,9 +786,12 @@ function BannerAdsList() {
                               </div>
                             ) : null}
                             <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className="text-[9px] font-extrabold uppercase tracking-wide text-[#6B7280] bg-[#F3F4F6] px-1.5 py-0.5 rounded">
-                                {mediaLabel}
-                              </span>
+                              <AdTypeBadge formatId={row.formatId} testId={`ads-type-${row.id}`} />
+                              {mediaLabel === 'Video' || mediaLabel === 'GIF' ? (
+                                <span className="text-[9px] font-extrabold uppercase tracking-wide text-[#6B7280] bg-[#F3F4F6] px-1.5 py-0.5 rounded">
+                                  {mediaLabel}
+                                </span>
+                              ) : null}
 
                             </div>
                           </div>
@@ -769,12 +800,23 @@ function BannerAdsList() {
                       <td className="px-3 py-2.5 text-[12px] font-semibold text-[#374151]">
                         {creative.advertiserName || (adFor(row)?.label ? adFor(row)!.label.replace(/ · links to .*$/, '').replace(/ \((brand|product|creator|guide|deal|category)\)$/, '') : '—')}
                       </td>
-                      <td className="px-3 py-2.5 text-[11px] text-[#6B7280]">{format?.label || row.formatId || '—'}</td>
+                      <td className="px-3 py-2.5 text-[11px] text-[#6B7280]">
+                        <div className="font-bold" style={{ color: adType(row.formatId).fg }}>{format?.label || row.formatId || '—'}</div>
+                        {adType(row.formatId).look ? <div className="mt-0.5 max-w-[150px] text-[10px] leading-snug text-[#9CA3AF]">{adType(row.formatId).look}</div> : null}
+                      </td>
                       <td className="px-3 py-2.5 text-[11px] text-[#6B7280]">
                         {placement?.pageLabel || row.pageKey || '—'}
                       </td>
                       <td className="px-3 py-2.5 text-[11px] text-[#6B7280]">
                         {placement?.slotLabel || getAnyPlacementDef(row.placementId)?.slotLabel || row.placementId || row.placement || '—'}
+                        {(() => {
+                          const pos = resolvePagePosition(placement, creative.pagePosition);
+                          if (!pos) return null;
+                          const where = pos === IN_GRID_POSITION
+                            ? `Inside the grid, after row ${Number(creative.listRow) >= 1 ? Number(creative.listRow) : 1}`
+                            : pagePositionLabel(placement, pos)?.replace(/^Banner at the /, '').replace(/^./, (c) => c.toUpperCase());
+                          return where ? <div className="text-[10px] font-bold text-[#4F46E5]" data-testid={`ads-spot-${row.id}`}>{where}</div> : null;
+                        })()}
                         {!placement && getAnyPlacementDef(row.placementId) ? (
                           <div className="text-[9.5px] font-bold text-red-600" data-testid="ads-slot-retired">Slot retired — move this ad</div>
                         ) : null}
