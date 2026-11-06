@@ -137,16 +137,17 @@ export function AdSlotPreview({ placement, ad }: { placement: AdPlacementDef; ad
         className="relative flex gap-3 overflow-hidden rounded-xl"
         style={{
           background: brandGradient(ad.brandColor, 110, ad.brandColor2) ?? 'linear-gradient(110deg, #3B1E3F 0%, #2A1846 55%, #2B1A4A 100%)',
-          padding: phone ? '26px 12px 10px' : '28px 20px 16px',
+          padding: phone ? '14px 12px 10px' : '16px 20px',
           flexDirection: phone ? 'column' : 'row',
-          alignItems: phone ? 'flex-start' : 'center',
+          alignItems: 'center',
+          textAlign: phone ? 'center' : 'left',
         }}
       >
-        {chip(ad.advertiserName)}
         {ad.logoUrl ? (
           <span className="shrink-0 overflow-hidden rounded-full" style={{ width: phone ? 48 : 56, height: phone ? 48 : 56, boxShadow: '0 4px 14px rgba(0,0,0,.35)', alignSelf: phone ? 'center' : undefined, background: ad.logoFit === 'fit' ? '#FFFFFF' : undefined, padding: ad.logoFit === 'fit' ? (phone ? 6 : 7) : undefined }}><img src={ad.logoUrl} alt="" className={`h-full w-full ${ad.logoFit === 'fit' ? 'object-contain' : 'object-cover'}`} style={{ transform: ad.logoFit !== 'fit' && ad.logoZoom ? `scale(${ad.logoZoom})` : undefined }} /></span>
         ) : null}
         <div className="min-w-0 flex-1">
+          <div className="font-extrabold uppercase" style={{ color: 'rgba(255,255,255,.6)', fontSize: phone ? 8.5 : 9.5, letterSpacing: '0.14em', marginBottom: 3 }} data-testid="ad-preview-chip">Sponsored</div>
           <div className="font-extrabold leading-tight" style={{ color: '#FFFFFF', fontSize: phone ? 12 : 14 }}>{ad.headline || 'Your headline'}</div>
           {ad.subtext ? <div style={{ color: 'rgba(255,255,255,.7)', fontSize: phone ? 10 : 11.5, marginTop: 2 }}>{ad.subtext}</div> : null}
         </div>
