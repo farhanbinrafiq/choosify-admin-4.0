@@ -56,6 +56,8 @@ export type PublicAd = {
   popup?: { pages: string[]; maxPerSession: number; delaySec: number };
   /** In-grid cards / Sponsored Listings: after every N cards (0 = once, after the last card). */
   gridEvery?: number;
+  /** In-grid card shown once (after card gridEvery), not repeated. */
+  gridOnce?: boolean;
   /** Sponsored Listing: the product / brand promoted (drawn as its normal card). */
   entity?: { type: 'product' | 'brand'; id: string };
   /** Sponsored Listing: the row it starts (first card of that row, whatever the column count). */
@@ -207,6 +209,7 @@ export function toPublicAd(ad: AdRecord, origin = ''): PublicAd {
         : format.formatId === 'sponsored_listing'
           ? Number(c.gridEvery) > 0 ? Number(c.gridEvery) : 5
           : undefined,
+    gridOnce: slot.slotKey === 'grid_card' && c.gridOnce === true && Number(c.gridEvery) > 0 ? true : undefined,
     listRow:
       format.formatId === 'sponsored_listing'
         ? Number(c.listRow) >= 1 && Number(c.listRow) <= 10 ? Math.round(Number(c.listRow)) : 2

@@ -98,8 +98,11 @@ async function measuredCreative(creative: unknown, formatId: string | undefined,
   if (slot?.slotKey === 'grid_card') {
     const n = Math.round(Number(c.gridEvery));
     c.gridEvery = GRID_EVERY_CHOICES.includes(n) ? n : 8;
+    if (c.gridOnce === true && c.gridEvery > 0) c.gridOnce = true;
+    else delete c.gridOnce;
   } else {
     delete c.gridEvery;
+    delete c.gridOnce;
   }
   // Sponsored Listing: the row it starts (it is always the FIRST card of that row).
   if (format?.formatId === 'sponsored_listing') {

@@ -150,6 +150,8 @@ export default function AdsVisualBuilder() {
   const [popupDelay, setPopupDelay] = useState(3);
   /** In-grid cards: after every N cards (0 = once at the end). */
   const [gridEvery, setGridEvery] = useState(8);
+  /** In-grid card: show only once (after the Nth card) instead of repeating. */
+  const [gridOnce, setGridOnce] = useState(false);
   const [listRow, setListRow] = useState(2);
   const [imageUrl, setImageUrl] = useState('');
   /** Optional taller picture shown on phones (wide banners / pop-ups). */
@@ -317,6 +319,7 @@ export default function AdsVisualBuilder() {
       setPopupMax(Number(c.popupMaxPerSession) || 1);
       setPopupDelay(c.popupDelaySec === undefined ? 3 : Number(c.popupDelaySec) || 0);
       setGridEvery(c.gridEvery === undefined ? 8 : Number(c.gridEvery));
+      setGridOnce(c.gridOnce === true);
       setListRow(Number(c.listRow) >= 1 ? Number(c.listRow) : 2);
     }
     {
@@ -518,6 +521,7 @@ export default function AdsVisualBuilder() {
       showText: formatDef?.imageLed && fields.has('headline') ? showText : undefined,
       fit: placementDef?.creative?.display === 'natural' && placementDef.slotKey !== 'popup' ? fit : undefined,
       gridEvery: placementDef?.slotKey === 'grid_card' ? gridEvery : undefined,
+      gridOnce: placementDef?.slotKey === 'grid_card' && gridEvery > 0 && gridOnce ? true : undefined,
       listRow: formatId === 'sponsored_listing' || isInGrid ? listRow : undefined,
       popupPages: formatId === 'popup' ? popupPages : undefined,
       popupMaxPerSession: formatId === 'popup' ? popupMax : undefined,
@@ -1383,7 +1387,7 @@ export default function AdsVisualBuilder() {
             <div className="mt-3" data-testid="ad-page-map">
               <div className="text-[11px] font-bold text-[#374151]">Where on this page</div>
               <div className="mt-0.5 text-[10.5px] text-[#6B7280]">
-                Every place on the page, top to bottom. Different places show separately; ads in the same place take turns (round switch icons).
+                Every place on the page, top to bottom. Different places show separately; ads in the same place are stacked and slide (round switch icons).
               </div>
               <div className="mt-2 overflow-hidden rounded-lg border border-[#E8EDF2]">
                 {pageRows.map((row, idx) => {
@@ -1415,7 +1419,7 @@ export default function AdsVisualBuilder() {
                       </span>
                       {taken.length ? (
                         <span className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-800" title={taken.map((a) => a.advertisementReferenceId || a.title).join(', ')}>
-                          {taken.length} live ad{taken.length > 1 ? 's' : ''}{chosen ? ' — will take turns' : ''}
+                          {taken.length} live ad{taken.length > 1 ? 's' : ''}{chosen ? ' — will be stacked' : ''}
                         </span>
                       ) : (
                         <span className="shrink-0 text-[10px] font-semibold text-[#9CA3AF]">free</span>
@@ -1431,17 +1435,40 @@ export default function AdsVisualBuilder() {
             {placementDef?.slotKey === 'grid_card' ? (
               <div className="mt-3 rounded-lg border-2 border-[#C4B5FD] bg-[#F5F3FF] px-3 py-2.5" data-testid="grid-rules">
                 <label className="block text-[11.5px] font-extrabold text-[#111827]">
-                  How often in the grid
+                  Where in the grid
                   <select value={gridEvery} onChange={(e) => setGridEvery(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-[#E8EDF2] bg-white px-3 py-2 text-[12px] font-semibold" data-testid="grid-every">
                     {GRID_EVERY_CHOICES.map((n) => (
                       <option key={n} value={n}>
-                        {n === 0 ? 'Once, after the last card' : `After every ${n} cards`}
+                        {n === 0 ? 'Once, after the last card' : gridOnce ? `After card ${n}` : `After every ${n} cards`}
                       </option>
                     ))}
                   </select>
                 </label>
-                <div className="mt-1 text-[10.5px] text-[#6B7280]">
-                  The ad repeats through the list (e.g. after every 8 cards = about every 2 rows on desktop). Several ads in the same spot are stacked into one card that slides between them (with small round switches), so every ad gets seen; each ad keeps its own "every N cards". With fewer cards than that, it shows after the last card.
+                {gridEvery > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label="Repeat" data-testid="grid-once">
+                    {[
+                      { v: false, label: 'Repeat through the list' },
+                      { v: true, label: `Only once (after card ${gridEvery})` },
+                    ].map((o) => (
+                      <button
+                        key={String(o.v)}
+                        type="button"
+                        role="radio"
+                        aria-checked={gridOnce === o.v}
+                        onClick={() => setGridOnce(o.v)}
+                        className={`rounded-lg border px-3 py-1.5 text-[11.5px] font-bold ${gridOnce === o.v ? 'border-[#7C3AED] bg-white text-[#5B21B6] shadow-sm' : 'border-[#E8EDF2] bg-white/60 text-[#6B7280]'}`}
+                        data-testid={o.v ? 'grid-once-yes' : 'grid-once-no'}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="mt-1.5 text-[10.5px] text-[#6B7280]">
+                  {gridEvery > 0 && gridOnce
+                    ? `Shows one time only, right after card ${gridEvery}, and not again further down.`
+                    : 'Repeats through the list (e.g. every 8 cards = about every 2 rows on desktop).'}{' '}
+                  Several ads in the same spot are stacked into one card that slides between them (small round switches). With fewer cards than that, it shows after the last card.
                 </div>
               </div>
             ) : null}
