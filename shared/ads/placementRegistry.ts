@@ -546,7 +546,7 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
     pageLabel: 'Recommendations (Discover)',
     slotKey: 'feed',
     slotLabel: 'Sponsored feed card',
-    sectionLabel: 'Recommendations / Discover feed — sponsored card between feed items',
+    sectionLabel: 'Recommendations — sponsored card inside the feed, the same size as the cards around it (in YouTube Picks; in Blogs / Live / Reels when that tab is open). Several ads stack and slide',
     allowedFormats: ['vertical_card', 'gradient_promo', 'sponsored_listing'],
     entityTypes: ['product', 'brand', 'guide', 'creator'],
     frequency: 'At most 1 sponsored card per 8 feed items, never first.',
