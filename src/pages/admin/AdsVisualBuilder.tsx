@@ -1441,7 +1441,7 @@ export default function AdsVisualBuilder() {
                   </select>
                 </label>
                 <div className="mt-1 text-[10.5px] text-[#6B7280]">
-                  The ad repeats through the list (e.g. after every 8 cards = about every 2 rows on desktop). If several ads are booked here they take turns. With fewer cards than that, it shows once after the last card.
+                  The ad repeats through the list (e.g. after every 8 cards = about every 2 rows on desktop). Several ads in the same spot are stacked into one card that slides between them (with small round switches), so every ad gets seen; each ad keeps its own "every N cards". With fewer cards than that, it shows after the last card.
                 </div>
               </div>
             ) : null}
