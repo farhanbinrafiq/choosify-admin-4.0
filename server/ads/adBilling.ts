@@ -15,6 +15,8 @@ import type { AdRecord } from './types';
 export type AdBilling = AdQuote & {
   status: 'unpaid' | 'paid' | 'waived';
   quotedAt: string;
+  /** The advertiser says they paid (bKash / Nagad / bank …) — waits for Choosify to confirm. */
+  submitted?: { method: string; reference: string; note?: string; at: string; by: string };
   paidAt?: string;
   paidBy?: string;
   method?: string;
@@ -69,6 +71,11 @@ export function withBilling(ad: AdRecord, previous?: AdRecord | null): AdRecord 
     return { ...ad, metadata: meta };
   }
   const billing: AdBilling = { ...q, status: 'unpaid', quotedAt: new Date().toISOString() };
+  // keep a payment the advertiser already sent while the charge itself is unchanged
+  if (prior?.submitted && prior.amount === q.amount && prior.days === q.days && prior.placementId === q.placementId) {
+    billing.submitted = prior.submitted;
+    billing.quotedAt = prior.quotedAt;
+  }
   meta.billing = billing;
   return { ...ad, metadata: meta };
 }
@@ -78,6 +85,7 @@ export function billingBlocker(ad: AdRecord): string | null {
   if (!isPaidAd(ad)) return null;
   const b = billingOf(ad);
   if (!b) return 'Choose a start and an end date — ads are charged per day';
+  if (b.status === 'unpaid' && b.submitted) return `Payment sent (${b.submitted.method}, ref ${b.submitted.reference}) — waiting for Choosify to confirm it`;
   if (b.status === 'unpaid') return `Payment not received yet (${b.currency} ${b.amount} for ${b.days} day${b.days === 1 ? '' : 's'})`;
   return null;
 }

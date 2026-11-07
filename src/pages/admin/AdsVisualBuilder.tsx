@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { AdPaymentPanel } from '../../components/ads/AdPaymentPanel';
 import { ArrowLeft, Image as ImageIcon, Loader2, Upload } from 'lucide-react';
 import {
   AD_FORMATS,
@@ -109,6 +110,8 @@ function shapeOf(p: AdPlacementDef): string {
 
 export default function AdsVisualBuilder() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const payMode = searchParams.get('pay') === '1';
   const isEdit = Boolean(id);
   const navigate = useNavigate();
   const { profile } = useAuth();
@@ -780,6 +783,18 @@ export default function AdsVisualBuilder() {
 
   const pagesForFormat = [...new Set(allFormatPlacements.map((p) => p.pageKey))];
 
+  // "Pay now" (ads list / cost box) opens the payment page for this ad.
+  if (payMode && existing) {
+    return (
+      <AdPaymentPanel
+        ad={existing}
+        isAdmin={isAdmin}
+        onUpdated={(next) => setExisting(next)}
+        onBack={() => setSearchParams({}, { replace: true })}
+      />
+    );
+  }
+
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-5 md:px-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -1225,86 +1240,6 @@ export default function AdsVisualBuilder() {
                 </div>
               </div>
             ) : null}
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <label className="block text-[11px] font-bold text-[#374151]">
-                {isAdmin ? 'Start (optional)' : 'Start date'}
-                <input
-                  type="datetime-local"
-                  value={startsAt}
-                  onChange={(e) => setStartsAt(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px]"
-                />
-              </label>
-              <label className="block text-[11px] font-bold text-[#374151]">
-                {isAdmin ? 'End (optional)' : 'End date'}
-                <input
-                  type="datetime-local"
-                  value={endsAt}
-                  onChange={(e) => setEndsAt(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px]"
-                />
-              </label>
-            </div>
-            {(() => {
-              // Paid ads: sellers / creators pay per day; Super Admin / Admin ads are free.
-              const ownerPays = !isAdmin || existing?.ownerRole === 'seller' || existing?.ownerRole === 'creator';
-              if (!ownerPays || formatId === 'popup') return null;
-              const billing = ((existing?.metadata || {}) as Record<string, unknown>).billing as
-                | { status: string; amount: number; days: number; ratePerDay: number; tier: string; method?: string; reference?: string; note?: string }
-                | undefined;
-              const q = quoteAd(placementId, startsAt || undefined, endsAt || undefined);
-              return (
-                <div className="mt-3 rounded-lg border-2 border-[#FDBA74] bg-[#FFF7ED] px-3 py-2.5" data-testid="ad-cost">
-                  <div className="text-[11.5px] font-extrabold text-[#111827]">Cost</div>
-                  {'error' in q ? (
-                    <div className="mt-0.5 text-[11.5px] font-semibold text-amber-800" data-testid="ad-cost-missing">{q.error}.</div>
-                  ) : (
-                    <div className="mt-0.5 text-[12.5px] text-[#374151]" data-testid="ad-cost-quote">
-                      {RATE_TIER_LABEL[q.tier]}: {formatBdt(q.ratePerDay)} / day × {q.days} day{q.days === 1 ? '' : 's'} ={' '}
-                      <span className="text-[14px] font-extrabold text-[#111827]">{formatBdt(q.amount)}</span>
-                    </div>
-                  )}
-                  <div className="mt-0.5 text-[10.5px] text-[#6B7280]">
-                    Prices: homepage hero ৳100 / day · other homepage places ৳50 / day · any other page ৳30 / day.
-                  </div>
-                  {billing ? (
-                    <div className="mt-1.5 text-[11.5px] font-bold" data-testid="ad-billing-status">
-                      {billing.status === 'paid' ? (
-                        <span className="text-emerald-700">Paid {formatBdt(billing.amount)}{billing.method ? ` · ${billing.method}` : ''}{billing.reference ? ` · ref ${billing.reference}` : ''} — place and dates are locked.</span>
-                      ) : billing.status === 'waived' ? (
-                        <span className="text-emerald-700">Charge waived by Choosify{billing.note ? ` (${billing.note})` : ''}.</span>
-                      ) : (
-                        <span className="text-amber-800">Payment not received yet ({formatBdt(billing.amount)}). The ad goes live only after payment and approval.</span>
-                      )}
-                    </div>
-                  ) : (
-                    !isAdmin && <div className="mt-1.5 text-[10.5px] text-[#6B7280]">After you submit, Choosify confirms the payment with you; the ad goes live only after payment and approval.</div>
-                  )}
-                  {isAdmin && existing && billing?.status === 'unpaid' ? (
-                    <div className="mt-2 flex flex-wrap items-end gap-2" data-testid="ad-billing-admin">
-                      <label className="text-[10.5px] font-bold text-[#374151]">
-                        Paid by
-                        <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)} className="mt-0.5 block rounded border border-[#E8EDF2] bg-white px-2 py-1 text-[11.5px]" data-testid="ad-pay-method">
-                          {['bKash', 'Nagad', 'Bank transfer', 'Cash', 'Other'].map((m) => (
-                            <option key={m} value={m}>{m}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="text-[10.5px] font-bold text-[#374151]">
-                        Reference
-                        <input value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="Transaction ID" className="mt-0.5 block rounded border border-[#E8EDF2] bg-white px-2 py-1 text-[11.5px]" data-testid="ad-pay-ref" />
-                      </label>
-                      <button type="button" disabled={saving} onClick={() => void billingAction('paid')} className="rounded-md bg-emerald-600 px-2.5 py-1.5 text-[11px] font-extrabold text-white" data-testid="ad-mark-paid">
-                        Mark as paid
-                      </button>
-                      <button type="button" disabled={saving} onClick={() => void billingAction('waive')} className="rounded-md border border-[#E8EDF2] bg-white px-2.5 py-1.5 text-[11px] font-extrabold text-[#374151]" data-testid="ad-waive">
-                        Waive
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })()}
           </section>
 
           {/* 2. CONTENT */}
@@ -1538,6 +1473,109 @@ export default function AdsVisualBuilder() {
                 ) : null}
               </FieldBox>
             )}
+          </section>
+
+          {/* 4. DATES & COST — last step, right above Save / Submit */}
+          <section className="rounded-xl border border-[#E8EDF2] bg-white p-4" data-testid="ad-dates">
+            <div className="mb-3 text-[10px] font-extrabold tracking-[0.08em] text-[#9CA3AF]">4 · DATES &amp; COST</div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-[11px] font-bold text-[#374151]">
+                {isAdmin ? 'Start (optional)' : 'Start date'}
+                <input
+                  type="datetime-local"
+                  value={startsAt}
+                  onChange={(e) => setStartsAt(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px]"
+                />
+              </label>
+              <label className="block text-[11px] font-bold text-[#374151]">
+                {isAdmin ? 'End (optional)' : 'End date'}
+                <input
+                  type="datetime-local"
+                  value={endsAt}
+                  onChange={(e) => setEndsAt(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px]"
+                />
+              </label>
+            </div>
+            {(() => {
+              // Paid ads: sellers / creators pay per day; Super Admin / Admin ads are free.
+              const ownerPays = !isAdmin || existing?.ownerRole === 'seller' || existing?.ownerRole === 'creator';
+              if (!ownerPays || formatId === 'popup') return null;
+              const billing = ((existing?.metadata || {}) as Record<string, unknown>).billing as
+                | { status: string; amount: number; days: number; ratePerDay: number; tier: string; method?: string; reference?: string; note?: string }
+                | undefined;
+              const q = quoteAd(placementId, startsAt || undefined, endsAt || undefined);
+              return (
+                <div className="mt-3 rounded-lg border-2 border-[#FDBA74] bg-[#FFF7ED] px-3 py-2.5" data-testid="ad-cost">
+                  <div className="text-[11.5px] font-extrabold text-[#111827]">Cost</div>
+                  {'error' in q ? (
+                    <div className="mt-0.5 text-[11.5px] font-semibold text-amber-800" data-testid="ad-cost-missing">{q.error}.</div>
+                  ) : (
+                    <div className="mt-0.5 text-[12.5px] text-[#374151]" data-testid="ad-cost-quote">
+                      {RATE_TIER_LABEL[q.tier]}: {formatBdt(q.ratePerDay)} / day × {q.days} day{q.days === 1 ? '' : 's'} ={' '}
+                      <span className="text-[14px] font-extrabold text-[#111827]">{formatBdt(q.amount)}</span>
+                    </div>
+                  )}
+                  <div className="mt-0.5 text-[10.5px] text-[#6B7280]">
+                    Prices: homepage hero ৳100 / day · other homepage places ৳50 / day · any other page ৳30 / day.
+                  </div>
+                  {billing ? (
+                    <div className="mt-1.5 text-[11.5px] font-bold" data-testid="ad-billing-status">
+                      {billing.status === 'paid' ? (
+                        <span className="text-emerald-700">Paid {formatBdt(billing.amount)}{billing.method ? ` · ${billing.method}` : ''}{billing.reference ? ` · ref ${billing.reference}` : ''} — place and dates are locked.</span>
+                      ) : billing.status === 'waived' ? (
+                        <span className="text-emerald-700">Charge waived by Choosify{billing.note ? ` (${billing.note})` : ''}.</span>
+                      ) : (billing as { submitted?: { method: string; reference: string } }).submitted ? (
+                        <span className="text-blue-700" data-testid="ad-billing-sent">
+                          Payment sent ({(billing as { submitted?: { method: string; reference: string } }).submitted!.method}, ref {(billing as { submitted?: { method: string; reference: string } }).submitted!.reference}) — {isAdmin ? 'check it on the payment page.' : 'Choosify is checking it.'}{' '}
+                          {existing ? (
+                            <button type="button" onClick={() => setSearchParams({ pay: '1' })} className="font-extrabold underline">
+                              {isAdmin ? 'Check payment' : 'View payment'}
+                            </button>
+                          ) : null}
+                        </span>
+                      ) : existing && existing.status === 'approved' && !isAdmin ? (
+                        <span className="flex flex-wrap items-center gap-2 text-amber-800">
+                          Approved — pay {formatBdt(billing.amount)} to put the ad live.
+                          <button type="button" onClick={() => setSearchParams({ pay: '1' })} className="rounded-lg bg-[#FF5B00] px-3 py-1.5 text-[11px] font-extrabold text-white" data-testid="ad-pay-now">
+                            Pay now
+                          </button>
+                        </span>
+                      ) : (
+                        <span className="text-amber-800">
+                          {formatBdt(billing.amount)} to pay. {existing?.status === 'approved' ? 'Approved — waiting for the advertiser to pay; it goes live when the payment is confirmed.' : 'You pay after Choosify approves the ad; it goes live as soon as the payment is confirmed.'}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    !isAdmin && <div className="mt-1.5 text-[10.5px] text-[#6B7280]">Submit the ad for approval. Once Choosify approves it you pay, and it goes live as soon as the payment is confirmed.</div>
+                  )}
+                  {isAdmin && existing && billing?.status === 'unpaid' ? (
+                    <div className="mt-2 flex flex-wrap items-end gap-2" data-testid="ad-billing-admin">
+                      <label className="text-[10.5px] font-bold text-[#374151]">
+                        Paid by
+                        <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)} className="mt-0.5 block rounded border border-[#E8EDF2] bg-white px-2 py-1 text-[11.5px]" data-testid="ad-pay-method">
+                          {['bKash', 'Nagad', 'Bank transfer', 'Cash', 'Other'].map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="text-[10.5px] font-bold text-[#374151]">
+                        Reference
+                        <input value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="Transaction ID" className="mt-0.5 block rounded border border-[#E8EDF2] bg-white px-2 py-1 text-[11.5px]" data-testid="ad-pay-ref" />
+                      </label>
+                      <button type="button" disabled={saving} onClick={() => void billingAction('paid')} className="rounded-md bg-emerald-600 px-2.5 py-1.5 text-[11px] font-extrabold text-white" data-testid="ad-mark-paid">
+                        Mark as paid
+                      </button>
+                      <button type="button" disabled={saving} onClick={() => void billingAction('waive')} className="rounded-md border border-[#E8EDF2] bg-white px-2.5 py-1.5 text-[11px] font-extrabold text-[#374151]" data-testid="ad-waive">
+                        Waive
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })()}
           </section>
 
           {/* Ready check — every problem is shown and fixable HERE, next to the buttons (no scrolling up). */}

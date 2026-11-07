@@ -52,6 +52,8 @@ import { deliverableAdsBySlot, deliveryProblems, probeImageSize, ACTIVE_SLOT_IDS
 import { adsStore } from './adsStore';
 import { metricsFor, rateLimited, recordEvent } from './adMetrics';
 import { billingBlocker, billingOf, changesPaidTerms, isPaidAd, stripBilling, withBilling } from './adBilling';
+import { readAdPaymentSettings, writeAdPaymentSettings } from './adPaymentSettings';
+import { sslcommerzProvider } from '../payments/sslcommerzProvider';
 import { AD_DAILY_RATES_BDT, RATE_TIER_LABEL, quoteAd } from '../../shared/ads/pricing';
 import { checkCreativeFit, getAnyPlacementDef, getFormatDef, getPlacementDef, assertFormatPlacementCompatible, resolvePagePosition, POPUP_PAGES, GRID_EVERY_CHOICES, GRID_ROW_CHOICES, IN_GRID_POSITION } from '../../shared/ads/placementRegistry';
 
@@ -646,6 +648,83 @@ adsRouter.get('/ads/pricing', ...requireAuth, (_req, res) => {
   res.json({ success: true, data: { currency: 'BDT', ratesPerDay: AD_DAILY_RATES_BDT, labels: RATE_TIER_LABEL } });
 });
 
+/** How to pay Choosify for an ad (set by Choosify staff) + whether online checkout is on. */
+adsRouter.get('/ads/payment-info', ...requireAuth, (_req, res) => {
+  const s = readAdPaymentSettings();
+  res.json({ success: true, data: { instructions: s.instructions, updatedAt: s.updatedAt, online: sslcommerzProvider.isConfigured() } });
+});
+
+/** Admin: set the payment instructions advertisers see (bKash / Nagad / bank details). */
+adsRouter.put('/ads/payment-info', ...requireAdmin, (req, res) => {
+  try {
+    const actor = actorOf(req);
+    const instructions = String(req.body?.instructions ?? '').trim();
+    if (instructions.length > 3000) throw new AdsError('Keep the payment details under 3000 characters', 400);
+    const saved = writeAdPaymentSettings({ instructions, updatedAt: new Date().toISOString(), updatedBy: actor.userId });
+    Logger.audit('ads.payment_info_updated', { actorId: actor.userId, length: instructions.length });
+    res.json({ success: true, data: { instructions: saved.instructions, updatedAt: saved.updatedAt, online: sslcommerzProvider.isConfigured() } });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+/** Advertiser: "I have paid" — sends the transaction details for Choosify to confirm. */
+adsRouter.post('/ads/:id/billing/submit', ...requireAuth, async (req, res) => {
+  try {
+    const actor = actorOf(req);
+    const ad = (await adsStore.getAd(req.params.id)) as AdRecord | null;
+    if (!ad) throw new AdsError('Ad not found', 404);
+    const admin = actor.role === 'admin' || actor.role === 'super_admin';
+    if (!admin && ad.ownerId !== actor.userId) throw new AdsError('Not authorized', 403);
+    const billed = withBilling(ad);
+    const b = billingOf(billed);
+    if (!isPaidAd(ad) || !b) throw new AdsError('This ad has no charge to pay — choose a start and an end date first', 400);
+    if (b.status !== 'unpaid') throw new AdsError(`Already ${b.status}`, 409);
+    const method = String(req.body?.method || '').trim().slice(0, 40);
+    const reference = String(req.body?.reference || '').trim().slice(0, 80);
+    const note = String(req.body?.note || '').trim().slice(0, 300);
+    if (!method) throw new AdsError('Say how you paid (bKash, Nagad, bank transfer …)', 400);
+    if (reference.length < 4) throw new AdsError('Add the transaction ID / reference so Choosify can find your payment', 400);
+    const now = new Date().toISOString();
+    const updated: AdRecord = {
+      ...billed,
+      updatedAt: now,
+      metadata: {
+        ...((billed.metadata || {}) as Record<string, unknown>),
+        billing: { ...b, submitted: { method, reference, note: note || undefined, at: now, by: actor.userId } },
+      },
+    };
+    await adsStore.upsertAd(updated);
+    Logger.audit('ads.billing_submitted', { actorId: actor.userId, adId: ad.id, amount: b.amount, method, reference });
+    res.json({ success: true, data: updated });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+/**
+ * Approved + now paid (or waived) → the ad goes live by itself, unless something else would stop it
+ * showing (then it stays approved and the reason is in its delivery problems). Saves the ad.
+ */
+async function activateIfApproved(ad: AdRecord, actorId: string): Promise<AdRecord> {
+  let next = ad;
+  if (ad.status === 'approved' && !billingBlocker(ad)) {
+    const problems = deliveryProblems({ ...ad, status: 'active' }).filter((p) => !p.startsWith('Scheduled'));
+    if (!problems.length) {
+      const now = new Date().toISOString();
+      next = {
+        ...ad,
+        status: 'active',
+        updatedAt: now,
+        metadata: { ...((ad.metadata || {}) as Record<string, unknown>), publishedBy: actorId, publishedAt: now, publishedFrom: 'approved', activatedOnPayment: true },
+      };
+      Logger.audit('ads.activated_on_payment', { actorId, adId: ad.id });
+    }
+  }
+  await adsStore.upsertAd(next);
+  return next;
+}
+
 /** Admin: record the advertiser's payment for a seller / creator ad (no online ad payment yet). */
 adsRouter.post('/ads/:id/billing/paid', ...requireAdmin, async (req, res) => {
   try {
@@ -665,9 +744,9 @@ adsRouter.post('/ads/:id/billing/paid', ...requireAdmin, async (req, res) => {
       updatedAt: now,
       metadata: { ...((billed.metadata || {}) as Record<string, unknown>), billing: { ...b, status: 'paid', paidAt: now, paidBy: actor.userId, method, reference } },
     };
-    await adsStore.upsertAd(updated);
-    Logger.audit('ads.billing_paid', { actorId: actor.userId, adId: ad.id, amount: b.amount, method, reference });
-    res.json({ success: true, data: updated });
+    const live = await activateIfApproved(updated, actor.userId);
+    Logger.audit('ads.billing_paid', { actorId: actor.userId, adId: ad.id, amount: b.amount, method, reference, activated: live.status === 'active' });
+    res.json({ success: true, data: live });
   } catch (error) {
     handleError(res, error);
   }
@@ -691,9 +770,9 @@ adsRouter.post('/ads/:id/billing/waive', ...requireAdmin, async (req, res) => {
       updatedAt: now,
       metadata: { ...((billed.metadata || {}) as Record<string, unknown>), billing: { ...b, status: 'waived', paidAt: now, paidBy: actor.userId, note } },
     };
-    await adsStore.upsertAd(updated);
-    Logger.audit('ads.billing_waived', { actorId: actor.userId, adId: ad.id, amount: b.amount, note });
-    res.json({ success: true, data: updated });
+    const live = await activateIfApproved(updated, actor.userId);
+    Logger.audit('ads.billing_waived', { actorId: actor.userId, adId: ad.id, amount: b.amount, note, activated: live.status === 'active' });
+    res.json({ success: true, data: live });
   } catch (error) {
     handleError(res, error);
   }
@@ -877,9 +956,12 @@ adsRouter.post('/ads/banners', ...requireAuth, async (req, res) => {
 adsRouter.post('/ads/banners/:id/approve', ...requireAdmin, async (req, res) => {
   try {
     const pending = (await adsStore.getAd(req.params.id)) as AdRecord | null;
+    if (pending && isPaidAd(pending) && !billingOf(withBilling(pending))) {
+      throw new AdsError('Cannot approve yet: the ad has no start and end date, so there is nothing to charge.', 400);
+    }
+    // Paid ads: approve first, the advertiser pays next, and the ad goes live when the payment is confirmed.
     const unpaid = pending ? billingBlocker(withBilling(pending)) : null;
-    if (unpaid) throw new AdsError(`Cannot approve yet: ${unpaid}. Mark it as paid (or waive it) first.`, 400);
-    const data = await approveAd(req.params.id, actorOf(req), { publish: true });
+    const data = await approveAd(req.params.id, actorOf(req), { publish: !unpaid });
     res.json({ success: true, data });
   } catch (error) {
     handleError(res, error);

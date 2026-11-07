@@ -210,6 +210,15 @@ export const adsApi = {
   publishAd: (id: string) => request<AdsApiRecord>(`/ads/${encodeURIComponent(id)}/publish`, 'POST', {}),
 
   /** Admin: record payment for a seller / creator ad. */
+  /** How to pay Choosify for an ad + whether online checkout is on. */
+  getPaymentInfo: () => request<{ instructions: string; updatedAt?: string; online: boolean }>(`/ads/payment-info`),
+  /** Admin: set the payment details advertisers see. */
+  setPaymentInfo: (instructions: string) =>
+    request<{ instructions: string; updatedAt?: string; online: boolean }>(`/ads/payment-info`, 'PUT', { instructions }),
+  /** Advertiser: send the transaction details of a payment for Choosify to confirm. */
+  submitAdPayment: (id: string, method: string, reference: string, note?: string) =>
+    request<AdsApiRecord>(`/ads/${encodeURIComponent(id)}/billing/submit`, 'POST', { method, reference, note }),
+
   markAdPaid: (id: string, method: string, reference: string) =>
     request<AdsApiRecord>(`/ads/${encodeURIComponent(id)}/billing/paid`, 'POST', { method, reference }),
   /** Admin: waive the charge for a seller / creator ad. */

@@ -100,6 +100,27 @@ const FILTERS: Array<{ key: StatusFilter; label: string }> = [
   { key: 'rejected', label: 'Rejected' },
 ];
 
+/** Payment state of an ad: free (Choosify's own ads), unpaid, sent (waiting for Choosify), paid, waived. */
+type PayState = 'free' | 'unpaid' | 'sent' | 'paid' | 'waived';
+type PayFilter = 'all' | PayState;
+type RowBilling = { status: 'unpaid' | 'paid' | 'waived'; amount: number; submitted?: { method: string; reference: string; at: string } };
+const billingOfRow = (r: AdsApiRecord) => ((r.metadata || {}) as Record<string, unknown>).billing as RowBilling | undefined;
+function payStateOf(r: AdsApiRecord): PayState {
+  const b = billingOfRow(r);
+  if (!b) return r.ownerRole === 'seller' || r.ownerRole === 'creator' ? 'unpaid' : 'free';
+  if (b.status === 'paid') return 'paid';
+  if (b.status === 'waived') return 'waived';
+  return b.submitted ? 'sent' : 'unpaid';
+}
+const PAY_FILTERS: Array<{ key: PayFilter; label: string }> = [
+  { key: 'all', label: 'All' },
+  { key: 'unpaid', label: 'Unpaid' },
+  { key: 'sent', label: 'Payment sent — to check' },
+  { key: 'paid', label: 'Paid' },
+  { key: 'waived', label: 'Waived' },
+  { key: 'free', label: 'Free (Choosify ads)' },
+];
+
 function statusBadge(status: string) {
   const map: Record<string, string> = {
     active: 'background:#DCFCE7;color:#166534',
@@ -262,6 +283,7 @@ function BannerAdsList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<StatusFilter>('all');
+  const [payFilter, setPayFilter] = useState<PayFilter>('all');
   const [sort, setSort] = useState<SortKey>(() => {
     try {
       const v = localStorage.getItem('choosify.adsList.sort') as SortKey | null;
@@ -387,7 +409,11 @@ function BannerAdsList() {
   }, [load]);
 
   const filtered = useMemo(
-    () => sortRows(filter === 'all' ? rows : rows.filter((r) => r.status === filter), sort),
+    () =>
+      sortRows(
+        rows.filter((r) => (filter === 'all' || r.status === filter) && (payFilter === 'all' || payStateOf(r) === payFilter)),
+        sort,
+      ),
     [rows, filter, sort],
   );
   const selectableIds = useMemo(
@@ -605,6 +631,26 @@ function BannerAdsList() {
             {f.label}
           </button>
         ))}
+        <div className="flex basis-full flex-wrap items-center gap-2 border-t border-[#F1F3F5] pt-2" data-testid="ads-pay-filters">
+          <span className="text-[10px] font-extrabold uppercase tracking-wide text-[#6B7280]">Payment</span>
+          {PAY_FILTERS.map((f) => {
+            const count = f.key === 'all' ? rows.length : rows.filter((r) => payStateOf(r) === f.key).length;
+            return (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setPayFilter(f.key)}
+                data-testid={`ads-pay-filter-${f.key}`}
+                className={`rounded-full px-3 py-1.5 text-[10px] font-extrabold ${
+                  payFilter === f.key ? 'bg-[#FF5B00] text-white' : f.key === 'sent' && count ? 'bg-amber-100 text-amber-900' : 'bg-[#F3F4F6] text-[#374151]'
+                }`}
+              >
+                {f.label}
+                {f.key !== 'all' ? <span className="ml-1 opacity-70">{count}</span> : null}
+              </button>
+            );
+          })}
+        </div>
         <label className="ml-auto flex items-center gap-1.5 text-[10.5px] font-extrabold uppercase tracking-wide text-[#6B7280]">
           Sort by
           <select
@@ -885,12 +931,16 @@ function BannerAdsList() {
                           {row.status}
                         </span>
                         {(() => {
-                          const billing = ((row.metadata || {}) as Record<string, unknown>).billing as { status: string; amount: number } | undefined;
+                          const billing = billingOfRow(row);
                           if (!billing) return null;
-                          const paid = billing.status !== 'unpaid';
+                          const st = payStateOf(row);
                           return (
-                            <div className={`mt-0.5 text-[9.5px] font-extrabold ${paid ? 'text-emerald-700' : 'text-amber-700'}`} data-testid={`ads-billing-${row.id}`}>
-                              {billing.status === 'paid' ? `Paid ৳${billing.amount}` : billing.status === 'waived' ? 'Charge waived' : `Unpaid ৳${billing.amount}`}
+                            <div
+                              className={`mt-0.5 text-[9.5px] font-extrabold ${st === 'paid' || st === 'waived' ? 'text-emerald-700' : st === 'sent' ? 'text-blue-700' : 'text-amber-700'}`}
+                              data-testid={`ads-billing-${row.id}`}
+                              title={billing.submitted ? `${billing.submitted.method} · ref ${billing.submitted.reference}` : undefined}
+                            >
+                              {st === 'paid' ? `Paid ৳${billing.amount}` : st === 'waived' ? 'Charge waived' : st === 'sent' ? `Payment sent ৳${billing.amount} — ${isAdmin ? 'check it' : 'being checked'}` : row.status === 'approved' ? `Approved — waiting for payment ৳${billing.amount}` : `Unpaid ৳${billing.amount} (pay after approval)`}
                             </div>
                           );
                         })()}
@@ -936,6 +986,26 @@ function BannerAdsList() {
                           >
                             Edit
                           </button>
+                          {payStateOf(row) === 'unpaid' && billingOfRow(row) && row.status === 'approved' && (!isAdmin || row.ownerId === profile?.id) ? (
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/admin/ads-studio/${encodeURIComponent(row.id)}/edit?pay=1`)}
+                              className="rounded-md bg-[#FF5B00] px-2 py-1 text-[10px] font-extrabold text-white"
+                              data-testid={`ads-pay-${row.id}`}
+                            >
+                              Pay now
+                            </button>
+                          ) : null}
+                          {isAdmin && payStateOf(row) === 'sent' ? (
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/admin/ads-studio/${encodeURIComponent(row.id)}/edit?pay=1`)}
+                              className="rounded-md bg-blue-600 px-2 py-1 text-[10px] font-extrabold text-white"
+                              data-testid={`ads-check-pay-${row.id}`}
+                            >
+                              Check payment
+                            </button>
+                          ) : null}
                           {isAdmin && row.status === 'pending' ? (
                             <>
                               <button
