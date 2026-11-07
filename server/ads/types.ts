@@ -74,6 +74,8 @@ export type AdCta = {
  */
 export type AdRecord = {
   id: string;
+  /** Last pause: why, who, when (shown in the ads list / builder). Cleared when it goes live again. */
+  pauseNote?: { reason: string; by: string; at: string };
   /** Permanent Choosify Advertisement Reference ID (AD-#####) for banner/promo/external ads. */
   advertisementReferenceId?: string;
   /** Permanent Choosify Deal Reference ID (DL-#####) when kind === 'deal'. */

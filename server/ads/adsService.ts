@@ -1355,7 +1355,7 @@ export async function updateOwnAd(
   return updated;
 }
 
-export async function deleteOwnAd(id: string, actor: AdsActor): Promise<{ id: string }> {
+export async function deleteOwnAd(id: string, actor: AdsActor, reason?: string): Promise<{ id: string }> {
   const ad = await adsStore.getAd(id);
   if (!ad) throw new AdsError('Ad not found', 404);
   if (ad.kind === 'deal') {
@@ -1386,8 +1386,12 @@ export async function deleteOwnAd(id: string, actor: AdsActor): Promise<{ id: st
   await adsStore.deleteAd(id);
   Logger.audit('ads.delete', {
     adId: id,
+    adRef: ad.advertisementReferenceId,
+    title: ad.title,
+    placementId: ad.placementId,
     actorId: actor.userId,
     previousStatus: ad.status,
+    reason: reason || undefined,
   });
   return { id };
 }
@@ -1521,15 +1525,20 @@ export async function submitAdForApproval(id: string, actor: AdsActor): Promise<
   return updated;
 }
 
-export async function pauseAd(id: string, actor: AdsActor): Promise<AdRecord> {
+export async function pauseAd(id: string, actor: AdsActor, reason?: string): Promise<AdRecord> {
   if (!isPlatformAdmin(actor.role)) throw new AdsError('Admin role required', 403);
   const ad = await adsStore.getAd(id);
   if (!ad) throw new AdsError('Ad not found', 404);
   if (ad.kind === 'deal') assertDealTransition(ad, 'pause');
   if (isDealPromotionRequest(ad)) throw new AdsError('Deal promotion requests cannot be paused', 400);
-  const updated: AdRecord = { ...ad, status: 'paused', updatedAt: nowIso() };
+  const updated: AdRecord = {
+    ...ad,
+    status: 'paused',
+    updatedAt: nowIso(),
+    pauseNote: reason ? { reason, by: actor.userId, at: nowIso() } : ad.pauseNote,
+  };
   await adsStore.upsertAd(updated);
-  Logger.audit('ads.pause', { adId: id, actorId: actor.userId });
+  Logger.audit('ads.pause', { adId: id, adRef: ad.advertisementReferenceId, actorId: actor.userId, reason: reason || undefined });
   return updated;
 }
 

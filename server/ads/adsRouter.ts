@@ -733,7 +733,8 @@ adsRouter.post('/ads/:id/publish', ...requireAdmin, async (req, res) => {
 
 adsRouter.post('/ads/:id/pause', ...requireAdmin, async (req, res) => {
   try {
-    const data = await pauseAd(req.params.id, actorOf(req));
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 500) : '';
+    const data = await pauseAd(req.params.id, actorOf(req), reason || undefined);
     res.json({ success: true, data });
   } catch (error) {
     handleError(res, error);
@@ -751,7 +752,8 @@ adsRouter.post('/ads/:id/disable', ...requireAdmin, async (req, res) => {
 
 adsRouter.delete('/ads/:id', ...requireAuth, async (req, res) => {
   try {
-    const data = await deleteOwnAd(req.params.id, actorOf(req));
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 500) : undefined;
+    const data = await deleteOwnAd(req.params.id, actorOf(req), reason || undefined);
     res.json({ success: true, data });
   } catch (error) {
     handleError(res, error);

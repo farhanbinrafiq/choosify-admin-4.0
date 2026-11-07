@@ -282,7 +282,10 @@ function BannerAdsList() {
   /** Ticked rows (bulk Duplicate / Delete). */
   const [selected, setSelected] = useState<Set<string>>(new Set());
   /** Attention dialog before Duplicate / Delete. */
-  const [confirm, setConfirm] = useState<{ kind: 'duplicate' | 'delete'; ids: string[]; openCopy?: boolean } | null>(null);
+  const [confirm, setConfirm] = useState<{ kind: 'duplicate' | 'delete' | 'pause'; ids: string[]; openCopy?: boolean } | null>(null);
+  /** Required reason for Delete / Pause (saved in the activity log). */
+  const [confirmReason, setConfirmReason] = useState('');
+  const needsReason = confirm?.kind === 'delete' || confirm?.kind === 'pause';
   const [notice, setNotice] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [range, setRange] = useState<RangeKey>('30');
@@ -410,7 +413,10 @@ function BannerAdsList() {
   const runConfirmed = async () => {
     if (!confirm) return;
     const { kind, ids, openCopy } = confirm;
+    const reason = confirmReason.trim();
+    if ((kind === 'delete' || kind === 'pause') && reason.length < 5) return;
     setConfirm(null);
+    setConfirmReason('');
     setBulkBusy(true);
     setError(null);
     setNotice(null);
@@ -421,7 +427,10 @@ function BannerAdsList() {
     for (const id of ids) {
       const row = rows.find((x) => x.id === id);
       try {
-        if (kind === 'duplicate') {
+        if (kind === 'pause') {
+          await adsApi.pauseAd(id, reason);
+          done.push(refOf(id));
+        } else if (kind === 'duplicate') {
           const copy = await adsApi.duplicateAd(id);
           lastCopyId = copy.id;
           done.push(copy.advertisementReferenceId || copy.id);
@@ -430,7 +439,7 @@ function BannerAdsList() {
             skipped.push(refOf(id));
             continue;
           }
-          await adsApi.deleteAd(id);
+          await adsApi.deleteAd(id, reason);
           done.push(refOf(id));
         }
       } catch (err) {
@@ -444,7 +453,7 @@ function BannerAdsList() {
       return;
     }
     const parts = [
-      done.length ? (kind === 'duplicate' ? `${done.length} draft cop${done.length === 1 ? 'y' : 'ies'} created: ${done.join(', ')} — open each, choose where it goes, then publish.` : `${done.length} ad${done.length === 1 ? '' : 's'} deleted: ${done.join(', ')}.`) : '',
+      done.length ? (kind === 'duplicate' ? `${done.length} draft cop${done.length === 1 ? 'y' : 'ies'} created: ${done.join(', ')} — open each, choose where it goes, then publish.` : kind === 'pause' ? `Paused: ${done.join(', ')} — off the storefront until resumed.` : `${done.length} ad${done.length === 1 ? '' : 's'} deleted: ${done.join(', ')}.`) : '',
       skipped.length ? `Not deleted (live on the storefront — pause or disable first): ${skipped.join(', ')}.` : '',
     ].filter(Boolean);
     if (parts.length) setNotice(parts.join(' '));
@@ -513,34 +522,6 @@ function BannerAdsList() {
           {notice}
         </div>
       ) : null}
-      {selected.size > 0 ? (
-        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-[#FFD8C7] bg-[#FFF4EE] px-3 py-2 text-[12px] font-bold text-[#111827]" data-testid="ads-bulk-bar">
-          <span>{selected.size} selected</span>
-          <button
-            type="button"
-            disabled={bulkBusy}
-            onClick={() => setConfirm({ kind: 'duplicate', ids: [...selected] })}
-            className="rounded-md border border-[#E8EDF2] bg-white px-2.5 py-1 text-[11px] font-extrabold"
-            data-testid="ads-bulk-duplicate"
-          >
-            Duplicate
-          </button>
-          <button
-            type="button"
-            disabled={bulkBusy}
-            onClick={() => setConfirm({ kind: 'delete', ids: [...selected] })}
-            className="rounded-md border border-red-200 bg-white px-2.5 py-1 text-[11px] font-extrabold text-red-700"
-            data-testid="ads-bulk-delete"
-          >
-            Delete
-          </button>
-          <button type="button" onClick={() => setSelected(new Set())} className="text-[11px] font-bold text-[#6B7280] hover:underline">
-            Clear selection
-          </button>
-          {bulkBusy ? <Loader2 className="h-4 w-4 animate-spin text-[#EF3C23]" /> : null}
-        </div>
-      ) : null}
-
       {/* Top analytics — Inventory-style cards + panels (same period as the Results bar below). */}
       {(() => {
         let views = 0;
@@ -664,6 +645,37 @@ function BannerAdsList() {
           );
         })()}
       </div>
+
+      {selected.size > 0 ? (
+        <div className="sticky top-0 z-20 mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-[#FFD8C7] bg-[#FFF4EE] px-3 py-2 text-[12px] font-bold text-[#111827]" data-testid="ads-bulk-bar">
+          <span>{selected.size} selected</span>
+          <button
+            type="button"
+            disabled={bulkBusy}
+            onClick={() => setConfirm({ kind: 'duplicate', ids: [...selected] })}
+            className="rounded-md border border-[#E8EDF2] bg-white px-2.5 py-1 text-[11px] font-extrabold"
+            data-testid="ads-bulk-duplicate"
+          >
+            Duplicate
+          </button>
+          <button
+            type="button"
+            disabled={bulkBusy}
+            onClick={() => {
+              setConfirmReason('');
+              setConfirm({ kind: 'delete', ids: [...selected] });
+            }}
+            className="rounded-md border border-red-200 bg-white px-2.5 py-1 text-[11px] font-extrabold text-red-700"
+            data-testid="ads-bulk-delete"
+          >
+            Delete
+          </button>
+          <button type="button" onClick={() => setSelected(new Set())} className="ml-auto rounded-md bg-[#FF5B00] px-2.5 py-1 text-[11px] font-extrabold text-white hover:bg-[#EF3C23]" data-testid="ads-clear-selection">
+            Clear selection
+          </button>
+          {bulkBusy ? <Loader2 className="h-4 w-4 animate-spin text-[#EF3C23]" /> : null}
+        </div>
+      ) : null}
 
       {reportFor ? <AdReportModal row={reportFor} metrics={metrics.get(reportFor.id)} rangeLabel={rangeDef.label} onClose={() => setReportFor(null)} /> : null}
 
@@ -891,6 +903,11 @@ function BannerAdsList() {
                             </div>
                           )
                         ) : null}
+                        {row.status === 'paused' && row.pauseNote?.reason ? (
+                          <div className="mt-1 max-w-[200px] text-[9.5px] font-semibold text-amber-800" title={row.pauseNote.reason} data-testid={`ads-pause-note-${row.id}`}>
+                            Paused: {row.pauseNote.reason}
+                          </div>
+                        ) : null}
                       </td>
                       <td className="px-3 py-2.5 text-[10.5px]" data-testid={`ads-results-${row.id}`}>
                         {(() => {
@@ -954,7 +971,11 @@ function BannerAdsList() {
                             <button
                               type="button"
                               disabled={busyId === row.id}
-                              onClick={() => void act(row.id, 'pause')}
+                              onClick={() => {
+                                setConfirmReason('');
+                                setConfirm({ kind: 'pause', ids: [row.id] });
+                              }}
+                              data-testid={`ads-pause-${row.id}`}
                               className="rounded-md border border-[#E8EDF2] px-2 py-1 text-[10px] font-extrabold"
                             >
                               Pause
@@ -980,13 +1001,20 @@ function BannerAdsList() {
                 <div className="text-[15px] font-extrabold text-[#111827]">
                   {confirm.kind === 'duplicate'
                     ? `Duplicate ${confirm.ids.length === 1 ? refOf(confirm.ids[0]) : `${confirm.ids.length} ads`}?`
-                    : `Delete ${confirm.ids.length === 1 ? refOf(confirm.ids[0]) : `${confirm.ids.length} ads`}?`}
+                    : confirm.kind === 'pause'
+                      ? `Pause ${refOf(confirm.ids[0])}?`
+                      : `Delete ${confirm.ids.length === 1 ? refOf(confirm.ids[0]) : `${confirm.ids.length} ads`}?`}
                 </div>
                 {confirm.kind === 'duplicate' ? (
                   <div className="mt-1.5 space-y-1 text-[12.5px] text-[#4B5563]">
                     <p>A copy of {confirm.ids.length === 1 ? 'this ad' : 'each ad'} is made with the same design, text, link and place, and its own AD number.</p>
                     <p className="font-semibold text-[#92400E]">Copies are saved as drafts and are NOT on the storefront. Open each copy, choose the page and place it should go, then publish it.</p>
                     {confirm.openCopy ? <p>The copy opens straight away.</p> : null}
+                  </div>
+                ) : confirm.kind === 'pause' ? (
+                  <div className="mt-1.5 space-y-1 text-[12.5px] text-[#4B5563]">
+                    <p className="font-semibold text-[#92400E]">It is live now and comes off the storefront at once — shoppers stop seeing it until someone resumes it.</p>
+                    <p>Nothing is deleted: the design, settings, booking and reports stay.</p>
                   </div>
                 ) : (
                   <div className="mt-1.5 space-y-1 text-[12.5px] text-[#4B5563]">
@@ -996,6 +1024,21 @@ function BannerAdsList() {
                     ) : null}
                   </div>
                 )}
+                {needsReason ? (
+                  <label className="mt-2 block text-[11.5px] font-bold text-[#111827]">
+                    Reason for {confirm.kind === 'pause' ? 'pausing' : 'deleting'} <span className="text-red-600">*</span>
+                    <textarea
+                      value={confirmReason}
+                      onChange={(e) => setConfirmReason(e.target.value)}
+                      rows={3}
+                      maxLength={500}
+                      placeholder={confirm.kind === 'pause' ? 'e.g. Advertiser asked to stop for a week / payment pending' : 'e.g. Advertiser cancelled / wrong design / duplicate ad'}
+                      className="mt-1 w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px] font-normal"
+                      data-testid="ads-confirm-reason"
+                    />
+                    <span className="text-[10.5px] font-normal text-[#6B7280]">Saved in the activity log with your name.</span>
+                  </label>
+                ) : null}
                 {confirm.ids.length > 1 ? (
                   <div className="mt-2 max-h-24 overflow-auto rounded border border-[#F1F3F5] bg-[#F9FAFB] px-2 py-1 font-mono text-[10.5px] text-[#374151]">
                     {confirm.ids.map((x) => refOf(x)).join(', ')}
@@ -1010,10 +1053,11 @@ function BannerAdsList() {
               <button
                 type="button"
                 onClick={() => void runConfirmed()}
-                className={`rounded-lg px-3.5 py-2 text-[12px] font-extrabold text-white ${confirm.kind === 'delete' ? 'bg-red-600' : 'bg-[#EF3C23]'}`}
+                disabled={needsReason && confirmReason.trim().length < 5}
+                className={`rounded-lg px-3.5 py-2 text-[12px] font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-40 ${confirm.kind === 'delete' ? 'bg-red-600' : confirm.kind === 'pause' ? 'bg-amber-600' : 'bg-[#EF3C23]'}`}
                 data-testid="ads-confirm-ok"
               >
-                {confirm.kind === 'duplicate' ? (confirm.ids.length === 1 ? 'Duplicate' : `Duplicate ${confirm.ids.length}`) : confirm.ids.length === 1 ? 'Delete' : `Delete ${confirm.ids.length}`}
+                {confirm.kind === 'duplicate' ? (confirm.ids.length === 1 ? 'Duplicate' : `Duplicate ${confirm.ids.length}`) : confirm.kind === 'pause' ? 'Pause the ad' : confirm.ids.length === 1 ? 'Delete' : `Delete ${confirm.ids.length}`}
               </button>
             </div>
           </div>

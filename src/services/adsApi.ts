@@ -22,6 +22,8 @@ const API_BASE =
 
 export type AdsApiRecord = {
   id: string;
+  /** Last pause reason (set when an admin pauses it). */
+  pauseNote?: { reason: string; by: string; at: string };
   /** List views: is the ad on the storefront right now, and if not, why. */
   delivery?: { delivered: boolean; problems: string[] };
   ownerId: string;
@@ -228,8 +230,8 @@ export const adsApi = {
   submitForApproval: (id: string) =>
     request<AdsApiRecord>(`/ads/${encodeURIComponent(id)}/submit`, 'POST', {}),
 
-  deleteAd: (id: string) =>
-    request<{ id: string }>(`/ads/${encodeURIComponent(id)}`, 'DELETE'),
+  deleteAd: (id: string, reason?: string) =>
+    request<{ id: string }>(`/ads/${encodeURIComponent(id)}`, 'DELETE', reason ? { reason } : undefined),
 
   approveBanner: (id: string) =>
     request<AdsApiRecord>(`/ads/banners/${encodeURIComponent(id)}/approve`, 'POST', {}),
@@ -237,8 +239,8 @@ export const adsApi = {
   rejectBanner: (id: string, reason?: string) =>
     request<AdsApiRecord>(`/ads/banners/${encodeURIComponent(id)}/reject`, 'POST', { reason }),
 
-  pauseAd: (id: string) =>
-    request<AdsApiRecord>(`/ads/${encodeURIComponent(id)}/pause`, 'POST', {}),
+  pauseAd: (id: string, reason?: string) =>
+    request<AdsApiRecord>(`/ads/${encodeURIComponent(id)}/pause`, 'POST', reason ? { reason } : {}),
 
   disableAd: (id: string) =>
     request<AdsApiRecord>(`/ads/${encodeURIComponent(id)}/disable`, 'POST', {}),

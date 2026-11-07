@@ -605,6 +605,43 @@ export default function AdsVisualBuilder() {
   }, [imageUrl]);
 
   const [askDuplicate, setAskDuplicate] = useState(false);
+  /** Delete: confirmation dialog with a required reason (kept in the audit log). */
+  const [askDelete, setAskDelete] = useState(false);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  /** Pause (off the storefront) / Resume (back on) straight from the builder — admins. */
+  const [statusBusy, setStatusBusy] = useState(false);
+  const [askPause, setAskPause] = useState(false);
+  const [pauseReason, setPauseReason] = useState('');
+  const changeStatus = async (to: 'pause' | 'resume') => {
+    if (!existing) return;
+    if (to === 'pause' && pauseReason.trim().length < 5) return;
+    setStatusBusy(true);
+    setError(null);
+    try {
+      const saved = to === 'pause' ? await adsApi.pauseAd(existing.id, pauseReason.trim()) : await adsApi.publishAd(existing.id);
+      setAskPause(false);
+      setExisting(saved);
+      setMessage(to === 'pause' ? 'Paused — the ad is off the storefront until you resume it.' : 'Live again on the storefront.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not change the status');
+    } finally {
+      setStatusBusy(false);
+    }
+  };
+  const removeAd = async () => {
+    if (!existing || deleteReason.trim().length < 5) return;
+    setDeleting(true);
+    try {
+      await adsApi.deleteAd(existing.id, deleteReason.trim());
+      navigate('/admin/ads-studio');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delete failed');
+      setAskDelete(false);
+    } finally {
+      setDeleting(false);
+    }
+  };
   const [askCancel, setAskCancel] = useState(false);
   const [payMethod, setPayMethod] = useState('bKash');
   const [payRef, setPayRef] = useState('');
@@ -822,6 +859,93 @@ export default function AdsVisualBuilder() {
         </div>
       ) : null}
 
+      {askPause && existing ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" data-testid="ad-pause-confirm">
+          <div className="w-full max-w-[460px] rounded-xl bg-white p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-50 text-[16px] font-extrabold text-amber-600">!</span>
+              <div className="min-w-0 flex-1 space-y-1 text-[12.5px] text-[#4B5563]">
+                <div className="text-[15px] font-extrabold text-[#111827]">Pause {existing.advertisementReferenceId || 'this ad'}?</div>
+                <p className="font-semibold text-[#92400E]">It is live now and comes off the storefront at once — shoppers stop seeing it until someone resumes it.</p>
+                <p>Nothing is deleted: the design, settings, booking and reports stay, and you can resume it any time.</p>
+                <label className="mt-2 block text-[11.5px] font-bold text-[#111827]">
+                  Reason for pausing <span className="text-red-600">*</span>
+                  <textarea
+                    value={pauseReason}
+                    onChange={(e) => setPauseReason(e.target.value)}
+                    rows={3}
+                    maxLength={500}
+                    placeholder="e.g. Advertiser asked to stop for a week / payment pending / design needs fixing"
+                    className="mt-1 w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px] font-normal"
+                    data-testid="ad-pause-reason"
+                  />
+                  <span className="text-[10.5px] font-normal text-[#6B7280]">Shown on the ad and saved in the activity log with your name.</span>
+                </label>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setAskPause(false)} className="rounded-lg border border-[#E8EDF2] px-3.5 py-2 text-[12px] font-extrabold text-[#374151]">
+                Keep it live
+              </button>
+              <button
+                type="button"
+                disabled={statusBusy || pauseReason.trim().length < 5}
+                onClick={() => void changeStatus('pause')}
+                className="rounded-lg bg-amber-600 px-3.5 py-2 text-[12px] font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                data-testid="ad-pause-ok"
+              >
+                {statusBusy ? 'Pausing…' : 'Pause the ad'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {askDelete && existing ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" data-testid="ad-delete-confirm">
+          <div className="w-full max-w-[460px] rounded-xl bg-white p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-50 text-[16px] font-extrabold text-red-600">!</span>
+              <div className="min-w-0 flex-1 space-y-1 text-[12.5px] text-[#4B5563]">
+                <div className="text-[15px] font-extrabold text-[#111827]">Delete {existing.advertisementReferenceId || 'this ad'}?</div>
+                <p>
+                  {existing.status === 'active' ? <b className="text-red-700">It is live now and disappears from the storefront at once. </b> : null}
+                  The ad, its design and its settings are removed for good — this cannot be undone. Its past views and clicks stay in the reports.
+                </p>
+                <p className="text-[11.5px]">Only want it off the storefront for a while? Use <b>Pause</b> in the ads list instead.</p>
+                <label className="mt-2 block text-[11.5px] font-bold text-[#111827]">
+                  Reason for deleting <span className="text-red-600">*</span>
+                  <textarea
+                    value={deleteReason}
+                    onChange={(e) => setDeleteReason(e.target.value)}
+                    rows={3}
+                    maxLength={500}
+                    placeholder="e.g. Advertiser cancelled the campaign / wrong design uploaded / duplicate ad"
+                    className="mt-1 w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px] font-normal"
+                    data-testid="ad-delete-reason"
+                  />
+                  <span className="text-[10.5px] font-normal text-[#6B7280]">Saved in the activity log with your name.</span>
+                </label>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => { setAskDelete(false); setDeleteReason(''); }} className="rounded-lg border border-[#E8EDF2] px-3.5 py-2 text-[12px] font-extrabold text-[#374151]">
+                Keep the ad
+              </button>
+              <button
+                type="button"
+                disabled={deleting || deleteReason.trim().length < 5}
+                onClick={() => void removeAd()}
+                className="rounded-lg bg-red-600 px-3.5 py-2 text-[12px] font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                data-testid="ad-delete-ok"
+              >
+                {deleting ? 'Deleting…' : 'Delete for good'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {askDuplicate ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" data-testid="ad-duplicate-confirm">
           <div className="w-full max-w-[440px] rounded-xl bg-white p-5 shadow-xl">
@@ -859,516 +983,9 @@ export default function AdsVisualBuilder() {
 
       <div className="grid gap-5 lg:grid-cols-[1fr_420px]">
         <div className="space-y-4">
-          {/* 1. FORMAT */}
+          {/* 1. FORMAT & PLACEMENT — side by side: a format greys out places that do not take it; a page greys out formats it has no place for */}
           <section className="rounded-xl border border-[#E8EDF2] bg-white p-4">
-            <div className="mb-3 text-[10px] font-extrabold tracking-[0.08em] text-[#9CA3AF]">1 · FORMAT</div>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              {AD_FORMATS.map((f) => {
-                const allowed = placementsForFormat(f.formatId, role).length > 0;
-                const active = formatId === f.formatId;
-                return (
-                  <button
-                    key={f.formatId}
-                    type="button"
-                    disabled={!allowed}
-                    onClick={() => setFormatId(f.formatId)}
-                    className={`rounded-lg border px-3 py-3 text-left transition ${
-                      active
-                        ? 'border-[#EF3C23] bg-[#FFF5F3] ring-1 ring-[#EF3C23]/30'
-                        : 'border-[#E8EDF2] bg-white hover:border-[#FDBA74]'
-                    } ${!allowed ? 'opacity-40 cursor-not-allowed' : ''}`}
-                  >
-                    <div className="text-[12px] font-extrabold text-[#111827]">{f.label}</div>
-                    <div className="mt-1 text-[10px] text-[#6B7280] leading-snug">{f.description}</div>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
-          {/* 2. CONTENT */}
-          <section className="rounded-xl border border-[#E8EDF2] bg-white p-4">
-            <div className="mb-3 text-[10px] font-extrabold tracking-[0.08em] text-[#9CA3AF]">2 · CONTENT</div>
-            {isListing ? (
-              <div className="rounded-lg bg-[#F9FAFB] px-3 py-2 text-[11.5px] text-[#6B7280]" data-testid="listing-no-content">
-                Nothing to write here — a Sponsored Listing shows the item’s own photo, name and price with a “Sponsored” label. Choose the item below.
-              </div>
-            ) : null}
-            <div className="grid gap-3 sm:grid-cols-2">
-              {fields.has('advertiser') ? (
-                <FieldBox tone="advertiser" label="Advertiser / Brand" where="Who the ad is for">
-                  <input
-                    value={advertiserName}
-                    onChange={(e) => setAdvertiserName(e.target.value)}
-                    className={fieldInput('advertiser')}
-                    placeholder="e.g. Samsung"
-                  />
-                </FieldBox>
-              ) : null}
-              {fields.has('headline') ? (
-                <FieldBox
-                  tone="headline"
-                  label="Headline"
-                  where={formatDef?.imageLed && !showText ? 'Image description (not shown)' : 'Big text on the ad'}
-                >
-                  <input
-                    value={headline}
-                    onChange={(e) => setHeadline(e.target.value)}
-                    className={fieldInput('headline')}
-                    placeholder="e.g. Membership is open"
-                    data-testid="input-headline"
-                  />
-                </FieldBox>
-              ) : null}
-              {fields.has('subtext') ? (
-                <FieldBox
-                  tone="subtext"
-                  label="Subtext"
-                  where={formatDef?.imageLed && !showText ? 'Not shown on image banners unless ticked below' : 'Small line under the headline'}
-                  className="sm:col-span-2"
-                >
-                  <textarea
-                    value={subtext}
-                    onChange={(e) => setSubtext(e.target.value)}
-                    rows={2}
-                    className={fieldInput('subtext')}
-                    placeholder="e.g. Special discount for Choosify customers"
-                    data-testid="input-subtext"
-                  />
-                </FieldBox>
-              ) : null}
-              {formatDef?.imageLed && fields.has('headline') && formatId !== 'hero_banner' ? (
-                <label className="flex items-start gap-2 sm:col-span-2 rounded-lg border border-[#E8EDF2] bg-[#F9FAFB] px-3 py-2 text-[11.5px] font-semibold text-[#374151]">
-                  <input type="checkbox" className="mt-0.5" checked={showText} onChange={(e) => setShowText(e.target.checked)} data-testid="ad-show-text" />
-                  <span>
-                    Show the headline and subtext on the banner
-                    <span className="block text-[10.5px] font-normal text-[#6B7280]">
-                      Off: your design is shown as it is and the headline is only its description for screen readers — use this when the artwork already contains its text.
-                    </span>
-                  </span>
-                </label>
-              ) : null}
-              {fields.has('ctaLabel') ? (
-                <FieldBox tone="cta" label="CTA button text" where="The orange button">
-                  <div className="flex items-center gap-2">
-                    <input
-                      value={ctaLabel}
-                      onChange={(e) => setCtaLabel(e.target.value)}
-                      className={fieldInput('cta')}
-                      placeholder="e.g. Apply now, Shop now, Visit"
-                      maxLength={30}
-                      data-testid="input-cta"
-                    />
-                    {ctaLabel ? (
-                      <span className="shrink-0 rounded-lg bg-[#FF5B00] px-3 py-1.5 text-[10.5px] font-extrabold uppercase tracking-wide text-white shadow" data-testid="cta-chip">
-                        {ctaLabel} →
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {['Shop now', 'Apply now', 'Buy now', 'Visit', 'Learn more', 'Book now'].map((s) => (
-                      <button key={s} type="button" onClick={() => setCtaLabel(s)} className="rounded-full border border-[#FDBA74] bg-white px-2 py-0.5 text-[10px] font-bold text-[#9A3412] hover:bg-[#FFEDD5]">
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                </FieldBox>
-              ) : null}
-              {fields.has('listing') ? (
-                <label className="block text-[11px] font-bold text-[#374151]">
-                  Linked Product / Listing
-                  <select
-                    value={listingId}
-                    onChange={(e) => onSelectListing(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px]"
-                  >
-                    <option value="">None</option>
-                    {listings.map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.title}
-                      </option>
-                    ))}
-                  </select>
-                  {listingLocked ? (
-                    <div className="mt-1 text-[10px] font-semibold text-amber-700">
-                      Prices hydrate from the linked product and cannot be faked.
-                    </div>
-                  ) : null}
-                </label>
-              ) : null}
-              {fields.has('hostCategory') ? (
-                <>
-                  <div className="sm:col-span-2">
-                    <CategorySearchSelect
-                      label="Category"
-                      value={
-                        hostCategoryId
-                          ? { categoryId: hostCategoryId, categoryName: hostCategoryName || hostCategoryId }
-                          : null
-                      }
-                      onChange={(next) => {
-                        setHostCategoryId(next?.categoryId || '');
-                        setHostCategoryName(next?.categoryName || '');
-                      }}
-                    />
-                  </div>
-                  <label className="block text-[11px] font-bold text-[#374151]">
-                    Host Category Image URL (optional preview)
-                    <input
-                      value={hostCategoryImageUrl}
-                      onChange={(e) => setHostCategoryImageUrl(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px]"
-                      placeholder="Optional organic-card image for preview"
-                    />
-                  </label>
-                </>
-              ) : null}
-            </div>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {fields.has('image') ? (
-                <div className="sm:col-span-2">
-                  {formatId === 'hero_banner' ? (
-                    <div className="mb-3">
-                      <div className="text-[11px] font-bold text-[#374151] mb-1.5">Creative Type</div>
-                      <div className="flex flex-wrap gap-2">
-                        {(['image', 'gif', 'video'] as HeroMediaType[]).map((t) => (
-                          <button
-                            key={t}
-                            type="button"
-                            onClick={() => setMediaType(t)}
-                            className={`rounded-lg px-3 py-1.5 text-[11px] font-extrabold capitalize ${
-                              mediaType === t ? 'bg-[#111827] text-white' : 'bg-[#F3F4F6] text-[#374151]'
-                            }`}
-                          >
-                            {t === 'gif' ? 'GIF' : t === 'video' ? 'Video' : 'Image'}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                  {placementDef ? <div className="mb-2"><AdSlotSpec placement={placementDef} /></div> : null}
-                  {placementDef?.creative?.display === 'natural' && placementDef.slotKey !== 'popup' && imageDims ? (
-                    <div className="mb-2 rounded-lg border border-[#E8EDF2] bg-[#F9FAFB] px-3 py-2 text-[11.5px] text-[#374151]" data-testid="ad-fit-choice">
-                      <div className="font-bold">How it fills the banner on desktop</div>
-                      {Math.abs(imageDims.width / imageDims.height - 4) < 0.15 ? (
-                        <div className="mt-0.5 text-[10.5px] text-emerald-700 font-semibold">Your design is 4:1 — it fills the frame edge to edge on every screen.</div>
-                      ) : (
-                        <>
-                          <div className="mt-0.5 text-[10.5px] text-[#6B7280]">
-                            Your design is {(imageDims.width / imageDims.height).toFixed(2)}:1 and the desktop frame is 4:1. Phones always show it whole, edge to edge.
-                          </div>
-                          <label className="mt-1.5 flex items-start gap-2">
-                            <input type="radio" name="ad-fit" checked={fit === 'whole'} onChange={() => setFit('whole')} data-testid="ad-fit-whole" />
-                            <span>Show the whole design <span className="text-[#6B7280]">— nothing cut off; a soft blurred fill covers the {imageDims.width / imageDims.height < 4 ? 'sides' : 'top and bottom'}</span></span>
-                          </label>
-                          <label className="mt-1 flex items-start gap-2">
-                            <input type="radio" name="ad-fit" checked={fit === 'fill'} onChange={() => setFit('fill')} data-testid="ad-fit-fill" />
-                            <span>
-                              Fill edge to edge <span className="text-[#6B7280]">— no gaps; about {Math.round(Math.abs(1 - Math.min(imageDims.width / imageDims.height, 4) / Math.max(imageDims.width / imageDims.height, 4)) * 100)}% of the design is cut off ({imageDims.width / imageDims.height < 4 ? 'top and bottom' : 'sides'}). Check the preview so no text is lost.</span>
-                            </span>
-                          </label>
-                          {fit === 'fill' && imageDims.width / imageDims.height < 4 ? (
-                            <label className="mt-1.5 ml-6 flex items-center gap-2 text-[11px]">
-                              Keep
-                              <select value={focusY} onChange={(e) => setFocusY(e.target.value as 'top' | 'center' | 'bottom')} className="rounded border border-[#E8EDF2] px-1.5 py-0.5 text-[11px]" data-testid="ad-fit-focus">
-                                <option value="top">the top</option>
-                                <option value="center">the middle</option>
-                                <option value="bottom">the bottom</option>
-                              </select>
-                              of the design
-                            </label>
-                          ) : null}
-                        </>
-                      )}
-                    </div>
-                  ) : null}
-                  {fitError && imageDims && placementDef?.creative ? (
-                    <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11.5px] font-semibold leading-snug text-amber-900" data-testid="ad-artwork-needed">
-                      New artwork needed for this shape. The current design is {imageDims.width}×{imageDims.height}px
-                      ({(imageDims.width / imageDims.height).toFixed(2)}:1) and cannot be shown in “{placementDef.slotLabel}”. Upload a{' '}
-                      {placementDef.creative.recommended.width}×{placementDef.creative.recommended.height}px version below, or switch back to a
-                      wide format. {isEdit ? 'The live ad keeps running unchanged until this is saved.' : ''}
-                    </div>
-                  ) : null}
-                  <div className="text-[11px] font-bold text-[#374151] mb-1">
-                    {mediaType === 'video' && formatId === 'hero_banner'
-                      ? 'Hero Video URL (hosted mp4/webm)'
-                      : `Creative ${mediaType === 'gif' ? 'GIF' : 'Image'}${
-                          placementDef?.creative ? ` — ${placementDef.creative.recommended.width}×${placementDef.creative.recommended.height}px recommended` : ''
-                        }`}
-                  </div>
-                  {mediaType === 'video' && formatId === 'hero_banner' ? (
-                    <div className="space-y-2">
-                      <input
-                        value={videoUrl}
-                        onChange={(e) => {
-                          setVideoUrl(e.target.value);
-                          setMediaType('video');
-                        }}
-                        className="w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px]"
-                        placeholder="https://…/hero.mp4"
-                      />
-                      <div className="text-[10px] text-[#9CA3AF] leading-snug">
-                        Video uses existing media limits: hosted http(s) URL only. Platform has no Hero video
-                        upload/transcoder — paste an mp4/webm URL. Playback: muted autoplay loop playsInline,
-                        no controls.
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#E8EDF2] bg-[#F9FAFB] px-3 py-2 text-[11px] font-bold">
-                          {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                          Poster image (optional)
-                          <input
-                            type="file"
-                            accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,image/avif"
-                            className="hidden"
-                            onChange={(e) => void uploadCreative(e.target.files?.[0] || null, 'poster')}
-                          />
-                        </label>
-                        {posterUrl || imageUrl ? (
-                          <span className="truncate text-[10px] text-[#6B7280] max-w-[220px]">
-                            {posterUrl || imageUrl}
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      {imageUrl ? (
-                        <div className="mb-2 flex items-center gap-3 rounded-lg border border-[#E8EDF2] bg-white p-2" data-testid="ad-image-current">
-                          <a href={imageUrl} target="_blank" rel="noreferrer" className="block shrink-0 overflow-hidden rounded-md border border-[#E8EDF2] bg-[#0F1238]" title="Open the full image">
-                            <img src={imageUrl} alt="Current creative" className="block h-16 w-auto max-w-[220px] object-contain" />
-                          </a>
-                          <div className="min-w-0 flex-1 text-[11px]">
-                            <div className="font-bold text-[#111827]">Current image</div>
-                            <div className="text-[#6B7280]">
-                              {imageDims ? `${imageDims.width}×${imageDims.height}px · ${(imageDims.width / imageDims.height).toFixed(2)}:1` : 'Reading size…'}
-                            </div>
-                            <div className="truncate text-[10px] text-[#9CA3AF]">{imageUrl.split('/').pop()}</div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setImageUrl('');
-                              setImageDims(null);
-                              setMessage(null);
-                            }}
-                            className="shrink-0 rounded-md border border-red-200 px-2.5 py-1.5 text-[10.5px] font-extrabold text-red-700 hover:bg-red-50"
-                            data-testid="ad-image-remove"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ) : null}
-                      <div className="flex items-center gap-2">
-                        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#E8EDF2] bg-[#F9FAFB] px-3 py-2 text-[11px] font-bold">
-                          {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                          {imageUrl ? 'Replace image' : 'Upload'}
-                          <input
-                            type="file"
-                            accept={
-                              mediaType === 'gif'
-                                ? 'image/gif'
-                                : 'image/jpeg,image/jpg,image/png,image/webp,image/gif'
-                            }
-                            className="hidden"
-                            onChange={(e) => {
-                              const f = e.target.files?.[0] || null;
-                              // allow picking the same file again after a failure
-                              e.target.value = '';
-                              void uploadCreative(f, 'image');
-                            }}
-                            data-testid="ad-image-file"
-                          />
-                        </label>
-                        {imageUrl ? null : (
-                          <span className="text-[10px] text-[#9CA3AF] inline-flex items-center gap-1" data-testid="ad-image-none">
-                            <ImageIcon className="h-3 w-3" /> No image — upload one before publishing
-                          </span>
-                        )}
-                      </div>
-                      {uploadNote ? (
-                        <div
-                          className={`mt-2 rounded-md px-2.5 py-1.5 text-[11px] font-semibold ${uploadNote.kind === 'error' ? 'bg-red-50 text-red-700' : uploadNote.kind === 'busy' ? 'bg-blue-50 text-blue-700' : uploadNote.kind === 'tip' ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-700'}`}
-                          data-testid="ad-upload-note"
-                          role="status"
-                        >
-                          {uploadNote.text}
-                        </div>
-                      ) : null}
-                      <div className="mt-1 text-[10px] text-[#9CA3AF]">
-                        JPG/PNG/WEBP/GIF, any shape — it is fitted into the frame (best: the recommended size). Big photos are shrunk automatically.
-                      </div>
-                      {formatId !== 'hero_banner' ? (
-                        <div className="mt-3 rounded-lg border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-2.5" data-testid="ad-phone-image">
-                          <div className="text-[11.5px] font-extrabold text-[#111827]">Phone image (optional)</div>
-                          <div className="mb-2 text-[10.5px] text-[#6B7280]">
-                            Phones are narrow, so a wide banner looks thin there. Upload a taller version — e.g. 1080×1080 (square) or 1080×1350 — and phones show it instead. Without one, phones show the wide design whole.
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            {mobileImageUrl ? <img src={mobileImageUrl} alt="" className="h-16 w-16 rounded-md border border-[#E8EDF2] object-cover" /> : null}
-                            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#E8EDF2] bg-white px-3 py-1.5 text-[11px] font-bold">
-                              {mobileUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                              {mobileImageUrl ? 'Replace phone image' : 'Upload phone image'}
-                              <input
-                                type="file"
-                                accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
-                                className="hidden"
-                                data-testid="ad-phone-image-file"
-                                onChange={async (e) => {
-                                  const f = e.target.files?.[0];
-                                  e.target.value = '';
-                                  if (!f) return;
-                                  setMobileUploading(true);
-                                  try {
-                                    setMobileImageUrl(await uploadProductImage(f));
-                                  } catch (err) {
-                                    setError(err instanceof Error ? err.message : 'Upload failed');
-                                  } finally {
-                                    setMobileUploading(false);
-                                  }
-                                }}
-                              />
-                            </label>
-                            {mobileImageUrl ? (
-                              <button type="button" onClick={() => setMobileImageUrl('')} className="rounded-md border border-red-200 px-2.5 py-1.5 text-[10.5px] font-extrabold text-red-700">
-                                Remove
-                              </button>
-                            ) : null}
-                          </div>
-                        </div>
-                      ) : null}
-                    </>
-                  )}
-                </div>
-              ) : null}
-              {fields.has('logo') ? (
-                <div>
-                  <div className="text-[11px] font-bold text-[#374151] mb-1">Logo / Avatar</div>
-                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#E8EDF2] bg-[#F9FAFB] px-3 py-2 text-[11px] font-bold">
-                    {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                    Upload logo
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,image/avif"
-                      className="hidden"
-                      onChange={(e) => void uploadCreative(e.target.files?.[0] || null, 'logo')}
-                    />
-                  </label>
-                  {logoUrl ? (
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11.5px]" data-testid="logo-color">
-                      <img src={logoUrl} alt="" className="h-9 w-9 rounded-full border border-[#E8EDF2] bg-white object-cover" />
-                      <span
-                        className="inline-block h-7 w-16 rounded-md border border-[#E8EDF2]"
-                        style={{ background: (useLogoColor && brandGradient(logoColor, 110, logoColor2)) || 'linear-gradient(110deg,#3B1E3F,#2A1846,#2B1A4A)' }}
-                        title={logoColor || 'Choosify colours'}
-                      />
-                      <label className="inline-flex items-center gap-1.5 font-semibold text-[#374151]">
-                        <input type="checkbox" checked={useLogoColor} onChange={(e) => setUseLogoColor(e.target.checked)} data-testid="logo-color-on" />
-                        Colour the card from the logo{logoColor ? ` (${logoColor})` : ''}
-                      </label>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          </section>
-
-          {/* 3. DESTINATION */}
-          <section className="rounded-xl border border-[#E8EDF2] bg-white p-4">
-            <div className="mb-3 text-[10px] font-extrabold tracking-[0.08em] text-[#9CA3AF]">{isListing ? '3 · WHAT YOU ARE PROMOTING' : '3 · DESTINATION'}</div>
-            {isListing ? (
-              <div className="mb-3 rounded-lg bg-[#F5F3FF] px-3 py-2 text-[11px] font-semibold text-[#5B21B6]" data-testid="listing-explainer">
-                Shown as the item's normal card with a “Sponsored” label, inside the {placementDef?.pageLabel ?? ''} list
-                {placementDef?.entityTypes?.length ? ` (${placementDef.entityTypes.join(' / ')})` : ''}. Only shown while it is live on Choosify.
-              </div>
-            ) : null}
-            <div className={`flex gap-2 mb-3 ${isListing ? 'hidden' : ''}`}>
-              <button
-                type="button"
-                onClick={() => setDestMode('internal')}
-                className={`rounded-lg px-3 py-1.5 text-[11px] font-extrabold ${
-                  destMode === 'internal' ? 'bg-[#111827] text-white' : 'bg-[#F3F4F6] text-[#374151]'
-                }`}
-              >
-                Internal Choosify
-              </button>
-              <button
-                type="button"
-                onClick={() => setDestMode('external')}
-                className={`rounded-lg px-3 py-1.5 text-[11px] font-extrabold ${
-                  destMode === 'external' ? 'bg-[#111827] text-white' : 'bg-[#F3F4F6] text-[#374151]'
-                }`}
-              >
-                External URL
-              </button>
-            </div>
-            {destMode === 'internal' ? (
-              <FieldBox tone="link" label={isListing ? 'Item to promote' : 'Where the button goes'} where={isListing ? 'Your product or brand' : 'A page on Choosify'}>
-              <div className="grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)]">
-                <label className="block text-[11px] font-bold text-[#374151]">
-                  Link to a
-                  <select
-                    value={internalEntityType}
-                    onChange={(e) => {
-                      setInternalEntityType(e.target.value);
-                      setInternalEntityId('');
-                      setInternalEntitySlug('');
-                    }}
-                    className={`mt-1 ${fieldInput('link')}`}
-                    data-testid="entity-type"
-                  >
-                    {(isListing
-                      ? (placementDef?.entityTypes ?? ['product', 'brand']).filter((t) => t === 'product' || t === 'brand')
-                      : ['page', 'product', 'brand', 'deal', 'category', 'guide', 'creator']
-                    ).map((t) => (
-                      <option key={t} value={t}>
-                        {t === 'page' ? 'Choosify page (About, Terms…)' : t.charAt(0).toUpperCase() + t.slice(1)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="block text-[11px] font-bold text-[#374151]">
-                  Choose it
-                  {internalEntityType === 'page' ? (
-                    <div className="mt-1" data-testid="ad-dest-page">
-                      <LinkInput value={pagePath} onChange={setPagePath} disabled={false} testId="ad-dest-page-input" placeholder="Start typing: /about, /terms, /privacy, /pages/…" />
-                      <div className="mt-1 text-[10.5px] text-[#6B7280]">Pick from the list or type any Choosify address starting with /.</div>
-                    </div>
-                  ) : (
-                  <EntityPicker
-                    type={internalEntityType as PickableType}
-                    value={internalEntityType === 'category' ? internalEntityId || internalEntitySlug : internalEntityId}
-                    onPick={(e) => {
-                      setInternalEntityId(e?.id || '');
-                      setInternalEntitySlug(e?.slug || '');
-                    }}
-                  />
-                  )}
-                </div>
-              </div>
-              </FieldBox>
-            ) : (
-              <FieldBox tone="link" label="Where the button goes" where="Another website (opens in a new tab)">
-                <input
-                  value={externalUrl}
-                  onChange={(e) => setExternalUrl(e.target.value)}
-                  className={fieldInput('link')}
-                  placeholder="https://example.com/offer"
-                  data-testid="input-external-url"
-                />
-                {externalUrl.trim() && !/^https:\/\//i.test(externalUrl.trim()) ? (
-                  <div className="mt-1 text-[10.5px] font-semibold text-amber-800" data-testid="external-url-warning">
-                    Use a full secure address starting with https:// — other links are not shown on the storefront.
-                  </div>
-                ) : null}
-              </FieldBox>
-            )}
-          </section>
-
-          {/* 4. PLACEMENT */}
-          <section className="rounded-xl border border-[#E8EDF2] bg-white p-4">
-            <div className="mb-3 text-[10px] font-extrabold tracking-[0.08em] text-[#9CA3AF]">4 · PLACEMENT</div>
+            <div className="mb-3 text-[10px] font-extrabold tracking-[0.08em] text-[#9CA3AF]">1 · PAGE, FORMAT &amp; PLACEMENT</div>
             <label className="block text-[11px] font-bold text-[#374151]">
               Page
               <select
@@ -1384,7 +1001,43 @@ export default function AdsVisualBuilder() {
                 ))}
               </select>
             </label>
-            <div className="mt-3" data-testid="ad-page-map">
+            <div className="mt-3 grid gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+            <div data-testid="ad-format-list">
+              <div className="text-[11px] font-bold text-[#374151]">Format</div>
+              <div className="mt-0.5 text-[10.5px] text-[#6B7280]">Greyed out = this page has no place for it.</div>
+              <div className="mt-2 grid gap-1.5">
+                {AD_FORMATS.map((f) => {
+                  const anywhere = placementsForFormat(f.formatId, role).length > 0;
+                  const pageRow = pageRows.find((r) => r.placement.allowedFormats.includes(f.formatId));
+                  const allowed = anywhere && Boolean(pageRow);
+                  const active = formatId === f.formatId;
+                  const inChosen = Boolean(placementDef?.allowedFormats.includes(f.formatId));
+                  return (
+                    <button
+                      key={f.formatId}
+                      type="button"
+                      disabled={!allowed}
+                      onClick={() => setFormatId(f.formatId)}
+                      data-testid={`ad-format-${f.formatId}`}
+                      aria-pressed={active}
+                      title={!anywhere ? 'Not available for your account' : !pageRow ? `No place for ${f.label} on this page — choose another page` : f.description}
+                      className={`rounded-lg border px-3 py-2 text-left transition ${
+                        active ? 'border-[#EF3C23] bg-[#FFF5F3] ring-1 ring-[#EF3C23]/30' : 'border-[#E8EDF2] bg-white hover:border-[#FDBA74]'
+                      } ${!allowed ? 'cursor-not-allowed bg-[#F9FAFB] opacity-45 hover:border-[#E8EDF2]' : ''}`}
+                    >
+                      <div className="text-[12px] font-extrabold text-[#111827]">{f.label}</div>
+                      <div className="mt-0.5 text-[10px] leading-snug text-[#6B7280]">{f.description}</div>
+                      {!allowed ? (
+                        <div className="mt-0.5 text-[10px] font-bold text-[#9CA3AF]">{anywhere ? 'Not on this page' : 'Not available'}</div>
+                      ) : !active && !inChosen && pageRow ? (
+                        <div className="mt-0.5 text-[10px] font-bold text-[#7C3AED]">Moves the place to: {pageRow.label}</div>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div data-testid="ad-page-map">
               <div className="text-[11px] font-bold text-[#374151]">Where on this page</div>
               <div className="mt-0.5 text-[10.5px] text-[#6B7280]">
                 Every place on the page, top to bottom. Different places show separately; ads in the same place are stacked and slide (round switch icons).
@@ -1394,16 +1047,18 @@ export default function AdsVisualBuilder() {
                   const chosen = isRowChosen(row);
                   const taken = placeOccupancy[row.key] || [];
                   const fits = row.placement.allowedFormats.includes(formatId);
-                  const switchTo = fits ? null : getFormatDef(row.placement.allowedFormats[0] as AdFormatId)?.label;
+                  const takes = fits ? null : row.placement.allowedFormats.map((f) => getFormatDef(f as AdFormatId)?.label || f).join(' / ');
                   return (
                     <button
                       key={row.key}
                       type="button"
+                      disabled={!fits}
+                      title={fits ? undefined : `Not for ${formatDef?.label || 'this format'} — this place takes: ${takes}`}
                       onClick={() => chooseRow(row)}
                       data-testid={`ad-place-${row.key.replace(':', '--')}`}
                       aria-pressed={chosen}
                       className={`flex w-full items-center gap-3 px-3 py-2 text-left text-[11.5px] ${idx ? 'border-t border-[#E8EDF2]' : ''} ${
-                        chosen ? 'bg-[#FFF4EE]' : 'bg-white hover:bg-[#F9FAFB]'
+                        chosen ? 'bg-[#FFF4EE]' : fits ? 'bg-white hover:bg-[#F9FAFB]' : 'cursor-not-allowed bg-[#F9FAFB] opacity-45'
                       }`}
                     >
                       <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${chosen ? 'border-[#EF3C23] bg-[#EF3C23]' : 'border-[#CBD5E1]'}`}>
@@ -1414,7 +1069,7 @@ export default function AdsVisualBuilder() {
                       </span>
                       <span className={`min-w-0 flex-1 ${chosen ? 'font-extrabold text-[#111827]' : 'font-semibold text-[#374151]'}`}>
                         {row.label}
-                        {switchTo ? <span className="block text-[10px] font-semibold text-[#9CA3AF]">Switches the format to {switchTo}</span> : null}
+                        {takes ? <span className="block text-[10px] font-semibold text-[#9CA3AF]">Takes: {takes}</span> : null}
                         {!row.placement.mobileSupport ? <span className="block text-[10px] font-semibold text-[#9CA3AF]">Desktop only</span> : null}
                       </span>
                       {taken.length ? (
@@ -1428,6 +1083,9 @@ export default function AdsVisualBuilder() {
                   );
                 })}
               </div>
+              </div>
+            </div>
+            <div>
               <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-bold text-[#6B7280]">
                 <span className="rounded bg-[#F3F4F6] px-2 py-1 font-mono">{placementId}{pagePosition ? ` · ${pagePosition}` : ''}</span>
               </div>
@@ -1649,6 +1307,239 @@ export default function AdsVisualBuilder() {
             })()}
           </section>
 
+          {/* 2. CONTENT */}
+          <section className="rounded-xl border border-[#E8EDF2] bg-white p-4">
+            <div className="mb-3 text-[10px] font-extrabold tracking-[0.08em] text-[#9CA3AF]">2 · CONTENT</div>
+            {isListing ? (
+              <div className="rounded-lg bg-[#F9FAFB] px-3 py-2 text-[11.5px] text-[#6B7280]" data-testid="listing-no-content">
+                Nothing to write here — a Sponsored Listing shows the item’s own photo, name and price with a “Sponsored” label. Choose the item below.
+              </div>
+            ) : null}
+            <div className="grid gap-3 sm:grid-cols-2">
+              {fields.has('advertiser') ? (
+                <FieldBox tone="advertiser" label="Advertiser / Brand" where="Who the ad is for">
+                  <input
+                    value={advertiserName}
+                    onChange={(e) => setAdvertiserName(e.target.value)}
+                    className={fieldInput('advertiser')}
+                    placeholder="e.g. Samsung"
+                  />
+                </FieldBox>
+              ) : null}
+              {fields.has('headline') ? (
+                <FieldBox
+                  tone="headline"
+                  label="Headline"
+                  where={formatDef?.imageLed && !showText ? 'Image description (not shown)' : 'Big text on the ad'}
+                >
+                  <input
+                    value={headline}
+                    onChange={(e) => setHeadline(e.target.value)}
+                    className={fieldInput('headline')}
+                    placeholder="e.g. Membership is open"
+                    data-testid="input-headline"
+                  />
+                </FieldBox>
+              ) : null}
+              {fields.has('subtext') ? (
+                <FieldBox
+                  tone="subtext"
+                  label="Subtext"
+                  where={formatDef?.imageLed && !showText ? 'Not shown on image banners unless ticked below' : 'Small line under the headline'}
+                  className="sm:col-span-2"
+                >
+                  <textarea
+                    value={subtext}
+                    onChange={(e) => setSubtext(e.target.value)}
+                    rows={2}
+                    className={fieldInput('subtext')}
+                    placeholder="e.g. Special discount for Choosify customers"
+                    data-testid="input-subtext"
+                  />
+                </FieldBox>
+              ) : null}
+              {formatDef?.imageLed && fields.has('headline') && formatId !== 'hero_banner' ? (
+                <label className="flex items-start gap-2 sm:col-span-2 rounded-lg border border-[#E8EDF2] bg-[#F9FAFB] px-3 py-2 text-[11.5px] font-semibold text-[#374151]">
+                  <input type="checkbox" className="mt-0.5" checked={showText} onChange={(e) => setShowText(e.target.checked)} data-testid="ad-show-text" />
+                  <span>
+                    Show the headline and subtext on the banner
+                    <span className="block text-[10.5px] font-normal text-[#6B7280]">
+                      Off: your design is shown as it is and the headline is only its description for screen readers — use this when the artwork already contains its text.
+                    </span>
+                  </span>
+                </label>
+              ) : null}
+              {fields.has('ctaLabel') ? (
+                <FieldBox tone="cta" label="CTA button text" where="The orange button">
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={ctaLabel}
+                      onChange={(e) => setCtaLabel(e.target.value)}
+                      className={fieldInput('cta')}
+                      placeholder="e.g. Apply now, Shop now, Visit"
+                      maxLength={30}
+                      data-testid="input-cta"
+                    />
+                    {ctaLabel ? (
+                      <span className="shrink-0 rounded-lg bg-[#FF5B00] px-3 py-1.5 text-[10.5px] font-extrabold uppercase tracking-wide text-white shadow" data-testid="cta-chip">
+                        {ctaLabel} →
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {['Shop now', 'Apply now', 'Buy now', 'Visit', 'Learn more', 'Book now'].map((s) => (
+                      <button key={s} type="button" onClick={() => setCtaLabel(s)} className="rounded-full border border-[#FDBA74] bg-white px-2 py-0.5 text-[10px] font-bold text-[#9A3412] hover:bg-[#FFEDD5]">
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </FieldBox>
+              ) : null}
+              {fields.has('listing') ? (
+                <label className="block text-[11px] font-bold text-[#374151]">
+                  Linked Product / Listing
+                  <select
+                    value={listingId}
+                    onChange={(e) => onSelectListing(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px]"
+                  >
+                    <option value="">None</option>
+                    {listings.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.title}
+                      </option>
+                    ))}
+                  </select>
+                  {listingLocked ? (
+                    <div className="mt-1 text-[10px] font-semibold text-amber-700">
+                      Prices hydrate from the linked product and cannot be faked.
+                    </div>
+                  ) : null}
+                </label>
+              ) : null}
+              {fields.has('hostCategory') ? (
+                <>
+                  <div className="sm:col-span-2">
+                    <CategorySearchSelect
+                      label="Category"
+                      value={
+                        hostCategoryId
+                          ? { categoryId: hostCategoryId, categoryName: hostCategoryName || hostCategoryId }
+                          : null
+                      }
+                      onChange={(next) => {
+                        setHostCategoryId(next?.categoryId || '');
+                        setHostCategoryName(next?.categoryName || '');
+                      }}
+                    />
+                  </div>
+                  <label className="block text-[11px] font-bold text-[#374151]">
+                    Host Category Image URL (optional preview)
+                    <input
+                      value={hostCategoryImageUrl}
+                      onChange={(e) => setHostCategoryImageUrl(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px]"
+                      placeholder="Optional organic-card image for preview"
+                    />
+                  </label>
+                </>
+              ) : null}
+            </div>
+
+          </section>
+
+          {/* 3. DESTINATION */}
+          <section className="rounded-xl border border-[#E8EDF2] bg-white p-4">
+            <div className="mb-3 text-[10px] font-extrabold tracking-[0.08em] text-[#9CA3AF]">{isListing ? '3 · WHAT YOU ARE PROMOTING' : '3 · DESTINATION'}</div>
+            {isListing ? (
+              <div className="mb-3 rounded-lg bg-[#F5F3FF] px-3 py-2 text-[11px] font-semibold text-[#5B21B6]" data-testid="listing-explainer">
+                Shown as the item's normal card with a “Sponsored” label, inside the {placementDef?.pageLabel ?? ''} list
+                {placementDef?.entityTypes?.length ? ` (${placementDef.entityTypes.join(' / ')})` : ''}. Only shown while it is live on Choosify.
+              </div>
+            ) : null}
+            <div className={`flex gap-2 mb-3 ${isListing ? 'hidden' : ''}`}>
+              <button
+                type="button"
+                onClick={() => setDestMode('internal')}
+                className={`rounded-lg px-3 py-1.5 text-[11px] font-extrabold ${
+                  destMode === 'internal' ? 'bg-[#111827] text-white' : 'bg-[#F3F4F6] text-[#374151]'
+                }`}
+              >
+                Internal Choosify
+              </button>
+              <button
+                type="button"
+                onClick={() => setDestMode('external')}
+                className={`rounded-lg px-3 py-1.5 text-[11px] font-extrabold ${
+                  destMode === 'external' ? 'bg-[#111827] text-white' : 'bg-[#F3F4F6] text-[#374151]'
+                }`}
+              >
+                External URL
+              </button>
+            </div>
+            {destMode === 'internal' ? (
+              <FieldBox tone="link" label={isListing ? 'Item to promote' : 'Where the button goes'} where={isListing ? 'Your product or brand' : 'A page on Choosify'}>
+              <div className="grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)]">
+                <label className="block text-[11px] font-bold text-[#374151]">
+                  Link to a
+                  <select
+                    value={internalEntityType}
+                    onChange={(e) => {
+                      setInternalEntityType(e.target.value);
+                      setInternalEntityId('');
+                      setInternalEntitySlug('');
+                    }}
+                    className={`mt-1 ${fieldInput('link')}`}
+                    data-testid="entity-type"
+                  >
+                    {(isListing
+                      ? (placementDef?.entityTypes ?? ['product', 'brand']).filter((t) => t === 'product' || t === 'brand')
+                      : ['page', 'product', 'brand', 'deal', 'category', 'guide', 'creator']
+                    ).map((t) => (
+                      <option key={t} value={t}>
+                        {t === 'page' ? 'Choosify page (About, Terms…)' : t.charAt(0).toUpperCase() + t.slice(1)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="block text-[11px] font-bold text-[#374151]">
+                  Choose it
+                  {internalEntityType === 'page' ? (
+                    <div className="mt-1" data-testid="ad-dest-page">
+                      <LinkInput value={pagePath} onChange={setPagePath} disabled={false} testId="ad-dest-page-input" placeholder="Start typing: /about, /terms, /privacy, /pages/…" />
+                      <div className="mt-1 text-[10.5px] text-[#6B7280]">Pick from the list or type any Choosify address starting with /.</div>
+                    </div>
+                  ) : (
+                  <EntityPicker
+                    type={internalEntityType as PickableType}
+                    value={internalEntityType === 'category' ? internalEntityId || internalEntitySlug : internalEntityId}
+                    onPick={(e) => {
+                      setInternalEntityId(e?.id || '');
+                      setInternalEntitySlug(e?.slug || '');
+                    }}
+                  />
+                  )}
+                </div>
+              </div>
+              </FieldBox>
+            ) : (
+              <FieldBox tone="link" label="Where the button goes" where="Another website (opens in a new tab)">
+                <input
+                  value={externalUrl}
+                  onChange={(e) => setExternalUrl(e.target.value)}
+                  className={fieldInput('link')}
+                  placeholder="https://example.com/offer"
+                  data-testid="input-external-url"
+                />
+                {externalUrl.trim() && !/^https:\/\//i.test(externalUrl.trim()) ? (
+                  <div className="mt-1 text-[10.5px] font-semibold text-amber-800" data-testid="external-url-warning">
+                    Use a full secure address starting with https:// — other links are not shown on the storefront.
+                  </div>
+                ) : null}
+              </FieldBox>
+            )}
+          </section>
+
           {/* Ready check — every problem is shown and fixable HERE, next to the buttons (no scrolling up). */}
           {(() => {
             const needsImage = Boolean(formatDef?.imageLed) && !imageUrl && !(formatId === 'hero_banner' && mediaType === 'video' && videoUrl);
@@ -1751,6 +1642,49 @@ export default function AdsVisualBuilder() {
               </>
             )}
             {saving ? <Loader2 className="h-5 w-5 animate-spin text-[#EF3C23]" /> : null}
+            {isEdit && existing ? (
+              <div className="ml-auto flex flex-wrap gap-2" data-testid="ad-status-actions">
+                {isAdmin && existing.status === 'active' ? (
+                  <button
+                    type="button"
+                    disabled={saving || statusBusy}
+                    onClick={() => {
+                      setPauseReason('');
+                      setAskPause(true);
+                    }}
+                    className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-[11px] font-extrabold text-amber-800"
+                    title="Take it off the storefront for now (can be resumed)"
+                    data-testid="ad-pause"
+                  >
+                    Pause
+                  </button>
+                ) : null}
+                {isAdmin && (existing.status === 'paused' || existing.status === 'disabled') ? (
+                  <button
+                    type="button"
+                    disabled={saving || statusBusy}
+                    onClick={() => void changeStatus('resume')}
+                    className="rounded-lg bg-emerald-600 px-4 py-2.5 text-[11px] font-extrabold text-white"
+                    title="Put the last saved version back on the storefront (save first if you changed anything)"
+                    data-testid="ad-resume"
+                  >
+                    Resume (activate)
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={saving || statusBusy}
+                  onClick={() => {
+                    setDeleteReason('');
+                    setAskDelete(true);
+                  }}
+                  className="rounded-lg border border-red-200 bg-white px-4 py-2.5 text-[11px] font-extrabold text-red-600 hover:bg-red-50"
+                  data-testid="ad-delete"
+                >
+                  Delete
+                </button>
+              </div>
+            ) : null}
           </div>
           {!saving && (error || message) ? (
             <div
@@ -1767,7 +1701,7 @@ export default function AdsVisualBuilder() {
         </div>
 
         {/* LIVE PREVIEW */}
-        <aside className="lg:sticky lg:top-4 h-fit space-y-3">
+        <aside className="h-fit space-y-3 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1">
           <div className="rounded-xl border border-[#E8EDF2] bg-white p-4">
             <div className="mb-2 flex items-center justify-between gap-2">
               <div className="text-[10px] font-extrabold tracking-[0.08em] text-[#9CA3AF]">LIVE PREVIEW</div>
@@ -1866,6 +1800,260 @@ export default function AdsVisualBuilder() {
               cropping). Untick it to see the format on its own.
             </div>
           </div>
+          {/* Image + logo uploads sit with the preview, so you see the result as you upload. */}
+          {fields.has('image') || fields.has('logo') ? (
+            <section className="rounded-xl border border-[#E8EDF2] bg-white p-4" data-testid="ad-uploads">
+              <div className="mb-3 text-[10px] font-extrabold tracking-[0.08em] text-[#9CA3AF]">IMAGE &amp; LOGO</div>
+              <div className="grid gap-3">
+                {fields.has('image') ? (
+                  <div className="sm:col-span-2">
+                    {formatId === 'hero_banner' ? (
+                      <div className="mb-3">
+                        <div className="text-[11px] font-bold text-[#374151] mb-1.5">Creative Type</div>
+                        <div className="flex flex-wrap gap-2">
+                          {(['image', 'gif', 'video'] as HeroMediaType[]).map((t) => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => setMediaType(t)}
+                              className={`rounded-lg px-3 py-1.5 text-[11px] font-extrabold capitalize ${
+                                mediaType === t ? 'bg-[#111827] text-white' : 'bg-[#F3F4F6] text-[#374151]'
+                              }`}
+                            >
+                              {t === 'gif' ? 'GIF' : t === 'video' ? 'Video' : 'Image'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    {placementDef?.creative?.display === 'natural' && placementDef.slotKey !== 'popup' && imageDims ? (
+                      <div className="mb-2 rounded-lg border border-[#E8EDF2] bg-[#F9FAFB] px-3 py-2 text-[11.5px] text-[#374151]" data-testid="ad-fit-choice">
+                        <div className="font-bold">How it fills the banner on desktop</div>
+                        {Math.abs(imageDims.width / imageDims.height - 4) < 0.15 ? (
+                          <div className="mt-0.5 text-[10.5px] text-emerald-700 font-semibold">Your design is 4:1 — it fills the frame edge to edge on every screen.</div>
+                        ) : (
+                          <>
+                            <div className="mt-0.5 text-[10.5px] text-[#6B7280]">
+                              Your design is {(imageDims.width / imageDims.height).toFixed(2)}:1 and the desktop frame is 4:1. Phones always show it whole, edge to edge.
+                            </div>
+                            <label className="mt-1.5 flex items-start gap-2">
+                              <input type="radio" name="ad-fit" checked={fit === 'whole'} onChange={() => setFit('whole')} data-testid="ad-fit-whole" />
+                              <span>Show the whole design <span className="text-[#6B7280]">— nothing cut off; a soft blurred fill covers the {imageDims.width / imageDims.height < 4 ? 'sides' : 'top and bottom'}</span></span>
+                            </label>
+                            <label className="mt-1 flex items-start gap-2">
+                              <input type="radio" name="ad-fit" checked={fit === 'fill'} onChange={() => setFit('fill')} data-testid="ad-fit-fill" />
+                              <span>
+                                Fill edge to edge <span className="text-[#6B7280]">— no gaps; about {Math.round(Math.abs(1 - Math.min(imageDims.width / imageDims.height, 4) / Math.max(imageDims.width / imageDims.height, 4)) * 100)}% of the design is cut off ({imageDims.width / imageDims.height < 4 ? 'top and bottom' : 'sides'}). Check the preview so no text is lost.</span>
+                              </span>
+                            </label>
+                            {fit === 'fill' && imageDims.width / imageDims.height < 4 ? (
+                              <label className="mt-1.5 ml-6 flex items-center gap-2 text-[11px]">
+                                Keep
+                                <select value={focusY} onChange={(e) => setFocusY(e.target.value as 'top' | 'center' | 'bottom')} className="rounded border border-[#E8EDF2] px-1.5 py-0.5 text-[11px]" data-testid="ad-fit-focus">
+                                  <option value="top">the top</option>
+                                  <option value="center">the middle</option>
+                                  <option value="bottom">the bottom</option>
+                                </select>
+                                of the design
+                              </label>
+                            ) : null}
+                          </>
+                        )}
+                      </div>
+                    ) : null}
+                    {fitError && imageDims && placementDef?.creative ? (
+                      <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11.5px] font-semibold leading-snug text-amber-900" data-testid="ad-artwork-needed">
+                        New artwork needed for this shape. The current design is {imageDims.width}×{imageDims.height}px
+                        ({(imageDims.width / imageDims.height).toFixed(2)}:1) and cannot be shown in “{placementDef.slotLabel}”. Upload a{' '}
+                        {placementDef.creative.recommended.width}×{placementDef.creative.recommended.height}px version below, or switch back to a
+                        wide format. {isEdit ? 'The live ad keeps running unchanged until this is saved.' : ''}
+                      </div>
+                    ) : null}
+                    <div className="text-[11px] font-bold text-[#374151] mb-1">
+                      {mediaType === 'video' && formatId === 'hero_banner'
+                        ? 'Hero Video URL (hosted mp4/webm)'
+                        : `Creative ${mediaType === 'gif' ? 'GIF' : 'Image'}${
+                            placementDef?.creative ? ` — ${placementDef.creative.recommended.width}×${placementDef.creative.recommended.height}px recommended` : ''
+                          }`}
+                    </div>
+                    {mediaType === 'video' && formatId === 'hero_banner' ? (
+                      <div className="space-y-2">
+                        <input
+                          value={videoUrl}
+                          onChange={(e) => {
+                            setVideoUrl(e.target.value);
+                            setMediaType('video');
+                          }}
+                          className="w-full rounded-lg border border-[#E8EDF2] px-3 py-2 text-[12px]"
+                          placeholder="https://…/hero.mp4"
+                        />
+                        <div className="text-[10px] text-[#9CA3AF] leading-snug">
+                          Video uses existing media limits: hosted http(s) URL only. Platform has no Hero video
+                          upload/transcoder — paste an mp4/webm URL. Playback: muted autoplay loop playsInline,
+                          no controls.
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#E8EDF2] bg-[#F9FAFB] px-3 py-2 text-[11px] font-bold">
+                            {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                            Poster image (optional)
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,image/avif"
+                              className="hidden"
+                              onChange={(e) => void uploadCreative(e.target.files?.[0] || null, 'poster')}
+                            />
+                          </label>
+                          {posterUrl || imageUrl ? (
+                            <span className="truncate text-[10px] text-[#6B7280] max-w-[220px]">
+                              {posterUrl || imageUrl}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {imageUrl ? (
+                          <div className="mb-2 flex items-center gap-3 rounded-lg border border-[#E8EDF2] bg-white p-2" data-testid="ad-image-current">
+                            <a href={imageUrl} target="_blank" rel="noreferrer" className="block shrink-0 overflow-hidden rounded-md border border-[#E8EDF2] bg-[#0F1238]" title="Open the full image">
+                              <img src={imageUrl} alt="Current creative" className="block h-16 w-auto max-w-[220px] object-contain" />
+                            </a>
+                            <div className="min-w-0 flex-1 text-[11px]">
+                              <div className="font-bold text-[#111827]">Current image</div>
+                              <div className="text-[#6B7280]">
+                                {imageDims ? `${imageDims.width}×${imageDims.height}px · ${(imageDims.width / imageDims.height).toFixed(2)}:1` : 'Reading size…'}
+                              </div>
+                              <div className="truncate text-[10px] text-[#9CA3AF]">{imageUrl.split('/').pop()}</div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setImageUrl('');
+                                setImageDims(null);
+                                setMessage(null);
+                              }}
+                              className="shrink-0 rounded-md border border-red-200 px-2.5 py-1.5 text-[10.5px] font-extrabold text-red-700 hover:bg-red-50"
+                              data-testid="ad-image-remove"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ) : null}
+                        <div className="flex items-center gap-2">
+                          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#E8EDF2] bg-[#F9FAFB] px-3 py-2 text-[11px] font-bold">
+                            {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                            {imageUrl ? 'Replace image' : 'Upload'}
+                            <input
+                              type="file"
+                              accept={
+                                mediaType === 'gif'
+                                  ? 'image/gif'
+                                  : 'image/jpeg,image/jpg,image/png,image/webp,image/gif'
+                              }
+                              className="hidden"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0] || null;
+                                // allow picking the same file again after a failure
+                                e.target.value = '';
+                                void uploadCreative(f, 'image');
+                              }}
+                              data-testid="ad-image-file"
+                            />
+                          </label>
+                          {imageUrl ? null : (
+                            <span className="text-[10px] text-[#9CA3AF] inline-flex items-center gap-1" data-testid="ad-image-none">
+                              <ImageIcon className="h-3 w-3" /> No image — upload one before publishing
+                            </span>
+                          )}
+                        </div>
+                        {uploadNote ? (
+                          <div
+                            className={`mt-2 rounded-md px-2.5 py-1.5 text-[11px] font-semibold ${uploadNote.kind === 'error' ? 'bg-red-50 text-red-700' : uploadNote.kind === 'busy' ? 'bg-blue-50 text-blue-700' : uploadNote.kind === 'tip' ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-700'}`}
+                            data-testid="ad-upload-note"
+                            role="status"
+                          >
+                            {uploadNote.text}
+                          </div>
+                        ) : null}
+                        <div className="mt-1 text-[10px] text-[#9CA3AF]">
+                          JPG/PNG/WEBP/GIF, any shape — it is fitted into the frame (best: the recommended size). Big photos are shrunk automatically.
+                        </div>
+                        {formatId !== 'hero_banner' ? (
+                          <div className="mt-3 rounded-lg border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-2.5" data-testid="ad-phone-image">
+                            <div className="text-[11.5px] font-extrabold text-[#111827]">Phone image (optional)</div>
+                            <div className="mb-2 text-[10.5px] text-[#6B7280]">
+                              Phones are narrow, so a wide banner looks thin there. Upload a taller version — e.g. 1080×1080 (square) or 1080×1350 — and phones show it instead. Without one, phones show the wide design whole.
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              {mobileImageUrl ? <img src={mobileImageUrl} alt="" className="h-16 w-16 rounded-md border border-[#E8EDF2] object-cover" /> : null}
+                              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#E8EDF2] bg-white px-3 py-1.5 text-[11px] font-bold">
+                                {mobileUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                                {mobileImageUrl ? 'Replace phone image' : 'Upload phone image'}
+                                <input
+                                  type="file"
+                                  accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                                  className="hidden"
+                                  data-testid="ad-phone-image-file"
+                                  onChange={async (e) => {
+                                    const f = e.target.files?.[0];
+                                    e.target.value = '';
+                                    if (!f) return;
+                                    setMobileUploading(true);
+                                    try {
+                                      setMobileImageUrl(await uploadProductImage(f));
+                                    } catch (err) {
+                                      setError(err instanceof Error ? err.message : 'Upload failed');
+                                    } finally {
+                                      setMobileUploading(false);
+                                    }
+                                  }}
+                                />
+                              </label>
+                              {mobileImageUrl ? (
+                                <button type="button" onClick={() => setMobileImageUrl('')} className="rounded-md border border-red-200 px-2.5 py-1.5 text-[10.5px] font-extrabold text-red-700">
+                                  Remove
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+                ) : null}
+                {fields.has('logo') ? (
+                  <div>
+                    <div className="text-[11px] font-bold text-[#374151] mb-1">Logo / Avatar</div>
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#E8EDF2] bg-[#F9FAFB] px-3 py-2 text-[11px] font-bold">
+                      {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                      Upload logo
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,image/avif"
+                        className="hidden"
+                        onChange={(e) => void uploadCreative(e.target.files?.[0] || null, 'logo')}
+                      />
+                    </label>
+                    {logoUrl ? (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11.5px]" data-testid="logo-color">
+                        <img src={logoUrl} alt="" className="h-9 w-9 rounded-full border border-[#E8EDF2] bg-white object-cover" />
+                        <span
+                          className="inline-block h-7 w-16 rounded-md border border-[#E8EDF2]"
+                          style={{ background: (useLogoColor && brandGradient(logoColor, 110, logoColor2)) || 'linear-gradient(110deg,#3B1E3F,#2A1846,#2B1A4A)' }}
+                          title={logoColor || 'Choosify colours'}
+                        />
+                        <label className="inline-flex items-center gap-1.5 font-semibold text-[#374151]">
+                          <input type="checkbox" checked={useLogoColor} onChange={(e) => setUseLogoColor(e.target.checked)} data-testid="logo-color-on" />
+                          Colour the card from the logo{logoColor ? ` (${logoColor})` : ''}
+                        </label>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+          {/* Where it appears + what to upload, under the preview (moved from the upload area). */}
+          {placementDef ? <div className="mt-3" data-testid="ad-spec-under-preview"><AdSlotSpec placement={placementDef} /></div> : null}
         </aside>
       </div>
     </div>

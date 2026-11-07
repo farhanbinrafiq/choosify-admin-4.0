@@ -92,12 +92,50 @@ export function AdFitStatus({ placement, width, height }: { placement: AdPlaceme
   );
 }
 
+/** Labelled sample picture in the slot's recommended shape (shown until the real image is uploaded). */
+function samplePicture(w: number, h: number, label: string): string {
+  const fs = Math.round(Math.min(w, h) * 0.09);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#C7D2FE"/><stop offset="1" stop-color="#FBCFE8"/></linearGradient>
+<pattern id="p" width="${fs * 2}" height="${fs * 2}" patternUnits="userSpaceOnUse" patternTransform="rotate(35)"><rect width="${fs}" height="${fs * 2}" fill="#FFFFFF" fill-opacity=".18"/></pattern></defs>
+<rect width="100%" height="100%" fill="url(#g)"/><rect width="100%" height="100%" fill="url(#p)"/>
+<text x="50%" y="46%" text-anchor="middle" font-family="Arial,sans-serif" font-weight="700" font-size="${fs}" fill="#3730A3">${label}</text>
+<text x="50%" y="${46 + 14}%" text-anchor="middle" font-family="Arial,sans-serif" font-weight="600" font-size="${Math.round(fs * 0.55)}" fill="#4338CA">Sample picture · ${w}×${h}px</text></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+/**
+ * Preview in the slot. Until the advertiser adds a picture / text, a labelled SAMPLE is drawn in
+ * the real shape, so the chosen format is always visible.
+ */
 export function AdSlotPreview({ placement, ad }: { placement: AdPlacementDef; ad: AdPreviewInput }) {
   const format = getFormatDef(ad.formatId);
+  const needsPic = Boolean(format?.imageLed && !ad.imageUrl);
+  const needsText = !format?.imageLed && !ad.headline;
+  if (!needsPic && !needsText) return <AdSlotPreviewInner placement={placement} ad={ad} />;
+  const rec = placement.creative?.recommended ?? { width: 1600, height: 900 };
+  const sample: AdPreviewInput = {
+    ...ad,
+    ...(needsPic ? { imageUrl: samplePicture(rec.width, rec.height, `Your ${format?.label || 'ad'} design`), imageWidth: rec.width, imageHeight: rec.height } : {}),
+    ...(needsText
+      ? { headline: 'Your headline here', subtext: ad.subtext || 'One short line about your offer', ctaLabel: ad.ctaLabel || 'Learn more', hasDestination: true }
+      : {}),
+  };
+  return (
+    <div data-testid="ad-preview-sample">
+      <div className="mb-2 rounded-md bg-amber-50 px-2 py-1 text-[10.5px] font-semibold text-amber-800">
+        {format?.label || 'Ad'}: sample {needsPic ? 'picture' : 'text'} shown — {needsPic ? 'upload your image' : 'add your headline'} to see your real ad.
+      </div>
+      <AdSlotPreviewInner placement={placement} ad={sample} />
+    </div>
+  );
+}
+
+function AdSlotPreviewInner({ placement, ad }: { placement: AdPlacementDef; ad: AdPreviewInput }) {
+  const format = getFormatDef(ad.formatId);
   const img = ad.imageUrl;
-  if (format?.imageLed && !img) {
-    return <div className="rounded-lg border border-dashed border-slate-300 px-3 py-8 text-center text-[11.5px] text-slate-500">Upload the image to see exactly how it will look.</div>;
-  }
+  if (format?.imageLed && !img) return null;
+  void format;
   if (ad.formatId === 'popup') {
     // Same as the storefront pop-up: design shown whole over a dimmed page, × top-right.
     const box = (phone: boolean) => (
