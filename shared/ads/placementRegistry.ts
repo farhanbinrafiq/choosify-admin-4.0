@@ -118,6 +118,14 @@ export const LISTING_BANNER_POSITIONS: AdPagePosition[] = [
   { key: 'bottom', order: 90, label: 'Banner at the bottom of the page' },
 ];
 
+/** Recommendations feed lanes a sponsored feed card can sit in (Web DiscoverStructuredFeed). */
+export const DISCOVER_FEED_LANES: AdPagePosition[] = [
+  { key: 'lane-live', order: 20, label: 'Card in Live Now (after the 1st live card)' },
+  { key: 'lane-youtube', order: 25, label: 'Card in YouTube Picks (after the 3rd video)' },
+  { key: 'lane-reels', order: 30, label: 'Card in Reels & Shorts (after the 4th reel, tall reel-sized card)' },
+  { key: 'lane-blogs', order: 35, label: 'Card in Blog Stories (Blogs / Buying Guides tab, after the 1st story)' },
+];
+
 /** Spot key of a wide banner drawn INSIDE a results grid, between two rows of cards. */
 export const IN_GRID_POSITION = 'in-grid';
 
@@ -546,8 +554,11 @@ export const AD_PLACEMENTS: AdPlacementDef[] = [
     pageLabel: 'Recommendations (Discover)',
     slotKey: 'feed',
     slotLabel: 'Sponsored feed card',
-    sectionLabel: 'Recommendations — sponsored card inside the feed, the same size as the cards around it (in YouTube Picks; in Blogs / Live / Reels when that tab is open). Several ads stack and slide',
-    allowedFormats: ['vertical_card', 'gradient_promo', 'sponsored_listing'],
+    sectionLabel: 'Recommendations — sponsored card inside a feed lane you choose (Live Now, YouTube Picks, Reels & Shorts or Blog Stories), the same size as the cards around it. Several ads in the same lane stack and slide',
+    // Sponsored Listing is not drawn in the lane feed, so it is not offered here.
+    allowedFormats: ['vertical_card', 'gradient_promo'],
+    positions: DISCOVER_FEED_LANES,
+    defaultPosition: 'lane-youtube',
     entityTypes: ['product', 'brand', 'guide', 'creator'],
     frequency: 'At most 1 sponsored card per 8 feed items, never first.',
     fallback: 'Feed shows organic items only.',
